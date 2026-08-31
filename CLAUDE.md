@@ -169,7 +169,13 @@ three (verify with `jq -S 'del(.theme)|del(.permissions.allow)' … | shasum`).
 
 Plans are shared too: all three point `plansDirectory` at `~/.claude/dvb-gn-plans` (157 files,
 deduplicated — clone_03's 149 were byte-identical copies of clone_01's). Plan files are
-individually named, so concurrent sessions do not collide the way a single shared index would.
+individually named random word-triples and the directory holds no index or manifest, so unlike a
+shared `MEMORY.md` there is nothing for concurrent sessions to clobber.
+
+**The absolute path there is correct — do not "fix" it.** The settings-reference documents
+`{"plansDirectory": "/path/to/plans"}`; the JSON *schema* still describes the key as "relative to
+project root" and is simply stale (the settings docs warn the schema can lag the CLI). Changing it
+back to a relative path would silently re-fragment plans across the three clones.
 
 ## Git topology
 
