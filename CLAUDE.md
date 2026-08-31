@@ -126,6 +126,31 @@ Two things to know before editing any of this:
   `.env.shared` at that later point to win. Delete it and Playwright's login breaks with an empty
   password — verify with `node dev/ports.mjs` style checks, not by assuming.
 
+## Shared Jira ticket cache
+
+The per-ticket Jira cache is shared across all three clones. `~/.claude/dvb-gn-jira/<KEY>/` is the
+real directory; each clone's `tmp/<KEY>` is a symlink into it, so a ticket fetched or refreshed in
+one clone is immediately there for the other two. `jira-cache-link.sh` here adopts and links
+(no arguments = every ticket dir found anywhere; a key = link just that one; `--dry-run` to preview).
+It is idempotent and never deletes a differing file — a conflicting copy is kept as
+`<name>.from-clone_0X` and reported.
+
+This needs **no change to the tracked tooling**: `.claude/skills/jira-scope/jira-cache.mjs`
+hardcodes `<git toplevel>/tmp/<KEY>` with no configuration, but only ever does
+`mkdirSync(..., {recursive: true})` on it, which follows a symlink.
+
+> **`tmp/` itself is NEVER shared, and must stay a real per-clone directory.** It also holds the
+> dev-server PID files, and `dev/run-with-pid.mjs` refuses a name that is already live — so a
+> shared `tmp/` would let only one clone run a dev server at a time, and would let
+> `node dev/pids.mjs --kill ng_serve` reach into another clone and kill its server. Only the
+> per-ticket `tmp/<KEY>` directories are linked. When adding a new key, link the key, never `tmp/`.
+
+`ticket_<KEY>.md`, its relation variants and Jira attachments are clone- and branch-independent,
+which is the point. **`pr_description_<KEY>.md` is not** — it is derived from the working-tree diff,
+so it is shared as a side effect and is last-writer-wins when two clones work one ticket at once.
+One ticket normally belongs to one clone, so this is bounded, but do not trust a PR description you
+did not just generate in this clone.
+
 ## Claude Code settings layering
 
 Only two things differ per clone: **`theme`** and the **Storybook health-check port** in
