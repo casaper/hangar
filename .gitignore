@@ -1,0 +1,5 @@
+# The fleet root is deliberately NOT a git repository. This file is insurance: if one is
+# ever initialised here, these must never be committed.
+.env.shared
+.remember/
+clone_0*/
