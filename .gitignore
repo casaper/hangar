@@ -1,5 +1,6 @@
-# The fleet root is deliberately NOT a git repository. This file is insurance: if one is
-# ever initialised here, these must never be committed.
+# The fleet root IS a git repository (branch `main`, no remote) tracking only the fleet map and
+# the shell helpers. These entries are what keep the clones and the secrets out of it, so they
+# are load-bearing, not insurance. Do not remove them.
 .env.shared
 .remember/
 clone_0*/

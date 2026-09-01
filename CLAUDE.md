@@ -4,9 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this directory is
 
-`~/code/dvb_gn/` is **not** a repository. It is a container for three independent full clones of
-the same Bitbucket repo (`git@bitbucket.org:acme/storefront_ui.git`). There is no code
-here, no `package.json`, no build. Everything buildable lives one level down.
+`~/code/dvb_gn/` is **not** a clone of the application. It is a container for three independent
+full clones of the same Bitbucket repo (`git@bitbucket.org:acme/storefront_ui.git`).
+There is no application code here, no `package.json`, no build. Everything buildable lives one
+level down.
+
+It *is* itself a small local-only git repo — branch `main`, no remote — tracking only this file,
+the three shell helpers, `.gitignore` and `.claude/settings.local.json`. Never the application.
 
 Full clones, not `git worktree`: each needs its own `node_modules`, its own dev server, its own
 Storybook and its own Playwright run. That is the whole reason the fleet exists.
@@ -145,6 +149,11 @@ hardcodes `<git toplevel>/tmp/<KEY>` with no configuration, but only ever does
 > `node dev/pids.mjs --kill ng_serve` reach into another clone and kill its server. Only the
 > per-ticket `tmp/<KEY>` directories are linked. When adding a new key, link the key, never `tmp/`.
 
+**Nothing enforces the linking.** `jira-scope` creates `tmp/<KEY>` as a real directory whenever a
+clone fetches a ticket the fleet has not linked yet, so when `ls -la clone_0*/tmp` shows a real
+directory among the symlinks, re-run `./jira-cache-link.sh` (`--dry-run` first) — it adopts them in
+place, from the fleet root, for all three clones.
+
 `ticket_<KEY>.md`, its relation variants and Jira attachments are clone- and branch-independent,
 which is the point. **`pr_description_<KEY>.md` is not** — it is derived from the working-tree diff,
 so it is shared as a side effect and is last-writer-wins when two clones work one ticket at once.
@@ -163,8 +172,10 @@ three (verify with `jq -S 'del(.theme)|del(.permissions.allow)' … | shasum`).
   other projects, and `autoMemoryDirectory`, `plansDirectory`, `statusLine` and
   `enabledMcpjsonServers` would leak the fleet onto them.
 - `clone_0X/.claude/settings.local.json` (untracked) holds the fleet-scoped keys, identical in all
-  three: the shared memory and plans directories, the shared statusline, the six MCP servers, the
-  `frontend-design` plugin off, and the `.env.shared` deny.
+  three: the shared memory and plans directories, the shared statusline, the six MCP servers
+  (`playwright`, `jira`, `yfiles-api`, `angular-cli`, `primeng`, `ag-mcp`), the `frontend-design`
+  plugin off, the `.env.shared` deny, and the two iTerm2 keys (`terminal.explorerKind`,
+  `terminal.external.osxExec`).
 - `.claude/settings.json` is **tracked and shared** — never put a per-clone or personal value there.
 
 Plans are shared too: all three point `plansDirectory` at `~/.claude/dvb-gn-plans` (157 files,
@@ -203,8 +214,14 @@ it — do not go read its working tree and reconstruct the change.
 ## Parent-session scope
 
 A session started here, in `~/code/dvb_gn/`, is for fleet-level work only: comparing clones,
-looking at the layout, editing this file. It has no repo `.claude/` — no project skills, agents,
-hooks or permission rules load, because those live in the clones and are keyed to a git root.
+looking at the layout, editing this file. No project skills, agents, hooks or permission rules
+load — the parent's `.claude/` holds nothing but `settings.local.json`, and everything else lives
+in the clones. That one file is tracked, and it is not empty: it points `autoMemoryDirectory` at
+the shared fleet memory.
+
+Because the parent is its own repo, `git log` here and in a clone are unrelated histories. And
+`.gitignore` here is load-bearing, not leftover: `clone_0*/` and `.env.shared` are the only reason
+the clones and the secrets stay out of the parent repo. Do not remove either line.
 
 **Do not run project work from here.** `npm`, `ng`, `jest`, `playwright`, lint, format and the
 project skills all require a clone's root (or its `angular/` subdirectory) as the working
@@ -216,8 +233,9 @@ a `SessionStart` hook (`.claude/hooks/direnv-load.sh` — it appends a `direnv e
 wrapper to `CLAUDE_ENV_FILE`, so every Bash call in a clone session, and every `cd` inside one,
 re-evaluates the environment). **A parent session has no such hook**, so `.env.local` is never
 loaded and `(cd clone_0X && node dev/ports.mjs)` reports the fallbacks `4200 / 6006 / 9323` for
-**all three clones** — it does not error, it just answers wrong. Never read a clone's ports from a
-parent session; read the clone's `CLAUDE.local.md`, or `grep` its `.env.local`.
+**all three clones** — it does not error, it just answers wrong (the tell is the `(default)` marker
+it prints beside each number). Never read a clone's ports from a parent session; read the clone's
+`CLAUDE.local.md`, or `grep` its `.env.local`.
 
 Session history and memory are keyed differently, which is worth knowing before you go looking for
 either:
@@ -230,8 +248,11 @@ either:
   clones are three separate repos, so they get three separate memory directories unless
   `autoMemoryDirectory` is pointed at a shared path.
 
-A session started here in the parent sees neither, since the parent is not a git repo and is not
-inside one.
+A parent session has its own transcript directory, so it sees no clone's history in `/resume`. It
+**does** see the shared memory — the parent's tracked `.claude/settings.local.json` points
+`autoMemoryDirectory` at the same `~/.claude/dvb-gn-memory` all three clones use. A memory written
+from the parent is immediately visible in every clone and vice versa; `MEMORY.md` is one shared
+index with no locking, so append a line to it, never rewrite it wholesale.
 
 ## How this file reaches the clone sessions
 
@@ -243,5 +264,5 @@ is paid for three times over and cannot be branch-specific.
 
 Note that this ancestor walk is specific to `CLAUDE.md`. It does **not** apply to
 `.claude/settings.json`, `.mcp.json`, hooks, agents or skills — those come from the clone's own
-repo root (skills walk up only as far as it), which is why the fleet has no parent `.claude/`
-directory and does not need one.
+repo root (skills walk up only as far as it), so the parent's `.claude/` carries nothing but the
+one settings file described above.
