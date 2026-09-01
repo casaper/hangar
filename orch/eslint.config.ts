@@ -7,12 +7,12 @@ import tseslint from 'typescript-eslint';
 /**
  * Lint config for the fleet orchestration CLI in this directory ONLY.
  *
- * It never reaches the clones: they are ignored below, each carries its own (very different)
- * Angular config, and their rules are versioned per branch. Type-checked rules are on, which
- * is affordable here because the whole CLI is a few hundred lines.
+ * It cannot reach the clones: they live a level up, outside this package, and each carries
+ * its own (very different) Angular config whose rules are versioned per branch. Type-checked
+ * rules are on, which is affordable here because the whole CLI is a few hundred lines.
  */
 export default defineConfig([
-  globalIgnores(['clone_*/', 'node_modules/', '.remember/']),
+  globalIgnores(['node_modules/']),
   eslint.configs.recommended,
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,

@@ -7,13 +7,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `~/code/dvb_gn/` is **not** a clone of the application. It is a container for an arbitrary number
 of independent full clones of the same Bitbucket repo
 (`git@bitbucket.org:acme/storefront_ui.git`), plus the `orch-util` CLI that orchestrates
-them. There is no application code here. Everything buildable lives one level down; the
-`package.json` here belongs to `orch-util` alone and has nothing to do with the app.
+them. There is no application code here. Everything buildable lives one level down, and the CLI's
+own package lives in `orch/` — never at this level.
 
-It _is_ itself a small local-only git repo — branch `main`, no remote — tracking this file, the
-`orch-util` CLI (`bin/orch-util`, `src/**`, `package.json`, `tsconfig.json`, `eslint.config.ts`),
-`.envrc`, the shell helpers, `.gitignore` and `.claude/settings.local.json`. Never the
-application.
+> **Never put a `package.json` (or `node_modules`) in the fleet root itself.** This directory is
+> an ancestor of every clone, and Node resolves a file's module type from the nearest
+> `package.json` walking up. A clone has no `package.json` at its own root — only in `angular/` —
+> so a package here becomes the nearest one for every clone file outside `angular/`. It has
+> already broken things once: `"type": "module"` at this level flipped
+> `clone_NN/.claude/hooks/*.js` to ESM, so every one of them died with
+> `ReferenceError: require is not defined in ES module scope` at session start, and
+> `npm pkg get name` run at a clone root answered `dvb-gn-fleet`, meaning an `npm install` there
+> would have written to the fleet's package. That is why the CLI is in `orch/`.
+
+It _is_ itself a small local-only git repo — branch `main`, no remote — tracking this file,
+`bin/orch-util`, the CLI package in `orch/**`, `.envrc`, `.editorconfig`, the shell helpers,
+`.gitignore` and `.claude/settings.local.json`. Never the application.
 
 Full clones, not `git worktree`: each needs its own `node_modules`, its own dev server, its own
 Storybook and its own Playwright run. That is the whole reason the fleet exists.
@@ -99,9 +108,10 @@ port, never assume a server on a default port is yours.
 
 ## The `orch-util` CLI
 
-The fleet is orchestrated by one TypeScript commander CLI in this directory. The executable is
-`bin/orch-util`, and the fleet root's tracked `.envrc` does `PATH_add bin`, so inside the fleet
-root you just type `orch-util`. **Every clone gets the same directory on PATH from its own
+The fleet is orchestrated by one TypeScript commander CLI. The executable is `bin/orch-util`; the
+package it runs is `orch/` (`orch/src/**`, `orch/package.json`, `orch/node_modules`), kept out of
+the fleet root for the ancestor reason above. The fleet root's tracked `.envrc` does
+`PATH_add bin`, so inside the fleet root you just type `orch-util`. **Every clone gets the same directory on PATH from its own
 untracked `.envrc.private`**, so `orch-util` also works from inside a clone — which is where you
 usually are. There is no build step: Node strips the types and runs `src/cli.ts` directly.
 
@@ -290,8 +300,9 @@ matching at `clone_10`.)
 **Do not run project work from here.** `ng`, `jest`, `playwright`, the project's lint and format
 and the project skills all require a clone's root (or its `angular/` subdirectory) as the working
 directory, and the repo's `SessionStart` hooks resolve paths via `git rev-parse --show-toplevel`,
-which fails here. Start a session in the clone instead. `npm` at the fleet root is for the `orch-util`
-CLI only — `npm run lint`, `npm run typecheck`, `npm run format` here lint the CLI, not the app.
+which fails here. Start a session in the clone instead. The CLI's own `npm run lint`,
+`npm run typecheck` and `npm run format` must be run **from `orch/`**, and they cover the CLI, not
+the app.
 
 **The specific trap:** the clones get their per-clone ports from direnv, which the repo wires up in
 a `SessionStart` hook (`.claude/hooks/direnv-load.sh` — it appends a `direnv export` plus a `cd`

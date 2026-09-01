@@ -1,10 +1,16 @@
 #!/bin/sh
 # Entry point for the dvb_gn fleet orchestration CLI.
 #
-# There is no build step: Node strips the TypeScript at load time, so this runs src/cli.ts
-# directly. Resolve the fleet root from this script's own location, not $PWD, so `orch-util`
-# works from inside a clone or from anywhere else on the machine -- which is the whole point
-# of putting this directory on PATH.
+# There is no build step: Node strips the TypeScript at load time, so this runs the CLI
+# source directly. Resolve the fleet root from this script's own location, not $PWD, so
+# `orch-util` works from inside a clone or from anywhere else on the machine -- which is the
+# whole point of putting this directory on PATH.
+#
+# The CLI's package lives in orch/, NOT at the fleet root, and that is load-bearing: the
+# fleet root is an ancestor of every clone, so a package.json here would be the nearest one
+# for every clone file outside angular/. Its `"type": "module"` flipped the clones'
+# .claude/hooks/*.js to ESM and broke them, and `npm` run at a clone root resolved to the
+# fleet package. Keep this directory free of package.json.
 set -eu
 fleet="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)"
-exec node "$fleet/src/cli.ts" "$@"
+exec node "$fleet/orch/src/cli.ts" "$@"
