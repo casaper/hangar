@@ -117,6 +117,7 @@ plans
   .command('collect')
   .description("Move every clone's finished plans into <fleet>/plans, dated and deduplicated")
   .option('-n, --dry-run', 'show what would move, change nothing')
+  .option('-q, --quiet', 'say nothing unless a plan actually moved (for the SessionEnd hook)')
   .option('--no-transcript-scan', 'do not fall back to session transcripts for a missing date')
   .option(
     '--in-use-window <minutes>',

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { CliError } from './exec.ts';
 import type { Clone } from './fleet.ts';
@@ -180,12 +180,57 @@ export const storybookHealthCheckAllow = (clone: Clone): string =>
 const HEALTH_CHECK_RE =
   /^Bash\(curl -s -o \/dev\/null -w "%\{http_code\}" --max-time 3 http:\/\/localhost:\d+\)$/;
 
+export type HookEntry = { type: string; command: string; timeout?: number };
+export type HookMatcher = { matcher?: string; hooks: HookEntry[] };
+
 export type SettingsJson = {
   theme?: string;
   /** Must resolve INSIDE the clone -- Claude Code rejects a path that escapes the project root. */
   plansDirectory?: string;
+  hooks?: Record<string, HookMatcher[]>;
   permissions?: { allow?: string[]; deny?: string[] };
   [key: string]: unknown;
+};
+
+/**
+ * The `SessionEnd` hook that keeps the shared plan archive current.
+ *
+ * Claude Code will not write plans outside the project root -- it resolves `plansDirectory`
+ * against the root and rejects anything that escapes it, symlinks followed -- so a clone
+ * cannot write into `<fleet>/plans` however the setting is spelled. The clone writes to its
+ * own `.claude/plans`, and this hook sweeps a session's plan into the shared archive the
+ * moment that session ends, which is also the first moment it is safe to move: nothing can
+ * rewrite it any more.
+ *
+ * It lives in the untracked per-clone settings, not in the repo: it names an absolute path in
+ * this fleet, and a teammate with a single checkout has nothing to collect into.
+ */
+export const PLANS_HOOK_COMMAND = `${join(fleetRoot, 'bin', 'orch-util')} plans collect --quiet`;
+
+const plansHook = (): HookMatcher => ({
+  hooks: [{ type: 'command', command: PLANS_HOOK_COMMAND, timeout: 60 }],
+});
+
+export const hasPlansHook = (settings: SettingsJson | undefined): boolean =>
+  (settings?.hooks?.['SessionEnd'] ?? []).some((matcher) =>
+    matcher.hooks.some((hook) => hook.command === PLANS_HOOK_COMMAND),
+  );
+
+/**
+ * Settings with the plan-collecting hook in place and no `plansDirectory` override.
+ *
+ * The override is removed deliberately: the repo's own tracked `.claude/settings.json` already
+ * says `.claude/plans`, which is the only value that works, so a per-clone copy of it is one
+ * more place to drift.
+ */
+export const withPlansHook = (settings: SettingsJson): SettingsJson => {
+  const { plansDirectory: _dropped, ...rest } = settings;
+  const hooks = { ...rest.hooks };
+  const existing = (hooks['SessionEnd'] ?? []).filter(
+    (matcher) => !matcher.hooks.some((hook) => hook.command === PLANS_HOOK_COMMAND),
+  );
+  hooks['SessionEnd'] = [...existing, plansHook()];
+  return { ...rest, hooks };
 };
 
 /**
@@ -220,14 +265,38 @@ export const settingsContentFor = (clone: Clone, template: SettingsJson): string
   return `${JSON.stringify(settings, null, 2)}\n`;
 };
 
-export const readSettings = (clone: Clone): SettingsJson | undefined => {
-  const path = settingsPath(clone);
+const readSettingsFile = (path: string): SettingsJson | undefined => {
   if (!existsSync(path)) return undefined;
   try {
     return JSON.parse(readFileSync(path, 'utf8')) as SettingsJson;
   } catch {
     return undefined;
   }
+};
+
+export const readSettings = (clone: Clone): SettingsJson | undefined =>
+  readSettingsFile(settingsPath(clone));
+
+/** The repo's own tracked settings -- shared with the team, and not ours to edit from here. */
+export const readTrackedSettings = (clone: Clone): SettingsJson | undefined =>
+  readSettingsFile(join(clone.path, '.claude', 'settings.json'));
+
+/**
+ * Where this clone's plans actually land, and whether Claude Code will accept it.
+ *
+ * The local settings outrank the tracked ones. A value that resolves outside the clone is
+ * REJECTED (with only a debug-level log) and plans fall back to `~/.claude/plans`, mixed in
+ * with every other project on the machine -- which is what happened for a day when all three
+ * clones pointed at an absolute shared path.
+ */
+export const effectivePlansDirectory = (
+  clone: Clone,
+): { readonly value: string | undefined; readonly resolved: string | undefined } => {
+  const value = readSettings(clone)?.plansDirectory ?? readTrackedSettings(clone)?.plansDirectory;
+  if (value === undefined) return { value: undefined, resolved: undefined };
+  const resolved = resolve(clone.path, value);
+  const inside = resolved === clone.path || resolved.startsWith(`${clone.path}/`);
+  return { value, resolved: inside ? resolved : undefined };
 };
 
 /** Ports as they are actually written in the clone's `.env.local`, for drift detection. */

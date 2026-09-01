@@ -38,6 +38,8 @@ export type CollectOptions = {
   dryRun?: boolean | undefined;
   transcriptScan?: boolean | undefined;
   inUseWindow?: string | undefined;
+  /** Say nothing unless something actually moved -- for the SessionEnd hook. */
+  quiet?: boolean | undefined;
 };
 
 export type StampOptions = CollectOptions;
@@ -55,12 +57,25 @@ const relabel = (file: PlanFile): string => `${file.source}/${file.name}`;
 
 export const plansCollect = (opts: CollectOptions): void => {
   const dryRun = opts.dryRun === true;
-  heading(`Collecting plans into ${tildify(fleetPlans)}${dryRun ? pc.dim(' (dry run)') : ''}`);
+  const quiet = opts.quiet === true;
+  // In quiet mode every line is buffered and printed only if something moved, so the
+  // SessionEnd hook that runs this in every clone stays invisible until it has news.
+  const lines: (() => void)[] = [];
+  const say = (emit: () => void): void => {
+    if (quiet) lines.push(emit);
+    else emit();
+  };
+
+  say(() => {
+    heading(`Collecting plans into ${tildify(fleetPlans)}${dryRun ? pc.dim(' (dry run)') : ''}`);
+  });
 
   const inUse = planFilesInUse(windowMinutes(opts));
-  note(
-    `${inUse.sessions.length} live fleet session(s); ${inUse.names.size} plan file(s) they may still be holding`,
-  );
+  say(() => {
+    note(
+      `${inUse.sessions.length} live fleet session(s); ${inUse.names.size} plan file(s) they may still be holding`,
+    );
+  });
 
   const sources = planSources();
   // Without a clone there is nothing to collect FROM, and the shared user plans directory is
@@ -75,7 +90,9 @@ export const plansCollect = (opts: CollectOptions): void => {
   const candidates: PlanFile[] = [];
   for (const source of sources) {
     const files = planFilesIn(source.dir, source.label);
-    step(`${tildify(source.dir)} — ${files.length} plan(s)`);
+    say(() => {
+      step(`${tildify(source.dir)} — ${files.length} plan(s)`);
+    });
     candidates.push(...files);
   }
   const archive = planFilesIn(fleetPlans, 'plans');
@@ -129,7 +146,9 @@ export const plansCollect = (opts: CollectOptions): void => {
       const survivor = survivors.get(file.hash);
       if (survivor !== undefined) {
         dropped += 1;
-        note(pc.dim(`${relabel(file)} — identical to ${basename(survivor.path)}, dropping`));
+        say(() => {
+          note(pc.dim(`${relabel(file)} — identical to ${basename(survivor.path)}, dropping`));
+        });
         if (!dryRun) rmSync(file.path);
         continue;
       }
@@ -140,17 +159,47 @@ export const plansCollect = (opts: CollectOptions): void => {
         continue;
       }
       const to = join(fleetPlans, name);
-      moved += 1;
-      ok(`${relabel(file)} → ${name}${dated === undefined ? pc.dim(' (undated)') : ''}`);
       if (!dryRun) {
-        moveInto(file.path, to);
+        // Two sessions can end at the same moment and both run this. Losing the race is not
+        // an error worth failing a hook over -- the next run collects what is left.
+        try {
+          moveInto(file.path, to);
+        } catch (error) {
+          conflicts.push(`${relabel(file)} — could not move: ${String(error)}`);
+          continue;
+        }
         if (dated !== undefined) setMtimeToDay(to, dated.day);
       }
+      moved += 1;
+      const line = `${relabel(file)} → ${name}${dated === undefined ? pc.dim(' (undated)') : ''}`;
+      say(() => {
+        ok(line);
+      });
       taken.add(name);
       survivors.set(file.hash, { ...file, path: to, source: 'plans', name });
     }
   }
 
+  // The legacy store is drained as soon as it is empty, whether or not anything moved now.
+  const drainLegacy = (): void => {
+    if (!existsSync(legacyPlans) || planFilesIn(legacyPlans, 'dvb-gn-plans').length > 0) return;
+    if (dryRun) {
+      say(() => {
+        note(`${tildify(legacyPlans)} would be empty and can be removed`);
+      });
+      return;
+    }
+    rmSync(legacyPlans, { recursive: true });
+    say(() => {
+      ok(`removed the empty ${tildify(legacyPlans)}`);
+    });
+  };
+
+  if (quiet && moved === 0 && conflicts.length === 0) {
+    drainLegacy();
+    return;
+  }
+  for (const emit of lines) emit();
   console.log('');
   ok(`${moved} plan(s) ${dryRun ? 'would move' : 'moved'}, ${dropped} duplicate(s) dropped`);
   for (const line of conflicts) warn(line);
@@ -159,16 +208,12 @@ export const plansCollect = (opts: CollectOptions): void => {
     for (const stem of undated) note(stem);
   }
   if (skipped.length > 0) {
-    note(`${skipped.length} left where they are:`);
-    for (const line of skipped) note(line);
+    note(`${skipped.length} left where they are${quiet ? '' : ':'}`);
+    // A plan a live session is holding is the normal case, not news: listing all of them in
+    // quiet mode would make the SessionEnd hook shout on every collect that moved anything.
+    if (!quiet) for (const line of skipped) note(line);
   }
-  if (existsSync(legacyPlans) && planFilesIn(legacyPlans, 'dvb-gn-plans').length === 0) {
-    if (dryRun) note(`${tildify(legacyPlans)} would be empty and can be removed`);
-    else {
-      rmSync(legacyPlans, { recursive: true });
-      ok(`removed the empty ${tildify(legacyPlans)}`);
-    }
-  }
+  drainLegacy();
 };
 
 export const plansStamp = (opts: StampOptions): void => {

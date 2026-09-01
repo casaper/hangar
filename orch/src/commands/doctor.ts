@@ -14,6 +14,9 @@ import pc from 'picocolors';
 
 import {
   claudeLocalMdContent,
+  effectivePlansDirectory,
+  hasPlansHook,
+  withPlansHook,
   claudeLocalMdPath,
   envLocalContent,
   envLocalPath,
@@ -229,25 +232,44 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
           },
   });
 
-  // The plan archive. `plansDirectory` MUST resolve inside the clone: Claude Code resolves it
-  // against the project root and rejects anything that escapes, symlinks followed -- which is
-  // how an absolute shared path silently sent every plan to ~/.claude/plans instead. So the
-  // clone keeps its own real directory and `orch-util plans collect` gathers from it.
-  const plansOk = settings?.plansDirectory === PLANS_DIRECTORY;
+  // Where this clone's plans land. `plansDirectory` MUST resolve inside the clone: Claude Code
+  // resolves it against the project root and rejects anything that escapes, symlinks followed,
+  // then falls back to ~/.claude/plans with only a debug-level log. So the value stays
+  // `.claude/plans` (from the repo's own tracked settings) and the SessionEnd hook below is
+  // what gets the finished plans into the shared archive.
+  const plans = effectivePlansDirectory(clone);
   checks.push({
     name: 'plansDirectory',
-    ok: plansOk,
-    detail: plansOk
-      ? `${PLANS_DIRECTORY} — collect with \`orch-util plans collect\``
-      : `${String(settings?.plansDirectory)}, expected ${PLANS_DIRECTORY} (an absolute path outside the clone is rejected and plans land in ~/.claude/plans)`,
+    ok: plans.resolved !== undefined,
+    detail:
+      plans.value === undefined
+        ? 'unset — plans land in ~/.claude/plans, shared with every other project on this machine'
+        : plans.resolved === undefined
+          ? `${plans.value} resolves outside the clone — Claude Code REJECTS that and silently uses ~/.claude/plans instead`
+          : `${plans.value}${readSettings(clone)?.plansDirectory === undefined ? ' (from the repo settings)' : ''}`,
     repair:
-      settings === undefined
-        ? undefined
-        : () => {
+      plans.resolved === undefined && settings !== undefined
+        ? () => {
             writeFile(
               settingsPath(clone),
               `${JSON.stringify({ ...settings, plansDirectory: PLANS_DIRECTORY }, null, 2)}\n`,
             );
+          }
+        : undefined,
+  });
+
+  const hookOk = hasPlansHook(settings);
+  checks.push({
+    name: 'plans SessionEnd hook',
+    ok: hookOk,
+    detail: hookOk
+      ? "collects this clone's finished plans into the shared archive"
+      : 'missing — a finished plan stays in this clone until `orch-util plans collect` is run by hand',
+    repair:
+      settings === undefined
+        ? undefined
+        : () => {
+            writeFile(settingsPath(clone), `${JSON.stringify(withPlansHook(settings), null, 2)}\n`);
           },
   });
 

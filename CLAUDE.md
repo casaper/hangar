@@ -260,29 +260,33 @@ three (verify with `jq -S 'del(.theme)|del(.permissions.allow)' … | shasum`).
   other projects, and `autoMemoryDirectory`, `plansDirectory`, `statusLine` and
   `enabledMcpjsonServers` would leak the fleet onto them.
 - `clone_NN/.claude/settings.local.json` (untracked) holds the fleet-scoped keys, identical in all
-  three: the shared memory directory, `plansDirectory` (relative — see above), the shared
-  statusline, the six MCP servers
+  three: the shared memory directory, the `SessionEnd` hook that collects plans (see below), the
+  shared statusline, the six MCP servers
   (`playwright`, `jira`, `yfiles-api`, `angular-cli`, `primeng`, `ag-mcp`), the `frontend-design`
   plugin off, the `.env.shared` deny, and the two iTerm2 keys (`terminal.explorerKind`,
   `terminal.external.osxExec`).
 - `.claude/settings.json` is **tracked and shared** — never put a per-clone or personal value there.
 
-**Plans cannot be shared by a setting, and `plansDirectory` must stay relative.** Claude Code
-resolves it against the project root and then requires the result to be inside that root *with
-symlinks followed*; anything that escapes is rejected with `plansDirectory must be within project
-root` and the CLI **silently falls back to `~/.claude/plans`** — mixed in with this machine's other
-projects. An absolute `~/.claude/dvb-gn-plans` was set in all three clones and did exactly that
-from 2026-08-31 until it was found. A `.claude/plans` symlink pointing at the fleet root fails the
-same check, so that is not a way round it either.
+**Plans cannot be shared by a setting.** Claude Code resolves `plansDirectory` against the project
+root and then requires the result to be **inside** that root — a string-prefix test on the resolved
+path, with symlinks followed. Anything outside is rejected with `plansDirectory must be within
+project root` and the CLI **silently falls back to `~/.claude/plans`**, mixed in with this machine's
+other projects. That is not a check to work around: `../plans`, an absolute
+`~/code/dvb_gn/plans`, and a `.claude/plans` symlink pointing at the fleet root all fail it the same
+way. An absolute `~/.claude/dvb-gn-plans` was configured in all three clones and did exactly that,
+unnoticed, for a day.
 
-So each clone keeps `"plansDirectory": ".claude/plans"` — its own real directory — and the sharing
-is a command: **`orch-util plans collect`** moves finished plans into `~/code/dvb_gn/plans`,
-collapsing byte-identical copies and putting the plan's date in front of the name.
-**`orch-util plans stamp`** dates anything that arrives there unstamped. Both refuse to touch a
-plan a live session may still be writing (reconstructed from the live `claude` processes and the
-`trackingPath` entries in their transcripts), so re-run them; what was skipped will move next time.
-A fleet-root session needs no collection: its project root *is* the fleet root, so
-`"plansDirectory": "plans"` in `.claude/settings.json` writes there directly.
+So the value stays the repo's own tracked `"plansDirectory": ".claude/plans"` — each clone writes
+into its own directory, and the per-clone settings carry no copy of it — and the sharing is
+**`orch-util plans collect`**, which moves finished plans into `~/code/dvb_gn/plans`, collapses
+byte-identical copies and puts the plan's date in front of the name. It is not something to
+remember: each clone's untracked `.claude/settings.local.json` runs it from a **`SessionEnd` hook**,
+so a session's plan reaches the archive the moment that session ends — which is also the first
+moment it is safe to move, because nothing can rewrite it any more. **A plan stays in its own clone
+while its session is alive; that is the guarantee, not a delay.** `orch-util plans stamp` dates
+anything that arrives unstamped, and `orch-util doctor` checks both the effective `plansDirectory`
+and the hook. A fleet-root session needs neither: its project root *is* the fleet root, so
+`"plansDirectory": "plans"` in `.claude/settings.json` writes into the archive directly.
 
 Dates come from the filename, then the file's own birthtime/mtime, then the first transcript that
 mentions it. **`stat` alone is not trustworthy here:** an earlier consolidation copied 157 plans
@@ -290,6 +294,10 @@ without preserving times, so they all carry one identical second, and Claude Cod
 resets birthtime on a plan it is still editing. `plans collect` detects a bulk-copy timestamp (many
 files, same second, birthtime == mtime) and refuses to use it, then writes the date it resolved
 back as the file's mtime so it survives.
+
+One consequence to expect: `/resume` on an older session will not find its plan file where it left
+it. Claude Code logs `Plan file missing during resume` and reconstructs the plan from the message
+history, so it degrades rather than breaks.
 
 ## Git topology
 
