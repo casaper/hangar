@@ -1,0 +1,40 @@
+import { join } from 'node:path';
+
+import type { Clone } from '../fleet.ts';
+import { themesDir } from '../paths.ts';
+import type { Artifact } from './index.ts';
+
+/**
+ * `~/.claude/themes/dvb-clone-NN-<colour>.json` -- one per clone.
+ *
+ * JSON has no comment syntax and the theme file is parsed by Claude Code against its own
+ * schema, so this is the one generated artifact WITHOUT a "do not edit" header: an unknown
+ * key risks the theme being rejected, and a rejected theme is a clone that silently looks
+ * like every other clone. `orch-util doctor` is what catches a hand-edited theme instead.
+ *
+ * Only `theme` differs per clone in a clone's settings; the file name encodes the hue name
+ * so the value in settings.local.json reads as `custom:dvb-clone-01-cyan`.
+ */
+export const themeName = (clone: Clone): string =>
+  `dvb-clone-${String(clone.index).padStart(2, '0')}-${clone.colour.name}`;
+
+export const themePath = (clone: Clone): string => join(themesDir, `${themeName(clone)}.json`);
+
+export const themeArtifact = (clone: Clone): Artifact => {
+  const theme = {
+    name: `${clone.name} (${clone.colour.name})`,
+    base: 'dark',
+    overrides: {
+      claude: clone.colour.main,
+      claudeShimmer: clone.colour.shimmer,
+      briefLabelClaude: clone.colour.main,
+      promptBorder: clone.colour.border,
+      promptBorderShimmer: clone.colour.main,
+    },
+  };
+  return {
+    path: themePath(clone),
+    content: `${JSON.stringify(theme, null, 2)}\n`,
+    what: `${clone.name} Claude Code theme (${clone.colour.name})`,
+  };
+};

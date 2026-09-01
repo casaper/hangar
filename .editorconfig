@@ -1,0 +1,22 @@
+# Fleet-root editor settings. This governs the PARENT directory only -- the orchestration
+# CLI, the shell helpers and CLAUDE.md. Each clone carries its own .editorconfig for the
+# application code, which uses different (4-space) conventions; nothing here reaches it,
+# because EditorConfig stops at the first `root = true` it finds walking up, and each
+# clone has one.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+[*.md]
+# Markdown uses two trailing spaces as a hard line break.
+trim_trailing_whitespace = false
+
+[Makefile]
+indent_style = tab

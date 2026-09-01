@@ -1,0 +1,10 @@
+#!/bin/sh
+# Entry point for the dvb_gn fleet orchestration CLI.
+#
+# There is no build step: Node strips the TypeScript at load time, so this runs src/cli.ts
+# directly. Resolve the fleet root from this script's own location, not $PWD, so `orch-util`
+# works from inside a clone or from anywhere else on the machine -- which is the whole point
+# of putting this directory on PATH.
+set -eu
+fleet="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)"
+exec node "$fleet/src/cli.ts" "$@"

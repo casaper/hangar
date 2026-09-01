@@ -1,6 +1,11 @@
-# The fleet root IS a git repository (branch `main`, no remote) tracking only the fleet map and
-# the shell helpers. These entries are what keep the clones and the secrets out of it, so they
-# are load-bearing, not insurance. Do not remove them.
+# The fleet root IS a git repository (branch `main`, no remote) tracking the fleet map, the
+# orchestration CLI and the generated shell helpers. These entries are what keep the clones,
+# the secrets and the CLI's dependencies out of it, so they are load-bearing, not insurance.
+# Do not remove them.
+#
+# `clone_*/` rather than `clone_0*/`: the fleet is no longer fixed at three clones, and the
+# old glob would have stopped matching at clone_10.
 .env.shared
 .remember/
-clone_0*/
+clone_*/
+node_modules/
