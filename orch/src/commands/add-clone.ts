@@ -9,7 +9,7 @@ import {
   envrcPrivateContent,
   envrcPrivatePath,
   EXCLUDE_BLOCK,
-  EXCLUDE_LINE,
+  missingExcludeLines,
   excludePath,
   playwrightEnvLocalPath,
   readSettings,
@@ -22,7 +22,8 @@ import {
 import { CliError, run } from '../exec.ts';
 import { cloneAt, discoverClones, nextFreeIndex, type Clone } from '../fleet.ts';
 import { git } from '../git.ts';
-import { envShared, fleetRoot, originUrl, tildify } from '../paths.ts';
+import { envShared, fleetRoot, fleetTmp, originUrl, tildify } from '../paths.ts';
+import { cloneTmpPath, hasScopedPidDir, pidFilesModule } from '../tmp.ts';
 import { cloneLabel, heading, note, ok, step, warn } from '../ui.ts';
 import { coloursSync } from './colours.ts';
 import { statusOf } from './status.ts';
@@ -68,7 +69,7 @@ export const addClone = (opts: AddCloneOptions): void => {
     throw new CliError(`${clone.path} already exists`);
   }
 
-  heading(`Creating ${cloneLabel(clone.name, clone.colour)}`);
+  heading(`Creating ${cloneLabel(clone)}`);
   note(`ports ${clone.ports.ng} / ${clone.ports.storybook} / ${clone.ports.playwrightReport}`);
 
   // 1. the clone itself
@@ -106,10 +107,24 @@ export const addClone = (opts: AddCloneOptions): void => {
   // 6. identity file AND its exclude line, created as a pair.
   writeFile(claudeLocalMdPath(clone), claudeLocalMdContent(clone, [...existing, clone]));
   const exclude = existsSync(excludePath(clone)) ? readFileSync(excludePath(clone), 'utf8') : '';
-  if (!exclude.split('\n').some((l) => l.trim() === EXCLUDE_LINE)) {
+  if (missingExcludeLines(exclude).length > 0) {
     writeFile(excludePath(clone), exclude + EXCLUDE_BLOCK);
   }
   ok('CLAUDE.local.md + .git/info/exclude (always as a pair)');
+
+  // 6b. the shared tmp/. A fresh clone has none, so this is a plain symlink rather than a
+  // merge -- but only if its checked-out branch writes PID files per clone, the same condition
+  // `orch-util tmp merge` enforces for the others.
+  if (existsSync(fleetTmp)) {
+    if (hasScopedPidDir(clone)) {
+      symlinkSync(fleetTmp, cloneTmpPath(clone));
+      ok(`tmp/ -> ${tildify(fleetTmp)}`);
+    } else {
+      warn(
+        `tmp/ left unshared: ${relative(clone.path, pidFilesModule(clone))} on this branch writes flat tmp/<name>.pid`,
+      );
+    }
+  }
 
   // 7. Claude Code settings: copied, except the two values that must not be.
   writeFile(settingsPath(clone), settingsContentFor(clone, settingsTemplate(existing)));

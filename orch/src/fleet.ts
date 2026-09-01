@@ -1,6 +1,7 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { CliError } from './exec.ts';
 import { colourFor, type CloneColour } from './palette.ts';
 import { fleetRoot } from './paths.ts';
 import { portsFor, type ClonePorts } from './ports.ts';
@@ -78,3 +79,21 @@ export const nextFreeIndex = (): number => {
 
 /** A clone the CLI created but has not yet finished wiring up still needs a Clone shape. */
 export const cloneAt = (index: number): Clone => makeClone(index);
+
+/**
+ * The hint every "which clone?" error carries. Indices, not directory names: the index is what
+ * you type, and `findClone` accepts nothing the index does not cover.
+ */
+export const knownClonesHint = (): string =>
+  `Known clones: ${
+    discoverClones()
+      .map((c) => String(c.index))
+      .join(', ') || '(none)'
+  }`;
+
+/** `findClone`, but a missing clone is a CliError rather than `undefined`. */
+export const requireClone = (ref: string): Clone => {
+  const clone = findClone(ref);
+  if (!clone) throw new CliError(`no such clone: ${ref}`, knownClonesHint());
+  return clone;
+};

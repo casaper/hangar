@@ -9,3 +9,12 @@
 .remember/
 clone_*/
 node_modules/
+
+# The two shared directories the clones cannot share by symlink or by setting:
+#   plans/ -- the plan archive. `plansDirectory` must resolve INSIDE the project root (Claude
+#             Code follows symlinks and rejects an escape), so each clone keeps its own real
+#             .claude/plans and `orch-util plans collect` moves finished plans in here.
+#   tmp/   -- the shared per-ticket Jira cache and per-clone scratch. Each clone's `tmp` is a
+#             symlink to it. Holds Jira attachments and live PID files; never committable.
+plans/
+tmp/

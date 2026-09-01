@@ -2,7 +2,7 @@ import pc from 'picocolors';
 
 import { prSearchUrl, repoRef } from '../bitbucket.ts';
 import { CliError } from '../exec.ts';
-import { discoverClones, findClone, type Clone } from '../fleet.ts';
+import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import { currentBranch, git, syncState } from '../git.ts';
 import { inferTicket, jiraUrl } from '../jira.ts';
 import { claudeSessionsIn, runningServersIn } from '../procs.ts';
@@ -49,7 +49,7 @@ export const statusOf = (clone: Clone, fetched: boolean): void => {
   const sessions = claudeSessionsIn(clone.path);
   const servers = runningServersIn(clone.path);
 
-  heading(cloneLabel(clone.name, clone.colour));
+  heading(cloneLabel(clone));
 
   const rows: string[][] = [
     ['dir', clone.path],
@@ -111,27 +111,9 @@ export const status = (ref: string | undefined, opts: StatusOptions): void => {
 
 const resolveOne = (ref: string | undefined): Clone[] => {
   if (ref === undefined) {
-    throw new CliError(
-      'status needs a clone name, or --all',
-      `Known clones: ${
-        discoverClones()
-          .map((c) => c.name)
-          .join(', ') || '(none)'
-      }`,
-    );
+    throw new CliError('status needs a clone name, or --all', knownClonesHint());
   }
-  const clone = findClone(ref);
-  if (!clone) {
-    throw new CliError(
-      `no such clone: ${ref}`,
-      `Known clones: ${
-        discoverClones()
-          .map((c) => c.name)
-          .join(', ') || '(none)'
-      }`,
-    );
-  }
-  return [clone];
+  return [requireClone(ref)];
 };
 
 /** Two clones on one branch is legal but almost always a mistake worth surfacing. */

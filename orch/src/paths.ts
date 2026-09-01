@@ -20,6 +20,31 @@ export const home = homedir();
 export const claudeDir = join(home, '.claude');
 export const themesDir = join(claudeDir, 'themes');
 
+/** Claude Code's session transcripts, one directory per working directory a session started in. */
+export const projectsDir = join(claudeDir, 'projects');
+
+/**
+ * The shared plan archive. A fleet-root session writes here directly (`plansDirectory: "plans"`);
+ * the clones write to their own `.claude/plans` and `orch-util plans collect` moves them in.
+ */
+export const fleetPlans = join(fleetRoot, 'plans');
+
+/**
+ * The one shared `tmp/`: every clone's `tmp` is a symlink to it, so a Jira ticket fetched in
+ * one clone is there for all of them. PID files stay per clone in `tmp/_<clone>/`.
+ */
+export const fleetTmp = join(fleetRoot, 'tmp');
+
+/** Where plans land when `plansDirectory` is absent or rejected -- shared with other projects. */
+export const userPlans = join(claudeDir, 'plans');
+
+/**
+ * The abandoned shared archive. Claude Code requires `plansDirectory` to resolve INSIDE the
+ * project root (following symlinks), so this absolute path was silently rejected in every
+ * clone and every plan since 2026-08-31 went to `userPlans` instead.
+ */
+export const legacyPlans = join(claudeDir, 'dvb-gn-plans');
+
 /** The one shared statusline script -- all clones run it; it derives its hue from the cwd. */
 export const statuslineScript = join(claudeDir, 'dvb-clone-statusline.sh');
 

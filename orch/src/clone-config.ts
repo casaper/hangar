@@ -28,13 +28,28 @@ export const workspacePath = (clone: Clone): string =>
 export const playwrightEnvLocalPath = (clone: Clone): string =>
   join(clone.path, 'tests', 'playwright-regression-tests', '.env.local');
 
-export const EXCLUDE_LINE = '/CLAUDE.local.md';
+/**
+ * What `.git/info/exclude` has to hide, and why it cannot be the tracked `.gitignore`:
+ *
+ * - `/CLAUDE.local.md` is generated per clone and must never travel to a sibling.
+ * - `/tmp` is a SYMLINK to the fleet's shared tmp. The tracked `.gitignore` says `tmp/`, and a
+ *   trailing slash matches a directory only -- so without this line the symlink shows up as
+ *   untracked in every clone until the tracked rule is relaxed to `tmp`.
+ */
+export const EXCLUDE_LINES = ['/CLAUDE.local.md', '/tmp'] as const;
+export const EXCLUDE_LINE = EXCLUDE_LINES[0];
 export const EXCLUDE_BLOCK = [
   '',
-  `# Per-clone Claude Code identity (fleet: ${tildify(fleetRoot)})`,
-  EXCLUDE_LINE,
+  `# Per-clone Claude Code identity and the shared tmp symlink (fleet: ${tildify(fleetRoot)})`,
+  ...EXCLUDE_LINES,
   '',
 ].join('\n');
+
+/** The lines `.git/info/exclude` is missing, so `doctor` can append only what is absent. */
+export const missingExcludeLines = (exclude: string): string[] => {
+  const present = new Set(exclude.split('\n').map((line) => line.trim()));
+  return EXCLUDE_LINES.filter((line) => !present.has(line));
+};
 
 export const envLocalContent = (clone: Clone): string =>
   [
@@ -167,6 +182,8 @@ const HEALTH_CHECK_RE =
 
 export type SettingsJson = {
   theme?: string;
+  /** Must resolve INSIDE the clone -- Claude Code rejects a path that escapes the project root. */
+  plansDirectory?: string;
   permissions?: { allow?: string[]; deny?: string[] };
   [key: string]: unknown;
 };

@@ -1,7 +1,7 @@
 import { existsSync, renameSync, rmSync, unlinkSync } from 'node:fs';
 
 import { CliError } from '../exec.ts';
-import { discoverClones, findClone, type Clone } from '../fleet.ts';
+import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import { themePath } from '../generate/theme-json.ts';
 import { git, gitTry, syncState } from '../git.ts';
 import { tildify } from '../paths.ts';
@@ -75,21 +75,11 @@ const detachedPathFor = (clone: Clone): string => {
 };
 
 export const removeClone = (ref: string, opts: RemoveCloneOptions): void => {
-  const clone = findClone(ref);
-  if (!clone) {
-    throw new CliError(
-      `no such clone: ${ref}`,
-      `Known clones: ${
-        discoverClones()
-          .map((c) => c.name)
-          .join(', ') || '(none)'
-      }`,
-    );
-  }
+  const clone = requireClone(ref);
   const siblings = discoverClones().filter((c) => c.index !== clone.index);
   const deleting = opts.delete === true;
 
-  heading(`${deleting ? 'Deleting' : 'Detaching'} ${cloneLabel(clone.name, clone.colour)}`);
+  heading(`${deleting ? 'Deleting' : 'Detaching'} ${cloneLabel(clone)}`);
 
   const blocking = [...movementGuards(clone), ...(deleting ? dataGuards(clone) : [])];
   for (const guard of blocking) fail(guard.message);

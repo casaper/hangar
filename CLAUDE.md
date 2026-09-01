@@ -22,7 +22,8 @@ own package lives in `orch/` — never at this level.
 
 It _is_ itself a small local-only git repo — branch `main`, no remote — tracking this file,
 `bin/orch-util`, the CLI package in `orch/**`, `.envrc`, `.editorconfig`, the shell helpers,
-`.gitignore` and `.claude/settings.local.json`. Never the application.
+`.gitignore` and `.claude/settings.json`. Never the application, and never the two shared
+directories it now also holds (`plans/`, `tmp/`).
 
 Full clones, not `git worktree`: each needs its own `node_modules`, its own dev server, its own
 Storybook and its own Playwright run. That is the whole reason the fleet exists.
@@ -50,6 +51,12 @@ adding or removing one needs no bookkeeping:
 **Run `orch-util list` and `orch-util ports`; do not treat the numbers above as a roster.** Clones come
 and go, and index gaps are normal — `remove-clone` never renumbers, because renumbering would
 move another clone's ports out from under a running server.
+
+A clone is **addressed by its index**: `orch-util status 2`, `sync 3`, `open 1` — `clone_02` and
+`02` are accepted too. `orch-util` prints the index for the same reason (`● 1`), and keeps the
+padded `clone_NN` form only where it names a directory you can act on: `status`'s `dir` row, the
+sibling remote names, the generated per-clone files, and the messages `sync` types into another
+clone's live session.
 
 The colour is not decoration — it is how the developer tells near-identical terminal windows
 apart. It is wired the same way in every clone, and none of it is in git (it cannot be:
@@ -125,16 +132,23 @@ usually are. There is no build step: Node strips the types and runs `src/cli.ts`
 | `orch-util add-clone`             | create the next clone and wire it in completely                       |
 | `orch-util remove-clone <clone>`  | detach it (`--delete` also removes the directory, guarded)            |
 | `orch-util doctor [--fix]`        | verify/repair every untracked per-clone artifact                      |
-| `orch-util jira link [KEY...]`    | link `tmp/<KEY>` into the shared store in every clone                 |
+| `orch-util plans collect`         | gather every clone's finished plans into the shared `plans/`          |
+| `orch-util plans stamp`           | date-prefix the plans in `plans/`, skipping any a live agent is using |
+| `orch-util tmp merge`             | merge every clone's `tmp/` into the shared `tmp/`, then link them     |
+| `orch-util jira link [KEY...]`    | link `tmp/<KEY>` into the legacy store (superseded by `tmp merge`)    |
 | `orch-util colours sync`          | regenerate the palette-derived artifacts                              |
 
-Two behaviours are worth knowing before you run them:
+Three behaviours are worth knowing before you run them:
 
 - **`orch-util sync` types into a live Claude session.** There is no CLI mechanism to message a
   running interactive session, so it finds the session's tty, maps it to an iTerm2 tab and writes
   a pause message, then a resume message afterwards. `--all` **skips** clones with a live session
   unless `--include-busy`. Rebase vs merge follows the rule "rebase only my own linear branch";
   anything with merge commits, or started by someone else, is merged instead.
+- **`orch-util plans collect` and `tmp merge` move files between the clones and the fleet root.**
+  Both are idempotent and neither ever overwrites: byte-identical copies collapse to one, anything
+  that differs is kept beside the winner as `<name>.from-clone_NN`, and anything a live session may
+  still be writing is left where it is and reported. Run them again rather than forcing them.
 - **Conflicts are delegated to a headless `claude -p` inside the clone**, then verified
   mechanically (no unmerged paths, no markers). If that fails the whole operation is aborted and
   the pre-sync state restored — never left half-merged. `git rerere` and `-X ours/theirs` are
@@ -197,36 +211,42 @@ Two things to know before editing any of this:
   `.env.shared` at that later point to win. Delete it and Playwright's login breaks with an empty
   password — verify with `node dev/ports.mjs` style checks, not by assuming.
 
-## Shared Jira ticket cache
+## Shared `tmp/`
 
-The per-ticket Jira cache is shared across every clone. `~/.claude/dvb-gn-jira/<KEY>/` is the
-real directory; each clone's `tmp/<KEY>` is a symlink into it, so a ticket fetched or refreshed in
-one clone is immediately there for the others. `orch-util jira link` adopts and links (no arguments =
-every ticket dir found anywhere; keys = link just those; `--dry-run` to preview). It is idempotent
-and never deletes a differing file — a conflicting copy is kept as `<name>.from-clone_NN` and
-reported. (`jira-cache-link.sh` is a shim that forwards to it.)
+`tmp/` is **one directory for the whole fleet**: `~/code/dvb_gn/tmp` is real, and each clone's
+`tmp` is a symlink to it. (Migration pending as of 2026-09-01: it waits on the per-clone PID path
+below reaching every clone's branch. `orch-util doctor` says where each clone actually stands —
+never assume from this file.) A Jira ticket fetched in one clone is immediately there for the others,
+and so is anything else the skills cache. `orch-util tmp merge` performs the migration (idempotent,
+and it never overwrites: a differing file is kept beside the winner as `<name>.from-clone_NN`) and
+`orch-util doctor` checks the symlink afterwards. The old per-key mechanism — `tmp/<KEY>` linked
+into `~/.claude/dvb-gn-jira` by `orch-util jira link` — is superseded by it; the store is drained
+into the shared `tmp/` and removed.
 
-This needs **no change to the tracked tooling**: `.claude/skills/jira-scope/jira-cache.mjs`
-hardcodes `<git toplevel>/tmp/<KEY>` with no configuration, but only ever does
-`mkdirSync(..., {recursive: true})` on it, which follows a symlink.
+This needs **no change to the tracked skill tooling**:
+`.claude/skills/jira-scope/jira-cache.mjs` hardcodes `<git toplevel>/tmp/<KEY>` with no
+configuration, but only ever does `mkdirSync(..., {recursive: true})` on it, which follows a
+symlink.
 
-> **`tmp/` itself is NEVER shared, and must stay a real per-clone directory.** It also holds the
-> dev-server PID files, and `dev/run-with-pid.mjs` refuses a name that is already live — so a
-> shared `tmp/` would let only one clone run a dev server at a time, and would let
-> `node dev/pids.mjs --kill ng_serve` reach into another clone and kill its server. Only the
-> per-ticket `tmp/<KEY>` directories are linked. When adding a new key, link the key, never `tmp/`.
-
-**Nothing enforces the linking.** `jira-scope` creates `tmp/<KEY>` as a real directory whenever a
-clone fetches a ticket the fleet has not linked yet, so when `ls -la clone_*/tmp` shows a real
-directory among the symlinks, re-run `orch-util jira link` (`--dry-run` first) — it adopts them in
-place, from the fleet root, for every clone. `orch-util doctor` will not catch this; the symlinks are
-maintenance, not setup.
+> **PID files are the reason this was not shared before, and they stay per clone.** `tmp/` also
+> holds the dev-server PID files, and `dev/run-with-pid.mjs` refuses a name that is already live —
+> so a flat `tmp/ng_serve.pid` in a shared directory would let the first clone to start a dev
+> server block the other two, and would let `node dev/pids.mjs --kill ng_serve` reach into another
+> clone and kill its server. The tracked `dev/pid-files.mjs` therefore writes to
+> **`tmp/_<clone>/<name>.pid`**, and `tests/playwright-regression-tests/config/runner-pid.ts`
+> matches it. Until that change is on a clone's checked-out branch, that clone must not be shared:
+> `orch-util tmp merge` refuses (`--force` overrides), and `doctor` reports the clone as waiting
+> rather than broken.
 
 `ticket_<KEY>.md`, its relation variants and Jira attachments are clone- and branch-independent,
 which is the point. **`pr_description_<KEY>.md` is not** — it is derived from the working-tree diff,
 so it is shared as a side effect and is last-writer-wins when two clones work one ticket at once.
 One ticket normally belongs to one clone, so this is bounded, but do not trust a PR description you
 did not just generate in this clone.
+
+`tmp/` is gitignored in the clone, but the tracked rule is `tmp/`, and a **trailing slash does not
+match a symlink** — so each clone's `.git/info/exclude` carries `/tmp` beside `/CLAUDE.local.md`.
+`orch-util doctor` checks for it once the clone is shared. A re-clone loses both lines.
 
 ## Claude Code settings layering
 
@@ -240,21 +260,36 @@ three (verify with `jq -S 'del(.theme)|del(.permissions.allow)' … | shasum`).
   other projects, and `autoMemoryDirectory`, `plansDirectory`, `statusLine` and
   `enabledMcpjsonServers` would leak the fleet onto them.
 - `clone_NN/.claude/settings.local.json` (untracked) holds the fleet-scoped keys, identical in all
-  three: the shared memory and plans directories, the shared statusline, the six MCP servers
+  three: the shared memory directory, `plansDirectory` (relative — see above), the shared
+  statusline, the six MCP servers
   (`playwright`, `jira`, `yfiles-api`, `angular-cli`, `primeng`, `ag-mcp`), the `frontend-design`
   plugin off, the `.env.shared` deny, and the two iTerm2 keys (`terminal.explorerKind`,
   `terminal.external.osxExec`).
 - `.claude/settings.json` is **tracked and shared** — never put a per-clone or personal value there.
 
-Plans are shared too: every clone points `plansDirectory` at `~/.claude/dvb-gn-plans` (157 files,
-deduplicated — clone_03's 149 were byte-identical copies of clone_01's). Plan files are
-individually named random word-triples and the directory holds no index or manifest, so unlike a
-shared `MEMORY.md` there is nothing for concurrent sessions to clobber.
+**Plans cannot be shared by a setting, and `plansDirectory` must stay relative.** Claude Code
+resolves it against the project root and then requires the result to be inside that root *with
+symlinks followed*; anything that escapes is rejected with `plansDirectory must be within project
+root` and the CLI **silently falls back to `~/.claude/plans`** — mixed in with this machine's other
+projects. An absolute `~/.claude/dvb-gn-plans` was set in all three clones and did exactly that
+from 2026-08-31 until it was found. A `.claude/plans` symlink pointing at the fleet root fails the
+same check, so that is not a way round it either.
 
-**The absolute path there is correct — do not "fix" it.** The settings-reference documents
-`{"plansDirectory": "/path/to/plans"}`; the JSON _schema_ still describes the key as "relative to
-project root" and is simply stale (the settings docs warn the schema can lag the CLI). Changing it
-back to a relative path would silently re-fragment plans across the clones.
+So each clone keeps `"plansDirectory": ".claude/plans"` — its own real directory — and the sharing
+is a command: **`orch-util plans collect`** moves finished plans into `~/code/dvb_gn/plans`,
+collapsing byte-identical copies and putting the plan's date in front of the name.
+**`orch-util plans stamp`** dates anything that arrives there unstamped. Both refuse to touch a
+plan a live session may still be writing (reconstructed from the live `claude` processes and the
+`trackingPath` entries in their transcripts), so re-run them; what was skipped will move next time.
+A fleet-root session needs no collection: its project root *is* the fleet root, so
+`"plansDirectory": "plans"` in `.claude/settings.json` writes there directly.
+
+Dates come from the filename, then the file's own birthtime/mtime, then the first transcript that
+mentions it. **`stat` alone is not trustworthy here:** an earlier consolidation copied 157 plans
+without preserving times, so they all carry one identical second, and Claude Code's atomic rewrite
+resets birthtime on a plan it is still editing. `plans collect` detects a bulk-copy timestamp (many
+files, same second, birthtime == mtime) and refuses to use it, then writes the date it resolved
+back as the file's mtime so it survives.
 
 ## Git topology
 
@@ -283,18 +318,20 @@ it — do not go read its working tree and reconstruct the change.
 
 A session started here, in `~/code/dvb_gn/`, is for fleet-level work only: running `orch-util`,
 comparing clones, looking at the layout, editing this file. No project skills, agents, hooks or permission rules
-load — the parent's `.claude/` holds nothing but `settings.local.json`, and everything else lives
-in the clones. That one file is tracked, and it is not empty: it points `autoMemoryDirectory` at
-the shared fleet memory.
+load — the parent's `.claude/` holds nothing but `settings.json`, and everything else lives
+in the clones. That one file is tracked and committed (it holds no personal values, which is why it
+is not a `.local.json`): it points `autoMemoryDirectory` at the shared fleet memory and
+`plansDirectory` at `plans/`, so a fleet-root session writes straight into the shared archive.
 
 Because the parent is its own repo, `git log` here and in a clone are unrelated histories. And
 There is now an `.envrc` here too, and its only job is `PATH_add bin`. It does **not** reach the
 clones — direnv loads the nearest `.envrc` only, and every clone has its own — which is why each
 clone repeats the same `PATH_add` in its untracked `.envrc.private`.
 
-`.gitignore` here is load-bearing, not leftover: `clone_*/`, `.env.shared` and `node_modules/`
-are the only reason the clones, the secrets and the CLI's dependencies stay out of the parent
-repo. Do not remove any of those lines. (`clone_*/`, not `clone_0*/`: the old glob stopped
+`.gitignore` here is load-bearing, not leftover: `clone_*/`, `.env.shared`, `node_modules/`,
+`plans/` and `tmp/` are the only reason the clones, the secrets, the CLI's dependencies, the plan
+archive and the shared scratch directory stay out of the parent repo. Do not remove any of those
+lines. (`clone_*/`, not `clone_0*/`: the old glob stopped
 matching at `clone_10`.)
 
 **Do not run project work from here.** `ng`, `jest`, `playwright`, the project's lint and format
@@ -325,7 +362,7 @@ either:
   `autoMemoryDirectory` is pointed at a shared path.
 
 A parent session has its own transcript directory, so it sees no clone's history in `/resume`. It
-**does** see the shared memory — the parent's tracked `.claude/settings.local.json` points
+**does** see the shared memory — the parent's tracked `.claude/settings.json` points
 `autoMemoryDirectory` at the same `~/.claude/dvb-gn-memory` every clone uses. A memory written
 from the parent is immediately visible in every clone and vice versa; `MEMORY.md` is one shared
 index with no locking, so append a line to it, never rewrite it wholesale.

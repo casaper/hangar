@@ -27,12 +27,7 @@ export const list = (): void => {
       commit === undefined
         ? pc.dim('(no commits)')
         : `${pc.yellow(commit.sha)} ${pc.dim(commit.date)} ${pc.dim(truncate(commit.committer, 18))} ${truncate(commit.subject, 50)}`;
-    rows.push([
-      cloneLabel(clone.name, clone.colour),
-      clone.colour.name,
-      currentBranch(clone.path),
-      commitCell,
-    ]);
+    rows.push([cloneLabel(clone), clone.colour.name, currentBranch(clone.path), commitCell]);
   }
   table(rows);
 };

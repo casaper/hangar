@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { workspacePath } from '../clone-config.ts';
 import { CliError, run } from '../exec.ts';
-import { discoverClones, findClone } from '../fleet.ts';
+import { requireClone } from '../fleet.ts';
 import { itermIsRunning, openWindowWithTabs } from '../iterm.ts';
 import { note, ok, warn } from '../ui.ts';
 
@@ -20,17 +20,7 @@ import { note, ok, warn } from '../ui.ts';
 export type OpenOptions = { code?: boolean | undefined; claude?: boolean | undefined };
 
 export const open = (ref: string, opts: OpenOptions): void => {
-  const clone = findClone(ref);
-  if (!clone) {
-    throw new CliError(
-      `no such clone: ${ref}`,
-      `Known clones: ${
-        discoverClones()
-          .map((c) => c.name)
-          .join(', ') || '(none)'
-      }`,
-    );
-  }
+  const clone = requireClone(ref);
 
   if (!itermIsRunning()) {
     throw new CliError(

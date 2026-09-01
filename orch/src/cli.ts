@@ -7,10 +7,12 @@ import { doctor } from './commands/doctor.ts';
 import { jiraLink } from './commands/jira.ts';
 import { list } from './commands/list.ts';
 import { open } from './commands/open.ts';
+import { plansCollect, plansStamp } from './commands/plans.ts';
 import { ports } from './commands/ports.ts';
 import { removeClone } from './commands/remove-clone.ts';
 import { status } from './commands/status.ts';
 import { sync } from './commands/sync.ts';
+import { tmpMerge } from './commands/tmp.ts';
 import { CliError } from './exec.ts';
 import { fleetRoot, tildify } from './paths.ts';
 
@@ -107,11 +109,61 @@ program
     doctor(clone, options);
   });
 
-const jira = program.command('jira').description('Shared per-ticket Jira cache');
+const plans = program
+  .command('plans')
+  .description("The shared plan archive: gather the clones' plans and date them");
+
+plans
+  .command('collect')
+  .description("Move every clone's finished plans into <fleet>/plans, dated and deduplicated")
+  .option('-n, --dry-run', 'show what would move, change nothing')
+  .option('--no-transcript-scan', 'do not fall back to session transcripts for a missing date')
+  .option(
+    '--in-use-window <minutes>',
+    'treat plans named in transcripts written this recently as in use',
+    '30',
+  )
+  .action((options) => {
+    plansCollect(options);
+  });
+
+plans
+  .command('stamp')
+  .description('Prefix every plan in <fleet>/plans with its ISO creation date')
+  .option('-n, --dry-run', 'show what would be renamed, change nothing')
+  .option('--no-transcript-scan', 'do not fall back to session transcripts for a missing date')
+  .option(
+    '--in-use-window <minutes>',
+    'treat plans named in transcripts written this recently as in use',
+    '30',
+  )
+  .action((options) => {
+    plansStamp(options);
+  });
+
+const tmp = program
+  .command('tmp')
+  .description("The shared tmp/: one directory, every clone's `tmp` a symlink to it");
+
+tmp
+  .command('merge')
+  .description("Merge every clone's tmp/ into <fleet>/tmp and link them to it")
+  .option('-n, --dry-run', 'show what would move, change nothing')
+  .option(
+    '--force',
+    'merge even where a clone still writes flat tmp/<name>.pid (two clones then cannot both serve)',
+  )
+  .action((options) => {
+    tmpMerge(options);
+  });
+
+const jira = program
+  .command('jira')
+  .description('Per-ticket Jira cache (superseded by `tmp merge` once every tmp/ is shared)');
 
 jira
   .command('link')
-  .description('Link every clone tmp/<KEY> into the shared store, adopting real dirs in place')
+  .description('Link every clone tmp/<KEY> into the legacy store, adopting real dirs in place')
   .argument('[keys...]', 'issue keys to link; default is every key found anywhere')
   .option('-n, --dry-run', 'show what would happen, change nothing')
   .action((keys, options) => {

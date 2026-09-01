@@ -1,7 +1,7 @@
 import pc from 'picocolors';
 
 import { CliError } from '../exec.ts';
-import { discoverClones, findClone, type Clone } from '../fleet.ts';
+import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import {
   conflictedFiles,
   currentBranch,
@@ -156,7 +156,7 @@ const continueRebase = (clone: Clone, strategy: Strategy): boolean => {
 };
 
 const syncOne = (clone: Clone, opts: SyncOptions): boolean => {
-  heading(`Syncing ${cloneLabel(clone.name, clone.colour)}`);
+  heading(`Syncing ${cloneLabel(clone)}`);
 
   const sessions = claudeSessionsIn(clone.path);
   const strategyBefore = chooseStrategy(clone);
@@ -279,7 +279,7 @@ const syncOne = (clone: Clone, opts: SyncOptions): boolean => {
 };
 
 export const sync = (ref: string | undefined, opts: SyncOptions): void => {
-  const clones = opts.all === true ? discoverClones() : [requireClone(ref)];
+  const clones = opts.all === true ? discoverClones() : [namedClone(ref)];
   const skipped: string[] = [];
   const failed: string[] = [];
 
@@ -316,27 +316,9 @@ export const sync = (ref: string | undefined, opts: SyncOptions): void => {
   if (skipped.length > 0) note(pc.dim(`skipped (busy): ${skipped.join(', ')}`));
 };
 
-const requireClone = (ref: string | undefined): Clone => {
+const namedClone = (ref: string | undefined): Clone => {
   if (ref === undefined) {
-    throw new CliError(
-      'sync needs a clone name, or --all',
-      `Known clones: ${
-        discoverClones()
-          .map((c) => c.name)
-          .join(', ') || '(none)'
-      }`,
-    );
+    throw new CliError('sync needs a clone name, or --all', knownClonesHint());
   }
-  const clone = findClone(ref);
-  if (!clone) {
-    throw new CliError(
-      `no such clone: ${ref}`,
-      `Known clones: ${
-        discoverClones()
-          .map((c) => c.name)
-          .join(', ') || '(none)'
-      }`,
-    );
-  }
-  return clone;
+  return requireClone(ref);
 };

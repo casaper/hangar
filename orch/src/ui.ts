@@ -2,7 +2,8 @@ import { spawnSync } from 'node:child_process';
 
 import pc from 'picocolors';
 
-import { paint, type CloneColour } from './palette.ts';
+import type { Clone } from './fleet.ts';
+import { paint } from './palette.ts';
 
 /**
  * Terminal output helpers. Everything user-facing goes through here so the fleet's own
@@ -36,9 +37,16 @@ export const step = (msg: string): void => {
 const BULLET = '●';
 const ELLIPSIS = '…';
 
-/** A clone's name, always in the clone's own hue -- the fleet's core visual convention. */
-export const cloneLabel = (name: string, colour: CloneColour): string =>
-  paint(colour, `${BULLET} ${name}`);
+/**
+ * A clone's identity, always in its own hue -- the fleet's core visual convention.
+ *
+ * It prints the INDEX, not the directory name. A clone is addressed as `1`
+ * (`orch-util status 1`), so that is how it is shown. Anything naming a DIRECTORY keeps the
+ * padded `clone_NN` form -- `status`'s `dir` row, the git remote names, the generated
+ * per-clone files, and the messages `sync` types into another clone's live session -- because
+ * those are paths you can act on rather than an identity you type.
+ */
+export const cloneLabel = (clone: Clone): string => paint(clone.colour, `${BULLET} ${clone.index}`);
 
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
 

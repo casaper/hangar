@@ -67,7 +67,7 @@ export const ports = (opts: PortsOptions): void => {
       pc.dim(PORT_ROLES.playwrightReport.label),
     ],
     ...rows.map(({ clone }) => [
-      cloneLabel(clone.name, clone.colour),
+      cloneLabel(clone),
       String(clone.ports.ng),
       String(clone.ports.storybook),
       String(clone.ports.playwrightReport),
