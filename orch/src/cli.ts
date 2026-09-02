@@ -13,6 +13,7 @@ import { removeClone } from './commands/remove-clone.ts';
 import { status } from './commands/status.ts';
 import { sync } from './commands/sync.ts';
 import { tmpMerge } from './commands/tmp.ts';
+import { vscodeSync } from './commands/vscode.ts';
 import { CliError } from './exec.ts';
 import { fleetRoot, tildify } from './paths.ts';
 
@@ -169,6 +170,19 @@ jira
   .option('-n, --dry-run', 'show what would happen, change nothing')
   .action((keys, options) => {
     jiraLink(keys, options);
+  });
+
+const vscode = program
+  .command('vscode')
+  .description('The VS Code setup: settings, MCP servers, launchers and the workspace files');
+
+vscode
+  .command('sync')
+  .description('Give every clone the same VS Code setup, keeping its per-clone paths its own')
+  .option('--from <clone>', 'sync from this clone instead of the most recently edited file')
+  .option('-n, --dry-run', 'show what would change, write nothing')
+  .action((options) => {
+    vscodeSync(options);
   });
 
 program

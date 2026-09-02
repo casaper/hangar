@@ -136,6 +136,7 @@ usually are. There is no build step: Node strips the types and runs `src/cli.ts`
 | `orch-util plans stamp`           | date-prefix the plans in `plans/`, skipping any a live agent is using |
 | `orch-util tmp merge`             | merge every clone's `tmp/` into the shared `tmp/`, then link them     |
 | `orch-util jira link [KEY...]`    | link `tmp/<KEY>` into the legacy store (superseded by `tmp merge`)    |
+| `orch-util vscode sync`           | one VS Code setup everywhere, per-clone paths still per clone         |
 | `orch-util colours sync`          | regenerate the palette-derived artifacts                              |
 
 Three behaviours are worth knowing before you run them:
@@ -153,6 +154,43 @@ Three behaviours are worth knowing before you run them:
   mechanically (no unmerged paths, no markers). If that fails the whole operation is aborted and
   the pre-sync state restored — never left half-merged. `git rerere` and `-X ours/theirs` are
   deliberately not used: they look like resolution and silently produce wrong code.
+
+**`orch-util vscode sync` is a text transform, not a copy**, and for two reasons. A handful of
+VS Code settings take an **absolute** path into the checkout — `stylelint.stylelintPath`,
+`stylelint.configFile`, `stylelint.configBasedir`, `prettier.prettierPath`, `prettier.configPath`,
+`jestrunner.projectPath`, `coverage-gutters.manualCoverageFilePaths`,
+`storyExplorer.server.internal.npm.dir` — and VS Code resolves them against nothing, so those must
+differ per clone while every other key should be identical. It discovers the checkout root the
+source file's values point at, replaces it with a token, and renders that template with each
+clone's own root. And both `.vscode/settings.json` and the `*.code-workspace` files are **JSONC** —
+comments and trailing commas, neither of which survives `JSON.parse` — so nothing is ever
+reserialised; key order and the hand-maintained tab indentation are preserved as text.
+
+Three things follow that are worth knowing:
+
+- **The key list is declared, in `orch/src/vscode.ts`, not sniffed.** A clone-specific setting
+  that is missing from it gets copied verbatim and leaves one clone's tool path aimed at another
+  clone's `node_modules` — silent, exactly like a Storybook health check on a sibling's port. A
+  rendered file that still contains `clone_NN` for another `NN` is therefore a **hard error**
+  naming the file; the fix is to add the key to the table, not to force the write. Absolute paths
+  _outside_ the fleet root are left alone — the `~/.vscode/extensions/…` YAML schema URL in the
+  workspace file is genuinely shared.
+- **`launch.json` and `tasks.json` are tracked by git**, unlike `settings.json`, `mcp.json` and the
+  workspace files, so they are **compared and never written** — there is no flag to force it. They
+  are versioned per branch, so the newest copy is not the right one, it is just whatever branch
+  last touched it; writing it into a sibling would dirty that sibling's checked-out branch _and_
+  import another branch's content into it. When they differ the command groups the clones by
+  version and prints each one's branch, which is almost always the explanation. Git resolves that,
+  not this command.
+- **There is no source clone.** Each untracked artifact independently syncs from the most recently
+  modified copy of _that_ file (they drift separately), which is printed; `--from <clone>`
+  overrides it and `-n` shows the changed keys per clone without writing.
+
+The workspace file exists **twice** per clone, byte-identical — `clone_NN/dvb_gn_NN.code-workspace`
+and `clone_NN/angular/dvb_gn_NN.code-workspace` — because VS Code only offers a
+`*.code-workspace` from the directory you opened, and this repo is opened at both. `doctor` checks
+for both and fills a missing one from its twin; `workspaceContent()` in `clone-config.ts` is only
+the fallback for a clone that has neither.
 
 `orch-util doctor` is the regression net for everything that lives outside git and so cannot be
 restored by a pull — ports, the `CLAUDE.local.md` + `.git/info/exclude` pair, `.envrc.private`,
@@ -285,7 +323,7 @@ so a session's plan reaches the archive the moment that session ends — which i
 moment it is safe to move, because nothing can rewrite it any more. **A plan stays in its own clone
 while its session is alive; that is the guarantee, not a delay.** `orch-util plans stamp` dates
 anything that arrives unstamped, and `orch-util doctor` checks both the effective `plansDirectory`
-and the hook. A fleet-root session needs neither: its project root *is* the fleet root, so
+and the hook. A fleet-root session needs neither: its project root _is_ the fleet root, so
 `"plansDirectory": "plans"` in `.claude/settings.json` writes into the archive directly.
 
 Dates come from the filename, then the file's own birthtime/mtime, then the first transcript that

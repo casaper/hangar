@@ -33,6 +33,7 @@ import {
   settingsContentFor,
   settingsPath,
   storybookHealthCheckAllow,
+  workspaceAngularPath,
   workspaceContent,
   workspacePath,
 } from '../clone-config.ts';
@@ -334,13 +335,23 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
         : `a real directory; ${relative(clone.path, pidFilesModule(clone))} on this branch still writes flat tmp/<name>.pid, so sharing would let one clone's dev server block the others`,
   });
 
-  const wsExists = existsSync(workspacePath(clone));
+  // Both copies: VS Code only offers a `*.code-workspace` from the directory you opened, and
+  // this repo is opened at its root and at `angular/`. `workspaceContent` is the fallback for
+  // a clone that has neither -- `orch-util vscode sync` is what keeps existing ones in step.
+  const wsPaths = [workspacePath(clone), workspaceAngularPath(clone)];
+  const wsMissing = wsPaths.filter((p) => !existsSync(p));
   checks.push({
     name: 'code-workspace',
-    ok: wsExists,
-    detail: wsExists ? (workspacePath(clone).split('/').pop() ?? '') : 'missing',
+    ok: wsMissing.length === 0,
+    detail:
+      wsMissing.length === 0
+        ? `${workspacePath(clone).split('/').pop() ?? ''} (root and angular/)`
+        : `missing: ${wsMissing.map((p) => relative(clone.path, p)).join(', ')}`,
     repair: () => {
-      writeFile(workspacePath(clone), workspaceContent(clone));
+      const template = wsPaths.find((p) => existsSync(p));
+      const content =
+        template === undefined ? workspaceContent(clone) : readFileSync(template, 'utf8');
+      for (const path of wsMissing) writeFile(path, content);
     },
   });
 

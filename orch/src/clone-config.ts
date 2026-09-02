@@ -23,8 +23,20 @@ export const claudeLocalMdPath = (clone: Clone): string => join(clone.path, 'CLA
 export const settingsPath = (clone: Clone): string =>
   join(clone.path, '.claude', 'settings.local.json');
 export const excludePath = (clone: Clone): string => join(clone.path, '.git', 'info', 'exclude');
-export const workspacePath = (clone: Clone): string =>
-  join(clone.path, `dvb_gn_${String(clone.index).padStart(2, '0')}.code-workspace`);
+const workspaceName = (clone: Clone): string =>
+  `dvb_gn_${String(clone.index).padStart(2, '0')}.code-workspace`;
+
+export const workspacePath = (clone: Clone): string => join(clone.path, workspaceName(clone));
+
+/**
+ * The second copy of the workspace file, byte-identical to the first.
+ *
+ * VS Code only offers `*.code-workspace` files from the directory you opened, and this repo
+ * is opened both at its root and at `angular/` -- so the file has to exist in both. Keep
+ * them in step with `orch-util vscode sync`.
+ */
+export const workspaceAngularPath = (clone: Clone): string =>
+  join(clone.path, 'angular', workspaceName(clone));
 export const playwrightEnvLocalPath = (clone: Clone): string =>
   join(clone.path, 'tests', 'playwright-regression-tests', '.env.local');
 
