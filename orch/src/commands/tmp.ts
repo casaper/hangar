@@ -14,6 +14,13 @@ import pc from 'picocolors';
 
 import { adoptInto, type AdoptAction } from '../adopt.ts';
 import { excludePath, EXCLUDE_BLOCK, missingExcludeLines } from '../clone-config.ts';
+import {
+  duplicateSets,
+  hardLinkDuplicates,
+  hasJdupes,
+  linkToWinner,
+  sameTicketGroups,
+} from '../dedupe.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, type Clone } from '../fleet.ts';
 import { fleetTmp, jiraStore, tildify } from '../paths.ts';
@@ -282,6 +289,8 @@ export const tmpMerge = (opts: TmpMergeOptions): void => {
     excludeCloneLocalMd(clone, dryRun);
   }
 
+  dedupeStore(dryRun);
+
   // --- report ------------------------------------------------------------------------
   console.log('');
   const summary =
@@ -300,6 +309,129 @@ export const tmpMerge = (opts: TmpMergeOptions): void => {
   if (strays.length > 0) {
     warn(`pid files in ${tildify(fleetTmp)}: ${strays.join(', ')}`);
     note('Never put there by this command — a clone whose whole tmp/ was the store wrote them.');
+  }
+};
+
+const MAX_LISTED = 8;
+
+const kb = (bytes: number): string =>
+  bytes >= 1024 * 1024
+    ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+    : `${String(Math.max(1, Math.round(bytes / 1024)))} KB`;
+
+/**
+ * Collapse byte-identical files in the store into one inode, and report the same-ticket copies
+ * that differ.
+ *
+ * One ticket reaches the store under several names -- `ticket_ABC-1325_relates_to_ABC-1323.md`
+ * IS ABC-1323 -- so the cache holds real duplicates and near-duplicates side by side. Only the
+ * first kind can be hard-linked; `dedupe.ts` has why the second kind must not be, and why
+ * `jdupes` does the content matching.
+ */
+const dedupeStore = (dryRun: boolean): void => {
+  heading('Duplicate content in the store');
+  if (!hasJdupes()) {
+    warn('jdupes is not installed — identical files were left as separate copies');
+    note('`brew install jdupes`. fdupes is not an alternative: it has no hard-link action.');
+  } else {
+    const { sets, files, bytes } = duplicateSets(fleetTmp);
+    if (files === 0) {
+      ok('no byte-identical files to link');
+    } else {
+      for (const set of sets.slice(0, MAX_LISTED)) {
+        const [anchor, ...rest] = set;
+        note(pc.dim(`${anchor ?? '?'} = ${rest.join(', ')}`));
+      }
+      if (sets.length > MAX_LISTED) note(pc.dim(`… and ${String(sets.length - MAX_LISTED)} more`));
+      const what = `${String(files)} file(s) in ${String(sets.length)} set(s)`;
+      if (dryRun) {
+        ok(`${what} would be hard-linked, freeing ${kb(bytes)}`);
+      } else {
+        const res = hardLinkDuplicates(fleetTmp);
+        if (res.ok) ok(`hard-linked ${what}, freeing ${kb(bytes)}`);
+        else warn(`jdupes could not link them: ${res.error || 'unknown error'}`);
+      }
+    }
+  }
+
+  resolveSameTicketCopies(dryRun);
+};
+
+const pad = (n: number): string => String(n).padStart(2, '0');
+
+/** LOCAL time, not UTC: it is read next to a `fetched:` line the skill writes with an offset. */
+const stamp = (ms: number): string => {
+  const at = new Date(ms);
+  return (
+    `${String(at.getFullYear())}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ` +
+    `${pad(at.getHours())}:${pad(at.getMinutes())}`
+  );
+};
+
+/**
+ * The half no content matcher can see: one ticket cached twice with DIFFERENT content.
+ *
+ * `jdupes` matches bytes, and these do not match — a relation copy carries its own
+ * `relation:`/`relatedTo:` frontmatter and its own `fetched:` time, so two renderings of one
+ * ticket are never identical. Grouped by ticket id first and content second (see
+ * `sameTicketGroups`), the **freshest rendering wins** and the others become hard links to it.
+ *
+ * That is a deliberate override of the `jira-scope` skill's "the duplication between the two is
+ * intended … Never dedupe them", asked for explicitly: one file per ticket, the newest fetch.
+ * What it costs is worth knowing — when the winner is a relation copy, the ticket's own file
+ * inherits that copy's `relation:`/`relatedTo:` frontmatter, which then reads as though the
+ * ticket's own record hangs off the other ticket. It is said out loud when it happens, and `-n`
+ * shows every choice before any of it is done.
+ *
+ * Markdown only. A differing pair of ASSETS under one name is a re-download that went wrong,
+ * not a fresher rendering, and picking a winner there could keep a truncated file.
+ */
+const resolveSameTicketCopies = (dryRun: boolean): void => {
+  const groups = sameTicketGroups(fleetTmp).filter((g) => !g.linked && !g.identical);
+  if (groups.length === 0) return;
+  console.log('');
+
+  for (const group of groups) {
+    const [winner, ...losers] = group.copies;
+    if (winner === undefined) continue;
+    if (group.busy) {
+      warn(`${group.key}: a copy was written in the last two minutes — left alone`);
+      note(pc.dim('A session may be mid-refresh; collapsing now would overwrite it. Run again.'));
+      continue;
+    }
+    if (!group.resolvable) {
+      warn(`${group.key}: ${group.copies.map((c) => c.rel).join(' · ')} differ — left alone`);
+      note(
+        pc.dim(
+          'Not Markdown: a differing asset under one name is a bad download, not a newer' +
+            ' rendering, so neither copy is preferred.',
+        ),
+      );
+      continue;
+    }
+    const when = `${stamp(winner.at)}${winner.source === 'fetched' ? '' : ` (${winner.source})`}`;
+    step(`${group.key}: newest is ${winner.rel} — ${when}`);
+    for (const loser of losers) {
+      const gap = Math.round((winner.at - loser.at) / 60_000);
+      const older = gap > 0 ? `${String(gap)} min older` : 'same time, lost on name order';
+      note(pc.dim(`${loser.rel} (${older}) → hard link${dryRun ? ' would be made' : 'ed'}`));
+      if (!dryRun) {
+        try {
+          linkToWinner(winner.path, loser.path);
+        } catch (error) {
+          warn(`${loser.rel}: could not link — ${(error as Error).message}`);
+        }
+      }
+    }
+    // The one consequence the developer cannot see in the output above.
+    if (winner.relationCopy) {
+      note(
+        pc.dim(
+          `${group.key}'s own file now carries the relation frontmatter of the winning copy — ` +
+            're-fetch it if that matters.',
+        ),
+      );
+    }
   }
 };
 

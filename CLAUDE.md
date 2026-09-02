@@ -318,6 +318,39 @@ and dotfiles — a **blocklist**, so a file a skill starts caching tomorrow is s
 anyone editing a table. `-n` previews, and names any entry two clones both offer, since which of
 the two wins is decided from what is on disk and a dry run has moved nothing.
 
+**One ticket lands in the store under several names, and `tmp merge` knows it.** The
+`jira-scope` skill gives a directory only to the ticket the user asked about, so a ticket
+fetched as a relation is written into the asking ticket's directory:
+`ABC-1325/ticket_ABC-1325_relates_to_ABC-1323.md` **is ABC-1323**. The **last** issue key in a
+filename is what the file contains; the keys before it only say how it was reached (and the
+same holds for an attachment — `ticket_ABC-1323_relates_to_ABC-1191_asset_shot.png` is ABC-1191's
+attachment). Two things follow:
+
+- **Byte-identical copies are hard-linked**, by `jdupes -L` over the store (`-A` skips dotfiles,
+  `-X noext:pid` keeps PID files out of it, and it treats already-linked files as
+  non-duplicates, so a re-run does nothing). Not reimplemented and not `fdupes`, which has no
+  hard-link action at all. Attachments are what this is for: a 4 MB recording fetched under two
+  relation paths is one file twice. **Install it (`brew install jdupes`) or the pass is skipped
+  with a warning** — the rest of the merge is unaffected.
+- **Copies of one ticket that DIFFER are collapsed onto the FRESHEST one**, the rest becoming
+  hard links to it. Freshness is the `fetched:` frontmatter (Jira's `updated:` is only a
+  fallback — it is written on a ticket's own file and left off the relation copies, so it cannot
+  rank the two against each other). Markdown only: a differing pair of _assets_ under one name
+  is a download that went wrong, not a newer rendering, so neither is preferred. `-n` prints
+  every choice, the age gap and whose content disappears, before any of it happens.
+
+  Two things to know, because this is a **deliberate override** of the skill's "the duplication
+  between the two is intended … Never dedupe them". First, when the winner is a relation copy,
+  the ticket's own file inherits that copy's `relation:`/`relatedTo:` frontmatter and then reads
+  as though the ticket's own record hangs off the other ticket — the command says so when it
+  happens. Second, the collapse is **sticky**: the skill refreshes a ticket by overwriting its
+  Markdown in place, and an in-place write through one name changes every name hard-linked to
+  it. Re-fetching the ticket itself is then harmless — both names get the fresh record. Fetching
+  it again **as a relation** is not: that write carries `relation:`/`relatedTo:` frontmatter and
+  lands in the ticket's own file too, turning its own record into a relation record, at fetch
+  time, with nothing printed. A copy written in the last two minutes is left alone for the same
+  family of reasons — a session may be mid-refresh, and this pass replaces content.
+
 The old per-key mechanism — `tmp/<KEY>` linked into `~/.claude/dvb-gn-jira` by
 `orch-util jira link` — is **gone**, and so is that command: `tmp merge` drains the store into
 `~/code/dvb_gn/tmp` and removes it, and links every entry rather than only the `DN-####`

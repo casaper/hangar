@@ -11,7 +11,18 @@ import { atlassianUrl } from './paths.ts';
  * which left `pr-*.md` and everything else the skills cache unshared.
  */
 export const KEY_RE = /^[A-Z][A-Z0-9]+-\d+$/;
-const KEY_IN_TEXT_RE = /\b[A-Z][A-Z0-9]+-\d+\b/g;
+
+/**
+ * A key embedded in text, with `_` treated as a SEPARATOR rather than part of a word.
+ *
+ * Not `\b`: `_` is a word character, so `\bABC-1323\b` matches neither
+ * `fixes/ABC-1323_playwright_json` nor `ticket_ABC-1323.md` -- which is every branch name this
+ * repo produces and every filename the Jira cache writes. The branch was silently never used
+ * as a ticket signal, and `status` said "from a commit on this branch, not from the branch
+ * name" while the key sat in the branch name. The lookarounds exclude only letters and digits,
+ * so a key may abut `_`, `/`, `-`, `.` or a space.
+ */
+const KEY_IN_TEXT_RE = /(?<![A-Za-z0-9])[A-Z][A-Z0-9]+-\d+(?![A-Za-z0-9])/g;
 
 /**
  * Prefixes that look exactly like an issue key but never are. Without this, `UTF-8`,
@@ -37,13 +48,23 @@ const NOT_ISSUE_PREFIXES = new Set([
   'X',
 ]);
 
-const firstIssueKey = (text: string): string | undefined => {
+/**
+ * Every issue key in `text`, in order, with the false positives above removed.
+ *
+ * Exported because a cache FILENAME carries several: `ticket_ABC-1278_parent_ABC-1032.md` names
+ * the directory's ticket and then the one the file is actually about. See `cacheSubjectOf`.
+ */
+export const issueKeysIn = (text: string): { key: string; start: number; end: number }[] => {
+  const found: { key: string; start: number; end: number }[] = [];
   for (const match of text.matchAll(KEY_IN_TEXT_RE)) {
     const key = match[0];
-    if (!NOT_ISSUE_PREFIXES.has(key.split('-')[0] ?? '')) return key;
+    if (NOT_ISSUE_PREFIXES.has(key.split('-')[0] ?? '')) continue;
+    found.push({ key, start: match.index, end: match.index + key.length });
   }
-  return undefined;
+  return found;
 };
+
+const firstIssueKey = (text: string): string | undefined => issueKeysIn(text)[0]?.key;
 
 export const jiraUrl = (key: string): string => `${atlassianUrl}/browse/${key}`;
 
