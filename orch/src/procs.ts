@@ -2,7 +2,6 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
 import { run } from './exec.ts';
-import { isSharedTmpPath } from './tmp.ts';
 
 /**
  * Finding what is actually running in a clone.
@@ -120,7 +119,7 @@ export const isAlive = (pid: number): boolean => {
 
 export type RunningServer = { readonly name: string; readonly pid: number };
 
-/** Where `dev/pid-files.mjs` writes this clone's pid files inside the shared `tmp/`. */
+/** Where a branch that scopes its pid files per clone writes them. */
 export const pidDirIn = (clonePath: string): string =>
   join(clonePath, 'tmp', `_${basename(clonePath)}`);
 
@@ -149,14 +148,12 @@ const pidsIn = (dir: string): RunningServer[] => {
 /**
  * Dev servers a clone has running, from its pid files.
  *
- * `tmp/_<clone>/` is where a tree carrying the per-clone pid path writes. A flat `tmp/*.pid` is
- * what an older branch writes, and it is read ONLY while `tmp/` is still this clone's own
- * directory -- once `tmp/` is shared, that same file is visible from every clone and attributing
- * it here would make one clone's dev server look like a server in all of them, which
- * `remove-clone` and `status` would then act on. Flat pid files in a shared `tmp/` are reported
- * once at fleet level instead (`strayPidFilesInSharedTmp`).
+ * Both places, unconditionally: `tmp/` is the clone's OWN directory (only the cache entries in
+ * it are symlinks into the fleet store), so a flat `tmp/<name>.pid` and a scoped
+ * `tmp/_<clone>/<name>.pid` are equally this clone's -- which of the two a clone writes is
+ * whatever its checked-out branch does, and nothing here needs to care.
  */
 export const runningServersIn = (clonePath: string): RunningServer[] => [
   ...pidsIn(pidDirIn(clonePath)),
-  ...(isSharedTmpPath(clonePath) ? [] : pidsIn(join(clonePath, 'tmp'))),
+  ...pidsIn(join(clonePath, 'tmp')),
 ];

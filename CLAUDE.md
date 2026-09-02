@@ -135,8 +135,7 @@ usually are. There is no build step: Node strips the types and runs `src/cli.ts`
 | `orch-util doctor [--fix]`        | verify/repair every untracked per-clone artifact                      |
 | `orch-util plans collect`         | gather every clone's finished plans into the shared `plans/`          |
 | `orch-util plans stamp`           | date-prefix the plans in `plans/`, skipping any a live agent is using |
-| `orch-util tmp merge`             | merge every clone's `tmp/` into the shared `tmp/`, then link them     |
-| `orch-util jira link [KEY...]`    | link `tmp/<KEY>` into the legacy store (superseded by `tmp merge`)    |
+| `orch-util tmp merge`             | pool every clone's `tmp/` cache in `tmp/`, a symlink per entry back   |
 | `orch-util vscode sync`           | one VS Code setup everywhere, per-clone paths still per clone         |
 | `orch-util colours sync`          | regenerate the palette-derived artifacts                              |
 
@@ -154,18 +153,13 @@ Five behaviours are worth knowing before you run them:
   Both are idempotent and neither ever overwrites: byte-identical copies collapse to one, anything
   that differs is kept beside the winner as `<name>.from-clone_NN`, and anything a live session may
   still be writing is left where it is and reported. Run them again rather than forcing them.
-  **`tmp merge` never carries a PID file into the shared `tmp/`, at any depth** — they are per
-  clone and ephemeral, so it discards them (naming each one) and drops the `_<clone>/` directory
-  they leave behind, rather than putting one clone's leftovers in front of every other clone.
-  **Neither a live dev server nor a pre-migration branch aborts it any more — that clone simply
-  keeps its own `tmp/` and says why**, and the others are shared regardless. A running server is
-  a reason to leave a clone alone not because its PID file would be merged (none ever is) but
-  because `tmp/` is about to become a symlink and that server would then write its PID file
-  through it into the shared root. One consequence: while any clone is being left behind, the old
-  `~/.claude/dvb-gn-jira` store is **left in place too** — draining it moves the ticket
-  directories those clones' `tmp/<KEY>` symlinks point at, and would leave every one of them
-  dangling. And `-n` never refuses anything: a dry run touches nothing, so it reports what a real
-  run would skip and previews the rest.
+  **`tmp merge` never touches a PID file — it does not move, link or even read one** — so every
+  clone keeps its own `tmp/` directory and its own PID files in it, and a running dev server is no
+  obstacle to running the command. Only the cache entries inside `tmp/` are shared, one symlink
+  each. It moves every clone's cache into the store BEFORE it links any of it back, so a conflict
+  copy created for the last clone still reaches the first, and it drains
+  `~/.claude/dvb-gn-jira` in the same run (nothing is left pointing into a store that has been
+  emptied). See **Shared `tmp/`** below.
 - **Conflicts are delegated to a headless `claude -p` inside the clone**, then verified
   mechanically (no unmerged paths, no markers). If that fails the whole operation is aborted and
   the pre-sync state restored — never left half-merged. `git rerere` and `-X ours/theirs` are
@@ -239,8 +233,11 @@ the fallback for a clone that has neither.
 
 `orch-util doctor` is the regression net for everything that lives outside git and so cannot be
 restored by a pull — ports, the `CLAUDE.local.md` + `.git/info/exclude` pair, `.envrc.private`,
-the playwright symlink, the theme, the Storybook health-check port, and the sibling remotes in
-both directions. Run it after any re-clone.
+the playwright symlink, the theme, the Storybook health-check port, that `tmp/` is the clone's
+own directory, and the sibling remotes in both directions. Run it after any re-clone. **How much
+of the shared cache a clone links is deliberately not a check** — a ticket fetched here reaches
+the others at the next `tmp merge`, which is what linking per entry means, and a check that is red
+in normal operation is a check nobody reads.
 
 ## Staying in your own clone
 
@@ -296,43 +293,51 @@ Two things to know before editing any of this:
 
 ## Shared `tmp/`
 
-`tmp/` is **one directory for the whole fleet**: `~/code/dvb_gn/tmp` is real, and each clone's
-`tmp` is a symlink to it. (Migration pending as of 2026-09-01: it waits on the per-clone PID path
-below reaching every clone's branch. `orch-util doctor` says where each clone actually stands —
-never assume from this file.) A Jira ticket fetched in one clone is immediately there for the others,
-and so is anything else the skills cache. `orch-util tmp merge` performs the migration (idempotent,
-and it never overwrites: a differing file is kept beside the winner as `<name>.from-clone_NN`) and
-`orch-util doctor` checks the symlink afterwards. The old per-key mechanism — `tmp/<KEY>` linked
-into `~/.claude/dvb-gn-jira` by `orch-util jira link` — is superseded by it; the store is drained
-into the shared `tmp/` and removed.
+Every clone **keeps its own `tmp/` directory**. What is shared is the content in it that belongs
+to no clone in particular — the per-ticket Jira cache, the PR descriptions, whatever else the
+skills leave there — which lives in `~/code/dvb_gn/tmp/<name>` with `clone_NN/tmp/<name>` a
+**symlink per entry** in every clone. A ticket fetched in one clone reaches the others at the next
+`orch-util tmp merge`.
+
+**The links go one level down, and `tmp/` itself is never a symlink.** `tmp/` also holds the
+dev-server PID files: `dev/run-with-pid.mjs` refuses a name that is already live and
+`node dev/pids.mjs --kill <name>` finds a server by that file, so a shared `tmp/` would let the
+first clone to start a dev server block the other two and let a kill reach into a sibling. With
+the links one level down, **PID files are never moved, linked or even read** — a running dev
+server is no obstacle to sharing, and nothing has to have landed on a clone's branch first.
+Whether a clone writes `tmp/<name>.pid` or `tmp/_<clone>/<name>.pid` is its branch's business and
+matters to nobody else. A `tmp` that IS a symlink is the shape an earlier version of `tmp merge`
+produced: `tmp merge` turns it back into the clone's own directory of links, and `doctor` reports
+it.
+
+`orch-util tmp merge` is idempotent and never overwrites: byte-identical copies collapse to one,
+anything that differs is kept beside the winner as `<name>.from-clone_NN` (and is then linked
+everywhere like any other entry — review the pair and delete the loser), and a link that already
+points where it belongs is left alone rather than rebuilt. It shares everything except PID files
+and dotfiles — a **blocklist**, so a file a skill starts caching tomorrow is shared without
+anyone editing a table. `-n` previews, and names any entry two clones both offer, since which of
+the two wins is decided from what is on disk and a dry run has moved nothing.
+
+The old per-key mechanism — `tmp/<KEY>` linked into `~/.claude/dvb-gn-jira` by
+`orch-util jira link` — is **gone**, and so is that command: `tmp merge` drains the store into
+`~/code/dvb_gn/tmp` and removes it, and links every entry rather than only the `DN-####`
+directories (which left `pr-*.md` and `author-aliases.md` unshared in whichever clone made them).
 
 This needs **no change to the tracked skill tooling**:
 `.claude/skills/jira-scope/jira-cache.mjs` hardcodes `<git toplevel>/tmp/<KEY>` with no
 configuration, but only ever does `mkdirSync(..., {recursive: true})` on it, which follows a
 symlink.
 
-> **PID files are the reason this was not shared before, and they stay per clone.** `tmp/` also
-> holds the dev-server PID files, and `dev/run-with-pid.mjs` refuses a name that is already live —
-> so a flat `tmp/ng_serve.pid` in a shared directory would let the first clone to start a dev
-> server block the other two, and would let `node dev/pids.mjs --kill ng_serve` reach into another
-> clone and kill its server. The tracked `dev/pid-files.mjs` therefore writes to
-> **`tmp/_<clone>/<name>.pid`**, and `tests/playwright-regression-tests/config/runner-pid.ts`
-> matches it. Until that change is on a clone's checked-out branch, that clone must not be shared:
-> `orch-util tmp merge` leaves that ONE clone on its own `tmp/` (`--force` overrides) and shares
-> the rest, and `doctor` reports the clone as waiting rather than broken. The PID files themselves are never merged: `tmp merge` discards them and
-> lets the clone's own tooling recreate `tmp/_<clone>/` the next time it starts a server, so a
-> `*.pid` in the ROOT of the shared `tmp/` can only have come from a clone still writing flat
-> paths — which is what `doctor` and the end of `tmp merge` report.
-
 `ticket_<KEY>.md`, its relation variants and Jira attachments are clone- and branch-independent,
-which is the point. **`pr_description_<KEY>.md` is not** — it is derived from the working-tree diff,
-so it is shared as a side effect and is last-writer-wins when two clones work one ticket at once.
-One ticket normally belongs to one clone, so this is bounded, but do not trust a PR description you
+which is the point. **A PR description is not** — it is derived from the working-tree diff, so it
+is shared as a side effect and is last-writer-wins when two clones work one ticket at once. One
+ticket normally belongs to one clone, so this is bounded, but do not trust a PR description you
 did not just generate in this clone.
 
-`tmp/` is gitignored in the clone, but the tracked rule is `tmp/`, and a **trailing slash does not
-match a symlink** — so each clone's `.git/info/exclude` carries `/tmp` beside `/CLAUDE.local.md`.
-`orch-util doctor` checks for it once the clone is shared. A re-clone loses both lines.
+`tmp/` is gitignored by the tracked `tmp/` rule, which matches the real directory and everything
+under it — the per-entry links included. So nothing about `tmp` belongs in `.git/info/exclude`;
+that file is back to hiding `/CLAUDE.local.md` alone. A clone that still carries the old `/tmp`
+line is fine — it excludes something already ignored.
 
 ## Claude Code settings layering
 

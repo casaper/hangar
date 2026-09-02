@@ -42,17 +42,19 @@ export const playwrightEnvLocalPath = (clone: Clone): string =>
 
 /**
  * What `.git/info/exclude` has to hide, and why it cannot be the tracked `.gitignore`:
+ * `/CLAUDE.local.md` is generated per clone and must never travel to a sibling.
  *
- * - `/CLAUDE.local.md` is generated per clone and must never travel to a sibling.
- * - `/tmp` is a SYMLINK to the fleet's shared tmp. The tracked `.gitignore` says `tmp/`, and a
- *   trailing slash matches a directory only -- so without this line the symlink shows up as
- *   untracked in every clone until the tracked rule is relaxed to `tmp`.
+ * `/tmp` used to be here too, for a `tmp` that was a symlink to the fleet's shared directory:
+ * the tracked rule is `tmp/` and a trailing slash matches a directory only, so the link showed
+ * up as untracked. `tmp/` is a real directory again -- only the cache entries INSIDE it are
+ * links -- so the tracked rule covers it and this list is back to one line. An existing clone
+ * that still carries the `/tmp` line is fine; it excludes something already ignored.
  */
-export const EXCLUDE_LINES = ['/CLAUDE.local.md', '/tmp'] as const;
+export const EXCLUDE_LINES = ['/CLAUDE.local.md'] as const;
 export const EXCLUDE_LINE = EXCLUDE_LINES[0];
 export const EXCLUDE_BLOCK = [
   '',
-  `# Per-clone Claude Code identity and the shared tmp symlink (fleet: ${tildify(fleetRoot)})`,
+  `# Per-clone Claude Code identity (fleet: ${tildify(fleetRoot)})`,
   ...EXCLUDE_LINES,
   '',
 ].join('\n');

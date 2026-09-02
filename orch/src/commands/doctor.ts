@@ -44,7 +44,12 @@ import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
 import { isGitRepo, remotes } from '../git.ts';
 import { envShared, fleetPlans, fleetTmp, tildify } from '../paths.ts';
 import { planDirsIn } from '../plans.ts';
-import { hasScopedPidDir, isSharedTmp, pidFilesModule, strayPidFilesInSharedTmp } from '../tmp.ts';
+import {
+  isLinkedIntoStore,
+  storeEntries,
+  strayPidFilesInStore,
+  tmpIsOwnDirectory,
+} from '../tmp.ts';
 import { PORT_ROLES, PORT_ROLE_ORDER } from '../ports.ts';
 import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
 
@@ -57,7 +62,8 @@ import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
  * sibling remotes. A re-clone silently loses all of them.
  *
  * `--fix` rewrites only what is fully derivable from the clone index. It never touches git
- * remotes (a network/name decision) or `tmp/` (it holds live PID files).
+ * remotes (a network/name decision) or `tmp/` (it holds live PID files -- `orch-util tmp merge`
+ * is what shares the cache in it).
  */
 export type DoctorOptions = { all?: boolean | undefined; fix?: boolean | undefined };
 
@@ -93,13 +99,6 @@ const writeFile = (path: string, content: string): void => {
 
 const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
   const checks: Check[] = [];
-
-  // `tmp/` is shared across the fleet, but only safely once this clone's CHECKED-OUT tree
-  // writes its PID files into `tmp/_<clone>/`. That is tracked application code arriving by a
-  // normal merge, so a clone whose branch predates it is waiting, not broken. Both answers are
-  // needed by two checks below, so they are resolved once here.
-  const shared = isSharedTmp(clone);
-  const scopedPids = hasScopedPidDir(clone);
 
   checks.push({
     name: 'git repo',
@@ -191,15 +190,13 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
 
   const exclude = existsSync(excludePath(clone)) ? readFileSync(excludePath(clone), 'utf8') : '';
   const missingExcludes = missingExcludeLines(exclude);
-  // `/tmp` only matters once tmp/ is a symlink -- `.gitignore`'s `tmp/` covers a real directory.
-  const wantExcludes = shared ? missingExcludes : missingExcludes.filter((l) => l !== '/tmp');
-  const excluded = wantExcludes.length === 0;
+  const excluded = missingExcludes.length === 0;
   checks.push({
     name: '.git/info/exclude',
     ok: excluded,
     detail: excluded
-      ? `hides ${EXCLUDE_LINES.filter((l) => l !== '/tmp' || shared).join(', ')}`
-      : `missing ${wantExcludes.join(', ')} — untracked noise that eventually gets committed`,
+      ? `hides ${EXCLUDE_LINES.join(', ')}`
+      : `missing ${missingExcludes.join(', ')} — untracked noise that eventually gets committed`,
     repair: () => {
       writeFile(excludePath(clone), exclude + EXCLUDE_BLOCK);
     },
@@ -325,14 +322,19 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
             .join('; '),
   });
 
+  // The clone's OWN directory is the thing to check. Its PID files live there, so a `tmp` that
+  // is a symlink means they are the fleet's -- one clone's dev server blocking the others and a
+  // `pids.mjs --kill` reaching a sibling. How much of the store it links is NOT a check: a
+  // ticket fetched here reaches the others at the next `tmp merge`, which is inherent to
+  // linking per entry, and a check that is red in normal operation is a check nobody reads.
+  const ownTmp = tmpIsOwnDirectory(clone);
+  const linked = storeEntries().filter((name) => isLinkedIntoStore(clone, name)).length;
   checks.push({
-    name: 'tmp/ is shared',
-    ok: shared || !scopedPids,
-    detail: shared
-      ? `symlink -> ${tildify(fleetTmp)}; PID files in tmp/_${clone.name}/`
-      : scopedPids
-        ? 'a real directory, but this tree writes PID files per clone — run `orch-util tmp merge`'
-        : `a real directory; ${relative(clone.path, pidFilesModule(clone))} on this branch still writes flat tmp/<name>.pid, so sharing would let one clone's dev server block the others`,
+    name: 'tmp/ is its own',
+    ok: ownTmp,
+    detail: ownTmp
+      ? `a real directory; ${String(linked)} of ${String(storeEntries().length)} shared entries linked into it`
+      : `a symlink to ${tildify(fleetTmp)} — its PID files are the whole fleet's; run \`orch-util tmp merge\``,
   });
 
   // Both copies: VS Code only offers a `*.code-workspace` from the directory you opened, and
@@ -375,12 +377,12 @@ export const doctor = (ref: string | undefined, opts: DoctorOptions): void => {
     warn(`the shared plan archive ${tildify(fleetPlans)} does not exist yet`);
     note("`orch-util plans collect` creates it and gathers the clones' plans into it.");
   }
-  const strays = strayPidFilesInSharedTmp();
-  if (strays.length > 0 && all.some((clone) => isSharedTmp(clone))) {
-    warn(`PID files in the ROOT of ${tildify(fleetTmp)}: ${strays.join(', ')}`);
+  const strays = strayPidFilesInStore();
+  if (strays.length > 0) {
+    warn(`PID files in ${tildify(fleetTmp)}: ${strays.join(', ')}`);
     note(
-      'Written by a clone whose branch predates the per-clone pid path. They belong to no clone ' +
-        'in particular, and while one names a live process that clone stops the others serving.',
+      'The store holds shared cache only; PID files are never moved into it. These were written ' +
+        'by a clone whose whole tmp/ was the store, and they belong to no clone in particular.',
     );
   }
   const targets = opts.all === true || ref === undefined ? all : [requireClone(ref)];

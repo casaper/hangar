@@ -4,7 +4,6 @@ import pc from 'picocolors';
 import { addClone } from './commands/add-clone.ts';
 import { coloursSync } from './commands/colours.ts';
 import { doctor } from './commands/doctor.ts';
-import { jiraLink } from './commands/jira.ts';
 import { list } from './commands/list.ts';
 import { open } from './commands/open.ts';
 import { plansCollect, plansStamp } from './commands/plans.ts';
@@ -156,31 +155,14 @@ plans
 
 const tmp = program
   .command('tmp')
-  .description("The shared tmp/: one directory, every clone's `tmp` a symlink to it");
+  .description("The shared tmp/ cache: one store, a symlink per entry in every clone's own tmp/");
 
 tmp
   .command('merge')
-  .description("Merge every clone's tmp/ into <fleet>/tmp and link them to it")
+  .description("Move every clone's shareable tmp/ content into <fleet>/tmp and link it back")
   .option('-n, --dry-run', 'show what would move, change nothing')
-  .option(
-    '--force',
-    'merge even where a clone still writes flat tmp/<name>.pid (two clones then cannot both serve)',
-  )
   .action((options) => {
     tmpMerge(options);
-  });
-
-const jira = program
-  .command('jira')
-  .description('Per-ticket Jira cache (superseded by `tmp merge` once every tmp/ is shared)');
-
-jira
-  .command('link')
-  .description('Link every clone tmp/<KEY> into the legacy store, adopting real dirs in place')
-  .argument('[keys...]', 'issue keys to link; default is every key found anywhere')
-  .option('-n, --dry-run', 'show what would happen, change nothing')
-  .action((keys, options) => {
-    jiraLink(keys, options);
   });
 
 const vscode = program

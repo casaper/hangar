@@ -23,7 +23,7 @@ import { CliError, run } from '../exec.ts';
 import { cloneAt, discoverClones, nextFreeIndex, type Clone } from '../fleet.ts';
 import { git } from '../git.ts';
 import { envShared, fleetRoot, fleetTmp, originUrl, tildify } from '../paths.ts';
-import { cloneTmpPath, hasScopedPidDir, pidFilesModule } from '../tmp.ts';
+import { cloneTmpPath, linkStoreEntriesInto } from '../tmp.ts';
 import { cloneLabel, heading, note, ok, step, warn } from '../ui.ts';
 import { coloursSync } from './colours.ts';
 import { statusOf } from './status.ts';
@@ -112,19 +112,15 @@ export const addClone = (opts: AddCloneOptions): void => {
   }
   ok('CLAUDE.local.md + .git/info/exclude (always as a pair)');
 
-  // 6b. the shared tmp/. A fresh clone has none, so this is a plain symlink rather than a
-  // merge -- but only if its checked-out branch writes PID files per clone, the same condition
-  // `orch-util tmp merge` enforces for the others.
-  if (existsSync(fleetTmp)) {
-    if (hasScopedPidDir(clone)) {
-      symlinkSync(fleetTmp, cloneTmpPath(clone));
-      ok(`tmp/ -> ${tildify(fleetTmp)}`);
-    } else {
-      warn(
-        `tmp/ left unshared: ${relative(clone.path, pidFilesModule(clone))} on this branch writes flat tmp/<name>.pid`,
-      );
-    }
-  }
+  // 6b. its own tmp/, with a link to every entry of the shared store. The directory is the
+  // clone's -- its PID files go in it -- and only the cache entries in it are shared, exactly
+  // as `orch-util tmp merge` maintains for the others. A fresh clone has no cache of its own,
+  // so there is nothing to merge, only links to make.
+  const tmp = cloneTmpPath(clone);
+  mkdirSync(tmp, { recursive: true });
+  const { linked, taken } = linkStoreEntriesInto(tmp);
+  ok(`tmp/ (its own) with ${String(linked.length)} link(s) into ${tildify(fleetTmp)}`);
+  if (taken.length > 0) warn(`tmp/ already had ${taken.join(', ')} — not linked`);
 
   // 7. Claude Code settings: copied, except the two values that must not be.
   writeFile(settingsPath(clone), settingsContentFor(clone, settingsTemplate(existing)));
