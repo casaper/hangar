@@ -74,7 +74,16 @@ export const pendingRow = (pending: 'rebase' | 'merge' | undefined): string[][] 
         ],
       ];
 
-/** The unreturned-sync-stash row, or nothing at all. */
+/**
+ * The unreturned-sync-stash row, or nothing at all.
+ *
+ * Deliberately unfiltered by age or branch, with a known consequence: a stash the user never
+ * gets round to dropping keeps this row red on every `status` of that clone from then on --
+ * the cry-wolf case this file's header warns about. It is left broad because a stranded stash
+ * IS uncommitted work that nothing else surfaces, and the cure is dropping it. The closing
+ * message a paused session gets is not broad: it matches the full label, ISO timestamp
+ * included, so it can only ever report the stash THIS run pushed.
+ */
 export const strandedStashRow = (entries: readonly StashEntry[]): string[][] =>
   entries.length === 0
     ? []

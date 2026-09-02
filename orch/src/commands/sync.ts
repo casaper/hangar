@@ -680,7 +680,11 @@ const integrate = async (
     );
   }
   if (strategy.kind !== 'up-to-date') ok(`${strategy.kind} complete`);
-  run.integrated = true;
+  // Only when the branch actually MOVED. `up-to-date` integrated nothing, and claiming
+  // otherwise to a paused agent -- "applied and committed" when HEAD never changed -- is the
+  // same false statement as the one this outcome exists to prevent, pointing the other way.
+  // `ff-only` does move the branch, so it counts.
+  if (strategy.kind !== 'up-to-date') run.integrated = true;
 
   // 7. put the working tree back
   if (stashed) {
