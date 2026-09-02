@@ -100,6 +100,51 @@ export const remotes = (repo: string): Map<string, string> => {
   return map;
 };
 
+/**
+ * Git config a clone needs BECAUSE it is in the fleet, and that a re-clone loses.
+ *
+ * `checkout.defaultRemote=origin` is the whole list. Every clone carries every sibling as a
+ * remote, so a branch that exists on more than one of them makes `git checkout <branch>`
+ * ambiguous -- git refuses with "matched multiple (N) remote tracking branches" rather than
+ * picking one, and the more clones the fleet has the more often that is any branch worth
+ * checking out. Naming `origin` restores the single-remote behaviour without giving up the
+ * sibling remotes that cherry-picking needs.
+ *
+ * Set LOCAL, in the clone's own `.git/config`: it is a consequence of this directory being a
+ * fleet clone, and `--global` would apply it to every repo on the machine.
+ */
+export const FLEET_GIT_CONFIG = [['checkout.defaultRemote', 'origin']] as const;
+
+/** The effective value, whichever scope it comes from, or undefined when unset. */
+export const gitConfig = (repo: string, key: string): string | undefined =>
+  gitTry(repo, ['config', '--get', key]);
+
+/** Keys whose effective value is not what the fleet needs, with what they are instead. */
+export const wrongFleetGitConfig = (repo: string): { key: string; want: string; is: string }[] =>
+  FLEET_GIT_CONFIG.map(([key, want]) => ({
+    key,
+    want,
+    is: gitConfig(repo, key) ?? '(unset)',
+  })).filter(({ want, is }) => is !== want);
+
+/**
+ * Write every fleet key into the clone's own `.git/config`.
+ *
+ * `git config --local <key> <value>`, not `git config set`: the subcommand form needs git 2.46
+ * and this one has worked forever. Reports what it wrote and what it could not, rather than
+ * silently dropping a failed write from the list -- a repair that says nothing is the failure
+ * mode `doctor` exists to avoid.
+ */
+export const setFleetGitConfig = (repo: string): { set: string[]; failed: string[] } => {
+  const set: string[] = [];
+  const failed: string[] = [];
+  for (const [key, value] of FLEET_GIT_CONFIG) {
+    if (git(repo, ['config', '--local', key, value]).ok) set.push(`${key}=${value}`);
+    else failed.push(key);
+  }
+  return { set, failed };
+};
+
 /** The repo's default branch, from origin/HEAD, falling back to master. */
 export const remoteHeadBranch = (repo: string): string => {
   const ref = gitTry(repo, ['symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD']);

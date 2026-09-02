@@ -15,13 +15,14 @@ import {
   readSettings,
   settingsContentFor,
   settingsPath,
+  workspaceAngularPath,
   workspaceContent,
   workspacePath,
   type SettingsJson,
 } from '../clone-config.ts';
 import { CliError, run } from '../exec.ts';
 import { cloneAt, discoverClones, nextFreeIndex, type Clone } from '../fleet.ts';
-import { git } from '../git.ts';
+import { FLEET_GIT_CONFIG, git, gitTry, setFleetGitConfig } from '../git.ts';
 import { envShared, fleetRoot, fleetTmp, originUrl, tildify } from '../paths.ts';
 import { cloneTmpPath, linkStoreEntriesInto } from '../tmp.ts';
 import { cloneLabel, heading, note, ok, step, warn } from '../ui.ts';
@@ -85,6 +86,19 @@ export const addClone = (opts: AddCloneOptions): void => {
   }
   ok(`wired ${existing.length} sibling remote(s) in both directions`);
 
+  // 2b. and the config those remotes make necessary, in EVERY clone for the same reason the
+  //     remotes go both ways: this clone makes `git checkout <branch>` newly ambiguous in all
+  //     the others, so setting it only here fixes the one clone that did not have the problem.
+  const configFailures = [clone, ...existing].flatMap((repo) => {
+    const { failed } = setFleetGitConfig(repo.path);
+    return failed.map((key) => `${repo.name}: ${key}`);
+  });
+  if (configFailures.length === 0) {
+    ok(`git config ${FLEET_GIT_CONFIG.map(([k, v]) => `${k}=${v}`).join(', ')} in every clone`);
+  } else {
+    warn(`could not set ${configFailures.join(', ')} — run \`orch-util doctor --fix\``);
+  }
+
   // 3-5. environment
   writeFile(envLocalPath(clone), envLocalContent(clone));
   ok(`.env.local (${clone.ports.ng} / ${clone.ports.storybook} / ${clone.ports.playwrightReport})`);
@@ -126,9 +140,19 @@ export const addClone = (opts: AddCloneOptions): void => {
   writeFile(settingsPath(clone), settingsContentFor(clone, settingsTemplate(existing)));
   ok(`.claude/settings.local.json (theme + Storybook health check on ${clone.ports.storybook})`);
 
-  // 8-9. theme + workspace
-  writeFile(workspacePath(clone), workspaceContent(clone));
-  ok(workspacePath(clone).split('/').pop() ?? 'code-workspace');
+  // 8-9. theme + workspace. BOTH copies of the workspace file: VS Code only offers a
+  //       `*.code-workspace` from the directory you opened, and this repo is opened at its
+  //       root and at `angular/`. One of the two is the same silent gap as a missing
+  //       `.envrc` -- `doctor` reports it, but only if someone runs `doctor`.
+  const workspace = workspaceContent(clone);
+  for (const path of [workspacePath(clone), workspaceAngularPath(clone)]) {
+    if (!existsSync(dirname(path))) {
+      warn(`${relative(clone.path, path)} skipped — no ${relative(clone.path, dirname(path))}/`);
+      continue;
+    }
+    writeFile(path, workspace);
+    ok(relative(clone.path, path));
+  }
 
   // 10. regenerate everything derived from the palette, now that the fleet is bigger
   heading('Regenerating colour artifacts');
@@ -158,12 +182,42 @@ const addRemote = (repo: Clone, name: string, url: string): void => {
   if (!res.ok) git(repo.path, ['remote', 'set-url', name, url]);
 };
 
-/** Every directory in the clone that has an `.envrc`, so nothing is left un-allowed. */
-export const direnvSnippet = (clone: Clone): string => {
-  const dirs = ['.', 'angular'].filter((d) => existsSync(join(clone.path, d, '.envrc')));
-  const paths = dirs.map((d) => (d === '.' ? clone.path : join(clone.path, d)));
-  return paths.map((p) => `(cd ${JSON.stringify(p)} && direnv allow .)`).join('\n');
+/**
+ * Directories the repo is KNOWN to put an `.envrc` in, as the fallback for the discovery
+ * below. Not the list itself: a hardcoded `['.', 'angular']` silently left
+ * `tests/playwright-regression-tests` un-allowed, and that one carries the symlink that
+ * reloads `.env.shared` after the tracked `.env` blanks `USER_READWRITE_PASSWORD` -- so
+ * Playwright's login fails with an empty password and nothing says why.
+ */
+const KNOWN_ENVRC_DIRS = ['.', 'angular', 'tests/playwright-regression-tests'] as const;
+
+/**
+ * Every directory in the clone that has an `.envrc`, root first.
+ *
+ * Discovered from git rather than declared: all of them are tracked, so `ls-files` is exact
+ * and costs nothing, and a branch that adds a fourth `.envrc` is covered without editing this
+ * file. The known list above is the union'd fallback for a checkout git cannot answer for.
+ */
+const direnvDirs = (clone: Clone): string[] => {
+  const tracked = gitTry(clone.path, ['ls-files', '-z', '--', '*.envrc']) ?? '';
+  const dirs = new Set(
+    tracked
+      .split('\0')
+      .filter((file) => file.endsWith('.envrc'))
+      .map((file) => dirname(file)),
+  );
+  for (const dir of KNOWN_ENVRC_DIRS) dirs.add(dir);
+  return [...dirs]
+    .filter((dir) => existsSync(join(clone.path, dir, '.envrc')))
+    .sort((a, b) => (a === '.' ? -1 : b === '.' ? 1 : a.localeCompare(b)));
 };
+
+/** The `direnv allow` lines for those directories, ready to paste into a shell. */
+export const direnvSnippet = (clone: Clone): string =>
+  direnvDirs(clone)
+    .map((dir) => (dir === '.' ? clone.path : join(clone.path, dir)))
+    .map((path) => `(cd ${JSON.stringify(path)} && direnv allow .)`)
+    .join('\n');
 
 /**
  * `npm ci` under the Node version the clone pins. The machine uses fnm, and shell state does

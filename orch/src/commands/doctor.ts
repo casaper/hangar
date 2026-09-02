@@ -41,7 +41,13 @@ import { CliError } from '../exec.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import { applyArtifact } from '../generate/index.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
-import { isGitRepo, remotes } from '../git.ts';
+import {
+  FLEET_GIT_CONFIG,
+  isGitRepo,
+  remotes,
+  setFleetGitConfig,
+  wrongFleetGitConfig,
+} from '../git.ts';
 import { envShared, fleetPlans, fleetTmp, tildify } from '../paths.ts';
 import { planDirsIn } from '../plans.ts';
 import {
@@ -63,7 +69,8 @@ import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
  *
  * `--fix` rewrites only what is fully derivable from the clone index. It never touches git
  * remotes (a network/name decision) or `tmp/` (it holds live PID files -- `orch-util tmp merge`
- * is what shares the cache in it).
+ * is what shares the cache in it). The fleet's git CONFIG it does set: `checkout.defaultRemote`
+ * has one correct value here and is a consequence of those remotes existing.
  */
 export type DoctorOptions = { all?: boolean | undefined; fix?: boolean | undefined };
 
@@ -320,6 +327,23 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
           ]
             .filter((x) => x !== undefined)
             .join('; '),
+  });
+
+  // The config those remotes make necessary. It lives in `.git/config`, so a re-clone loses
+  // it exactly like the rest of this list -- and its absence shows up as `git checkout
+  // <branch>` refusing an unambiguous-looking branch name, which reads like a git problem
+  // rather than a missing fleet setting.
+  const wrongConfig = wrongFleetGitConfig(clone.path);
+  checks.push({
+    name: 'git config',
+    ok: wrongConfig.length === 0,
+    detail:
+      wrongConfig.length === 0
+        ? FLEET_GIT_CONFIG.map(([key, value]) => `${key}=${value}`).join(', ')
+        : wrongConfig.map(({ key, want, is }) => `${key} is ${is}, want ${want}`).join('; '),
+    repair: () => {
+      setFleetGitConfig(clone.path);
+    },
   });
 
   // The clone's OWN directory is the thing to check. Its PID files live there, so a `tmp` that

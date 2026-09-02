@@ -234,7 +234,8 @@ the fallback for a clone that has neither.
 `orch-util doctor` is the regression net for everything that lives outside git and so cannot be
 restored by a pull — ports, the `CLAUDE.local.md` + `.git/info/exclude` pair, `.envrc.private`,
 the playwright symlink, the theme, the Storybook health-check port, that `tmp/` is the clone's
-own directory, and the sibling remotes in both directions. Run it after any re-clone. **How much
+own directory, the sibling remotes in both directions, and the
+`checkout.defaultRemote=origin` those remotes make necessary. Run it after any re-clone. **How much
 of the shared cache a clone links is deliberately not a check** — a ticket fetched here reaches
 the others at the next `tmp merge`, which is what linking per entry means, and a check that is red
 in normal operation is a check nobody reads.
@@ -434,6 +435,11 @@ git fetch clone_02                      # from inside another clone
 git log --oneline clone_02/<branch>
 git cherry-pick <sha>
 ```
+
+Because a branch usually exists on more than one of those remotes, every clone sets
+**`checkout.defaultRemote=origin`** locally (`add-clone` writes it, `doctor --fix` repairs it).
+Without it `git checkout <branch>` refuses with _"matched multiple remote tracking branches"_ —
+the more clones the fleet has, the more often that is any branch worth checking out.
 
 Sibling remotes are for **fetching and cherry-picking only — never push to a sibling.** Git's
 default `receive.denyCurrentBranch=refuse` (unset everywhere, so in effect) only protects the
