@@ -147,6 +147,19 @@ the fleet root for the ancestor reason above. The fleet root's tracked `.envrc` 
 untracked `.envrc.private`**, so `orch-util` also works from inside a clone — which is where you
 usually are. There is no build step: Node strips the types and runs `src/cli.ts` directly.
 
+Two conventions for changing it, both of which exist because they caught something:
+
+- **There is no test suite, so anything that produces text for a human or an agent gets a PURE
+  builder, given its facts and exported.** Every variant can then be printed side by side
+  without constructing the state that produces it, which is how `sync`'s eight closing messages
+  were checked — and it found two bugs reading the code had not: one froze an agent after a
+  SUCCESSFUL sync, the other told it a branch had moved when nothing was integrated.
+- **Derive state at the moment you report it; carry a flag only for what git cannot know.** A
+  `restored` boolean set beside a `git stash pop` lies whenever the pop fails, which it can — it
+  only warns. Ask `inProgressOperation`, `conflictedFiles`, `syncStashes` instead. Whether an
+  integration got committed is the one thing git cannot answer, so that one is carried, and a
+  carried flag needs guarding for the paths that do nothing (`up-to-date` integrates nothing).
+
 | Command                           | What it does                                                          |
 | --------------------------------- | --------------------------------------------------------------------- |
 | `orch-util list`                  | every clone, its branch and last commit                               |
