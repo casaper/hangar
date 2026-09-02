@@ -120,7 +120,7 @@ export const addClone = (opts: AddCloneOptions): void => {
   }
 
   // 6. identity file AND its exclude line, created as a pair.
-  writeFile(claudeLocalMdPath(clone), claudeLocalMdContent(clone, [...existing, clone]));
+  writeFile(claudeLocalMdPath(clone), claudeLocalMdContent(clone));
   const exclude = existsSync(excludePath(clone)) ? readFileSync(excludePath(clone), 'utf8') : '';
   if (missingExcludeLines(exclude).length > 0) {
     writeFile(excludePath(clone), exclude + EXCLUDE_BLOCK);

@@ -153,19 +153,17 @@ const paddedTable = (rows: readonly (readonly [string, string])[]): string[] => 
  * The clone's identity file -- who this session is, and the handful of things that are true of
  * IT rather than of the fleet.
  *
+ * A pure function of the clone, like every other per-clone artifact -- in particular it does NOT
+ * enumerate the siblings. It used to, and `doctor`'s content check would then have turned every
+ * `add-clone` and `remove-clone` into a fleet-wide red report until someone re-ran `--fix`: a
+ * check that is red in normal operation is a check nobody reads.
+ *
  * The fleet's own `CLAUDE.md` is already in this session's context (Claude Code walks every
  * ancestor directory), so nothing here repeats a fleet rule. What it adds is second-person:
  * text that arrives in this session unbidden, a shared directory inside this checkout, and the
  * commands that would sync the very tree the reader is editing.
  */
-export const claudeLocalMdContent = (clone: Clone, siblings: readonly Clone[]): string => {
-  const others = siblings.filter((c) => c.index !== clone.index);
-  const siblingList =
-    others.length === 0
-      ? 'You currently have no sibling clones.'
-      : `Your siblings are ${others.map((c) => `\`../${c.name}\``).join(', ')} (also git remotes of the
-same name, for cherry-picking). Their working trees are off limits for writes.`;
-
+export const claudeLocalMdContent = (clone: Clone): string => {
   return [
     `# This clone: ${clone.name} (${clone.colour.name})`,
     '',
@@ -193,7 +191,11 @@ same name, for cherry-picking). Their working trees are off limits for writes.`;
     'any other port in those families belongs to a sibling — never test against it, never restart',
     'it, never kill it.',
     '',
-    siblingList,
+    'Your siblings are the other `clone_NN/` directories beside this one, each also a git remote of',
+    'that same name for cherry-picking (`orch-util list`, or `git remote`). Their working trees are',
+    'off limits for writes. Which clones exist is deliberately not written down anywhere, this file',
+    'included — the fleet adds and removes them without bookkeeping.',
+    '',
     `See \`../CLAUDE.md\` for the fleet rules; this clone's own \`CLAUDE.md\` and \`AGENTS.md\` are`,
     'authoritative for everything about the project itself.',
     '',
@@ -213,9 +215,10 @@ same name, for cherry-picking). Their working trees are off limits for writes.`;
     '## `tmp/` is shared with the whole fleet',
     '',
     `Every \`tmp/<name>\` entry is a symlink into \`${tildify(fleetRoot)}/tmp/\`, and each cached Jira`,
-    'record is a **hard link** to one file the whole fleet shares — so editing',
-    "`tmp/ABC-1234/ticket_ABC-1234.md` in place rewrites every clone's copy of it. Read those files",
-    'and regenerate them with the skill; never hand-edit one. The links are correct and not damage,',
+    'record is normally a **hard link** to one file the whole fleet shares — so editing',
+    "`tmp/ABC-1234/ticket_ABC-1234.md` in place may rewrite every clone's copy of it, and you cannot",
+    'tell from inside the clone (a re-sync detaches that one file until the next `tmp merge`). Read',
+    'those files and regenerate them with the skill; never hand-edit one. The links are not damage,',
     'so leave them alone. Dev-server PID files are the exception: they are real files, they stay in',
     'this clone, and they are why `tmp/` itself is never a symlink.',
     '',

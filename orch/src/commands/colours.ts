@@ -143,7 +143,6 @@ export const coloursChange = (ref: string, colour: string, opts: ColoursChangeOp
 
   // Re-derived, so every artifact below is built from the new hue.
   const updated = requireClone(ref);
-  const siblings = discoverClones();
 
   heading('Regenerating colour artifacts');
   coloursSync({});
@@ -165,7 +164,7 @@ export const coloursChange = (ref: string, colour: string, opts: ColoursChangeOp
   }
 
   // The identity file names the colour three times, and `doctor` only checks that it EXISTS.
-  writeFileSync(claudeLocalMdPath(updated), claudeLocalMdContent(updated, siblings), 'utf8');
+  writeFileSync(claudeLocalMdPath(updated), claudeLocalMdContent(updated), 'utf8');
   ok(`CLAUDE.local.md now announces ${updated.colour.name}`);
 
   console.log('');

@@ -218,7 +218,7 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
   // sessions the fleet had three clones, and the fourth one four. A generated file whose
   // content rots unnoticed is precisely what this command exists to catch.
   const identityPath = claudeLocalMdPath(clone);
-  const wantIdentity = claudeLocalMdContent(clone, siblings);
+  const wantIdentity = claudeLocalMdContent(clone);
   const identity = existsSync(identityPath) ? readFileSync(identityPath, 'utf8') : undefined;
   checks.push({
     name: 'CLAUDE.local.md',
