@@ -15,7 +15,9 @@ import pc from 'picocolors';
 import {
   claudeLocalMdContent,
   effectivePlansDirectory,
+  hasJiraHook,
   hasPlansHook,
+  withJiraHook,
   withPlansHook,
   claudeLocalMdPath,
   envLocalContent,
@@ -281,6 +283,21 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
         ? undefined
         : () => {
             writeFile(settingsPath(clone), `${JSON.stringify(withPlansHook(settings), null, 2)}\n`);
+          },
+  });
+
+  const jiraOk = hasJiraHook(settings);
+  checks.push({
+    name: 'jira record hook',
+    ok: jiraOk,
+    detail: jiraOk
+      ? 'a ticket fetched in the last hour is served from the shared record store, not re-fetched'
+      : 'missing — every `jira-ticket-sync` run re-fetches the ticket and its whole neighbourhood',
+    repair:
+      settings === undefined
+        ? undefined
+        : () => {
+            writeFile(settingsPath(clone), `${JSON.stringify(withJiraHook(settings), null, 2)}\n`);
           },
   });
 

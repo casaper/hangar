@@ -161,6 +161,7 @@ usually are. There is no build step: Node strips the types and runs `src/cli.ts`
 | `orch-util plans collect`         | gather every clone's finished plans into the shared `plans/`          |
 | `orch-util plans stamp`           | date-prefix the plans in `plans/`, skipping any a live agent is using |
 | `orch-util tmp merge`             | pool every clone's `tmp/` cache in `tmp/`, a symlink per entry back   |
+| `orch-util jira hook`             | `PreToolUse`: serve a cached ticket instead of re-fetching it         |
 | `orch-util vscode sync`           | one VS Code setup everywhere, per-clone paths still per clone         |
 | `orch-util colours sync`          | regenerate the palette-derived artifacts                              |
 | `orch-util colours change`        | give one clone another hue, and rebuild everything that names it      |
@@ -195,6 +196,10 @@ Six behaviours are worth knowing before you run them:
   Both are idempotent and neither ever overwrites: byte-identical copies collapse to one, anything
   that differs is kept beside the winner as `<name>.from-clone_NN`, and anything a live session may
   still be writing is left where it is and reported. Run them again rather than forcing them.
+  It also makes **one record per ticket** in `tmp/jira-tickets/`, with every cached name a hard
+  link to it — see **Shared `tmp/`** below, and note that a relation copy loses its
+  `relation:`/`relatedTo:` frontmatter when it is linked, because one inode cannot name two
+  trunks.
   **`tmp merge` never touches a PID file — it does not move, link or even read one** — so every
   clone keeps its own `tmp/` directory and its own PID files in it, and a running dev server is no
   obstacle to running the command. Only the cache entries inside `tmp/` are shared, one symlink
@@ -276,8 +281,9 @@ the fallback for a clone that has neither.
 `orch-util doctor` is the regression net for everything that lives outside git and so cannot be
 restored by a pull — ports, the `CLAUDE.local.md` + `.git/info/exclude` pair, `.envrc.private`,
 the playwright symlink, the theme, the Storybook health-check port, that `tmp/` is the clone's
-own directory, the sibling remotes in both directions, and the
-`checkout.defaultRemote=origin` those remotes make necessary. Run it after any re-clone. **How much
+own directory, the two hooks in `settings.local.json` (plan collection and the Jira record
+hook), the sibling remotes in both directions, and the `checkout.defaultRemote=origin` those
+remotes make necessary. Run it after any re-clone. **How much
 of the shared cache a clone links is deliberately not a check** — a ticket fetched here reaches
 the others at the next `tmp merge`, which is what linking per entry means, and a check that is red
 in normal operation is a check nobody reads.
@@ -362,38 +368,89 @@ and dotfiles — a **blocklist**, so a file a skill starts caching tomorrow is s
 anyone editing a table. `-n` previews, and names any entry two clones both offer, since which of
 the two wins is decided from what is on disk and a dry run has moved nothing.
 
-**One ticket lands in the store under several names, and `tmp merge` knows it.** The
-`jira-scope` skill gives a directory only to the ticket the user asked about, so a ticket
-fetched as a relation is written into the asking ticket's directory:
+**One ticket lands in the store under several names, and `tmp merge` collapses them onto one
+file.** The `jira-scope` skill gives a directory only to the ticket the user asked about, so a
+ticket fetched as a relation is written into the asking ticket's directory:
 `ABC-1325/ticket_ABC-1325_relates_to_ABC-1323.md` **is ABC-1323**. The **last** issue key in a
-filename is what the file contains; the keys before it only say how it was reached (and the
-same holds for an attachment — `ticket_ABC-1323_relates_to_ABC-1191_asset_shot.png` is ABC-1191's
-attachment). Two things follow:
+filename is what the file contains; the keys before it only say how it was reached (and the same
+holds for an attachment — `ticket_ABC-1323_relates_to_ABC-1191_asset_shot.png` is ABC-1191's
+attachment). Three things follow:
 
-- **Byte-identical copies are hard-linked**, by `jdupes -L` over the store (`-A` skips dotfiles,
-  `-X noext:pid` keeps PID files out of it, and it treats already-linked files as
+- **Every ticket has ONE record: `tmp/jira-tickets/ABC-1234.md`**, and every cached name for that
+  ticket is a **hard link** to it — its own `tmp/ABC-1234/ticket_ABC-1234.md` and every
+  `tmp/<TRUNK>/ticket_<TRUNK>_<relation>_ABC-1234.md`. One ticket is one inode however many
+  investigations reached it. This directory is deliberately **not** linked into the clones like
+  every other store entry: no skill owns that path, and a symlink in `clone_NN/tmp/` would
+  invite an agent to write into it.
+
+  **The record cannot carry `relation:`/`relatedTo:`, and that is a proof rather than a taste.**
+  Those keys name the trunk a copy was reached from, and a ticket reachable from two trunks
+  would need one inode holding two different `relatedTo:` values. So the record is the winning
+  copy with those two lines removed, and each relation copy loses them when it is linked. The
+  filename still says `_relates_to_`, and the trunk's own `relations:` / `parent:` /
+  `subtasks:` frontmatter still states the relation and its label, so nothing is unrecoverable —
+  it is printed every time it happens. Nothing in the skill reads a cached record (`sync.mjs`
+  has no `readFileSync` at all), so the stripped keys change what a reader sees and nothing else.
+
+  **A ticket's OWN record wins over a relation copy regardless of age**; `fetched_at:` only ranks
+  peers. That is the rule the old freshest-wins collapse lacked, and its absence is what put
+  ABC-1259's and ABC-1323's own records into a state where they read as though they hung off
+  another ticket. The store makes it unreachable rather than merely warned about. A copy written
+  in the last two minutes is left alone — a session may be mid-refresh, and this pass replaces
+  content — and a copy whose `id:` disagrees with its filename is reported and never linked.
+
+  The one thing that does **not** collapse: **a ticket with attachments, cached under two
+  different trunks.** Asset references in the body are trunk-specific
+  (`ticket_ABC-1323_relates_to_ABC-1191_asset_shot.png`), so one shared record cannot carry
+  correct references for both; the copy whose references differ is kept as its own file and
+  reported. Tickets with no attachments — most of them — link freely.
+
+- **Byte-identical files elsewhere in the store are hard-linked**, by `jdupes -L` (`-A` skips
+  dotfiles, `-X noext:pid` keeps PID files out, and it treats already-linked files as
   non-duplicates, so a re-run does nothing). Not reimplemented and not `fdupes`, which has no
-  hard-link action at all. Attachments are what this is for: a 4 MB recording fetched under two
-  relation paths is one file twice. **Install it (`brew install jdupes`) or the pass is skipped
-  with a warning** — the rest of the merge is unaffected.
-- **Copies of one ticket that DIFFER are collapsed onto the FRESHEST one**, the rest becoming
-  hard links to it. Freshness is the `fetched:` frontmatter (Jira's `updated:` is only a
-  fallback — it is written on a ticket's own file and left off the relation copies, so it cannot
-  rank the two against each other). Markdown only: a differing pair of _assets_ under one name
-  is a download that went wrong, not a newer rendering, so neither is preferred. `-n` prints
-  every choice, the age gap and whose content disappears, before any of it happens.
+  hard-link action at all. **Attachments** are what this is for now that ticket records have
+  their own store: a 4 MB recording fetched under two relation paths is one file twice.
+  **Install it (`brew install jdupes`) or the pass is skipped with a warning** — the rest of the
+  merge is unaffected.
+- **Everything else about a ticket that differs under one canonical name** — `plan_<KEY>.md`,
+  `pr_description_<KEY>.md` — still collapses onto the **freshest** copy, where freshest-wins is
+  the whole of the right answer. Freshness is `fetched_at:` / `fetched:` frontmatter (Jira's
+  `updated_at:` is only a fallback — it is written on a ticket's own file and left off the
+  relation copies, so it cannot rank the two against each other). **Both spellings are read:**
+  `jira-scope` wrote the bare names, the newer `jira-ticket-sync` contract writes the `_at` ones,
+  and matching only one sent every synced file to the file-mtime fallback. Markdown only: a
+  differing pair of _assets_ under one name is a download that went wrong, not a newer
+  rendering, so neither is preferred. `-n` prints every choice before any of it happens.
 
-  Two things to know, because this is a **deliberate override** of the skill's "the duplication
-  between the two is intended … Never dedupe them". First, when the winner is a relation copy,
-  the ticket's own file inherits that copy's `relation:`/`relatedTo:` frontmatter and then reads
-  as though the ticket's own record hangs off the other ticket — the command says so when it
-  happens. Second, the collapse is **sticky**: the skill refreshes a ticket by overwriting its
-  Markdown in place, and an in-place write through one name changes every name hard-linked to
-  it. Re-fetching the ticket itself is then harmless — both names get the fresh record. Fetching
-  it again **as a relation** is not: that write carries `relation:`/`relatedTo:` frontmatter and
-  lands in the ticket's own file too, turning its own record into a relation record, at fetch
-  time, with nothing printed. A copy written in the last two minutes is left alone for the same
-  family of reasons — a session may be mid-refresh, and this pass replaces content.
+**A ticket fetched in the last hour is not fetched again.** `orch-util jira hook` is a
+`PreToolUse` hook, wired into each clone's untracked `.claude/settings.local.json` by absolute
+path (`doctor` checks it, `--fix` wires it). It reads the Bash command Claude Code is about to
+run; when every file a `jira-ticket-sync/sync.mjs` run would write is already in the record
+store and inside the TTL, it hard-links all of them into place and **denies** the command,
+telling the agent what it got instead. Four properties are the whole design:
+
+- **It fails open.** A flag it does not know, a frontmatter shape it cannot read, a record with
+  no parsable timestamp, a shell construct in the tail — all exit silently and let the fetch
+  happen. A hook that wrongly denies leaves an agent unable to read a ticket for reasons
+  invisible from inside the clone. `--explain` prints the reason it declined, which is the only
+  way to debug something that is silent by design; `-n` decides without linking.
+- **All or nothing.** A run writes the trunk AND its parent, sub-tasks and relations, so the
+  neighbourhood is read out of the CACHED trunk's own frontmatter and every one of those tickets
+  must also be in the store and fresh. An OLD-format record has those keys absent rather than
+  empty, and absent is declined — reading it as "no neighbours" would turn a full sync into one
+  linked file.
+- **It never reimplements the naming.** Where each file belongs comes from that clone's own
+  `jira-scope/jira-cache.mjs name`, one subprocess per file. `paths.mjs` calls itself the single
+  owner of every filename in that directory, it is tracked and branch-versioned, and an
+  untracked copy of `stemFor` here would drift the first time a branch changed a relation slug.
+- **Whether Jira changed cannot be known without asking Jira**, so the TTL (`--ttl <minutes>`,
+  default 60) is the whole of the freshness guarantee. `JIRA_SYNC_NO_CACHE=1` in front of the
+  command bypasses the hook — an env var and not a flag, because `sync.mjs` dies on an unknown
+  flag.
+
+None of this needs anything from the clones. Their `.claude/` is shared with every other
+contributor and must work without this fleet, so the record store appears in no tracked file: the
+skill writes exactly what it always wrote, and `tmp merge` and the hook do the rest.
 
 The old per-key mechanism — `tmp/<KEY>` linked into `~/.claude/dvb-gn-jira` by
 `orch-util jira link` — is **gone**, and so is that command: `tmp merge` drains the store into
@@ -429,6 +486,8 @@ three (verify with `jq -S 'del(.theme)|del(.permissions.allow)' … | shasum`).
   `enabledMcpjsonServers` would leak the fleet onto them.
 - `clone_NN/.claude/settings.local.json` (untracked) holds the fleet-scoped keys, identical in all
   three: the shared memory directory, the `SessionEnd` hook that collects plans (see below), the
+  `PreToolUse` hook that serves a cached Jira ticket from the record store (additive — Claude
+  Code merges it with the repo's own tracked `PreToolUse` guard rather than replacing it), the
   shared statusline, the six MCP servers
   (`playwright`, `jira`, `yfiles-api`, `angular-cli`, `primeng`, `ag-mcp`), the `frontend-design`
   plugin off, the `.env.shared` deny, and the two iTerm2 keys (`terminal.explorerKind`,

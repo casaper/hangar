@@ -5,10 +5,11 @@ import {
   readFileSync,
   rmdirSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import pc from 'picocolors';
 
@@ -21,9 +22,17 @@ import {
   linkToWinner,
   sameTicketGroups,
 } from '../dedupe.ts';
+import {
+  groupTicketRecords,
+  isTicketRecordName,
+  linkToStore,
+  planGroup,
+  storeContentFrom,
+  writeStoreRecord,
+} from '../jira-records.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, type Clone } from '../fleet.ts';
-import { fleetTmp, jiraStore, tildify } from '../paths.ts';
+import { fleetTmp, jiraStore, jiraTicketsDir, tildify } from '../paths.ts';
 import {
   cloneTmpPath,
   isPrivateTmpEntry,
@@ -147,7 +156,16 @@ const adoptCloneEntries = (clone: Clone, dryRun: boolean, counts: Counts): strin
       // Already exactly the link pass 3b would make: left alone, so a re-run does not delete
       // and recreate every link in the fleet -- which churns them for nothing and leaves a
       // window where a session looking for its ticket cache finds none.
-      if (target === join(fleetTmp, entry)) continue;
+      if (target === join(fleetTmp, entry)) {
+        // Unless what it points at is gone. Deleting a store entry -- reviewing a
+        // `.from-clone_NN` conflict copy, throwing away a note that has served its purpose --
+        // otherwise leaves this link dangling in every clone for ever, since pass 3b only ever
+        // iterates entries the store still HAS.
+        if (existsSync(target)) continue;
+        note(pc.dim(`${entry}: link to a store entry that is gone, removing`));
+        if (!dryRun) rmSync(path);
+        continue;
+      }
       if (!isOurLink(target)) warn(`${entry}: symlink to ${tildify(target)} — left alone`);
       else if (!dryRun) rmSync(path);
       continue;
@@ -289,6 +307,7 @@ export const tmpMerge = (opts: TmpMergeOptions): void => {
     excludeCloneLocalMd(clone, dryRun);
   }
 
+  syncJiraStore(dryRun);
   dedupeStore(dryRun);
 
   // --- report ------------------------------------------------------------------------
@@ -369,6 +388,117 @@ const stamp = (ms: number): string => {
 };
 
 /**
+ * `tmp/jira-tickets/<KEY>.md` -- one record per ticket, every cached name a hard link to it.
+ *
+ * The per-ticket cache holds a ticket once per investigation that reached it: its own
+ * `tmp/ABC-1234/ticket_ABC-1234.md`, plus a copy in every trunk that named it as a parent or a
+ * relation. This pass makes all of those one inode. `jira-records.ts` has why the store record
+ * cannot keep `relation:`/`relatedTo:` (one inode, two possible `relatedTo:` values) and why
+ * stripping them is safe -- `sync.mjs` never reads a cached record.
+ *
+ * It replaces the old freshest-wins collapse for ticket records, and that is the point rather
+ * than a side effect: under that rule a relation copy could win, and a ticket's own record then
+ * read as though it hung off another ticket. ABC-1259 and ABC-1323 are both in that state on disk
+ * right now. Here a ticket's own record wins regardless of age, so the state is unreachable.
+ */
+const syncJiraStore = (dryRun: boolean): void => {
+  const groups = groupTicketRecords(ticketRecordPaths());
+  if (groups.length === 0) return;
+
+  heading(`One record per ticket in ${tildify(jiraTicketsDir)}`);
+  if (!dryRun) mkdirSync(jiraTicketsDir, { recursive: true });
+
+  let records = 0;
+  let links = 0;
+  for (const group of groups) {
+    const action = planGroup(group);
+    if (action === undefined) continue;
+    if (action.kind === 'busy') {
+      warn(`${group.key}: a copy was written in the last two minutes — left alone`);
+      note(pc.dim('A session may be mid-refresh; this pass replaces content. Run again.'));
+      continue;
+    }
+
+    for (const record of action.mismatched) {
+      warn(`${record.rel}: frontmatter says ${record.statedKey ?? '(nothing)'} — not linked`);
+      note(pc.dim('The name and the record disagree; neither is safe to make the one record.'));
+    }
+
+    const { stripped } = action;
+    if (action.write) {
+      records += 1;
+      const from = action.from.path.startsWith(jiraTicketsDir)
+        ? 'the store record'
+        : action.from.rel;
+      const when = action.from.source === 'fetched' ? '' : pc.dim(` (${action.from.source})`);
+      step(`${group.key}: record from ${from}${when}`);
+      if (stripped.length > 0) {
+        note(
+          pc.dim(
+            `${stripped.join(' and ')} removed — named ${action.from.relatedTo ?? 'a trunk'} as the` +
+              ' trunk it was reached from, and one record cannot name one trunk',
+          ),
+        );
+      }
+      if (!dryRun) writeStoreRecord(group.key, storeContentFrom(action.from.content).content);
+    }
+
+    for (const copy of action.link) {
+      links += 1;
+      note(pc.dim(`${copy.rel} → link${dryRun ? ' would be made' : 'ed'}`));
+      if (dryRun) continue;
+      try {
+        linkToStore(group.key, copy.path);
+      } catch (error) {
+        warn(`${copy.rel}: could not link — ${(error as Error).message}`);
+      }
+    }
+
+    // Attachment references are trunk-specific, so a copy that names different asset files
+    // cannot share content with the record without acquiring image links to files that are not
+    // in its directory.
+    for (const copy of action.keepOwn) {
+      warn(`${copy.rel}: references other attachment filenames — kept as its own file`);
+    }
+  }
+
+  if (records === 0 && links === 0) note(pc.dim('every ticket already has one record'));
+  else
+    ok(
+      `${String(records)} record(s) ${dryRun ? 'to write' : 'written'}, ` +
+        `${String(links)} name(s) ${dryRun ? 'to link' : 'linked'}`,
+    );
+};
+
+/** Every ticket record in the store, the record store itself excluded -- it is not a copy. */
+const ticketRecordPaths = (): string[] => {
+  const found: string[] = [];
+  const walk = (dir: string): void => {
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.startsWith('.')) continue;
+      const path = join(dir, entry);
+      if (path === jiraTicketsDir) continue;
+      let isDir: boolean;
+      try {
+        isDir = statSync(path).isDirectory();
+      } catch {
+        continue;
+      }
+      if (isDir) walk(path);
+      else if (isTicketRecordName(basename(path))) found.push(path);
+    }
+  };
+  walk(fleetTmp);
+  return found;
+};
+
+/**
  * The half no content matcher can see: one ticket cached twice with DIFFERENT content.
  *
  * `jdupes` matches bytes, and these do not match — a relation copy carries its own
@@ -387,7 +517,13 @@ const stamp = (ms: number): string => {
  * not a fresher rendering, and picking a winner there could keep a truncated file.
  */
 const resolveSameTicketCopies = (dryRun: boolean): void => {
-  const groups = sameTicketGroups(fleetTmp).filter((g) => !g.linked && !g.identical);
+  const groups = sameTicketGroups(fleetTmp).filter(
+    // Ticket RECORDS belong to `syncJiraStore` above, which picks a winner by a stronger rule
+    // (a ticket's own record beats a relation copy regardless of age) and links every name to
+    // one store file. What is left here is the rest of the per-ticket cache -- `plan_<KEY>.md`,
+    // `pr_description_<KEY>.md` -- where freshest-wins is the whole of the right answer.
+    (g) => !g.linked && !g.identical && g.canonical !== `ticket_${g.key}.md`,
+  );
   if (groups.length === 0) return;
   console.log('');
 

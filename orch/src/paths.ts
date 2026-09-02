@@ -62,6 +62,18 @@ export const legacyPlans = join(claudeDir, 'dvb-gn-plans');
 /** The one shared statusline script -- all clones run it; it derives its hue from the cwd. */
 export const statuslineScript = join(claudeDir, 'dvb-clone-statusline.sh');
 
+/**
+ * The one record per Jira ticket: `tmp/jira-tickets/ABC-1234.md`.
+ *
+ * Every name the per-ticket cache gives that ticket -- its own `tmp/ABC-1234/ticket_ABC-1234.md`
+ * and every `tmp/<TRUNK>/ticket_<TRUNK>_<relation>_ABC-1234.md` -- is a HARD link to this file,
+ * so one ticket is one inode however many investigations reached it. See `jira-records.ts`.
+ *
+ * Deliberately NOT linked into the clones like the other store entries: no skill owns this
+ * path, and a symlink in `clone_NN/tmp/` would invite an agent to write into it.
+ */
+export const jiraTicketsDir = join(fleetTmp, 'jira-tickets');
+
 /** Shared per-ticket Jira cache. Each clone's `tmp/<KEY>` is a symlink into here. */
 export const jiraStore = resolve(process.env['DVB_JIRA_CACHE'] ?? join(claudeDir, 'dvb-gn-jira'));
 

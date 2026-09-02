@@ -4,6 +4,7 @@ import pc from 'picocolors';
 import { addClone } from './commands/add-clone.ts';
 import { coloursChange, coloursList, coloursSync } from './commands/colours.ts';
 import { doctor } from './commands/doctor.ts';
+import { jiraHook } from './commands/jira.ts';
 import { list } from './commands/list.ts';
 import { open } from './commands/open.ts';
 import { plansCollect, plansStamp } from './commands/plans.ts';
@@ -122,6 +123,25 @@ program
   .option('--fix', 'repair the checks that are derivable from the clone index')
   .action((clone, options) => {
     doctor(clone, options);
+  });
+
+const jira = program
+  .command('jira')
+  .description(
+    'The shared ticket record store: one file per ticket, every cached name a link to it',
+  );
+
+jira
+  .command('hook')
+  .description('PreToolUse hook: serve a cached ticket from the record store instead of fetching')
+  .option('--ttl <minutes>', 'how old a stored record may be and still be served', '60')
+  .option('-n, --dry-run', 'decide without making any link')
+  .option(
+    '--explain',
+    'say on stderr why nothing was served — a fail-open hook is otherwise silent',
+  )
+  .action((options) => {
+    jiraHook(options);
   });
 
 const plans = program

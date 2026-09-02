@@ -223,7 +223,14 @@ const parseStamp = (value: string): number | undefined => {
 export const freshnessOf = (path: string): { at: number; source: Copy['source'] } => {
   const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---/.exec(readHead(path))?.[1] ?? '';
   for (const source of ['fetched', 'updated'] as const) {
-    const raw = new RegExp(`^${source}:\\s*(.+)$`, 'm').exec(frontmatter)?.[1];
+    // Both spellings, because both generations of the cache are on disk at once and have to
+    // rank against each other: `jira-scope` wrote `fetched:` / `updated:`, and the
+    // `jira-ticket-sync` contract writes `fetched_at:` / `updated_at:`. Matching only the bare
+    // names sent every synced file to the mtime fallback below -- the one this doc comment
+    // calls untrustworthy -- which is how a relation copy came to win against a ticket's own
+    // record. Both the skill's SKILL.md and `tmp/orch-util-fetched-at-followup.md` asked for
+    // this.
+    const raw = new RegExp(`^${source}(?:_at)?:\\s*(.+)$`, 'm').exec(frontmatter)?.[1];
     const at = raw === undefined ? undefined : parseStamp(raw);
     if (at !== undefined) return { at, source };
   }

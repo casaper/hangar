@@ -231,6 +231,39 @@ export const hasPlansHook = (settings: SettingsJson | undefined): boolean =>
   );
 
 /**
+ * The `PreToolUse` hook that serves a Jira ticket from the shared record store.
+ *
+ * Untracked for the same reason as the plan collector, and a stronger one: the clones' `.claude`
+ * is shared with every other contributor and has to work without this fleet, so nothing about
+ * the record store can be in a tracked file. The matcher is `Bash` because that is how the
+ * skill's sync script is invoked; the hook itself decides whether the command is one it knows,
+ * and fails open on everything else.
+ *
+ * Additive, not a replacement: Claude Code merges the tracked settings' hooks with these, so
+ * the repo's own `PreToolUse` guard still runs.
+ */
+export const JIRA_HOOK_COMMAND = `${join(fleetRoot, 'bin', 'orch-util')} jira hook`;
+
+const jiraHookMatcher = (): HookMatcher => ({
+  matcher: 'Bash',
+  hooks: [{ type: 'command', command: JIRA_HOOK_COMMAND, timeout: 30 }],
+});
+
+export const hasJiraHook = (settings: SettingsJson | undefined): boolean =>
+  (settings?.hooks?.['PreToolUse'] ?? []).some((matcher) =>
+    matcher.hooks.some((hook) => hook.command === JIRA_HOOK_COMMAND),
+  );
+
+export const withJiraHook = (settings: SettingsJson): SettingsJson => {
+  const hooks = { ...settings.hooks };
+  const existing = (hooks['PreToolUse'] ?? []).filter(
+    (matcher) => !matcher.hooks.some((hook) => hook.command === JIRA_HOOK_COMMAND),
+  );
+  hooks['PreToolUse'] = [...existing, jiraHookMatcher()];
+  return { ...settings, hooks };
+};
+
+/**
  * Settings with the plan-collecting hook in place and no `plansDirectory` override.
  *
  * The override is removed deliberately: the repo's own tracked `.claude/settings.json` already

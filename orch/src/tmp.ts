@@ -1,8 +1,8 @@
 import { lstatSync, readdirSync, readlinkSync, statSync, symlinkSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import type { Clone } from './fleet.ts';
-import { fleetTmp } from './paths.ts';
+import { fleetTmp, jiraTicketsDir } from './paths.ts';
 
 /**
  * The shared `tmp/`: one store at the fleet root, and per-ENTRY symlinks in every clone.
@@ -29,6 +29,9 @@ import { fleetTmp } from './paths.ts';
  */
 
 export const cloneTmpPath = (clone: Clone): string => join(clone.path, 'tmp');
+
+/** Named from the path itself, so the two can never say different things. */
+const JIRA_TICKETS_DIRNAME = basename(jiraTicketsDir);
 
 const lstatOrUndefined = (path: string): ReturnType<typeof lstatSync> | undefined => {
   try {
@@ -80,9 +83,17 @@ export const isPrivateTmpEntry = (clone: Clone, name: string): boolean => {
   return files.length > 0 && files.every((path) => isPidFile(path));
 };
 
-/** The store's entries worth linking into a clone -- everything except dotfiles and PID files. */
+/**
+ * The store's entries worth linking into a clone -- everything except dotfiles and PID files.
+ *
+ * And `jira-tickets`, the one-record-per-ticket store: the per-ticket directories a clone
+ * links already CONTAIN that content, as hard links, under the names the skills own. A symlink
+ * to the record store on top of that would be a second way in, to a path no skill owns.
+ */
 export const shareableStoreEntries = (names: readonly string[]): string[] =>
-  names.filter((name) => !name.startsWith('.') && !isPidFile(name)).sort();
+  names
+    .filter((name) => !name.startsWith('.') && !isPidFile(name) && name !== JIRA_TICKETS_DIRNAME)
+    .sort();
 
 export const storeEntries = (): string[] => {
   try {
