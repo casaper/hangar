@@ -16,7 +16,7 @@ dvb_clone_rgb() {
         clone_01) printf '0;204;255' ;;   # cyan   #00ccff
         clone_02) printf '255;204;0' ;;   # yellow #ffcc00
         clone_03) printf '0;204;0'   ;;   # green  #00cc00
-        clone_04) printf '255;136;0' ;;   # orange #ff8800
+        clone_04) printf '255;68;68' ;;   # red    #ff4444
         *)        return 1 ;;
     esac
 }

@@ -1,0 +1,4 @@
+{
+  "4": "red",
+  "_": "Written by `orch-util colours change <clone> <colour>`. Keys are clone indices; values are palette names from orch/src/palette.ts. A clone that is not listed takes PALETTE[(N-1) % length]."
+}
