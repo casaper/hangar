@@ -7,6 +7,7 @@ import {
   currentBranch,
   git,
   gitTry,
+  inProgressOperation,
   remoteHeadBranch,
   syncState,
 } from '../git.ts';
@@ -27,7 +28,10 @@ import { cloneLabel, confirm, fail, heading, note, ok, step, warn } from '../ui.
  *
  * 2. Conflicts are handed to a headless `claude -p` inside the clone and then verified
  *    mechanically. If that fails, the whole operation is aborted and the pre-sync state
- *    restored -- never left half-merged.
+ *    restored -- never left half-merged. That run streams its progress (see
+ *    `resolve-conflicts.ts`), because a silent minute here reads as a hung command and gets
+ *    killed -- which leaves the rebase stopped mid-pick, the one state this command exists
+ *    to avoid.
  *
  * Rebase vs merge follows the user's rule: rebase only when this is your own branch with a
  * linear history since it forked; merge when someone else started it or it already contains
@@ -92,7 +96,9 @@ const chooseStrategy = (clone: Clone): Strategy => {
 
 const PAUSE_MESSAGE =
   'STOP what you are doing and do not edit any file. `orch-util sync` is about to rebase or merge ' +
-  'this clone onto the default branch. Reply that you have paused, then wait.';
+  'this clone onto the default branch. If it conflicts, a separate headless Claude Code run will ' +
+  'edit the conflicted files in this working tree — do not touch them yourself, even if asked, ' +
+  'or you will both be editing the same file. Reply that you have paused, then wait.';
 
 const resumeMessage = (strategy: Strategy): string =>
   `The ${strategy.kind} onto ${strategy.target} is finished. You can resume what you were doing — ` +
@@ -128,7 +134,7 @@ const abortAndRestore = (clone: Clone, strategy: Strategy, stashed: boolean): vo
 };
 
 /** Drive a rebase to completion, resolving each conflicted step. */
-const continueRebase = (clone: Clone, strategy: Strategy): boolean => {
+const continueRebase = async (clone: Clone, strategy: Strategy): Promise<boolean> => {
   for (let guard = 0; guard < 50; guard += 1) {
     if (conflictedFiles(clone.path).length === 0) {
       const cont = git(clone.path, ['-c', 'core.editor=true', 'rebase', '--continue']);
@@ -139,7 +145,7 @@ const continueRebase = (clone: Clone, strategy: Strategy): boolean => {
         return false;
       }
     }
-    const outcome = resolveWithClaude(clone.path, 'rebase', strategy.target);
+    const outcome = await resolveWithClaude(clone.path, 'rebase', strategy.target);
     if (!outcome.resolved) {
       fail(outcome.reason ?? 'could not resolve conflicts');
       return false;
@@ -155,11 +161,24 @@ const continueRebase = (clone: Clone, strategy: Strategy): boolean => {
   return false;
 };
 
-const syncOne = (clone: Clone, opts: SyncOptions): boolean => {
+const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
   heading(`Syncing ${cloneLabel(clone)}`);
 
   const sessions = claudeSessionsIn(clone.path);
   const strategyBefore = chooseStrategy(clone);
+
+  // Refuse to start on top of a half-applied rebase or merge. Step 2 would `git stash push`
+  // over it, which buries the in-flight state in a stash nobody will think to look in. This
+  // is not hypothetical: a `sync` killed mid-resolution leaves exactly this, and re-running
+  // it is the obvious next thing a developer tries.
+  const pending = inProgressOperation(clone.path);
+  if (pending !== undefined && opts.dryRun !== true) {
+    throw new CliError(
+      `${clone.name} is in the middle of a ${pending}`,
+      `Finish it (\`git -C ${clone.path} ${pending} --continue\`) or abandon it ` +
+        `(\`--abort\`), then run sync again.`,
+    );
+  }
 
   if (opts.dryRun === true) {
     note(`branch:   ${currentBranch(clone.path)}`);
@@ -167,6 +186,7 @@ const syncOne = (clone: Clone, opts: SyncOptions): boolean => {
     if (strategyBefore.kind !== 'up-to-date') note(`because:  ${strategyBefore.reason}`);
     const state = syncState(clone.path);
     note(`worktree: ${state.dirty} modified, ${state.untracked} untracked`);
+    if (pending !== undefined) note(`pending:  a ${pending} is in progress — sync would refuse`);
     note(
       `sessions: ${sessions.length === 0 ? 'none' : sessions.map((s) => `pid ${s.pid} on ${s.tty ?? 'no tty'}`).join(', ')}`,
     );
@@ -225,11 +245,11 @@ const syncOne = (clone: Clone, opts: SyncOptions): boolean => {
     if (!integrated) fail('fast-forward failed — the default branch has diverged locally');
   } else if (strategy.kind === 'rebase') {
     const res = git(clone.path, ['rebase', strategy.target], true);
-    integrated = res.ok || continueRebase(clone, strategy);
+    integrated = res.ok || (await continueRebase(clone, strategy));
   } else if (strategy.kind === 'merge') {
     const res = git(clone.path, ['merge', '--no-edit', strategy.target], true);
     if (!res.ok) {
-      const outcome = resolveWithClaude(clone.path, 'merge', strategy.target);
+      const outcome = await resolveWithClaude(clone.path, 'merge', strategy.target);
       if (outcome.resolved) {
         git(clone.path, ['add', '-A']);
         integrated = git(clone.path, ['-c', 'core.editor=true', 'merge', '--continue']).ok;
@@ -257,7 +277,7 @@ const syncOne = (clone: Clone, opts: SyncOptions): boolean => {
       git(clone.path, ['stash', 'drop']);
       ok('re-applied your changes and dropped the stash');
     } else {
-      const outcome = resolveWithClaude(clone.path, 'stash apply', strategy.target);
+      const outcome = await resolveWithClaude(clone.path, 'stash apply', strategy.target);
       if (outcome.resolved && conflictedFiles(clone.path).length === 0) {
         ok('re-applied your changes (conflicts resolved)');
         warn('the stash was KEPT — verify the result, then `git stash drop`');
@@ -278,7 +298,7 @@ const syncOne = (clone: Clone, opts: SyncOptions): boolean => {
   return true;
 };
 
-export const sync = (ref: string | undefined, opts: SyncOptions): void => {
+export const sync = async (ref: string | undefined, opts: SyncOptions): Promise<void> => {
   const clones = opts.all === true ? discoverClones() : [namedClone(ref)];
   const skipped: string[] = [];
   const failed: string[] = [];
@@ -297,7 +317,7 @@ export const sync = (ref: string | undefined, opts: SyncOptions): void => {
       }
     }
     try {
-      if (!syncOne(clone, opts)) failed.push(clone.name);
+      if (!(await syncOne(clone, opts))) failed.push(clone.name);
     } catch (error) {
       if (!(error instanceof CliError) || clones.length === 1) throw error;
       fail(`${clone.name}: ${error.message}`);

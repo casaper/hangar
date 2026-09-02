@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
+
 import { run, runOrThrow, type RunResult } from './exec.ts';
 
 /**
@@ -108,13 +111,26 @@ export const conflictedFiles = (repo: string): string[] => {
   return out === '' ? [] : out.split('\n');
 };
 
-/** True while a rebase or merge is still in progress. */
+/**
+ * Whichever multi-step operation the repo is stopped in the middle of, if any.
+ *
+ * The STATE DIRECTORY is what decides this, exactly as git's own status does -- not
+ * `REBASE_HEAD`. That ref is written when a rebase stops at a conflict and is gone again
+ * once the step is staged, so a repo sitting resolved-but-not-continued -- the state a
+ * killed `orch-util sync` leaves behind, and the one this check exists to catch -- has a
+ * populated `rebase-merge/` and no `REBASE_HEAD` at all.
+ */
 export const inProgressOperation = (repo: string): 'rebase' | 'merge' | undefined => {
-  if (gitTry(repo, ['rev-parse', '--verify', '--quiet', 'REBASE_HEAD']) !== undefined) {
-    return 'rebase';
+  const gitPath = (name: string): string | undefined => {
+    const resolved = gitTry(repo, ['rev-parse', '--git-path', name]);
+    if (resolved === undefined) return undefined;
+    return isAbsolute(resolved) ? resolved : join(repo, resolved);
+  };
+  for (const name of ['rebase-merge', 'rebase-apply']) {
+    const path = gitPath(name);
+    if (path !== undefined && existsSync(path)) return 'rebase';
   }
-  if (gitTry(repo, ['rev-parse', '--verify', '--quiet', 'MERGE_HEAD']) !== undefined) {
-    return 'merge';
-  }
+  const mergeHead = gitPath('MERGE_HEAD');
+  if (mergeHead !== undefined && existsSync(mergeHead)) return 'merge';
   return undefined;
 };

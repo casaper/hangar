@@ -65,8 +65,8 @@ program
   .option('-n, --dry-run', 'show the chosen strategy and change nothing')
   .option('--no-session-notify', 'do not type pause/resume messages into live Claude sessions')
   .option('--include-busy', 'with --all, also sync clones that have a live Claude session')
-  .action((clone, options) => {
-    sync(clone, options);
+  .action(async (clone, options) => {
+    await sync(clone, options);
   });
 
 program
@@ -196,13 +196,23 @@ program
     coloursSync(options);
   });
 
-try {
-  program.parse();
-} catch (error) {
+/**
+ * `parseAsync`, not `parse`: `sync` awaits a streaming `claude -p` run. A synchronous
+ * `try/catch` around `parseAsync()` would NOT catch a CliError thrown inside an async action
+ * -- it would surface as an unhandled rejection with a stack trace, which is the exact
+ * failure mode CliError exists to prevent. So both paths funnel through one handler.
+ */
+const report = (error: unknown): never => {
   if (error instanceof CliError) {
     console.error(`${pc.red('error')}: ${error.message}`);
     if (error.hint !== undefined) console.error(`       ${error.hint}`);
     process.exit(1);
   }
   throw error;
+};
+
+try {
+  await program.parseAsync();
+} catch (error) {
+  report(error);
 }

@@ -145,7 +145,10 @@ Three behaviours are worth knowing before you run them:
   running interactive session, so it finds the session's tty, maps it to an iTerm2 tab and writes
   a pause message, then a resume message afterwards. `--all` **skips** clones with a live session
   unless `--include-busy`. Rebase vs merge follows the rule "rebase only my own linear branch";
-  anything with merge commits, or started by someone else, is merged instead.
+  anything with merge commits, or started by someone else, is merged instead. It **refuses to
+  start on a clone that is already mid-rebase or mid-merge** — finish or abort that first,
+  because step one is a `git stash push` and it would bury the half-applied state in a stash
+  nobody thinks to look in.
 - **`orch-util plans collect` and `tmp merge` move files between the clones and the fleet root.**
   Both are idempotent and neither ever overwrites: byte-identical copies collapse to one, anything
   that differs is kept beside the winner as `<name>.from-clone_NN`, and anything a live session may
@@ -154,6 +157,13 @@ Three behaviours are worth knowing before you run them:
   mechanically (no unmerged paths, no markers). If that fails the whole operation is aborted and
   the pre-sync state restored — never left half-merged. `git rerere` and `-X ours/theirs` are
   deliberately not used: they look like resolution and silently produce wrong code.
+  **That run takes one to three minutes and streams its progress** — a dim line per tool call,
+  per API retry, and a heartbeat into any longer silence — because `claude -p` in its default
+  output format prints nothing at all until it finishes, which reads as a hung command and gets
+  killed, leaving the rebase stopped mid-pick. **Let it run; do not resolve the same files by
+  hand while it is working.** It is aborted after 10 minutes
+  (`ORCH_UTIL_RESOLVE_TIMEOUT_MS` overrides), and the headless session id it prints is the
+  transcript to read afterwards.
 
 **`orch-util vscode sync` is a text transform, not a copy**, and for two reasons. A handful of
 VS Code settings take an **absolute** path into the checkout — `stylelint.stylelintPath`,
