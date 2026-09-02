@@ -332,6 +332,18 @@ and `clone_NN/angular/dvb_gn_NN.code-workspace` — because VS Code only offers 
 for both and fills a missing one from its twin; `workspaceContent()` in `clone-config.ts` is only
 the fallback for a clone that has neither.
 
+Two rules for anything `orch-util` GENERATES into a clone, both learned from the identity file:
+
+- **It has to satisfy that clone's own tooling.** `.git/info/exclude` hides a file from git, not
+  from Prettier, and the repo's `md:check` globs `../**/*.md` from `angular/` — so an untracked
+  generated `*.md` sitting at a clone root is formatted by the repo like any tracked file. The
+  identity file's markdown table went unpadded for a while and sat in that repo's pre-existing
+  format debt, where it read as the branch's doing and nobody could fix it: hand-formatting it
+  now trips `doctor`'s content check instead.
+- **`doctor` compares its content, never just its presence.** An existence check on a generated
+  file is a check that lets the content rot. The `*.code-workspace` pair is the deliberate
+  exception, because its content is `vscode sync`'s business rather than a generator's.
+
 `orch-util doctor` is the regression net for everything that lives outside git and so cannot be
 restored by a pull — ports, the `CLAUDE.local.md` + `.git/info/exclude` pair (the identity file by
 CONTENT, since it is generated, so a stale or hand-edited one is rewritten — existence alone was
@@ -560,10 +572,11 @@ every clone (verify with `jq -S 'del(.theme)|del(.permissions.allow)' … | shas
   `terminal.external.osxExec`).
 - `.claude/settings.json` is **tracked and shared** — never put a per-clone or personal value there.
 
-**A running session never sees a change to this file.** Claude Code reads it once at startup, so a
-hook wired in by `doctor --fix` or a theme swapped by `colours change` reaches that clone at its
-**next** session. In particular a session that started before a `SessionEnd` hook was added does
-not run it on exit — `doctor` checks the file, and a green report says nothing about what the open
+**A running session never sees a change to this file**, and the same is true of `CLAUDE.local.md`
+next to it. Claude Code reads both once at startup, so a hook wired in by `doctor --fix`, a theme
+swapped by `colours change` or an improved identity text reaches that clone at its **next**
+session. In particular a session that started before a `SessionEnd` hook was added does not run it
+on exit — `doctor` checks what is on disk, and a green report says nothing about what the open
 sessions are running.
 
 **Plans cannot be shared by a setting.** Claude Code resolves `plansDirectory` against the project
