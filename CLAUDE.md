@@ -154,6 +154,10 @@ Five behaviours are worth knowing before you run them:
   Both are idempotent and neither ever overwrites: byte-identical copies collapse to one, anything
   that differs is kept beside the winner as `<name>.from-clone_NN`, and anything a live session may
   still be writing is left where it is and reported. Run them again rather than forcing them.
+  **`tmp merge` never carries a PID file into the shared `tmp/`, at any depth** — they are per
+  clone and ephemeral, so it discards them (naming each one) and drops the `_<clone>/` directory
+  they leave behind, rather than putting one clone's leftovers in front of every other clone. A
+  live server still aborts the whole thing before anything is touched.
 - **Conflicts are delegated to a headless `claude -p` inside the clone**, then verified
   mechanically (no unmerged paths, no markers). If that fails the whole operation is aborted and
   the pre-sync state restored — never left half-merged. `git rerere` and `-X ours/theirs` are
@@ -307,7 +311,10 @@ symlink.
 > **`tmp/_<clone>/<name>.pid`**, and `tests/playwright-regression-tests/config/runner-pid.ts`
 > matches it. Until that change is on a clone's checked-out branch, that clone must not be shared:
 > `orch-util tmp merge` refuses (`--force` overrides), and `doctor` reports the clone as waiting
-> rather than broken.
+> rather than broken. The PID files themselves are never merged: `tmp merge` discards them and
+> lets the clone's own tooling recreate `tmp/_<clone>/` the next time it starts a server, so a
+> `*.pid` in the ROOT of the shared `tmp/` can only have come from a clone still writing flat
+> paths — which is what `doctor` and the end of `tmp merge` report.
 
 `ticket_<KEY>.md`, its relation variants and Jira attachments are clone- and branch-independent,
 which is the point. **`pr_description_<KEY>.md` is not** — it is derived from the working-tree diff,
