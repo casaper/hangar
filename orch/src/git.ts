@@ -20,11 +20,14 @@ export const gitTry = (repo: string, args: readonly string[]): string | undefine
   return res.ok ? res.stdout.trim() : undefined;
 };
 
+/** What `currentBranch` answers when there is no branch. Compared against, so it is shared. */
+export const DETACHED = '(detached HEAD)';
+
 export const currentBranch = (repo: string): string =>
   // `||`, not `??`: on a detached HEAD the command SUCCEEDS and prints nothing, so the
   // empty string has to fall through too.
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-  gitTry(repo, ['branch', '--show-current']) || '(detached HEAD)';
+  gitTry(repo, ['branch', '--show-current']) || DETACHED;
 
 export const isGitRepo = (repo: string): boolean =>
   gitTry(repo, ['rev-parse', '--git-dir']) !== undefined;
@@ -150,6 +153,15 @@ export const remoteHeadBranch = (repo: string): string => {
   const ref = gitTry(repo, ['symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD']);
   return ref?.replace('refs/remotes/origin/', '') ?? 'master';
 };
+
+/**
+ * True when `ref` names a commit here.
+ *
+ * `^{commit}` on purpose: a ref that exists but is not a commit is no use as a rebase or merge
+ * base, and `--verify --quiet` turns "no such ref" into a clean non-zero rather than noise.
+ */
+export const refExists = (repo: string, ref: string): boolean =>
+  gitTry(repo, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]) !== undefined;
 
 export const conflictedFiles = (repo: string): string[] => {
   const out = gitTry(repo, ['diff', '--name-only', '--diff-filter=U']) ?? '';

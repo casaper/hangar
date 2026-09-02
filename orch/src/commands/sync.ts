@@ -1,13 +1,16 @@
 import pc from 'picocolors';
 
+import { openPullRequests, repoRef, type PullRequest } from '../bitbucket.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import {
   conflictedFiles,
   currentBranch,
+  DETACHED,
   git,
   gitTry,
   inProgressOperation,
+  refExists,
   remoteHeadBranch,
   syncState,
 } from '../git.ts';
@@ -17,16 +20,20 @@ import { resolveWithClaude } from '../resolve-conflicts.ts';
 import { cloneLabel, confirm, fail, heading, note, ok, step, warn } from '../ui.ts';
 
 /**
- * `orch-util sync` -- bring a clone's branch up to date with the default branch.
+ * `orch-util sync` -- bring a clone's branch up to date with whatever it will be merged into.
  *
- * Two things here are not mechanical, and both are deliberate choices rather than defaults:
+ * Three things here are not mechanical, and all of them are deliberate choices rather than
+ * defaults:
  *
  * 1. A live Claude Code session in the clone is TOLD to pause, by typing into its iTerm2
  *    tab. There is no other mechanism: the `claude` CLI has no subcommand that messages a
  *    running interactive session. If the tab cannot be found the command asks the human
  *    instead of rewriting the branch under an agent that is mid-edit.
  *
- * 2. Conflicts are handed to a headless `claude -p` inside the clone and then verified
+ * 2. The target is the branch this one's PULL REQUEST targets, which is not always the
+ *    default branch and cannot be worked out locally -- see `resolveTarget`.
+ *
+ * 3. Conflicts are handed to a headless `claude -p` inside the clone and then verified
  *    mechanically. If that fails, the whole operation is aborted and the pre-sync state
  *    restored -- never left half-merged. That run streams its progress (see
  *    `resolve-conflicts.ts`), because a silent minute here reads as a hung command and gets
@@ -42,29 +49,132 @@ export type SyncOptions = {
   dryRun?: boolean | undefined;
   sessionNotify?: boolean | undefined;
   includeBusy?: boolean | undefined;
+  onto?: string | undefined;
 };
 
 type Strategy =
-  | { kind: 'up-to-date'; target: string }
-  | { kind: 'ff-only'; target: string; reason: string }
-  | { kind: 'rebase'; target: string; reason: string }
-  | { kind: 'merge'; target: string; reason: string };
+  | { kind: 'up-to-date'; target: Target }
+  | { kind: 'ff-only'; target: Target; reason: string }
+  | { kind: 'rebase'; target: Target; reason: string }
+  | { kind: 'merge'; target: Target; reason: string };
 
-const chooseStrategy = (clone: Clone): Strategy => {
+/**
+ * What this clone is being brought up to date WITH, and how sure we are of it.
+ *
+ * `ref` is what git is handed and is always remote-qualified. A bare branch name would be
+ * ambiguous the moment a sibling clone has the same branch -- which in a stacked pull request
+ * it does by definition -- and `checkout.defaultRemote=origin` is no help here: it steers
+ * `git checkout` DWIM only, not `rev-parse`, `merge-base` or `rebase`.
+ */
+type Target = {
+  readonly branch: string;
+  readonly ref: string;
+  /** Where this target came from, for the one line that says so. */
+  readonly why: string;
+  /** True when the PR could not be looked up and this is the default branch as a guess. */
+  readonly guessed: boolean;
+  readonly pr: PullRequest | undefined;
+};
+
+/**
+ * The target, in priority order: `--onto`, then the branch's open pull request, then the
+ * repo's default branch.
+ *
+ * The pull request is the authoritative answer and nothing local substitutes for it. A branch
+ * cut from `master` may perfectly well have a PR onto `release9`, or onto another branch of
+ * this very fleet (a stacked PR -- clone_02's PR onto clone_01's branch is the case this was
+ * written for), and every fork-point heuristic confidently answers `master` for all of them.
+ * Rebasing onto `master` there integrates the wrong base and burns a three-minute headless
+ * conflict resolution deciding against it.
+ *
+ * Every API failure is a FALLBACK, not an error: a clone with no token, no network or a 401
+ * still wants syncing, and it gets the old behaviour plus a warning that the target is a
+ * guess. The one thing that does abort is genuine ambiguity -- two open PRs onto different
+ * branches, where picking either silently would be worse than stopping.
+ *
+ * No lookup at all while we are ON the target branch: there is nothing to resolve, and a query
+ * for `master` comes back with `master`'s own historical PRs (`master` -> `release9`, merged in
+ * 2024), which must never become a sync target.
+ */
+const resolveTarget = async (clone: Clone, branch: string, opts: SyncOptions): Promise<Target> => {
   const defaultBranch = remoteHeadBranch(clone.path);
-  const target = `origin/${defaultBranch}`;
+  const onDefault = (why: string, guessed = false): Target => ({
+    branch: defaultBranch,
+    ref: `origin/${defaultBranch}`,
+    why,
+    guessed,
+    pr: undefined,
+  });
+
+  if (opts.onto !== undefined) {
+    // A bare name is qualified with `origin/` when that exists, for the ambiguity reason above;
+    // anything already qualified (`origin/release9`, `clone_01/some-branch`) is taken verbatim.
+    const qualified = `origin/${opts.onto}`;
+    const ref = refExists(clone.path, qualified) ? qualified : opts.onto;
+    return { branch: opts.onto, ref, why: 'given with --onto', guessed: false, pr: undefined };
+  }
+  if (branch === defaultBranch) return onDefault(`on the default branch (${defaultBranch})`);
+  if (branch === DETACHED) return onDefault('detached HEAD — no branch to look a PR up by');
+
+  const lookup = await openPullRequests(repoRef(clone.path), branch);
+  if (!lookup.ok) {
+    warn(`could not ask Bitbucket which branch this one's PR targets: ${lookup.reason}`);
+    return onDefault(`assuming the default branch (${defaultBranch}) — PR target unknown`, true);
+  }
+  const destinations = [...new Set(lookup.pullRequests.map((pr) => pr.destination))];
+  if (destinations.length > 1) {
+    throw new CliError(
+      `${clone.name}: ${branch} has open pull requests onto ${destinations.join(' and ')}`,
+      `Choose one with --onto <ref>: ${lookup.pullRequests
+        .map((pr) => `#${String(pr.id)} → ${pr.destination}`)
+        .join(', ')}`,
+    );
+  }
+  const pr = lookup.pullRequests[0];
+  if (pr === undefined) {
+    return onDefault(`no open pull request — the default branch (${defaultBranch})`);
+  }
+  return {
+    branch: pr.destination,
+    ref: `origin/${pr.destination}`,
+    why: `PR #${String(pr.id)} targets ${pr.destination}`,
+    guessed: false,
+    pr,
+  };
+};
+
+/** The target line, printed for every sync so the base is never implicit. */
+const describeTarget = (clone: Clone, target: Target): void => {
+  note(`target ${target.ref}${target.guessed ? pc.yellow(' (a guess)') : ''} — ${target.why}`);
+  if (target.pr !== undefined) note(pc.dim(target.pr.url));
+  // Fleet-aware, and print-only: a stacked PR targets a branch a sibling clone is working in,
+  // so `origin/<target>` is only as fresh as that clone's last push. Not a reason to stop.
+  const siblings = discoverClones()
+    .filter((other) => other.name !== clone.name && currentBranch(other.path) === target.branch)
+    .map((other) => other.name);
+  if (siblings.length > 0) {
+    note(
+      pc.dim(
+        `${target.branch} is checked out in ${siblings.join(', ')} — ${target.ref} is only as fresh as its last push`,
+      ),
+    );
+  }
+};
+
+const chooseStrategy = (clone: Clone, target: Target): Strategy => {
+  const ref = target.ref;
   const branch = currentBranch(clone.path);
 
-  if (branch === defaultBranch) {
-    return { kind: 'ff-only', target, reason: `on the default branch (${defaultBranch})` };
+  if (branch === target.branch) {
+    return { kind: 'ff-only', target, reason: `this IS ${target.branch} — fast-forward only` };
   }
 
-  const base = gitTry(clone.path, ['merge-base', target, 'HEAD']);
+  const base = gitTry(clone.path, ['merge-base', ref, 'HEAD']);
   if (base === undefined) {
-    return { kind: 'merge', target, reason: `no common ancestor found with ${target}` };
+    return { kind: 'merge', target, reason: `no common ancestor found with ${ref}` };
   }
 
-  const behind = gitTry(clone.path, ['rev-list', '--count', `HEAD..${target}`]) ?? '0';
+  const behind = gitTry(clone.path, ['rev-list', '--count', `HEAD..${ref}`]) ?? '0';
   if (behind === '0') return { kind: 'up-to-date', target };
 
   const merges = gitTry(clone.path, ['rev-list', '--merges', `${base}..HEAD`]) ?? '';
@@ -94,14 +204,15 @@ const chooseStrategy = (clone: Clone): Strategy => {
   return { kind: 'rebase', target, reason: 'your branch, linear since the fork' };
 };
 
-const PAUSE_MESSAGE =
-  'STOP what you are doing and do not edit any file. `orch-util sync` is about to rebase or merge ' +
-  'this clone onto the default branch. If it conflicts, a separate headless Claude Code run will ' +
+const pauseMessage = (strategy: Strategy): string =>
+  'STOP what you are doing and do not edit any file. `orch-util sync` is about to ' +
+  `${strategy.kind === 'merge' ? 'merge' : 'rebase'} this clone onto ${strategy.target.ref}. ` +
+  'If it conflicts, a separate headless Claude Code run will ' +
   'edit the conflicted files in this working tree — do not touch them yourself, even if asked, ' +
   'or you will both be editing the same file. Reply that you have paused, then wait.';
 
 const resumeMessage = (strategy: Strategy): string =>
-  `The ${strategy.kind} onto ${strategy.target} is finished. You can resume what you were doing — ` +
+  `The ${strategy.kind} onto ${strategy.target.ref} is finished. You can resume what you were doing — ` +
   'but re-read any file you had in flight first: code may have changed underneath you, ' +
   'including in the area you were working on.';
 
@@ -145,7 +256,7 @@ const continueRebase = async (clone: Clone, strategy: Strategy): Promise<boolean
         return false;
       }
     }
-    const outcome = await resolveWithClaude(clone.path, 'rebase', strategy.target);
+    const outcome = await resolveWithClaude(clone.path, 'rebase', strategy.target.ref);
     if (!outcome.resolved) {
       fail(outcome.reason ?? 'could not resolve conflicts');
       return false;
@@ -165,7 +276,7 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
   heading(`Syncing ${cloneLabel(clone)}`);
 
   const sessions = claudeSessionsIn(clone.path);
-  const strategyBefore = chooseStrategy(clone);
+  const branch = currentBranch(clone.path);
 
   // Refuse to start on top of a half-applied rebase or merge. Step 2 would `git stash push`
   // over it, which buries the in-flight state in a stash nobody will think to look in. This
@@ -180,10 +291,20 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
     );
   }
 
+  // The pull-request lookup is the one network call and happens ONCE, here. Whether
+  // `origin/<target>` is actually in this clone is a separate question, asked after the fetch
+  // below: a stacked PR can target a branch this clone has never fetched.
+  const target = await resolveTarget(clone, branch, opts);
+  describeTarget(clone, target);
+  const strategyBefore = chooseStrategy(clone, target);
+
   if (opts.dryRun === true) {
-    note(`branch:   ${currentBranch(clone.path)}`);
-    note(`strategy: ${strategyBefore.kind} onto ${strategyBefore.target}`);
+    note(`branch:   ${branch}`);
+    note(`strategy: ${strategyBefore.kind} onto ${target.ref}`);
     if (strategyBefore.kind !== 'up-to-date') note(`because:  ${strategyBefore.reason}`);
+    if (!refExists(clone.path, target.ref)) {
+      note(`missing:  ${target.ref} is not in this clone yet — the fetch would have to bring it`);
+    }
     const state = syncState(clone.path);
     note(`worktree: ${state.dirty} modified, ${state.untracked} untracked`);
     if (pending !== undefined) note(`pending:  a ${pending} is in progress — sync would refuse`);
@@ -200,7 +321,7 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
       warn(`${sessions.length} live Claude session(s) — not notified (--no-session-notify)`);
     } else {
       step(`pausing ${sessions.length} live Claude Code session(s)`);
-      if (!notifySessions(sessions, PAUSE_MESSAGE)) {
+      if (!notifySessions(sessions, pauseMessage(strategyBefore))) {
         if (!confirm('Some sessions could not be reached. Sync anyway?')) {
           note('skipped');
           return false;
@@ -229,27 +350,42 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
     throw new CliError(`fetch failed in ${clone.name}`, fetched.stderr.trim());
   }
 
-  // 4. strategy (recomputed: the fetch may have moved the target)
-  const strategy = chooseStrategy(clone);
-  if (strategy.kind === 'up-to-date') {
-    ok(`already up to date with ${strategy.target}`);
-  } else {
-    note(`${strategy.kind} onto ${strategy.target} — ${strategy.reason}`);
+  // 4. the target has to EXIST before anything is integrated onto it. Refusing here rather
+  //    than falling back to the default branch is the point: a rebase onto the wrong base is
+  //    the expensive thing to undo in this command, and it would look like it worked.
+  if (!refExists(clone.path, target.ref)) {
+    if (stashed) git(clone.path, ['stash', 'pop']);
+    throw new CliError(
+      `${clone.name}: ${target.ref} does not exist, even after fetching`,
+      `${
+        target.pr === undefined
+          ? 'Nothing on origin goes by that name.'
+          : `PR #${String(target.pr.id)} targets ${target.branch}, but origin has no such branch — deleted since?`
+      } Pick a base with --onto <ref>.${stashed ? ' Your changes were restored from the stash.' : ''}`,
+    );
   }
 
-  // 5. integrate
+  // 5. strategy (recomputed: the fetch may have moved the target)
+  const strategy = chooseStrategy(clone, target);
+  if (strategy.kind === 'up-to-date') {
+    ok(`already up to date with ${target.ref}`);
+  } else {
+    note(`${strategy.kind} onto ${target.ref} — ${strategy.reason}`);
+  }
+
+  // 6. integrate
   let integrated = true;
   if (strategy.kind === 'ff-only') {
-    const res = git(clone.path, ['merge', '--ff-only', strategy.target], true);
+    const res = git(clone.path, ['merge', '--ff-only', target.ref], true);
     integrated = res.ok;
-    if (!integrated) fail('fast-forward failed — the default branch has diverged locally');
+    if (!integrated) fail(`fast-forward failed — ${target.branch} has diverged locally`);
   } else if (strategy.kind === 'rebase') {
-    const res = git(clone.path, ['rebase', strategy.target], true);
+    const res = git(clone.path, ['rebase', target.ref], true);
     integrated = res.ok || (await continueRebase(clone, strategy));
   } else if (strategy.kind === 'merge') {
-    const res = git(clone.path, ['merge', '--no-edit', strategy.target], true);
+    const res = git(clone.path, ['merge', '--no-edit', target.ref], true);
     if (!res.ok) {
-      const outcome = await resolveWithClaude(clone.path, 'merge', strategy.target);
+      const outcome = await resolveWithClaude(clone.path, 'merge', strategy.target.ref);
       if (outcome.resolved) {
         git(clone.path, ['add', '-A']);
         integrated = git(clone.path, ['-c', 'core.editor=true', 'merge', '--continue']).ok;
@@ -263,13 +399,13 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
   if (!integrated) {
     abortAndRestore(clone, strategy, stashed);
     throw new CliError(
-      `${clone.name}: ${strategy.kind} onto ${strategy.target} failed and was rolled back`,
+      `${clone.name}: ${strategy.kind} onto ${target.ref} failed and was rolled back`,
       'Nothing was changed. Resolve by hand in the clone, or re-run after committing your work.',
     );
   }
   if (strategy.kind !== 'up-to-date') ok(`${strategy.kind} complete`);
 
-  // 6. put the working tree back
+  // 7. put the working tree back
   if (stashed) {
     // `apply`, not `pop`: the stash stays as a safety net until the apply is proven clean.
     const applied = git(clone.path, ['stash', 'apply'], true);
@@ -277,7 +413,7 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
       git(clone.path, ['stash', 'drop']);
       ok('re-applied your changes and dropped the stash');
     } else {
-      const outcome = await resolveWithClaude(clone.path, 'stash apply', strategy.target);
+      const outcome = await resolveWithClaude(clone.path, 'stash apply', strategy.target.ref);
       if (outcome.resolved && conflictedFiles(clone.path).length === 0) {
         ok('re-applied your changes (conflicts resolved)');
         warn('the stash was KEPT — verify the result, then `git stash drop`');
@@ -291,7 +427,7 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
     }
   }
 
-  // 7. let the session go again
+  // 8. let the session go again
   if (sessions.length > 0 && opts.sessionNotify !== false) {
     notifySessions(sessions, resumeMessage(strategy));
   }

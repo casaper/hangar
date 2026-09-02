@@ -127,7 +127,7 @@ usually are. There is no build step: Node strips the types and runs `src/cli.ts`
 | `orch-util list`                  | every clone, its branch and last commit                               |
 | `orch-util ports [--json]`        | the whole port map, and any `.env.local` that disagrees with it       |
 | `orch-util status <clone>\|--all` | branch, sync vs origin, Jira link, PR link, ports, servers, sessions  |
-| `orch-util sync <clone>\|--all`   | stash, fetch, rebase-or-merge onto the default branch, restore        |
+| `orch-util sync <clone>\|--all`   | stash, fetch, rebase-or-merge onto its PR's target branch, restore    |
 | `orch-util open <clone>\|--all`   | each clone's three tabs in one iTerm2 window + its VS Code workspace  |
 | `orch-util resume [clone]`        | pick one of a clone's past Claude Code sessions and resume it         |
 | `orch-util add-clone`             | create the next clone and wire it in completely                       |
@@ -139,7 +139,7 @@ usually are. There is no build step: Node strips the types and runs `src/cli.ts`
 | `orch-util vscode sync`           | one VS Code setup everywhere, per-clone paths still per clone         |
 | `orch-util colours sync`          | regenerate the palette-derived artifacts                              |
 
-Five behaviours are worth knowing before you run them:
+Six behaviours are worth knowing before you run them:
 
 - **`orch-util sync` types into a live Claude session.** There is no CLI mechanism to message a
   running interactive session, so it finds the session's tty, maps it to an iTerm2 tab and writes
@@ -149,6 +149,21 @@ Five behaviours are worth knowing before you run them:
   start on a clone that is already mid-rebase or mid-merge** — finish or abort that first,
   because step one is a `git stash push` and it would bury the half-applied state in a stash
   nobody thinks to look in.
+- **`orch-util sync` integrates onto the branch the clone's PULL REQUEST targets, not onto
+  `master`.** Nothing local knows that branch: a branch cut from `master` can have a PR onto
+  `release9`, or onto another branch of this fleet (a stacked PR — one clone's PR onto another
+  clone's branch), and every fork-point heuristic answers `master` for all of them. So `sync`
+  asks the Bitbucket REST API, authenticated with `BITBUCKET_TOKEN` from `.env.shared` (an
+  Atlassian API token; Bitbucket Cloud takes it as a bearer token). The target is **printed on
+  every run** with where it came from, and `-n` shows it without changing anything. Priority is
+  `--onto <ref>` > the open PR's destination > the default branch. Two open PRs onto different
+  branches **abort** and ask for `--onto`; a destination that does not exist on origin even
+  after the fetch **aborts** too, rather than quietly falling back — a rebase onto the wrong
+  base is the expensive thing to undo here. No token, no network or a 401 is _not_ an error: it
+  falls back to the default branch and says the target is a guess. The ref handed to git is
+  always `origin/<branch>` — a bare name is ambiguous the moment a sibling clone has the same
+  branch, which in a stacked PR it does by definition, and `checkout.defaultRemote` does not
+  reach `rev-parse` or `rebase`.
 - **`orch-util plans collect` and `tmp merge` move files between the clones and the fleet root.**
   Both are idempotent and neither ever overwrites: byte-identical copies collapse to one, anything
   that differs is kept beside the winner as `<name>.from-clone_NN`, and anything a live session may
@@ -263,8 +278,9 @@ Secrets are **not** duplicated per clone. They live in one file at the fleet roo
 under each clone's own values:
 
 **Every** secret lives in one file: `.env.shared` here in the fleet root (mode 600). It holds
-`ATLASSIAN_USER_EMAIL`, `ATLASSIAN_API_TOKEN`, `JIRA_API_TOKEN`, `JIRA_USERNAME`,
-`CONTEXT7_API_KEY`, `USER_READWRITE_PASSWORD`, `CERTSPOTTER_TOKEN` and `SENTRY_AUTH_TOKEN`.
+`ATLASSIAN_USER_EMAIL`, `ATLASSIAN_API_TOKEN`, `BITBUCKET_TOKEN` (which `orch-util sync` uses to
+read a branch's PR target), `JIRA_API_TOKEN`, `JIRA_USERNAME`, `CONTEXT7_API_KEY`,
+`USER_READWRITE_PASSWORD`, `CERTSPOTTER_TOKEN` and `SENTRY_AUTH_TOKEN`.
 
 | File                                                    | Scope       | Holds                                                    |
 | ------------------------------------------------------- | ----------- | -------------------------------------------------------- |
