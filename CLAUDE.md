@@ -156,8 +156,16 @@ Five behaviours are worth knowing before you run them:
   still be writing is left where it is and reported. Run them again rather than forcing them.
   **`tmp merge` never carries a PID file into the shared `tmp/`, at any depth** — they are per
   clone and ephemeral, so it discards them (naming each one) and drops the `_<clone>/` directory
-  they leave behind, rather than putting one clone's leftovers in front of every other clone. A
-  live server still aborts the whole thing before anything is touched.
+  they leave behind, rather than putting one clone's leftovers in front of every other clone.
+  **Neither a live dev server nor a pre-migration branch aborts it any more — that clone simply
+  keeps its own `tmp/` and says why**, and the others are shared regardless. A running server is
+  a reason to leave a clone alone not because its PID file would be merged (none ever is) but
+  because `tmp/` is about to become a symlink and that server would then write its PID file
+  through it into the shared root. One consequence: while any clone is being left behind, the old
+  `~/.claude/dvb-gn-jira` store is **left in place too** — draining it moves the ticket
+  directories those clones' `tmp/<KEY>` symlinks point at, and would leave every one of them
+  dangling. And `-n` never refuses anything: a dry run touches nothing, so it reports what a real
+  run would skip and previews the rest.
 - **Conflicts are delegated to a headless `claude -p` inside the clone**, then verified
   mechanically (no unmerged paths, no markers). If that fails the whole operation is aborted and
   the pre-sync state restored — never left half-merged. `git rerere` and `-X ours/theirs` are
@@ -310,8 +318,8 @@ symlink.
 > clone and kill its server. The tracked `dev/pid-files.mjs` therefore writes to
 > **`tmp/_<clone>/<name>.pid`**, and `tests/playwright-regression-tests/config/runner-pid.ts`
 > matches it. Until that change is on a clone's checked-out branch, that clone must not be shared:
-> `orch-util tmp merge` refuses (`--force` overrides), and `doctor` reports the clone as waiting
-> rather than broken. The PID files themselves are never merged: `tmp merge` discards them and
+> `orch-util tmp merge` leaves that ONE clone on its own `tmp/` (`--force` overrides) and shares
+> the rest, and `doctor` reports the clone as waiting rather than broken. The PID files themselves are never merged: `tmp merge` discards them and
 > lets the clone's own tooling recreate `tmp/_<clone>/` the next time it starts a server, so a
 > `*.pid` in the ROOT of the shared `tmp/` can only have come from a clone still writing flat
 > paths — which is what `doctor` and the end of `tmp merge` report.

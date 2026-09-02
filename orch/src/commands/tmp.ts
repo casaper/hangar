@@ -20,7 +20,7 @@ import { excludePath, EXCLUDE_BLOCK, missingExcludeLines } from '../clone-config
 import { CliError } from '../exec.ts';
 import { discoverClones, type Clone } from '../fleet.ts';
 import { fleetTmp, jiraStore, tildify } from '../paths.ts';
-import { runningServersIn } from '../procs.ts';
+import { runningServersIn, type RunningServer } from '../procs.ts';
 import { hasScopedPidDir, isSharedTmp, pidFilesModule, strayPidFilesInSharedTmp } from '../tmp.ts';
 import { cloneLabel, fail, heading, note, ok, step, warn } from '../ui.ts';
 
@@ -32,8 +32,8 @@ import { cloneLabel, fail, heading, note, ok, step, warn } from '../ui.ts';
  * (see `discardPidFiles`). Sharing the directory is only safe once the clone's own tooling
  * writes its PID files into `tmp/_<clone>/` -- otherwise the first clone to start a dev server
  * blocks the other two, and `dev/pids.mjs --kill` reaches into a sibling. That change is
- * tracked application code, so this command REFUSES until it is present in the clone's
- * checked-out tree.
+ * tracked application code, so a clone whose checked-out tree still writes flat paths keeps its
+ * own `tmp/` -- see `blockerFor`, which is also the only thing a live dev server stops.
  */
 
 export type TmpMergeOptions = { dryRun?: boolean | undefined; force?: boolean | undefined };
@@ -83,8 +83,8 @@ const holdsNothingToShare = (path: string): boolean =>
 /**
  * PID files are NEVER carried into the shared `tmp/`, at any depth.
  *
- * They are per clone and they are ephemeral: the file holds a bare pid, the guard above has
- * already established that no server is running, and the clone's own tooling recreates
+ * They are per clone and they are ephemeral: the file holds a bare pid, `blockerFor` has
+ * already left every clone with a live server alone, and the clone's own tooling recreates
  * `tmp/_<clone>/` the moment it next starts one. So a PID file in the tmp/ being merged is
  * dead weight -- carrying it into the shared directory would put one clone's leftovers in
  * front of every other clone, which is the exact confusion sharing `tmp/` has to avoid.
@@ -100,6 +100,51 @@ const discardPidFiles = (label: string, dir: string, dryRun: boolean): void => {
   }
 };
 
+/** Why one clone keeps its own `tmp/` this time round, and what to do about it. */
+type Blocker = { readonly reason: string; readonly hint: string };
+
+/**
+ * Whether a clone can be shared yet, and if not, why not.
+ *
+ * Both conditions used to abort the WHOLE command before the first clone was looked at, which
+ * was wrong twice over. A dry run touches nothing, so it has nothing to refuse -- it should
+ * report what a real run would leave alone and preview the rest. And one busy clone is no
+ * reason to leave the others on their own `tmp/`. They are resolved per clone instead, and in
+ * ONE place: two skip conditions tested in two places is how the second one gets forgotten,
+ * and how a command that had just stopped erroring errored again on the next line down.
+ */
+const blockerFor = (
+  clone: Clone,
+  servers: readonly RunningServer[],
+  force: boolean,
+): Blocker | undefined => {
+  // NOT because the server's PID file would be merged -- no PID file ever is, at any depth
+  // (see `discardPidFiles`). Because `tmp/` is about to become a symlink into the shared
+  // directory, and a server that outlives the merge writes and unlinks its PID file through
+  // whatever that path resolves to NOW: the first thing it touches lands a flat pid file in
+  // the shared root, belonging to a clone nobody can identify. The file on disk is stale
+  // paperwork; the running process is the problem, so the clone is left as it is.
+  if (servers.length > 0) {
+    return {
+      reason: `${servers.map((s) => `${s.name} (pid ${String(s.pid)})`).join(', ')} still running`,
+      hint:
+        'Its tmp/ would become a symlink, and that server would then write its PID file ' +
+        'through it into the shared root. Stop it (`node dev/pids.mjs --kill <name>` in that ' +
+        'clone) and run this again.',
+    };
+  }
+  if (!force && !hasScopedPidDir(clone)) {
+    return {
+      reason: `${tildify(pidFilesModule(clone))} still writes tmp/<name>.pid`,
+      hint:
+        'That branch predates the per-clone pid path: two clones could not both run a dev ' +
+        'server, and `dev/pids.mjs --kill` could reach a sibling. Land that change and sync, ' +
+        'or --force.',
+    };
+  }
+  return undefined;
+};
+
 export const tmpMerge = (opts: TmpMergeOptions): void => {
   const dryRun = opts.dryRun === true;
   const clones = discoverClones();
@@ -109,36 +154,41 @@ export const tmpMerge = (opts: TmpMergeOptions): void => {
     `Merging every clone's tmp/ into ${tildify(fleetTmp)}${dryRun ? pc.dim(' (dry run)') : ''}`,
   );
 
-  // --- guards ------------------------------------------------------------------------
-  const serving = clones.filter((clone) => runningServersIn(clone.path).length > 0);
-  if (serving.length > 0) {
-    for (const clone of serving) {
-      const servers = runningServersIn(clone.path);
-      fail(`${clone.name}: ${servers.map((s) => `${s.name} (pid ${s.pid})`).join(', ')}`);
-    }
-    throw new CliError(
-      'a live server holds a PID file in the tmp/ being moved',
-      'Stop them (`node dev/pids.mjs --kill <name>` in that clone) and run this again.',
-    );
+  // --- which clones can be shared this time round ------------------------------------
+  const blockers = new Map<string, Blocker>();
+  for (const clone of clones) {
+    const blocker = blockerFor(clone, runningServersIn(clone.path), opts.force === true);
+    if (blocker !== undefined) blockers.set(clone.name, blocker);
   }
-
-  const stale = clones.filter((clone) => !hasScopedPidDir(clone));
-  if (stale.length > 0 && opts.force !== true) {
-    for (const clone of stale)
-      fail(`${clone.name}: ${tildify(pidFilesModule(clone))} still writes tmp/<name>.pid`);
-    throw new CliError(
-      'a clone would write PID files into the shared tmp/ root',
-      'That branch predates the per-clone pid path: two clones could not both run a dev server, ' +
-        'and `dev/pids.mjs --kill` could reach a sibling. Land that change and sync, or --force.',
-    );
+  // Said once, up front, because otherwise a dry run reads as the preview of a merge that is
+  // about to happen when in fact not one clone would move.
+  if (blockers.size === clones.length) {
+    warn(`no clone can be shared yet — all ${String(clones.length)} keep their own tmp/`);
+    note('Each one says why below; nothing else here changes either.');
   }
-  for (const clone of stale) warn(`${clone.name}: flat PID paths — forced`);
 
   if (!dryRun) mkdirSync(fleetTmp, { recursive: true });
   const actions: AdoptAction[] = [];
 
   // --- the old shared Jira store becomes the shared tmp ------------------------------
-  if (existsSync(jiraStore)) {
+  // Only once every clone is coming with it. Draining the store MOVES its ticket directories,
+  // and a clone that keeps its own `tmp/` keeps a `tmp/<KEY>` symlink pointing into the store
+  // -- the old mechanism this replaces. Emptying it under those links leaves every one of them
+  // dangling, and `jira-cache.mjs` mkdirs straight through them. The fleet-wide abort used to
+  // make that unreachable; with per-clone skipping it is one `if` away.
+  const drainStore = existsSync(jiraStore) && blockers.size === 0;
+  if (existsSync(jiraStore) && !drainStore) {
+    step(`${tildify(jiraStore)} ${pc.dim('— left in place')}`);
+    // Named, not counted: the store can only be drained once every one of them is shared, so
+    // the list IS the remaining work -- and a clone parked on an old branch can hold it
+    // indefinitely, which is only obvious when you can see which clone it is.
+    const kept = [...blockers.keys()].join(', ');
+    const who =
+      blockers.size === 1
+        ? `${kept} still links into it from its own tmp/`
+        : `${kept} still link into it from their own tmp/`;
+    note(`${who}; draining it now would leave those links dangling.`);
+  } else if (drainStore) {
     step(`${tildify(jiraStore)} → ${tildify(fleetTmp)}`);
     discardPidFiles('jira-store', jiraStore, dryRun);
     for (const entry of readdirSync(jiraStore)) {
@@ -159,14 +209,23 @@ export const tmpMerge = (opts: TmpMergeOptions): void => {
   for (const clone of clones) {
     const tmp = join(clone.path, 'tmp');
     heading(`${cloneLabel(clone)} ${pc.dim(tildify(tmp))}`);
+    // Asked before the blocker: a clone that is already shared has nothing to keep, and a dev
+    // server running in one is the stray report's business, not a reason to say "left alone".
+    if (isSharedTmp(clone)) {
+      ok('already shared');
+      continue;
+    }
+    const blocker = blockers.get(clone.name);
+    if (blocker !== undefined) {
+      fail(`${blocker.reason} — keeping its own tmp/`);
+      note(blocker.hint);
+      continue;
+    }
+    if (!hasScopedPidDir(clone)) warn('flat PID paths — forced');
     if (!existsSync(tmp)) {
       note('no tmp/ yet');
       if (!dryRun) symlinkSync(fleetTmp, tmp);
       ok(`linked → ${tildify(fleetTmp)}`);
-      continue;
-    }
-    if (isSharedTmp(clone)) {
-      ok('already shared');
       continue;
     }
 
@@ -188,13 +247,16 @@ export const tmpMerge = (opts: TmpMergeOptions): void => {
         if (!dryRun) rmSync(path, { recursive: true });
         continue;
       }
-      // The OLD sharing mechanism: `tmp/<KEY>` linked into ~/.claude/dvb-gn-jira, whose
-      // contents have just been moved into the shared tmp. The link is all that is left.
-      // Checked by target rather than by `realpathSync`, so a dry run reports it correctly
-      // even though the store is still there.
+      // The OLD sharing mechanism: `tmp/<KEY>` linked into ~/.claude/dvb-gn-jira. The link
+      // goes either way, but for different reasons -- the store's contents have just been
+      // moved into the shared tmp, or the store is still there and holding it for the clones
+      // that could not come along, in which case this clone re-fetches the ticket into the
+      // shared tmp on demand. Checked by target rather than by `realpathSync`, so a dry run
+      // reports it correctly even though the store is still there either way.
       const link = linkTarget(path);
       if (link !== undefined && (isInside(link, jiraStore) || isInside(link, fleetTmp))) {
-        note(pc.dim(`${clone.name}/${entry}: symlink into the store, removing`));
+        const why = drainStore ? 'symlink into the store' : 'symlink into the store it kept';
+        note(pc.dim(`${clone.name}/${entry}: ${why}, removing`));
         if (!dryRun) rmSync(path);
         continue;
       }
@@ -229,10 +291,19 @@ export const tmpMerge = (opts: TmpMergeOptions): void => {
       ? 'nothing left to move'
       : [...counts].map(([kind, n]) => `${n} ${kind}`).join(', ');
   ok(`${summary}${dryRun ? ' (dry run)' : ''}`);
-  note(
-    'Every clone now sees the same tmp/. PID files were not carried over — each clone ' +
-      'recreates tmp/_<clone>/ the next time it starts a server.',
-  );
+  const carried =
+    'PID files are never carried over, at any depth — each clone recreates ' +
+    'tmp/_<clone>/ the next time it starts a server.';
+  if (blockers.size === 0) {
+    note(`Every clone ${dryRun ? 'would see' : 'now sees'} the same tmp/. ${carried}`);
+  } else {
+    const kept = [...blockers.keys()].join(', ');
+    note(
+      `${String(clones.length - blockers.size)} of ${String(clones.length)} clones ` +
+        `${dryRun ? 'would share' : 'share'} tmp/; ${kept} ` +
+        `${blockers.size === 1 ? 'keeps its' : 'keep their'} own for the reason above. ${carried}`,
+    );
+  }
 
   // Nothing this command does can put one here -- so one that IS here came from a clone that
   // still writes flat paths, and it is the file that makes one clone's server look like
