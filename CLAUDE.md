@@ -425,9 +425,9 @@ attachment). Three things follow:
 **A ticket fetched in the last hour is not fetched again.** `orch-util jira hook` is a
 `PreToolUse` hook, wired into each clone's untracked `.claude/settings.local.json` by absolute
 path (`doctor` checks it, `--fix` wires it). It reads the Bash command Claude Code is about to
-run; when every file a `jira-ticket-sync/sync.mjs` run would write is already in the record
-store and inside the TTL, it hard-links all of them into place and **denies** the command,
-telling the agent what it got instead. Four properties are the whole design:
+run; when every file a `jira-ticket-sync/sync.mjs` run would write is already on disk and inside
+the TTL, it hard-links from the record store whatever is missing and **denies** the command,
+telling the agent what it got instead. Five properties are the whole design:
 
 - **It fails open.** A flag it does not know, a frontmatter shape it cannot read, a record with
   no parsable timestamp, a shell construct in the tail — all exit silently and let the fetch
@@ -443,6 +443,13 @@ telling the agent what it got instead. Four properties are the whole design:
   `jira-scope/jira-cache.mjs name`, one subprocess per file. `paths.mjs` calls itself the single
   owner of every filename in that directory, it is tracked and branch-versioned, and an
   untracked copy of `stemFor` here would drift the first time a branch changed a relation slug.
+- **It never hands back a worse copy than the clone already has.** This is the case immediately
+  after any real fetch: `sync.mjs` replaces the inode, so the clone holds the fresh copy while
+  the store still holds the previous one until the next `tmp merge`. Linking then would put the
+  OLDER record over the newer file and report it as cached. So a destination whose own
+  `fetched_at:` is at least as fresh as the store record's is left exactly where it is and
+  counted as satisfied — the file that run would have written is present and fresh, just not by
+  way of the store.
 - **Whether Jira changed cannot be known without asking Jira**, so the TTL (`--ttl <minutes>`,
   default 60) is the whole of the freshness guarantee. `JIRA_SYNC_NO_CACHE=1` in front of the
   command bypasses the hook — an env var and not a flag, because `sync.mjs` dies on an unknown

@@ -211,7 +211,29 @@ const inodeOf = (path: string): number | undefined => {
   }
 };
 
-type Plan = { readonly record: FreshRecord; readonly destination: string };
+type Plan = {
+  readonly record: FreshRecord;
+  readonly destination: string;
+  /**
+   * True when the file already at `destination` is at least as fresh as the store record, so it
+   * is left exactly as it is.
+   *
+   * This is the case immediately after any real fetch: `sync.mjs` replaces the inode, so the
+   * clone holds the fresh copy and the store still holds the previous one until the next
+   * `tmp merge`. Linking then would hard-link the OLDER record over the newer file and report
+   * it as cached -- handing the agent a worse copy than it already had, which is the one
+   * outcome this hook must never produce. The run is still satisfied: the file that run would
+   * have written is present and fresh, just not by way of the store.
+   */
+  readonly kept: boolean;
+};
+
+/** How fresh the file already at a destination is, or undefined when it cannot be told. */
+const destinationFreshness = (destination: string): number | undefined => {
+  if (!existsSync(destination)) return undefined;
+  const { at, source } = freshnessOf(destination);
+  return source === 'mtime' ? undefined : at;
+};
 
 /**
  * Why nothing was short-circuited, for `--explain`.
@@ -276,7 +298,8 @@ export const planLinks = (
           }
         }
       }
-      plans.push({ record, destination });
+      const destAt = destinationFreshness(destination);
+      plans.push({ record, destination, kept: destAt !== undefined && destAt >= record.at });
     }
   }
   return plans;
@@ -372,6 +395,7 @@ export const jiraHook = (opts: JiraHookOptions): void => {
   const linked: string[] = [];
   for (const plan of plans) {
     try {
+      if (plan.kept) continue;
       if (inodeOf(plan.destination) === inodeOf(storeRecordPath(plan.record.key))) {
         linked.push(plan.destination);
         continue;
@@ -390,16 +414,18 @@ export const jiraHook = (opts: JiraHookOptions): void => {
   if (opts.dryRun === true) removeEmpty(created);
 
   const files = plans
-    .map(
-      (plan) =>
-        `  ${plan.destination.slice(clone.path.length + 1)}  ${plan.record.key}  fetched ${minutesAgo(plan.record.at)}`,
-    )
+    .map((plan) => {
+      const at = plan.kept
+        ? (destinationFreshness(plan.destination) ?? plan.record.at)
+        : plan.record.at;
+      const how = plan.kept ? 'already there' : opts.dryRun === true ? 'would link' : 'linked';
+      return `  ${plan.destination.slice(clone.path.length + 1)}  ${plan.record.key}  fetched ${minutesAgo(at)}  (${how})`;
+    })
     .join('\n');
   deny(
-    `Not fetched: every file this run would have written is already in the fleet's ticket ` +
-      `record store and was fetched within ${String(minutes)} min. ` +
-      `${String(linked.length)} file(s) ${opts.dryRun === true ? 'would be' : 'are now'} ` +
-      `hard-linked in place — read them:\n${files}\n` +
+    `Not fetched: every file this run would have written is already on disk and was fetched ` +
+      `within ${String(minutes)} min — ${String(linked.length)} from the fleet's ticket record ` +
+      `store, ${String(plans.length - linked.length)} already in this clone. Read them:\n${files}\n` +
       `Whether Jira changed since cannot be known without asking it. To fetch anyway, re-run ` +
       `the same command with ${BYPASS}=1 in front of it.`,
   );
