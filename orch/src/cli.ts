@@ -67,7 +67,7 @@ program
   .argument('[clone]', 'clone name, e.g. clone_02 (or just 2)')
   .option('-a, --all', 'sync every clone (skips clones with a live Claude session)')
   .option('-n, --dry-run', 'show the resolved target and chosen strategy, and change nothing')
-  .option('--no-session-notify', 'do not type pause/resume messages into live Claude sessions')
+  .option('--no-session-notify', 'do not type pause/closing messages into live Claude sessions')
   .option('--include-busy', 'with --all, also sync clones that have a live Claude session')
   .option('--onto <ref>', 'integrate onto this ref instead, skipping the pull-request lookup')
   .action(async (clone, options) => {

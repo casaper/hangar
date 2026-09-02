@@ -171,12 +171,18 @@ Six behaviours are worth knowing before you run them:
 
 - **`orch-util sync` types into a live Claude session.** There is no CLI mechanism to message a
   running interactive session, so it finds the session's tty, maps it to an iTerm2 tab and writes
-  a pause message, then a resume message afterwards. `--all` **skips** clones with a live session
-  unless `--include-busy`. Rebase vs merge follows the rule "rebase only my own linear branch";
-  anything with merge commits, or started by someone else, is merged instead. It **refuses to
-  start on a clone that is already mid-rebase or mid-merge** — finish or abort that first,
-  because step one is a `git stash push` and it would bury the half-applied state in a stash
-  nobody thinks to look in.
+  a pause message, then a closing message afterwards. Each one leads with a marker —
+  `SYNC PAUSE`, then **exactly one** `SYNC FINISHED` or `SYNC ABORTED`, which the pause promises
+  and a `finally` delivers. That guarantee is the point: six paths lead out of a sync between
+  the two messages, five of them used to send nothing, and an agent told to STOP and wait for a
+  message that never comes waits for good. The closing message **reports the state it found**
+  rather than an outcome — a half-applied operation, files still conflicted, work still in a
+  stash — because those combine, and it says whether to resume or to stand still and tell the
+  user. `--all` **skips** clones with a live session unless `--include-busy`. Rebase vs merge
+  follows the rule "rebase only my own linear branch"; anything with merge commits, or started by
+  someone else, is merged instead. It **refuses to start on a clone that is already mid-rebase or
+  mid-merge** — finish or abort that first, because step one is a `git stash push` and it would
+  bury the half-applied state in a stash nobody thinks to look in.
 - **`orch-util sync` integrates onto the branch the clone's PULL REQUEST targets, not onto
   `master`.** Nothing local knows that branch: a branch cut from `master` can have a PR onto
   `release9`, or onto another branch of this fleet (a stacked PR — one clone's PR onto another
@@ -224,7 +230,15 @@ Six behaviours are worth knowing before you run them:
   and refuses to hand back anything older than the copy the clone already holds.
 - **Conflicts are delegated to a headless `claude -p` inside the clone**, then verified
   mechanically (no unmerged paths, no markers). If that fails the whole operation is aborted and
-  the pre-sync state restored — never left half-merged. `git rerere` and `-X ours/theirs` are
+  the pre-sync state restored — never left half-merged. **One exception, and it is inherent:**
+  putting your stashed work back happens after the integration is already committed, so if that
+  is what fails, the branch has moved and cannot be rolled back. The clone is then left with
+  unmerged paths and the stash intact, and the session is told the integration DID happen —
+  never that it did not. `status` grows two rows for exactly this wreckage — `pending` and
+  `sync stash` — and both appear **only when there is something to say**, so a clone that shows
+  neither is the healthy case and not a missing feature. The stash row earns its place: these
+  clones carry six hundred stashes each, and a leftover `orch-util-sync` one is invisible in
+  that pile. `git rerere` and `-X ours/theirs` are
   deliberately not used: they look like resolution and silently produce wrong code.
   **That run takes one to three minutes and streams its progress** — a dim line per tool call,
   per API retry, and a heartbeat into any longer silence — because `claude -p` in its default

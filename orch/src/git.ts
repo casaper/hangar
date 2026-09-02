@@ -191,3 +191,52 @@ export const inProgressOperation = (repo: string): 'rebase' | 'merge' | undefine
   if (mergeHead !== undefined && existsSync(mergeHead)) return 'merge';
   return undefined;
 };
+
+/**
+ * The label `orch-util sync` stashes uncommitted work under, and the string everything else
+ * recognises it by.
+ *
+ * It lives here rather than in `sync.ts` because two commands need the same answer from
+ * opposite ends: `sync` writes the label, and `status` reports an entry still carrying it as
+ * work a sync failed to give back. Fleet-specific knowledge in a plumbing module has one
+ * precedent already, `FLEET_GIT_CONFIG`, for the same reason.
+ */
+export const SYNC_STASH_LABEL = 'orch-util-sync';
+
+export type StashEntry = {
+  /** `stash@{0}` — the reflog selector, which is what `git stash` commands take. */
+  readonly ref: string;
+  /** The stash subject, e.g. `On my-branch: orch-util-sync 2026-09-02T15:40:00.000Z`. */
+  readonly message: string;
+  /** Relative age, for a human: `12 minutes ago`. */
+  readonly age: string;
+};
+
+/**
+ * The stash list, parsed.
+ *
+ * NUL-separated because a stash message is free text that can contain anything, colons and
+ * tabs included -- splitting on a printable delimiter would mis-parse the very entries this
+ * exists to report. An empty stash list exits 0 with no output, so `?? ''` is the normal
+ * case and not an error path.
+ */
+export const stashList = (repo: string): StashEntry[] => {
+  const out = gitTry(repo, ['stash', 'list', '--format=%gd%x00%gs%x00%cr']) ?? '';
+  if (out === '') return [];
+  return out.split('\n').flatMap((line) => {
+    const [ref, message, age] = line.split('\0');
+    if (ref === undefined || message === undefined) return [];
+    return [{ ref, message, age: age ?? 'unknown age' }];
+  });
+};
+
+/**
+ * Stash entries `orch-util sync` created and did not manage to give back.
+ *
+ * On every path that finishes, sync either drops its stash or says out loud that it kept one.
+ * So an entry here is either a sync that died between the stash and the restore, or one whose
+ * re-apply needed conflict resolution -- and in both cases uncommitted work is sitting
+ * somewhere the working tree does not show it.
+ */
+export const syncStashes = (repo: string): StashEntry[] =>
+  stashList(repo).filter((entry) => entry.message.includes(SYNC_STASH_LABEL));

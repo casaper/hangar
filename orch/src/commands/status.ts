@@ -3,7 +3,14 @@ import pc from 'picocolors';
 import { prSearchUrl, repoRef } from '../bitbucket.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
-import { currentBranch, git, syncState } from '../git.ts';
+import {
+  currentBranch,
+  git,
+  inProgressOperation,
+  syncStashes,
+  syncState,
+  type StashEntry,
+} from '../git.ts';
 import { inferTicket, jiraUrl } from '../jira.ts';
 import { claudeSessionsIn, runningServersIn } from '../procs.ts';
 import { cloneLabel, fail, heading, note, ok, table, warn } from '../ui.ts';
@@ -14,6 +21,12 @@ import { cloneLabel, fail, heading, note, ok, table, warn } from '../ui.ts';
  * The sync line is deliberately explicit about freshness. Without `--fetch` it compares
  * against whatever remote-tracking refs happen to be on disk and SAYS SO, rather than
  * reporting "up to date" from a ref that is three days stale.
+ *
+ * Two rows appear only when there is something to say -- a half-applied rebase or merge, and a
+ * stash `orch-util sync` never gave back. Both are states a human has to clear, and neither is
+ * visible any other way: the stash is one line in a list hundreds of entries long. A row that
+ * reads "none" on every healthy clone is a row nobody reads, which is the same reason `doctor`
+ * has no check for how much of the shared cache a clone links.
  */
 export type StatusOptions = {
   all?: boolean | undefined;
@@ -42,12 +55,46 @@ const dirtyLine = (clone: Clone): string => {
   return pc.yellow(bits.join(', '));
 };
 
+/**
+ * The half-applied-operation row, or nothing at all.
+ *
+ * Its own function for the same reason `syncLine` and `dirtyLine` are: a cell built inline
+ * inside the table literal cannot be read, and this one has to be, because it is the row that
+ * explains why `sync` is refusing to run.
+ */
+export const pendingRow = (pending: 'rebase' | 'merge' | undefined): string[][] =>
+  pending === undefined
+    ? []
+    : [
+        [
+          'pending',
+          pc.red(
+            `a ${pending} is half-applied — \`--continue\` or \`--abort\` it; sync will refuse to start`,
+          ),
+        ],
+      ];
+
+/** The unreturned-sync-stash row, or nothing at all. */
+export const strandedStashRow = (entries: readonly StashEntry[]): string[][] =>
+  entries.length === 0
+    ? []
+    : [
+        [
+          'sync stash',
+          pc.yellow(
+            `${entries.map((entry) => `${entry.ref} (${entry.age})`).join(', ')} — uncommitted work \`orch-util sync\` did not give back`,
+          ),
+        ],
+      ];
+
 export const statusOf = (clone: Clone, fetched: boolean): void => {
   const branch = currentBranch(clone.path);
   const ticket = inferTicket(clone, branch);
   const ref = repoRef(clone.path);
   const sessions = claudeSessionsIn(clone.path);
   const servers = runningServersIn(clone.path);
+  const pending = inProgressOperation(clone.path);
+  const strandedStashes = syncStashes(clone.path);
 
   heading(cloneLabel(clone));
 
@@ -57,6 +104,8 @@ export const statusOf = (clone: Clone, fetched: boolean): void => {
     ['branch', branch],
     ['sync', syncLine(clone, fetched)],
     ['worktree', dirtyLine(clone)],
+    ...pendingRow(pending),
+    ...strandedStashRow(strandedStashes),
     [
       'jira',
       ticket === undefined

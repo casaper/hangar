@@ -13,7 +13,10 @@ import {
   refExists,
   remoteHeadBranch,
   remotes,
+  syncStashes,
   syncState,
+  SYNC_STASH_LABEL,
+  type StashEntry,
 } from '../git.ts';
 import { writeToTty } from '../iterm.ts';
 import { claudeSessionsIn, type ClaudeSession } from '../procs.ts';
@@ -29,14 +32,21 @@ import { cloneLabel, confirm, fail, heading, note, ok, step, warn } from '../ui.
  * 1. A live Claude Code session in the clone is TOLD to pause, by typing into its iTerm2
  *    tab. There is no other mechanism: the `claude` CLI has no subcommand that messages a
  *    running interactive session. If the tab cannot be found the command asks the human
- *    instead of rewriting the branch under an agent that is mid-edit.
+ *    instead of rewriting the branch under an agent that is mid-edit. It is also always told
+ *    how the sync ended: exactly one `SYNC FINISHED` or `SYNC ABORTED` follows every
+ *    `SYNC PAUSE`, sent from a `finally` (see `closeSessions`), because an agent waiting for
+ *    a message that never comes waits forever.
  *
  * 2. The target is the branch this one's PULL REQUEST targets, which is not always the
  *    default branch and cannot be worked out locally -- see `resolveTarget`.
  *
  * 3. Conflicts are handed to a headless `claude -p` inside the clone and then verified
- *    mechanically. If that fails, the whole operation is aborted and the pre-sync state
- *    restored -- never left half-merged. That run streams its progress (see
+ *    mechanically. If that fails during the INTEGRATION the whole operation is aborted and the
+ *    pre-sync state restored -- never left half-merged. The last step is the exception worth
+ *    knowing: re-applying the stash happens after the integration is already committed, so
+ *    when that is what fails, the branch has moved, the working tree holds unmerged paths and
+ *    the stash is intact. Which is why the closing message reports the STATE it found rather
+ *    than an outcome -- see `inspectAfterSync`. That run streams its progress (see
  *    `resolve-conflicts.ts`), because a silent minute here reads as a hung command and gets
  *    killed -- which leaves the rebase stopped mid-pick, the one state this command exists
  *    to avoid.
@@ -229,33 +239,180 @@ const chooseStrategy = (clone: Clone, target: Target): Strategy => {
   return { kind: 'rebase', target, reason: 'your branch, linear since the fork' };
 };
 
-const pauseMessage = (strategy: Strategy): string =>
-  'STOP what you are doing and do not edit any file. `orch-util sync` is about to ' +
-  `${strategy.kind === 'merge' ? 'merge' : 'rebase'} this clone onto ${strategy.target.ref}. ` +
-  'If it conflicts, a separate headless Claude Code run will ' +
-  'edit the conflicted files in this working tree — do not touch them yourself, even if asked, ' +
-  'or you will both be editing the same file. Reply that you have paused, then wait.';
+/**
+ * The word for what is being done, for the messages a live session is sent.
+ *
+ * `strategy.kind` is not it: `ff-only` is a fast-forward and calling it a rebase in a message
+ * that tells an agent to stop editing is the kind of small lie that gets a tool distrusted.
+ */
+const ACTION: Record<Strategy['kind'], string> = {
+  merge: 'merge',
+  rebase: 'rebase',
+  'ff-only': 'fast-forward',
+  'up-to-date': 'sync',
+};
 
-const resumeMessage = (strategy: Strategy): string =>
-  `The ${strategy.kind} onto ${strategy.target.ref} is finished. You can resume what you were doing — ` +
-  'but re-read any file you had in flight first: code may have changed underneath you, ' +
-  'including in the area you were working on.';
+/**
+ * The messages `orch-util sync` types into a live session, and the guarantee they carry.
+ *
+ * Each one leads with a MARKER -- `SYNC PAUSE`, `SYNC FINISHED`, `SYNC ABORTED` -- and the pause
+ * promises that exactly one of the other two follows it. That promise is the whole point: an
+ * agent told to stop and wait has no way to tell "still working" from "died three minutes ago",
+ * and the honest answer used to be that on five of the six ways this command can stop, nothing
+ * ever came. So the closing message is sent from a `finally` (see `closeSessions`) and the marker
+ * is what makes it recognisable in a tab full of ordinary conversation.
+ */
+export const pauseMessage = (strategy: Strategy): string =>
+  'SYNC PAUSE — STOP what you are doing and do not edit, stage or commit any file. ' +
+  `\`orch-util sync\` is about to ${ACTION[strategy.kind]} this clone onto ${strategy.target.ref}. ` +
+  'If it conflicts, a separate headless Claude Code run will edit the conflicted files in this ' +
+  'working tree — do not touch them yourself, even if asked, or you will both be editing the ' +
+  'same file. Exactly one line beginning SYNC FINISHED or SYNC ABORTED will follow this one, ' +
+  'saying whether you may resume and what state the working tree is in; nothing else will. ' +
+  'Reply that you have paused, then wait for it.';
 
-const notifySessions = (sessions: readonly ClaudeSession[], message: string): boolean => {
-  let allReached = true;
+/**
+ * The state of the clone at the moment sync stops, as git sees it.
+ *
+ * Read from git rather than tracked in flags, because the flags lie: `abortAndRestore`'s
+ * `stash pop` can itself fail and only warns, so a `restored` boolean set beside it would tell
+ * a paused agent its work is back when it is still in the stash. Three questions, asked once,
+ * cover every path.
+ */
+export type TreeAfterSync = {
+  readonly pending: 'rebase' | 'merge' | undefined;
+  readonly conflicted: number;
+  /** This run's own stash, if it is still listed -- matched on the full label, so a LEFTOVER
+   *  stash from some earlier sync is never reported as this one's. */
+  readonly stash: StashEntry | undefined;
+};
+
+const inspectAfterSync = (clone: Clone, stashLabel: string | undefined): TreeAfterSync => ({
+  pending: inProgressOperation(clone.path),
+  conflicted: conflictedFiles(clone.path).length,
+  stash:
+    stashLabel === undefined
+      ? undefined
+      : syncStashes(clone.path).find((entry) => entry.message.includes(stashLabel)),
+});
+
+/**
+ * What to say about a stash that is still listed -- which is three different things.
+ *
+ * On the finished path the stash is a KEPT COPY: the changes are in the working tree and the
+ * stash survives as a safety net (sync keeps it whenever re-applying needed conflict
+ * resolution). When the re-apply is what failed, the tree holds part of them and the original
+ * is still stashed. Anywhere else, the tree does not have them at all. Telling an agent "your
+ * changes are not in the working tree" when they are, or the reverse, is worse than saying
+ * nothing -- so this keys on the OUTCOME and never on the conflict count, which on a plain
+ * abort belongs to the failed rollback rather than to any re-apply.
+ */
+const stashSentence = (kind: Closing, state: TreeAfterSync): string | undefined => {
+  const stash = state.stash;
+  if (stash === undefined) return undefined;
+  const where = `the git stash entry ${stash.ref} ("${stash.message}")`;
+  if (kind === 'finished') {
+    return (
+      `A copy of your uncommitted changes was kept in ${where}: they ARE back in the working ` +
+      'tree, but re-applying them needed conflict resolution, so the stash was not dropped.'
+    );
+  }
+  if (kind === 'aborted-after-integrating') {
+    return `Re-applying your uncommitted changes did not complete — the original is still in ${where}.`;
+  }
+  return `Your uncommitted changes are NOT in the working tree: they are in ${where}.`;
+};
+
+/**
+ * How a sync ended, from the point of view of a session that was told to wait.
+ *
+ * The third one is not a nicety. Re-applying the stash is the one step that happens AFTER the
+ * integration is committed, so when it fails the branch really has moved -- and a message
+ * saying the rebase "did not happen" would send an agent looking for commits that are sitting
+ * in its history. Whether integration completed is something only this command knows, so
+ * unlike the tree state it is carried rather than asked for.
+ */
+export type Closing = 'finished' | 'aborted' | 'aborted-after-integrating';
+
+const OPENING: Record<Closing, (what: string) => string> = {
+  finished: (what) => `SYNC FINISHED — the ${what} is done.`,
+  aborted: (what) => `SYNC ABORTED — the ${what} did not happen.`,
+  'aborted-after-integrating': (what) =>
+    `SYNC ABORTED — the ${what} was applied and committed, but putting your uncommitted changes ` +
+    'back on top of it did not finish.',
+};
+
+/**
+ * Whether to resume, and it is the TREE that decides, not the outcome.
+ *
+ * A half-applied operation or an unmerged path means the clone cannot be worked in whichever
+ * way sync ended. A successful sync that merely kept a safety-net stash, on the other hand,
+ * must not freeze an agent: its files are all there, and the only thing not to touch is the
+ * stash. The remaining case is a clean abort that is still holding the work -- resumable in
+ * principle, except that editing would duplicate changes sitting in the stash.
+ */
+const instruction = (kind: Closing, state: TreeAfterSync): string => {
+  const freeze =
+    'Do not edit, stage or commit anything, and do not try to repair this yourself — tell the ' +
+    'user what this message says, and wait.';
+  if (state.pending !== undefined || state.conflicted > 0) return freeze;
+  if (kind === 'finished') {
+    const resume =
+      'You can resume what you were doing — but re-read any file you had in flight first: code ' +
+      'may have changed underneath you, including in the area you were working on.';
+    return state.stash === undefined
+      ? resume
+      : `${resume} Leave the stash alone — the user drops it once they have checked the result.`;
+  }
+  if (state.stash === undefined) {
+    return (
+      'Your working tree is exactly as it was and nothing was changed, so you can resume what ' +
+      'you were doing.'
+    );
+  }
+  return (
+    'Do not edit, stage or commit anything: the work you had in progress is not in the tree in ' +
+    'front of you. Tell the user what this message says, and wait.'
+  );
+};
+
+/**
+ * The closing message: what happened, what state that leaves, and whether to resume.
+ *
+ * Pure, and given the facts rather than asked to work them out, so every variant can be read
+ * side by side without constructing the git state that produces it.
+ */
+export const closingMessage = (kind: Closing, strategy: Strategy, state: TreeAfterSync): string => {
+  const what = `${ACTION[strategy.kind]} onto ${strategy.target.ref}`;
+  const facts = [
+    state.pending === undefined
+      ? undefined
+      : `A ${state.pending} is still half-applied here — git is stopped in the middle of it.`,
+    state.conflicted === 0
+      ? undefined
+      : `${state.conflicted} file(s) in this working tree have unresolved conflict markers right now.`,
+    stashSentence(kind, state),
+  ].filter((fact): fact is string => fact !== undefined);
+  return [OPENING[kind](what), ...facts, instruction(kind, state)].join(' ');
+};
+
+/** The sessions that actually got the message; the rest are reported and counted as missed. */
+const notifySessions = (
+  sessions: readonly ClaudeSession[],
+  message: string,
+): readonly ClaudeSession[] => {
+  const reached: ClaudeSession[] = [];
   for (const session of sessions) {
     if (session.tty === undefined) {
       warn(`session pid ${session.pid} has no terminal (IDE-hosted) — cannot reach it`);
-      allReached = false;
       continue;
     }
-    if (writeToTty(session.tty, message)) ok(`messaged the session on ${session.tty}`);
-    else {
-      warn(`could not find an iTerm2 tab for ${session.tty} (pid ${session.pid})`);
-      allReached = false;
-    }
+    if (writeToTty(session.tty, message)) {
+      ok(`messaged the session on ${session.tty}`);
+      reached.push(session);
+    } else warn(`could not find an iTerm2 tab for ${session.tty} (pid ${session.pid})`);
   }
-  return allReached;
+  return reached;
 };
 
 const abortAndRestore = (clone: Clone, strategy: Strategy, stashed: boolean): void => {
@@ -297,6 +454,60 @@ const continueRebase = async (clone: Clone, strategy: Strategy): Promise<boolean
   return false;
 };
 
+/**
+ * What the closing message is built from, filled in as the run progresses.
+ *
+ * Mutable on purpose: `closeSessions` runs from a `finally`, so it can only read state that
+ * outlives the block it is closing over.
+ */
+type Run = {
+  paused: readonly ClaudeSession[];
+  strategy: Strategy;
+  stashLabel: string | undefined;
+  /** The integration is committed. Only step 7 -- putting the stash back -- can still fail. */
+  integrated: boolean;
+  finished: boolean;
+};
+
+/**
+ * Tell the sessions that were paused how this ended -- from a `finally`, which is the point.
+ *
+ * Between the pause and the resume there are six ways out of a sync: the confirm being
+ * declined, a failed stash, a failed fetch, a target that does not exist, an integration that
+ * was rolled back, and a stash that could not be re-applied. Five of them used to send
+ * nothing at all, leaving an agent that had been told to STOP and wait doing exactly that,
+ * indefinitely, while the operator saw a clean error and moved on. Sending the closing message
+ * from anywhere else means six call sites and remembering all six -- including in whatever
+ * exit path gets added next -- so it is structural instead.
+ *
+ * `notifySessions` prints per session and can only fail in AppleScript, which must never
+ * replace the error the operator actually needs.
+ */
+const closeSessions = (clone: Clone, run: Run): void => {
+  if (run.paused.length === 0) return;
+  try {
+    const state = inspectAfterSync(clone, run.stashLabel);
+    const kind: Closing = run.finished
+      ? 'finished'
+      : run.integrated
+        ? 'aborted-after-integrating'
+        : 'aborted';
+    notifySessions(run.paused, closingMessage(kind, run.strategy, state));
+  } catch (error) {
+    warn(`could not tell the paused session(s) how this ended: ${String(error)}`);
+  }
+};
+
+/** The same facts as `closingMessage`, worded for the operator's terminal. */
+const leftovers = (state: TreeAfterSync): string =>
+  [
+    state.pending === undefined ? undefined : `a ${state.pending} is still in progress`,
+    state.conflicted === 0 ? undefined : `${state.conflicted} file(s) still conflicted`,
+    state.stash === undefined ? undefined : `your changes are in ${state.stash.ref}`,
+  ]
+    .filter((part): part is string => part !== undefined)
+    .join(', ');
+
 const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
   heading(`Syncing ${cloneLabel(clone)}`);
 
@@ -333,6 +544,9 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
     const state = syncState(clone.path);
     note(`worktree: ${state.dirty} modified, ${state.untracked} untracked`);
     if (pending !== undefined) note(`pending:  a ${pending} is in progress — sync would refuse`);
+    for (const stash of syncStashes(clone.path)) {
+      note(pc.yellow(`stash:    ${stash.ref} is an unreturned sync stash (${stash.age})`));
+    }
     note(
       `sessions: ${sessions.length === 0 ? 'none' : sessions.map((s) => `pid ${s.pid} on ${s.tty ?? 'no tty'}`).join(', ')}`,
     );
@@ -340,13 +554,42 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
     return true;
   }
 
+  const run: Run = {
+    paused: [],
+    strategy: strategyBefore,
+    stashLabel: undefined,
+    integrated: false,
+    finished: false,
+  };
+  try {
+    return await integrate(clone, opts, sessions, run);
+  } finally {
+    closeSessions(clone, run);
+  }
+};
+
+/**
+ * Everything from pausing the session to letting it go again.
+ *
+ * Separate from `syncOne` only so that the `try`/`finally` that guarantees the closing message
+ * wraps one call rather than a hundred indented lines.
+ */
+const integrate = async (
+  clone: Clone,
+  opts: SyncOptions,
+  sessions: readonly ClaudeSession[],
+  run: Run,
+): Promise<boolean> => {
+  const target = run.strategy.target;
+
   // 1. pause any live session
   if (sessions.length > 0) {
     if (opts.sessionNotify === false) {
       warn(`${sessions.length} live Claude session(s) — not notified (--no-session-notify)`);
     } else {
       step(`pausing ${sessions.length} live Claude Code session(s)`);
-      if (!notifySessions(sessions, pauseMessage(strategyBefore))) {
+      run.paused = notifySessions(sessions, pauseMessage(run.strategy));
+      if (run.paused.length !== sessions.length) {
         if (!confirm('Some sessions could not be reached. Sync anyway?')) {
           note('skipped');
           return false;
@@ -360,10 +603,11 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
   const stashNeeded = dirty.dirty > 0 || dirty.untracked > 0;
   let stashed = false;
   if (stashNeeded) {
-    const label = `orch-util-sync ${new Date().toISOString()}`;
+    const label = `${SYNC_STASH_LABEL} ${new Date().toISOString()}`;
     const res = git(clone.path, ['stash', 'push', '--include-untracked', '-m', label]);
     if (!res.ok) throw new CliError(`could not stash ${clone.name}`, res.stderr.trim());
     stashed = true;
+    run.stashLabel = label;
     ok(`stashed ${dirty.dirty + dirty.untracked} file(s) as "${label}"`);
   }
 
@@ -392,6 +636,7 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
 
   // 5. strategy (recomputed: the fetch may have moved the target)
   const strategy = chooseStrategy(clone, target);
+  run.strategy = strategy;
   if (strategy.kind === 'up-to-date') {
     ok(`already up to date with ${target.ref}`);
   } else {
@@ -423,12 +668,19 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
 
   if (!integrated) {
     abortAndRestore(clone, strategy, stashed);
+    // Asked, not assumed: `abortAndRestore`'s `stash pop` can fail, and it only warns.
+    const left = leftovers(inspectAfterSync(clone, run.stashLabel));
     throw new CliError(
       `${clone.name}: ${strategy.kind} onto ${target.ref} failed and was rolled back`,
-      'Nothing was changed. Resolve by hand in the clone, or re-run after committing your work.',
+      left === ''
+        ? 'Your working tree is back as it was. Resolve by hand in the clone, or re-run after ' +
+            'committing your work.'
+        : `The rollback did not leave this clone clean — ${left}. Sort that out first; ` +
+            'sync will refuse to start again until it is.',
     );
   }
   if (strategy.kind !== 'up-to-date') ok(`${strategy.kind} complete`);
+  run.integrated = true;
 
   // 7. put the working tree back
   if (stashed) {
@@ -452,10 +704,8 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
     }
   }
 
-  // 8. let the session go again
-  if (sessions.length > 0 && opts.sessionNotify !== false) {
-    notifySessions(sessions, resumeMessage(strategy));
-  }
+  // 8. done -- `closeSessions` is what lets the paused sessions go again
+  run.finished = true;
   return true;
 };
 
