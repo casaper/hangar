@@ -1,8 +1,8 @@
-import { Command, Option } from '@commander-js/extra-typings';
+import { Argument, Command, Option } from '@commander-js/extra-typings';
 import pc from 'picocolors';
 
 import { addClone } from './commands/add-clone.ts';
-import { coloursSync } from './commands/colours.ts';
+import { coloursChange, coloursList, coloursSync } from './commands/colours.ts';
 import { doctor } from './commands/doctor.ts';
 import { list } from './commands/list.ts';
 import { open } from './commands/open.ts';
@@ -15,6 +15,7 @@ import { sync } from './commands/sync.ts';
 import { tmpMerge } from './commands/tmp.ts';
 import { vscodeSync } from './commands/vscode.ts';
 import { CliError } from './exec.ts';
+import { PALETTE_NAMES } from './palette.ts';
 import { fleetRoot, tildify } from './paths.ts';
 
 /**
@@ -181,15 +182,37 @@ vscode
     vscodeSync(options);
   });
 
-program
+const colours = program
   .command('colours')
+  .description("The clones' colour identity: the palette, the themes and the shell artifacts");
+
+colours
+  .command('sync')
   .description('Regenerate the shell and theme artifacts derived from the clone palette')
-  .argument('[action]', 'sync', 'sync')
   .option('-n, --dry-run', 'show what would change, write nothing')
   .option('--check', 'exit non-zero if any artifact is out of date (writes nothing)')
-  .action((action, options) => {
-    if (action !== 'sync') throw new CliError(`unknown colours action: ${action}`);
+  .action((options) => {
     coloursSync(options);
+  });
+
+colours
+  .command('change')
+  .description('Give one clone a colour of your choosing, and rebuild everything that names it')
+  .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
+  // `.choices()` rather than a free string: extra-typings narrows the argument to the palette
+  // names, so a typo is a usage error listing the real ones instead of a clone silently keeping
+  // the hue it had. The names are DATA in src/palette.ts -- adding a hue extends this list.
+  .addArgument(new Argument('<colour>', 'palette colour').choices(PALETTE_NAMES))
+  .option('--force', 'allow a colour a sibling clone already has')
+  .action((clone, colour, options) => {
+    coloursChange(clone, colour, options);
+  });
+
+colours
+  .command('list')
+  .description('Show the palette, painted, and which clone holds each hue')
+  .action(() => {
+    coloursList();
   });
 
 /**

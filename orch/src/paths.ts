@@ -79,3 +79,12 @@ export const atlassianUrl = 'https://acme.atlassian.net';
 
 /** Render an absolute path under $HOME as `~/...` for output. */
 export const tildify = (p: string): string => (p.startsWith(home) ? `~${p.slice(home.length)}` : p);
+
+/**
+ * Explicit clone -> colour assignments, written by `orch-util colours change`.
+ *
+ * Distinct from the generated `clone-colours.sh` beside it: that one is OUTPUT (a hue table for
+ * the shell), this one is INPUT, and it is the only per-clone value in the fleet that is not
+ * derived from the clone index.
+ */
+export const colourAssignmentsFile = join(fleetRoot, 'colour-assignments.json');

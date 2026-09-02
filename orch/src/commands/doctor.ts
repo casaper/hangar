@@ -37,6 +37,11 @@ import {
   workspaceContent,
   workspacePath,
 } from '../clone-config.ts';
+import {
+  colourAssignmentFor,
+  colourAssignments,
+  colourAssignmentsLabel,
+} from '../colour-assignments.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import { applyArtifact } from '../generate/index.ts';
@@ -56,6 +61,7 @@ import {
   strayPidFilesInStore,
   tmpIsOwnDirectory,
 } from '../tmp.ts';
+import { paletteEntry } from '../palette.ts';
 import { PORT_ROLES, PORT_ROLE_ORDER } from '../ports.ts';
 import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
 
@@ -381,11 +387,30 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
     },
   });
 
-  if (clone.colour.reused) {
+  // Two clones one colour, however it happened: the palette wrapped (more clones than hues) or
+  // someone forced an assignment onto a hue a sibling already had. Either way the hue has
+  // stopped being an identity, which is the only thing it is for.
+  const sameHue = siblings.filter(
+    (other) => other.index !== clone.index && other.colour.name === clone.colour.name,
+  );
+  if (sameHue.length > 0) {
     checks.push({
       name: 'colour',
       ok: false,
-      detail: `the palette has wrapped — ${clone.colour.name} is already used by an earlier clone. Add a hue to src/palette.ts.`,
+      detail: clone.colour.reused
+        ? `the palette has wrapped — ${clone.colour.name} is also ${sameHue.map((c) => c.name).join(', ')}. Add a hue to src/palette.ts.`
+        : `${clone.colour.name} is also ${sameHue.map((c) => c.name).join(', ')} — recolour one with \`orch-util colours change\``,
+    });
+  }
+
+  // An assignment naming a hue that is not in the palette: `colourFor` falls back to the
+  // formula, so the file looks edited and changes nothing. A hand-edit typo, always.
+  const assigned = colourAssignmentFor(clone.index);
+  if (assigned !== undefined && paletteEntry(assigned) === undefined) {
+    checks.push({
+      name: 'colour assignment',
+      ok: false,
+      detail: `${colourAssignmentsLabel()} assigns "${assigned}" to index ${String(clone.index)}, which is not a palette colour — it is being ignored, ${clone.colour.name} comes from the index formula`,
     });
   }
 
@@ -400,6 +425,21 @@ export const doctor = (ref: string | undefined, opts: DoctorOptions): void => {
   if (!existsSync(fleetPlans)) {
     warn(`the shared plan archive ${tildify(fleetPlans)} does not exist yet`);
     note("`orch-util plans collect` creates it and gathers the clones' plans into it.");
+  }
+  // Assignments left behind by a clone that no longer exists. Harmless until `add-clone`
+  // reuses the index -- `nextFreeIndex()` fills gaps -- and then it silently hands a brand-new
+  // clone the old one's hue. `add-clone` and `remove-clone` both drop it; this catches a
+  // directory removed by hand.
+  const orphans = [...colourAssignments().keys()].filter(
+    (index) => !all.some((clone) => clone.index === index),
+  );
+  if (orphans.length > 0) {
+    warn(
+      `${colourAssignmentsLabel()} assigns a colour to ${orphans
+        .map((index) => `index ${String(index)}`)
+        .join(', ')}, which no clone has`,
+    );
+    note('Harmless now; `orch-util add-clone` reuses free indices, so it would inherit the hue.');
   }
   const strays = strayPidFilesInStore();
   if (strays.length > 0) {

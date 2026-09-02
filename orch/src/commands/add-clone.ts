@@ -20,6 +20,7 @@ import {
   workspacePath,
   type SettingsJson,
 } from '../clone-config.ts';
+import { clearColourAssignment } from '../colour-assignments.ts';
 import { CliError, run } from '../exec.ts';
 import { cloneAt, discoverClones, nextFreeIndex, type Clone } from '../fleet.ts';
 import { FLEET_GIT_CONFIG, git, gitTry, setFleetGitConfig } from '../git.ts';
@@ -154,7 +155,12 @@ export const addClone = (opts: AddCloneOptions): void => {
     ok(relative(clone.path, path));
   }
 
-  // 10. regenerate everything derived from the palette, now that the fleet is bigger
+  // 10. regenerate everything derived from the palette, now that the fleet is bigger. A
+  //     colour assignment left at this index by a clone that used to live here is dropped
+  //     first: a new clone starts on the formula, and `nextFreeIndex()` reuses gaps.
+  if (clearColourAssignment(clone.index)) {
+    warn(`dropped a leftover colour assignment for index ${String(clone.index)}`);
+  }
   heading('Regenerating colour artifacts');
   coloursSync({});
 

@@ -22,8 +22,8 @@ own package lives in `orch/` — never at this level.
 
 It _is_ itself a small local-only git repo — branch `main`, no remote — tracking this file,
 `bin/orch-util`, the CLI package in `orch/**`, `.envrc`, `.editorconfig`, the shell helpers,
-`.gitignore` and `.claude/settings.json`. Never the application, and never the two shared
-directories it now also holds (`plans/`, `tmp/`).
+`colour-assignments.json`, `.gitignore` and `.claude/settings.json`. Never the application, and
+never the two shared directories it now also holds (`plans/`, `tmp/`).
 
 Full clones, not `git worktree`: each needs its own `node_modules`, its own dev server, its own
 Storybook and its own Playwright run. That is the whole reason the fleet exists.
@@ -47,6 +47,9 @@ adding or removing one needs no bookkeeping:
 | Storybook  | `6006 + (N-1) * 100`               | 6006 / 6106 / 6206    |
 | Playwright | `9323 + (N-1) * 100`               | 9323 / 9423 / 9523    |
 | colour     | `PALETTE[N-1]` in `src/palette.ts` | cyan / yellow / green |
+
+The colour is the one derived value a human can override — `orch-util colours change <clone>
+<colour>` — and the only thing in the fleet that needs a file to remember it. See below.
 
 **Run `orch-util list` and `orch-util ports`; do not treat the numbers above as a roster.** Clones come
 and go, and index gaps are normal — `remove-clone` never renumbers, because renumbering would
@@ -84,7 +87,29 @@ so escape codes emitted from `.envrc` would be both fragile and incomplete. dire
 environment; the shell owns terminal I/O. The hook resets the tab colour only if it set it, so a
 tab coloured by hand is left alone, and it is a no-op outside iTerm2.
 
-To change a hue, edit `src/palette.ts` and run `orch-util colours sync`. Two consumers cannot source
+To change what a hue LOOKS LIKE, edit `src/palette.ts` and run `orch-util colours sync`. To give
+one clone a different hue, `orch-util colours change 4 red` — that is the only per-clone value in
+the fleet that is not a pure function of the index, so it is remembered in
+`colour-assignments.json` at the fleet root (tracked, sparse: a clone that was never re-coloured
+is not in it, which is why `add-clone` and `remove-clone` still need no bookkeeping). The command
+rebuilds everything that names the colour, which is the reason it exists rather than being three
+manual edits: the four generated artifacts, the clone's `.claude/settings.local.json` (it selects
+the theme by NAME, and a theme that no longer exists makes Claude Code fall back to the default
+one — the clone then looks like every other clone) and its `CLAUDE.local.md` (which tells the
+agent which colour to announce). It also deletes the theme file for the old hue, which is named
+after it and would otherwise linger. Picking the hue the index formula would have given clears
+the assignment instead of writing one, so going back is the same command; a hue a sibling already
+has is refused unless you pass `--force`, and `orch-util doctor` reports it if you do.
+`orch-util colours list` paints the whole palette with who holds what.
+
+**Claude Code takes arbitrary 24-bit hex in a custom theme** — the generated
+`~/.claude/themes/dvb-clone-NN-*.json` files already do exactly that for `claude`,
+`claudeShimmer`, `briefLabelClaude`, `promptBorder` and `promptBorderShimmer` — so the palette is
+limited by what a human can tell apart at a glance, not by anything Claude Code enforces. It
+holds 16 hues; the last four fill the gaps left by the first twelve and are the least
+distinguishable, so low indices stay the good ones.
+
+Two consumers cannot source
 `clone-colours.sh` and carry their own copy — the theme JSONs (static JSON) and the statusline
 script (self-contained so it can never fail) — but both are generated from the same data, so
 they cannot drift. A theme change needs a Claude Code restart in that clone to show up.
@@ -138,6 +163,8 @@ usually are. There is no build step: Node strips the types and runs `src/cli.ts`
 | `orch-util tmp merge`             | pool every clone's `tmp/` cache in `tmp/`, a symlink per entry back   |
 | `orch-util vscode sync`           | one VS Code setup everywhere, per-clone paths still per clone         |
 | `orch-util colours sync`          | regenerate the palette-derived artifacts                              |
+| `orch-util colours change`        | give one clone another hue, and rebuild everything that names it      |
+| `orch-util colours list`          | the palette, painted, and which clone holds each hue                  |
 
 Six behaviours are worth knowing before you run them:
 

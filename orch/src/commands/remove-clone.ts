@@ -2,6 +2,7 @@ import { existsSync, renameSync, rmSync, unlinkSync } from 'node:fs';
 
 import { CliError } from '../exec.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
+import { clearColourAssignment, colourAssignmentsLabel } from '../colour-assignments.ts';
 import { themePath } from '../generate/theme-json.ts';
 import { git, gitTry, syncState } from '../git.ts';
 import { tildify } from '../paths.ts';
@@ -125,7 +126,13 @@ export const removeClone = (ref: string, opts: RemoveCloneOptions): void => {
     ok(`deleted ${tildify(theme)}`);
   }
 
-  // 4. the generated artifacts no longer mention it
+  // 4. its colour assignment, if a human chose one. `nextFreeIndex()` reuses this index, so
+  //    leaving it behind would hand the next clone this one's hue.
+  if (clearColourAssignment(clone.index)) {
+    ok(`dropped its ${clone.colour.name} assignment from ${colourAssignmentsLabel()}`);
+  }
+
+  // 5. the generated artifacts no longer mention it
   heading('Regenerating colour artifacts');
   coloursSync({});
 

@@ -1,6 +1,7 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+import { colourAssignmentFor } from './colour-assignments.ts';
 import { CliError } from './exec.ts';
 import { colourFor, type CloneColour } from './palette.ts';
 import { fleetRoot } from './paths.ts';
@@ -13,6 +14,10 @@ import { portsFor, type ClonePorts } from './ports.ts';
  * directories exist; the index is parsed out of the name; the colour and the three ports
  * are pure functions of that index. Nothing is positional, so removing clone_02 leaves a
  * gap that costs nothing and never renumbers anyone.
+ *
+ * The single exception is a colour a human chose with `orch-util colours change`, which is a
+ * SPARSE override in `colour-assignments.json` -- a clone that was never re-coloured is not in
+ * that file, so none of the above changes.
  *
  * Two or more digits, so the fleet does not break at clone_10 the way the old
  * `clone_0[0-9]` globs did.
@@ -33,7 +38,7 @@ const makeClone = (index: number): Clone => ({
   name: cloneNameFor(index),
   index,
   path: join(fleetRoot, cloneNameFor(index)),
-  colour: colourFor(index),
+  colour: colourFor(index, colourAssignmentFor(index)),
   ports: portsFor(index),
 });
 
