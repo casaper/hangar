@@ -216,9 +216,12 @@ Six behaviours are worth knowing before you run them:
   Quiet mode holds the whole narration and prints it only if something needs a human (a
   conflict copy, a name it could not link, a record whose frontmatter disagrees with its
   filename, a stray PID file); the two-minute guard is explicitly not one of those, because the
-  next session end resolves it. Not having the hook costs one wasted re-fetch in a sibling and
-  never a wrong answer — `jira hook` reads `fetched_at:` out of the file and refuses to hand
-  back anything older than the copy the clone already holds.
+  next session end resolves it. The two `--quiet` commands are built differently and flush on
+  opposite criteria — `plans collect` buffers locally and prints when something MOVED, `tmp merge`
+  captures at the `ui.ts` level and prints only when something WARNED — so a third one copies
+  whichever matches its outcome rather than unifying them. Not having the hook costs one wasted
+  re-fetch in a sibling and never a wrong answer — `jira hook` reads `fetched_at:` out of the file
+  and refuses to hand back anything older than the copy the clone already holds.
 - **Conflicts are delegated to a headless `claude -p` inside the clone**, then verified
   mechanically (no unmerged paths, no markers). If that fails the whole operation is aborted and
   the pre-sync state restored — never left half-merged. `git rerere` and `-X ours/theirs` are
@@ -496,24 +499,30 @@ line is fine — it excludes something already ignored.
 ## Claude Code settings layering
 
 Only two things differ per clone: **`theme`** and the **Storybook health-check port** in
-`permissions.allow`. Everything else in `.claude/settings.local.json` is byte-identical across all
-three (verify with `jq -S 'del(.theme)|del(.permissions.allow)' … | shasum`).
+`permissions.allow`. Everything else in `.claude/settings.local.json` is byte-identical across
+every clone (verify with `jq -S 'del(.theme)|del(.permissions.allow)' … | shasum`).
 
 - `~/.claude/settings.json` (user) holds the genuinely global preferences —
   `skillListingBudgetFraction`, `prefersReducedMotion`, the `Explore` and `mcp__dash-api__*`
   allows, the `Read(~/.ssh/**)` deny. Do **not** move fleet-scoped keys up here: this machine has
   other projects, and `autoMemoryDirectory`, `plansDirectory`, `statusLine` and
   `enabledMcpjsonServers` would leak the fleet onto them.
-- `clone_NN/.claude/settings.local.json` (untracked) holds the fleet-scoped keys, identical in all
-  three: the shared memory directory, the two `SessionEnd` hooks (one collects plans, see below;
-  the other runs `tmp merge --quiet` so this clone's new Jira cache entries reach the store), the
-  `PreToolUse` hook that serves a cached Jira ticket from the record store (additive — Claude
+- `clone_NN/.claude/settings.local.json` (untracked) holds the fleet-scoped keys, identical in
+  every clone: the shared memory directory, the two `SessionEnd` hooks (one collects plans, see
+  below; the other runs `tmp merge --quiet` so this clone's new Jira cache entries reach the store),
+  the `PreToolUse` hook that serves a cached Jira ticket from the record store (additive — Claude
   Code merges it with the repo's own tracked `PreToolUse` guard rather than replacing it), the
   shared statusline, the six MCP servers
   (`playwright`, `jira`, `yfiles-api`, `angular-cli`, `primeng`, `ag-mcp`), the `frontend-design`
   plugin off, the `.env.shared` deny, and the two iTerm2 keys (`terminal.explorerKind`,
   `terminal.external.osxExec`).
 - `.claude/settings.json` is **tracked and shared** — never put a per-clone or personal value there.
+
+**A running session never sees a change to this file.** Claude Code reads it once at startup, so a
+hook wired in by `doctor --fix` or a theme swapped by `colours change` reaches that clone at its
+**next** session. In particular a session that started before a `SessionEnd` hook was added does
+not run it on exit — `doctor` checks the file, and a green report says nothing about what the open
+sessions are running.
 
 **Plans cannot be shared by a setting.** Claude Code resolves `plansDirectory` against the project
 root and then requires the result to be **inside** that root — a string-prefix test on the resolved
@@ -619,9 +628,9 @@ either:
   and will **not** appear in a `/resume` run from `clone_01/`. `orch-util resume <clone>` lists
   every one of a clone's transcript directories in one picker, which is what it is for.
 - **File-based memory** is keyed to the **git repository root**, so every session in a clone —
-  including ones started in `angular/` — shares that clone's one memory directory. The three
-  clones are three separate repos, so they get three separate memory directories unless
-  `autoMemoryDirectory` is pointed at a shared path.
+  including ones started in `angular/` — shares that clone's one memory directory. The clones
+  are separate repos, so each gets its own memory directory unless `autoMemoryDirectory` is
+  pointed at a shared path.
 
 A parent session has its own transcript directory, so it sees no clone's history in `/resume`. It
 **does** see the shared memory — the parent's tracked `.claude/settings.json` points
