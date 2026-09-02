@@ -129,6 +129,7 @@ usually are. There is no build step: Node strips the types and runs `src/cli.ts`
 | `orch-util status <clone>\|--all` | branch, sync vs origin, Jira link, PR link, ports, servers, sessions  |
 | `orch-util sync <clone>\|--all`   | stash, fetch, rebase-or-merge onto the default branch, restore        |
 | `orch-util open <clone>\|--all`   | each clone's three tabs in one iTerm2 window + its VS Code workspace  |
+| `orch-util resume [clone]`        | pick one of a clone's past Claude Code sessions and resume it         |
 | `orch-util add-clone`             | create the next clone and wire it in completely                       |
 | `orch-util remove-clone <clone>`  | detach it (`--delete` also removes the directory, guarded)            |
 | `orch-util doctor [--fix]`        | verify/repair every untracked per-clone artifact                      |
@@ -139,7 +140,7 @@ usually are. There is no build step: Node strips the types and runs `src/cli.ts`
 | `orch-util vscode sync`           | one VS Code setup everywhere, per-clone paths still per clone         |
 | `orch-util colours sync`          | regenerate the palette-derived artifacts                              |
 
-Four behaviours are worth knowing before you run them:
+Five behaviours are worth knowing before you run them:
 
 - **`orch-util sync` types into a live Claude session.** There is no CLI mechanism to message a
   running interactive session, so it finds the session's tty, maps it to an iTerm2 tab and writes
@@ -176,6 +177,16 @@ Four behaviours are worth knowing before you run them:
   tab — `move` is accepted and silently does nothing — so `open` sorts the clones it was given
   and appends them, then says so when the window ends up out of clone order. Sorting one that
   already is means dragging the tabs by hand, or closing the window and running `open --all`.
+- **`orch-util resume` is the only picker that sees all of a clone's sessions.** Claude Code's
+  own `--resume` list is scoped to the directory it was started in, so a session started in
+  `clone_01/angular/` is invisible from `clone_01/` — this one reads every transcript directory
+  the clone owns and runs `claude --resume` with the right `cd` baked in, in the tab you typed
+  it in. Each row is the session's own generated title (its opening request when it never got
+  one), and the pane under the list shows what it was asked first and last. The headless
+  `claude -p` runs `sync` leaves behind are filtered out by their `sdk-cli` entrypoint. A
+  session whose directory has a live `claude` in it is marked and **asks before resuming**:
+  nothing can tell which transcript a running session owns, and resuming the one already open
+  puts two Claude Code sessions in one clone.
 
 **`orch-util vscode sync` is a text transform, not a copy**, and for two reasons. A handful of
 VS Code settings take an **absolute** path into the checkout — `stylelint.stylelintPath`,
@@ -423,7 +434,8 @@ either:
 
 - **Transcripts** are keyed to the **working directory** a session was started in — a session
   started in `clone_01/angular/` lands in `~/.claude/projects/-Users-kaspi-code-dvb-gn-clone-01-angular/`
-  and will **not** appear in a `/resume` run from `clone_01/`.
+  and will **not** appear in a `/resume` run from `clone_01/`. `orch-util resume <clone>` lists
+  every one of a clone's transcript directories in one picker, which is what it is for.
 - **File-based memory** is keyed to the **git repository root**, so every session in a clone —
   including ones started in `angular/` — shares that clone's one memory directory. The three
   clones are three separate repos, so they get three separate memory directories unless

@@ -10,6 +10,7 @@ import { open } from './commands/open.ts';
 import { plansCollect, plansStamp } from './commands/plans.ts';
 import { ports } from './commands/ports.ts';
 import { removeClone } from './commands/remove-clone.ts';
+import { resume } from './commands/resume.ts';
 import { status } from './commands/status.ts';
 import { sync } from './commands/sync.ts';
 import { tmpMerge } from './commands/tmp.ts';
@@ -80,6 +81,15 @@ program
   .option('--no-code', 'do not open the VS Code workspace')
   .action((clones: string[], options) => {
     open(clones, options);
+  });
+
+program
+  .command('resume')
+  .description("Pick one of a clone's past Claude Code sessions from a list and resume it")
+  .argument('[clone]', 'clone name, e.g. clone_02 (or just 2); defaults to the clone you are in')
+  .option('-n, --limit <count>', 'how many of the most recent sessions to list (0 = all)', '20')
+  .action(async (clone, options) => {
+    await resume(clone, options);
   });
 
 program

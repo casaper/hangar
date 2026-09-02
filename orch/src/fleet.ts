@@ -1,5 +1,5 @@
 import { readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { CliError } from './exec.ts';
 import { colourFor, type CloneColour } from './palette.ts';
@@ -67,6 +67,21 @@ export const findClone = (ref: string): Clone | undefined => {
   const asNumber = Number.parseInt(ref.replace(/^clone_?/, ''), 10);
   if (Number.isNaN(asNumber)) return undefined;
   return clones.find((c) => c.index === asNumber);
+};
+
+/**
+ * The clone the current working directory is inside, if any.
+ *
+ * Only for commands that need to know WHICH LIST to show, never for one that acts on a clone:
+ * every mutating command takes the clone as an argument, because "wrong clone" is the failure
+ * this fleet is most prone to and a cwd is exactly the signal that moves without being noticed.
+ */
+export const cloneForCwd = (cwd: string = process.cwd()): Clone | undefined => {
+  const here = resolve(cwd);
+  if (here !== fleetRoot && !here.startsWith(`${fleetRoot}/`)) return undefined;
+  const segment = here.slice(fleetRoot.length + 1).split('/')[0];
+  if (segment === undefined || !CLONE_DIR_RE.test(segment)) return undefined;
+  return findClone(segment);
 };
 
 /** Lowest index not currently taken -- reuses a gap left by `remove-clone`. */
