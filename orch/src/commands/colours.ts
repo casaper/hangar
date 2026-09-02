@@ -15,6 +15,7 @@ import {
   settingsPath,
 } from '../clone-config.ts';
 import { discoverClones, requireClone } from '../fleet.ts';
+import { claudeSessionsIn } from '../procs.ts';
 import { cloneColoursArtifact } from '../generate/colours-sh.ts';
 import { applyArtifact, type Artifact, type ArtifactOutcome } from '../generate/index.ts';
 import { statuslineArtifact } from '../generate/statusline-sh.ts';
@@ -114,6 +115,18 @@ export const coloursChange = (ref: string, colour: string, opts: ColoursChangeOp
   }
 
   heading(`Recolouring ${cloneLabel(clone)}: ${clone.colour.name} → ${entry.name}`);
+
+  // This writes into a clone that may have an agent working in it -- `settings.local.json` and
+  // `CLAUDE.local.md`. Neither write is dangerous (no tracked file, no git state, and the
+  // session re-reads both only on restart), but every other path in this CLI that touches a
+  // clone with a live session says so, and silence is what makes the fleet's worst failures
+  // hard to spot.
+  const sessions = claudeSessionsIn(clone.path);
+  if (sessions.length > 0) {
+    warn(
+      `${clone.name} has ${String(sessions.length)} live Claude session(s) — they keep the old theme until restarted`,
+    );
+  }
 
   // Captured BEFORE the assignment moves: the theme file is named after the hue, so the new
   // one is a different path and the old one would just sit there for ever.

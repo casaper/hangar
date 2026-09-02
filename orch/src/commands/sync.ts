@@ -12,6 +12,7 @@ import {
   inProgressOperation,
   refExists,
   remoteHeadBranch,
+  remotes,
   syncState,
 } from '../git.ts';
 import { writeToTty } from '../iterm.ts';
@@ -111,7 +112,16 @@ const resolveTarget = async (clone: Clone, branch: string, opts: SyncOptions): P
     // anything already qualified (`origin/release9`, `clone_01/some-branch`) is taken verbatim.
     const qualified = `origin/${opts.onto}`;
     const ref = refExists(clone.path, qualified) ? qualified : opts.onto;
-    return { branch: opts.onto, ref, why: 'given with --onto', guessed: false, pr: undefined };
+    // `branch` must be the BARE name whatever was typed: `chooseStrategy` compares it with
+    // `currentBranch()`, so `--onto origin/master` while on `master` has to read as "already on
+    // the target" (fast-forward) and not as a rebase of master onto itself.
+    return {
+      branch: stripRemote(clone, ref),
+      ref,
+      why: 'given with --onto',
+      guessed: false,
+      pr: undefined,
+    };
   }
   if (branch === defaultBranch) return onDefault(`on the default branch (${defaultBranch})`);
   if (branch === DETACHED) return onDefault('detached HEAD — no branch to look a PR up by');
@@ -143,15 +153,30 @@ const resolveTarget = async (clone: Clone, branch: string, opts: SyncOptions): P
   };
 };
 
+/**
+ * `origin/master` -> `master`, `clone_01/fixes/x` -> `fixes/x`, anything else unchanged.
+ *
+ * Only a leading segment that really is one of this clone's remotes is removed, so a branch
+ * genuinely called `origin/something` (legal, if perverse) survives.
+ */
+const stripRemote = (clone: Clone, ref: string): string => {
+  const slash = ref.indexOf('/');
+  if (slash === -1) return ref;
+  return remotes(clone.path).has(ref.slice(0, slash)) ? ref.slice(slash + 1) : ref;
+};
+
 /** The target line, printed for every sync so the base is never implicit. */
 const describeTarget = (clone: Clone, target: Target): void => {
   note(`target ${target.ref}${target.guessed ? pc.yellow(' (a guess)') : ''} — ${target.why}`);
   if (target.pr !== undefined) note(pc.dim(target.pr.url));
   // Fleet-aware, and print-only: a stacked PR targets a branch a sibling clone is working in,
-  // so `origin/<target>` is only as fresh as that clone's last push. Not a reason to stop.
-  const siblings = discoverClones()
-    .filter((other) => other.name !== clone.name && currentBranch(other.path) === target.branch)
-    .map((other) => other.name);
+  // so `origin/<target>` is only as fresh as that clone's last push. Not a reason to stop, and
+  // only said of an `origin/` ref -- a `clone_NN/` one IS that clone, fetched.
+  const siblings = !target.ref.startsWith('origin/')
+    ? []
+    : discoverClones()
+        .filter((other) => other.name !== clone.name && currentBranch(other.path) === target.branch)
+        .map((other) => other.name);
   if (siblings.length > 0) {
     note(
       pc.dim(
