@@ -185,6 +185,7 @@ tmp
   .command('merge')
   .description("Move every clone's shareable tmp/ content into <fleet>/tmp and link it back")
   .option('-n, --dry-run', 'show what would move, change nothing')
+  .option('-q, --quiet', 'say nothing unless something needs a human (for the SessionEnd hook)')
   .action((options) => {
     tmpMerge(options);
   });

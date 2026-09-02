@@ -17,8 +17,10 @@ import {
   effectivePlansDirectory,
   hasJiraHook,
   hasPlansHook,
+  hasTmpHook,
   withJiraHook,
   withPlansHook,
+  withTmpHook,
   claudeLocalMdPath,
   envLocalContent,
   envLocalPath,
@@ -32,6 +34,7 @@ import {
   playwrightEnvLocalPath,
   readEnvLocalPorts,
   readSettings,
+  type SettingsJson,
   settingsContentFor,
   settingsPath,
   storybookHealthCheckAllow,
@@ -111,6 +114,22 @@ const writeFile = (path: string, content: string): void => {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, content, 'utf8');
 };
+
+/**
+ * Add one hook to the clone's settings, reading the file again first.
+ *
+ * All three hook checks are built from ONE `readSettings` at the top of `checksFor`, and
+ * `--fix` runs every repair in that same pass -- so a repair rendering that captured object
+ * would drop the hook a previous repair had just written. A clone missing two of them is the
+ * normal case for a fresh clone, which is exactly when it would go unnoticed.
+ */
+const addHook =
+  (clone: Clone, add: (settings: SettingsJson) => SettingsJson): (() => void) =>
+  () => {
+    const current = readSettings(clone);
+    if (current === undefined) return;
+    writeFile(settingsPath(clone), `${JSON.stringify(add(current), null, 2)}\n`);
+  };
 
 const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
   const checks: Check[] = [];
@@ -278,12 +297,7 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
     detail: hookOk
       ? "collects this clone's finished plans into the shared archive"
       : 'missing — a finished plan stays in this clone until `orch-util plans collect` is run by hand',
-    repair:
-      settings === undefined
-        ? undefined
-        : () => {
-            writeFile(settingsPath(clone), `${JSON.stringify(withPlansHook(settings), null, 2)}\n`);
-          },
+    repair: settings === undefined ? undefined : addHook(clone, withPlansHook),
   });
 
   const jiraOk = hasJiraHook(settings);
@@ -293,12 +307,17 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
     detail: jiraOk
       ? 'a ticket fetched in the last hour is served from the shared record store, not re-fetched'
       : 'missing — every `jira-ticket-sync` run re-fetches the ticket and its whole neighbourhood',
-    repair:
-      settings === undefined
-        ? undefined
-        : () => {
-            writeFile(settingsPath(clone), `${JSON.stringify(withJiraHook(settings), null, 2)}\n`);
-          },
+    repair: settings === undefined ? undefined : addHook(clone, withJiraHook),
+  });
+
+  const tmpHookOk = hasTmpHook(settings);
+  checks.push({
+    name: 'tmp SessionEnd hook',
+    ok: tmpHookOk,
+    detail: tmpHookOk
+      ? "folds this clone's new Jira cache entries into the shared record store at session end"
+      : 'missing — a ticket first fetched here reaches the siblings only when `orch-util tmp merge` is run by hand',
+    repair: settings === undefined ? undefined : addHook(clone, withTmpHook),
   });
 
   const strayPlanDirs = planDirsIn(clone).filter(

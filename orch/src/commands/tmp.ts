@@ -41,7 +41,19 @@ import {
   strayPidFilesInStore,
   tmpIsSymlink,
 } from '../tmp.ts';
-import { cloneLabel, heading, note, ok, step, warn } from '../ui.ts';
+import {
+  blank,
+  capturedProblems,
+  captureOutput,
+  cloneLabel,
+  heading,
+  note,
+  ok,
+  releaseCapture,
+  step,
+  warn,
+  warnTransient,
+} from '../ui.ts';
 
 /**
  * `orch-util tmp merge` -- put every clone's shareable `tmp/` content in one place.
@@ -66,7 +78,11 @@ import { cloneLabel, heading, note, ok, step, warn } from '../ui.ts';
  * anything that differs is kept beside the winner as `<name>.from-clone_NN` (see `adopt.ts`).
  * A running dev server is no obstacle -- its PID file is never read, moved or linked.
  */
-export type TmpMergeOptions = { dryRun?: boolean | undefined };
+export type TmpMergeOptions = {
+  dryRun?: boolean | undefined;
+  /** Print nothing unless something needs a human -- for the `SessionEnd` hook. */
+  quiet?: boolean | undefined;
+};
 
 type Counts = Map<string, number>;
 
@@ -227,8 +243,35 @@ const linkStoreEntries = (
   return { linked, already };
 };
 
+/**
+ * A `SessionEnd` hook runs this in every clone, which is the whole reason `--quiet` exists:
+ * the routine outcome -- a brand-new ticket directory adopted, one a re-sync detached linked
+ * back -- is what the hook is FOR, and a hook that announces it at the end of every session is
+ * one nobody reads. So quiet mode holds the entire narration and prints it only if a `warn` or
+ * a `fail` was raised: a conflict copy, a name that could not be linked, a record whose
+ * frontmatter disagrees with its filename, a stray PID file. Silence about work, never about a
+ * problem.
+ *
+ * A throw prints what was held regardless -- a swallowed narration is exactly the context
+ * needed to read the error.
+ */
 export const tmpMerge = (opts: TmpMergeOptions): void => {
   const dryRun = opts.dryRun === true;
+  if (opts.quiet !== true) {
+    runMerge(dryRun);
+    return;
+  }
+  captureOutput();
+  try {
+    runMerge(dryRun);
+  } catch (error) {
+    releaseCapture(true);
+    throw error;
+  }
+  releaseCapture(capturedProblems() > 0);
+};
+
+const runMerge = (dryRun: boolean): void => {
   const clones = discoverClones();
   if (clones.length === 0) throw new CliError('no clones found');
 
@@ -311,7 +354,7 @@ export const tmpMerge = (opts: TmpMergeOptions): void => {
   dedupeStore(dryRun);
 
   // --- report ------------------------------------------------------------------------
-  console.log('');
+  blank();
   const summary =
     counts.size === 0
       ? 'nothing to move'
@@ -414,7 +457,9 @@ const syncJiraStore = (dryRun: boolean): void => {
     const action = planGroup(group);
     if (action === undefined) continue;
     if (action.kind === 'busy') {
-      warn(`${group.key}: a copy was written in the last two minutes — left alone`);
+      // Transient by construction: this pass replaces content, so a copy that may still be
+      // being written is left for the next run -- which the `SessionEnd` hook will make.
+      warnTransient(`${group.key}: a copy was written in the last two minutes — left alone`);
       note(pc.dim('A session may be mid-refresh; this pass replaces content. Run again.'));
       continue;
     }
@@ -525,7 +570,7 @@ const resolveSameTicketCopies = (dryRun: boolean): void => {
     (g) => !g.linked && !g.identical && g.canonical !== `ticket_${g.key}.md`,
   );
   if (groups.length === 0) return;
-  console.log('');
+  blank();
 
   for (const group of groups) {
     const [winner, ...losers] = group.copies;

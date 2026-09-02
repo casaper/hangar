@@ -207,6 +207,18 @@ Six behaviours are worth knowing before you run them:
   copy created for the last clone still reaches the first, and it drains
   `~/.claude/dvb-gn-jira` in the same run (nothing is left pointing into a store that has been
   emptied). See **Shared `tmp/`** below.
+  **Each clone runs `tmp merge --quiet` from a `SessionEnd` hook**, so a ticket first fetched in
+  one clone reaches the others when that session ends. It is `SessionEnd` and not a trigger on
+  the write itself for a reason that cannot be tuned away: the store pass deliberately leaves
+  alone any copy written in the last two minutes, so a hook firing BECAUSE a ticket was just
+  written would arrive inside its own exclusion window every time and do nothing. Nothing
+  watches `tmp/` — the run happens once, at the end of a session, when nothing is mid-write.
+  Quiet mode holds the whole narration and prints it only if something needs a human (a
+  conflict copy, a name it could not link, a record whose frontmatter disagrees with its
+  filename, a stray PID file); the two-minute guard is explicitly not one of those, because the
+  next session end resolves it. Not having the hook costs one wasted re-fetch in a sibling and
+  never a wrong answer — `jira hook` reads `fetched_at:` out of the file and refuses to hand
+  back anything older than the copy the clone already holds.
 - **Conflicts are delegated to a headless `claude -p` inside the clone**, then verified
   mechanically (no unmerged paths, no markers). If that fails the whole operation is aborted and
   the pre-sync state restored — never left half-merged. `git rerere` and `-X ours/theirs` are
@@ -281,8 +293,9 @@ the fallback for a clone that has neither.
 `orch-util doctor` is the regression net for everything that lives outside git and so cannot be
 restored by a pull — ports, the `CLAUDE.local.md` + `.git/info/exclude` pair, `.envrc.private`,
 the playwright symlink, the theme, the Storybook health-check port, that `tmp/` is the clone's
-own directory, the two hooks in `settings.local.json` (plan collection and the Jira record
-hook), the sibling remotes in both directions, and the `checkout.defaultRemote=origin` those
+own directory, the three hooks in `settings.local.json` (plan collection, the cache merge and
+the Jira record hook — each repair re-reads the file, so a clone missing two of them gets both
+in one `--fix` pass), the sibling remotes in both directions, and the `checkout.defaultRemote=origin` those
 remotes make necessary. Run it after any re-clone. **How much
 of the shared cache a clone links is deliberately not a check** — a ticket fetched here reaches
 the others at the next `tmp merge`, which is what linking per entry means, and a check that is red
@@ -492,7 +505,8 @@ three (verify with `jq -S 'del(.theme)|del(.permissions.allow)' … | shasum`).
   other projects, and `autoMemoryDirectory`, `plansDirectory`, `statusLine` and
   `enabledMcpjsonServers` would leak the fleet onto them.
 - `clone_NN/.claude/settings.local.json` (untracked) holds the fleet-scoped keys, identical in all
-  three: the shared memory directory, the `SessionEnd` hook that collects plans (see below), the
+  three: the shared memory directory, the two `SessionEnd` hooks (one collects plans, see below;
+  the other runs `tmp merge --quiet` so this clone's new Jira cache entries reach the store), the
   `PreToolUse` hook that serves a cached Jira ticket from the record store (additive — Claude
   Code merges it with the repo's own tracked `PreToolUse` guard rather than replacing it), the
   shared statusline, the six MCP servers

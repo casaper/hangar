@@ -264,6 +264,44 @@ export const withJiraHook = (settings: SettingsJson): SettingsJson => {
 };
 
 /**
+ * The `SessionEnd` hook that folds this clone's new Jira cache entries into the shared store.
+ *
+ * A re-sync of a ticket that already has a `tmp/<KEY>` directory writes straight into the
+ * store -- that path is a symlink -- so what this catches is the two cases that need a move: a
+ * brand-new ticket directory, created inside the clone by `dirFor`'s `mkdirSync`, and a record
+ * whose inode a `writeAtomic` re-sync detached from the store copy.
+ *
+ * `SessionEnd` rather than a trigger on the write itself, and that is not a compromise: the
+ * store pass deliberately leaves alone any copy written in the last two minutes, because a
+ * session may be mid-refresh and the pass replaces content. A hook that fired BECAUSE a ticket
+ * was just written would arrive inside its own exclusion window every time and do nothing. At
+ * session end nothing is mid-write, so the guard never trips.
+ *
+ * The cost of not having it is bounded and worth knowing: one wasted re-fetch in a sibling.
+ * The store is never a wrong answer either way -- `jira hook` reads `fetched_at:` out of the
+ * file and refuses to hand back anything older than the copy the clone already holds.
+ */
+export const TMP_HOOK_COMMAND = `${join(fleetRoot, 'bin', 'orch-util')} tmp merge --quiet`;
+
+const tmpHook = (): HookMatcher => ({
+  hooks: [{ type: 'command', command: TMP_HOOK_COMMAND, timeout: 120 }],
+});
+
+export const hasTmpHook = (settings: SettingsJson | undefined): boolean =>
+  (settings?.hooks?.['SessionEnd'] ?? []).some((matcher) =>
+    matcher.hooks.some((hook) => hook.command === TMP_HOOK_COMMAND),
+  );
+
+export const withTmpHook = (settings: SettingsJson): SettingsJson => {
+  const hooks = { ...settings.hooks };
+  const existing = (hooks['SessionEnd'] ?? []).filter(
+    (matcher) => !matcher.hooks.some((hook) => hook.command === TMP_HOOK_COMMAND),
+  );
+  hooks['SessionEnd'] = [...existing, tmpHook()];
+  return { ...settings, hooks };
+};
+
+/**
  * Settings with the plan-collecting hook in place and no `plansDirectory` override.
  *
  * The override is removed deliberately: the repo's own tracked `.claude/settings.json` already

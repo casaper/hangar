@@ -10,28 +10,79 @@ import { paint } from './palette.ts';
  * colour vocabulary stays consistent: a clone is always printed in its own hue, and
  * severity uses picocolors, which already no-ops when stdout is not a TTY.
  */
+/**
+ * `--quiet` capture, for a command a `SessionEnd` hook runs in every clone.
+ *
+ * Everything user-facing already goes through this module, so holding the lines here is the
+ * whole mechanism: the command narrates exactly as it always does, and `releaseCapture`
+ * decides afterwards whether any of it is printed. `capturedProblems` is what that decision is
+ * made on -- a hook must say nothing about routine work and must never swallow a warning.
+ */
+let held: string[] | undefined;
+let problems = 0;
+
+const emit = (line: string): void => {
+  if (held === undefined) console.log(line);
+  else held.push(line);
+};
+
+export const captureOutput = (): void => {
+  held = [];
+  problems = 0;
+};
+
+/** How many `warn`/`fail` lines have been emitted since `captureOutput`. */
+export const capturedProblems = (): number => problems;
+
+/** Stop holding lines back, printing what was held only if `print`. */
+export const releaseCapture = (print: boolean): void => {
+  const lines = held ?? [];
+  held = undefined;
+  if (!print) return;
+  for (const line of lines) console.log(line);
+};
+
 export const ok = (msg: string): void => {
-  console.log(`${pc.green('ok')}  ${msg}`);
+  emit(`${pc.green('ok')}  ${msg}`);
 };
 
 export const warn = (msg: string): void => {
-  console.log(`${pc.yellow('!')}   ${msg}`);
+  problems += 1;
+  emit(`${pc.yellow('!')}   ${msg}`);
+};
+
+/**
+ * A warning that does NOT break `--quiet` silence, because the next run resolves it by itself.
+ *
+ * The store pass's two-minute busy guard is the case this exists for: a session ending moments
+ * after a ticket was fetched leaves a copy the pass must not touch, and the `SessionEnd` hook
+ * that reported it would be announcing work its own next run finishes. Interactively it is
+ * still worth seeing -- somebody typed the command and is waiting for its result.
+ */
+export const warnTransient = (msg: string): void => {
+  emit(`${pc.yellow('!')}   ${msg}`);
 };
 
 export const fail = (msg: string): void => {
-  console.log(`${pc.red('x')}   ${msg}`);
+  problems += 1;
+  emit(`${pc.red('x')}   ${msg}`);
 };
 
 export const note = (msg: string): void => {
-  console.log(`    ${pc.dim(msg)}`);
+  emit(`    ${pc.dim(msg)}`);
 };
 
 export const heading = (msg: string): void => {
-  console.log(`\n${pc.bold(msg)}`);
+  emit(`\n${pc.bold(msg)}`);
 };
 
 export const step = (msg: string): void => {
-  console.log(`${pc.cyan('>')}   ${msg}`);
+  emit(`${pc.cyan('>')}   ${msg}`);
+};
+
+/** A blank separator line -- routed through `emit` so `--quiet` holds it back too. */
+export const blank = (): void => {
+  emit('');
 };
 
 const BULLET = '●';
@@ -65,7 +116,7 @@ export const table = (rows: readonly (readonly string[])[], gap = 2): void => {
     const line = row
       .map((cell, i) => cell + ' '.repeat(Math.max(0, (widths[i] ?? 0) - visibleWidth(cell))))
       .join(' '.repeat(gap));
-    console.log(line.trimEnd());
+    emit(line.trimEnd());
   }
 };
 
