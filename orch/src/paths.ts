@@ -20,6 +20,20 @@ export const home = homedir();
 export const claudeDir = join(home, '.claude');
 export const themesDir = join(claudeDir, 'themes');
 
+/**
+ * VS Code's own window state -- which workspace each window has open. Written by VS Code as
+ * windows come and go, so it is LAST KNOWN rather than live; see `openWorkspaceFile`.
+ */
+export const vscodeWindowState = join(
+  home,
+  'Library',
+  'Application Support',
+  'Code',
+  'User',
+  'globalStorage',
+  'storage.json',
+);
+
 /** Claude Code's session transcripts, one directory per working directory a session started in. */
 export const projectsDir = join(claudeDir, 'projects');
 

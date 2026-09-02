@@ -128,7 +128,7 @@ usually are. There is no build step: Node strips the types and runs `src/cli.ts`
 | `orch-util ports [--json]`        | the whole port map, and any `.env.local` that disagrees with it       |
 | `orch-util status <clone>\|--all` | branch, sync vs origin, Jira link, PR link, ports, servers, sessions  |
 | `orch-util sync <clone>\|--all`   | stash, fetch, rebase-or-merge onto the default branch, restore        |
-| `orch-util open <clone>`          | three iTerm2 tabs (Claude, shell, `angular/`) + the VS Code workspace |
+| `orch-util open <clone>\|--all`   | each clone's three tabs in one iTerm2 window + its VS Code workspace  |
 | `orch-util add-clone`             | create the next clone and wire it in completely                       |
 | `orch-util remove-clone <clone>`  | detach it (`--delete` also removes the directory, guarded)            |
 | `orch-util doctor [--fix]`        | verify/repair every untracked per-clone artifact                      |
@@ -139,7 +139,7 @@ usually are. There is no build step: Node strips the types and runs `src/cli.ts`
 | `orch-util vscode sync`           | one VS Code setup everywhere, per-clone paths still per clone         |
 | `orch-util colours sync`          | regenerate the palette-derived artifacts                              |
 
-Three behaviours are worth knowing before you run them:
+Four behaviours are worth knowing before you run them:
 
 - **`orch-util sync` types into a live Claude session.** There is no CLI mechanism to message a
   running interactive session, so it finds the session's tty, maps it to an iTerm2 tab and writes
@@ -164,6 +164,18 @@ Three behaviours are worth knowing before you run them:
   hand while it is working.** It is aborted after 10 minutes
   (`ORCH_UTIL_RESOLVE_TIMEOUT_MS` overrides), and the headless session id it prints is the
   transcript to read afterwards.
+- **`orch-util open` puts every clone in ONE iTerm2 window and reuses whatever is already
+  open.** It finds that window by the user variables it stamps on the sessions it creates, so a
+  clone that already has tabs there is selected rather than opened a second time, and a clone
+  whose VS Code workspace is already open gets that window focused — the workspace file exists
+  twice per clone and VS Code counts the two copies as two different workspaces, so it is handed
+  back the exact path it already has. A window it does NOT recognise — opened by hand, or before
+  this change, and already sitting in that clone — makes it stop and ask, because that window may
+  hold a live Claude session and a second one in the same clone is the fleet's worst failure.
+  **Tab order is creation order and nothing else:** iTerm2's AppleScript interface cannot move a
+  tab — `move` is accepted and silently does nothing — so `open` sorts the clones it was given
+  and appends them, then says so when the window ends up out of clone order. Sorting one that
+  already is means dragging the tabs by hand, or closing the window and running `open --all`.
 
 **`orch-util vscode sync` is a text transform, not a copy**, and for two reasons. A handful of
 VS Code settings take an **absolute** path into the checkout — `stylelint.stylelintPath`,

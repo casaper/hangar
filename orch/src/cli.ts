@@ -72,13 +72,14 @@ program
 program
   .command('open')
   .description(
-    'Open a clone: three iTerm2 tabs (Claude, shell, angular/) and the VS Code workspace',
+    'Open clones in one shared iTerm2 window: three tabs each (Claude, shell, angular/) plus the VS Code workspace',
   )
-  .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
+  .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2) — opened in ascending order')
+  .option('--all', 'open every clone in the fleet')
   .option('--no-claude', 'do not start Claude Code in the first tab')
   .option('--no-code', 'do not open the VS Code workspace')
-  .action((clone, options) => {
-    open(clone, options);
+  .action((clones: string[], options) => {
+    open(clones, options);
   });
 
 program

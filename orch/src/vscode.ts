@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { workspaceAngularPath, workspacePath } from './clone-config.ts';
 import { CliError } from './exec.ts';
 import type { Clone } from './fleet.ts';
-import { fleetRoot } from './paths.ts';
+import { fleetRoot, vscodeWindowState } from './paths.ts';
 
 /**
  * The VS Code side of a clone: `.vscode/*` plus the two `*.code-workspace` copies.
@@ -277,4 +278,60 @@ export const pickSource = (copies: readonly CopyState[]): CopyState | undefined 
 export const writeCopy = (path: string, text: string): void => {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, text, 'utf8');
+};
+
+/**
+ * Which of the clone's two workspace files VS Code already has open, if either.
+ *
+ * The point is to hand `code` the copy it is ALREADY showing. VS Code identifies a workspace
+ * by its config file's URI, so the clone's two byte-identical twins -- `dvb_gn_NN.code-workspace`
+ * at the clone root and the one in `angular/` -- are two different workspaces to it: passing
+ * the root copy while the developer has the `angular/` copy open opens a SECOND window on
+ * identical content, which is exactly the duplicate this avoids. Passing the same path it
+ * already has open makes `code` focus that window instead.
+ *
+ * The state file is last-known, not live, so a stale entry only means the workspace is opened
+ * rather than focused -- which is what would have happened anyway. Nothing here fails loudly:
+ * an unreadable or unfamiliar file just means "no opinion", and the caller falls back to the
+ * root copy.
+ */
+export const openWorkspaceFile = (clone: Clone): string | undefined => {
+  let state: unknown;
+  try {
+    state = JSON.parse(readFileSync(vscodeWindowState, 'utf8'));
+  } catch {
+    return undefined;
+  }
+  const windows = windowStates(state);
+  const twins = [workspacePath(clone), workspaceAngularPath(clone)];
+  for (const window of windows) {
+    const path = configPath(window);
+    if (path !== undefined && twins.includes(path)) return path;
+  }
+  return undefined;
+};
+
+/** `lastActiveWindow` plus `openedWindows` -- a single window lives in the former alone. */
+const windowStates = (state: unknown): unknown[] => {
+  if (typeof state !== 'object' || state === null) return [];
+  const windowsState = (state as Record<string, unknown>)['windowsState'];
+  if (typeof windowsState !== 'object' || windowsState === null) return [];
+  const record = windowsState as Record<string, unknown>;
+  const opened: unknown = record['openedWindows'];
+  const rest: unknown[] = Array.isArray(opened) ? opened : [];
+  return [record['lastActiveWindow'], ...rest];
+};
+
+/** `{workspaceIdentifier: {configURIPath: "file:///..."}}` -> a filesystem path. */
+const configPath = (window: unknown): string | undefined => {
+  if (typeof window !== 'object' || window === null) return undefined;
+  const identifier = (window as Record<string, unknown>)['workspaceIdentifier'];
+  if (typeof identifier !== 'object' || identifier === null) return undefined;
+  const uri = (identifier as Record<string, unknown>)['configURIPath'];
+  if (typeof uri !== 'string' || !uri.startsWith('file://')) return undefined;
+  try {
+    return fileURLToPath(uri);
+  } catch {
+    return undefined;
+  }
 };
