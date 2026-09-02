@@ -212,13 +212,25 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
   });
 
   // --- identity ----------------------------------------------------------------------
-  const identityExists = existsSync(claudeLocalMdPath(clone));
+  // Content, not just existence. This file is generated, says so, and tells its reader not to
+  // hand-edit it -- so an exact comparison is the right test rather than an over-strict one.
+  // Existence alone was the check for a while, and three clones spent that while telling their
+  // sessions the fleet had three clones, and the fourth one four. A generated file whose
+  // content rots unnoticed is precisely what this command exists to catch.
+  const identityPath = claudeLocalMdPath(clone);
+  const wantIdentity = claudeLocalMdContent(clone, siblings);
+  const identity = existsSync(identityPath) ? readFileSync(identityPath, 'utf8') : undefined;
   checks.push({
     name: 'CLAUDE.local.md',
-    ok: identityExists,
-    detail: identityExists ? 'present' : 'missing — the session will not know which clone it is in',
+    ok: identity === wantIdentity,
+    detail:
+      identity === undefined
+        ? 'missing — the session will not know which clone it is in'
+        : identity === wantIdentity
+          ? `${identity.split('\n').length - 1} lines, as generated`
+          : 'differs from what the generator produces — stale, or hand-edited; --fix rewrites it',
     repair: () => {
-      writeFile(claudeLocalMdPath(clone), claudeLocalMdContent(clone, siblings));
+      writeFile(identityPath, wantIdentity);
     },
   });
 
