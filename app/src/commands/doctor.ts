@@ -54,7 +54,7 @@ import {
   colourAssignments,
   colourAssignmentsLabel,
 } from '../colour-assignments.ts';
-import { editors } from '../editor/index.ts';
+import { editors, type EditorDriver } from '../editor/index.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import { applyArtifact } from '../generate/index.ts';
@@ -553,6 +553,35 @@ const reportShellHook = (): void => {
   }
 };
 
+/**
+ * One editor's row: whether it can be launched, and what Hangar does for it.
+ *
+ * The two facts worth printing are the two that differ between these editors, and both are the
+ * editor's doing rather than Hangar's: who works out which window already has the clone open,
+ * and whether there is a project setup to keep in step at all. Terminal vim has neither -- it is
+ * a tab, not a window -- and Xcode and Eclipse are launch-only, so saying `$PROJECT_DIR$` of
+ * them (as this row once did) described a mechanism they do not have.
+ */
+const reportEditor = (editor: EditorDriver): void => {
+  if (!editor.isAvailable()) {
+    warn(`${editor.label} cannot be launched`);
+    note(editor.unavailableHint());
+    return;
+  }
+  const how =
+    editor.capabilities.inTerminalTab === true
+      ? 'a terminal tab'
+      : editor.capabilities.focusExisting
+        ? 'focus-existing'
+        : 'self-deduping';
+  const setup = !editor.capabilities.syncArtifacts
+    ? 'launch only'
+    : editor.capabilities.rewritesRootPaths
+      ? 'sync, per-clone paths'
+      : 'sync';
+  ok(`${'editor'.padEnd(22)} ${pc.dim(`${editor.label} — ${how}, ${setup}`)}`);
+};
+
 export const doctor = (ref: string | undefined, opts: DoctorOptions): void => {
   const all = discoverClones();
   if (!existsSync(fleetPlans)) {
@@ -641,16 +670,20 @@ export const doctor = (ref: string | undefined, opts: DoctorOptions): void => {
    * was never installed into PATH, and a JetBrains Toolbox that generated no shell scripts, both
    * mean `hangar open` silently opens no editor at all.
    */
-  for (const editor of editors().drivers) {
-    if (editor.isAvailable()) {
-      const can = [
-        editor.capabilities.focusExisting ? 'focus-existing' : 'self-deduping',
-        editor.capabilities.rewritesRootPaths ? 'per-clone paths' : '$PROJECT_DIR$',
-      ];
-      ok(`${'editor'.padEnd(22)} ${pc.dim(`${editor.label} — ${can.join(', ')}`)}`);
-    } else {
-      warn(`${editor.label} cannot be launched`);
-      note(editor.unavailableHint());
+  const editorChoice = editors();
+  for (const bad of editorChoice.broken) {
+    warn(`the ${bad.kind} editor driver would not build: ${bad.reason}`);
+    note('`hangar open` skips it and still opens the others.');
+  }
+  for (const editor of editorChoice.drivers) {
+    try {
+      reportEditor(editor);
+    } catch (err) {
+      // Same isolation as `open`: an optional editor's probe must not end the health report that
+      // the DEFAULT editor's row is in.
+      warn(
+        `${editor.label} could not be checked: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 

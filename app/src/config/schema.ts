@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-import { EDITOR_KINDS, JETBRAINS_PRODUCT_NAMES, KINDS_USING_ROOT_PATHS } from '../editor/kinds.ts';
+import {
+  DEFAULT_EDITOR_KIND,
+  EDITOR_KINDS,
+  JETBRAINS_PRODUCT_NAMES,
+  KINDS_USING_ROOT_PATHS,
+} from '../editor/kinds.ts';
 
 /**
  * The `hangar.config.yaml` schema, and the single authority on it.
@@ -281,10 +286,14 @@ export const editorSchema = z.strictObject({
    * IDE at once, and the two do not conflict -- their project files are different files. An
    * empty list is legal and means Hangar opens no editor at all.
    *
-   * VS Code is the default because it is the editor this fleet is set up for and the one whose
-   * per-clone workspace files `doctor` already maintains.
+   * VS Code is the default, and it is also the only kind that is exercised: it is the editor
+   * this fleet is set up for and the one whose per-clone workspace files `doctor` already
+   * maintains. `DEFAULT_EDITOR_KIND` is the single place that says so, and this default is the
+   * only route to it: `editor/index.ts` falls back by parsing an empty object through this
+   * schema, so a config that omits the key and a config too broken to parse cannot end up
+   * disagreeing about which editor comes up.
    */
-  kinds: z.array(z.enum(EDITOR_KINDS)).default(['vscode']),
+  kinds: z.array(z.enum(EDITOR_KINDS)).default([DEFAULT_EDITOR_KIND]),
   jetbrains: z
     .strictObject({
       product: z.enum(JETBRAINS_PRODUCT_NAMES).default('idea'),

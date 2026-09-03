@@ -224,31 +224,50 @@ const openEditors = (clone: Clone, drivers: readonly EditorDriver[]): void => {
   for (const driver of drivers) {
     // Already opened as one of the clone's terminal tabs, above -- not a window to launch.
     if (driver.capabilities.inTerminalTab === true) continue;
-    if (!driver.capabilities.launch) {
-      warn(`${driver.label} cannot be opened by Hangar`);
-      note(driver.unavailableHint());
-      continue;
+    try {
+      openEditor(clone, driver);
+    } catch (err) {
+      // One editor's failure is one line, and the loop goes on. Only the default editor has to
+      // work; the rest are best effort, and every one of them shells out to a launcher nobody
+      // here has run. Letting a throw out would end the whole `open` -- so a clone listing
+      // `[zed, vscode]` would lose VS Code to Zed's launcher, which inverts the priority the
+      // config states. `undefined` and a `note` are the drivers' own ways of declining and are
+      // handled above; this is only for a driver that breaks rather than declines.
+      warn(
+        `${driver.label} failed on ${clone.name}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      note(
+        "the clone's other editors are unaffected — `hangar doctor` reports what it can launch.",
+      );
     }
-    if (!driver.isAvailable()) {
-      warn(`${driver.label} is not available — ${clone.name} not opened in it`);
-      note(driver.unavailableHint());
-      continue;
-    }
-    const res = driver.launch(clone);
-    if (res === undefined) {
-      warn(`${driver.label} would not open ${clone.name}`);
-      note(driver.unavailableHint());
-      continue;
-    }
-    if (res.note !== undefined) {
-      warn(`${driver.label}: ${res.note}`);
-      continue;
-    }
-    const what = res.target.split('/').pop() ?? res.target;
-    if (res.reused)
-      ok(`reusing ${driver.label}'s window for ${clone.name} — ${tildify(res.target)}`);
-    else ok(`opened ${what} in ${driver.label}`);
   }
+};
+
+/** One editor, one clone. Throws only if the driver does; `openEditors` owns that. */
+const openEditor = (clone: Clone, driver: EditorDriver): void => {
+  if (!driver.capabilities.launch) {
+    warn(`${driver.label} cannot be opened by Hangar`);
+    note(driver.unavailableHint());
+    return;
+  }
+  if (!driver.isAvailable()) {
+    warn(`${driver.label} is not available — ${clone.name} not opened in it`);
+    note(driver.unavailableHint());
+    return;
+  }
+  const res = driver.launch(clone);
+  if (res === undefined) {
+    warn(`${driver.label} would not open ${clone.name}`);
+    note(driver.unavailableHint());
+    return;
+  }
+  if (res.note !== undefined) {
+    warn(`${driver.label}: ${res.note}`);
+    return;
+  }
+  const what = res.target.split('/').pop() ?? res.target;
+  if (res.reused) ok(`reusing ${driver.label}'s window for ${clone.name} — ${tildify(res.target)}`);
+  else ok(`opened ${what} in ${driver.label}`);
 };
 
 /**
@@ -289,6 +308,10 @@ export const open = (refs: readonly string[], opts: OpenOptions): void => {
   const { driver, source } = terminal();
   const editorChoice = editors();
   const drivers = opts.editor === false ? [] : editorChoice.drivers;
+  for (const bad of editorChoice.broken) {
+    warn(`the ${bad.kind} editor driver would not build: ${bad.reason}`);
+    note('it is skipped; the other configured editors still open.');
+  }
   if (drivers.length > 0 && editorChoice.fellBack) {
     warn(
       `hangar.config.yaml would not parse — opening ${drivers.map((d) => d.label).join(', ')} by default`,

@@ -17,18 +17,14 @@ export * from './kinds.ts';
 export * from './types.ts';
 export { isTracked } from './vscode.ts';
 
-/**
- * The editors this hangar is configured for, in config order.
- *
- * A LIST, unlike the terminal seam's single driver, and for a reason that is about the objects
- * rather than the code: two terminals cannot both hold the same tab, but two editors can both
- * have the same clone open, because their project files are different files. So `open` opens
- * every configured editor and `<kind> sync` addresses one of them by name.
- *
- * Never throws. A config that will not parse falls back to the schema's default -- VS Code --
- * rather than refusing to open an editor over a YAML typo; `doctor` is what reports the config.
- */
+/** A configured kind whose driver threw while being built. */
+export type BrokenEditor = {
+  readonly kind: EditorKind;
+  readonly reason: string;
+};
+
 export type EditorSelection = {
+  /** The drivers that BUILT, in config order. A kind that threw is in `broken` instead. */
   readonly drivers: readonly EditorDriver[];
   /**
    * True when the config exists but would not parse, so these drivers come from the SCHEMA
@@ -42,16 +38,63 @@ export type EditorSelection = {
    * to be said out loud, which `open` does.
    */
   readonly fellBack: boolean;
+  /**
+   * Configured kinds whose driver would not even build. Reported, never fatal -- see the loop.
+   *
+   * Normally empty, and it is meant to stay that way: a driver constructor only probes the
+   * machine, and `run` does not throw. It exists so that if one ever does, the failure is a line
+   * about that editor instead of a stack trace where the default editor should have opened.
+   */
+  readonly broken: readonly BrokenEditor[];
 };
 
+/**
+ * The editors this hangar is configured for, in config order.
+ *
+ * A LIST, unlike the terminal seam's single driver, and for a reason that is about the objects
+ * rather than the code: two terminals cannot both hold the same tab, but two editors can both
+ * have the same clone open, because their project files are different files. So `open` opens
+ * every configured editor and `<kind> sync` addresses one of them by name.
+ *
+ * Never throws. A config that will not parse falls back to the schema's default (VS Code, via
+ * `DEFAULT_EDITOR_KIND`) rather than refusing to open an editor over a YAML typo, and a single
+ * kind whose driver will not build is collected into `broken` rather than ending the run --
+ * because only the default editor has to work, and it must not be a bystander to another one's
+ * failure. `doctor` is what reports both.
+ */
 export const editors = (): EditorSelection => {
   const { editor, fellBack } = editorConfig();
-  return { drivers: editor.kinds.map((kind) => driverFor(kind, editor)), fellBack };
+  const drivers: EditorDriver[] = [];
+  const broken: BrokenEditor[] = [];
+  for (const kind of editor.kinds) {
+    try {
+      drivers.push(driverFor(kind, editor));
+    } catch (err) {
+      // Isolated per kind, and this is the whole point of the list being built in a loop rather
+      // than a `.map`. Only VS Code has to work; every other kind is best effort, and several
+      // build their driver by probing the machine (vim looks for four binaries, JetBrains
+      // resolves a launcher). A throw in one of those must cost that editor and nothing else --
+      // a `.map` would take the default editor down with it, which is exactly backwards.
+      broken.push({ kind, reason: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return { drivers, fellBack, broken };
 };
 
-/** One named editor, for the `<kind> sync` commands. Undefined when it is not configured. */
-export const editorFor = (kind: EditorKind): EditorDriver | undefined =>
-  editors().drivers.find((driver) => driver.kind === kind);
+/**
+ * One named editor, for the `<kind> sync` commands. Undefined when it is not configured.
+ *
+ * Builds ONLY the kind asked for, deliberately -- it used to go through `editors()` and pick from
+ * the result, which made `hangar vscode sync` construct every other configured driver first and
+ * so depend on all of them. And no catch here, unlike `editors()`: the developer named this
+ * editor, so a driver that cannot be built is the answer to their command rather than a bystander
+ * to be stepped over.
+ */
+export const editorFor = (kind: EditorKind): EditorDriver | undefined => {
+  const { editor } = editorConfig();
+  if (!editor.kinds.includes(kind)) return undefined;
+  return driverFor(kind, editor);
+};
 
 type EditorConfig = ReturnType<typeof editorSchema.parse>;
 

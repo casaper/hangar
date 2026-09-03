@@ -195,6 +195,41 @@ and `clone_NN/angular/dvb_gn_NN.code-workspace` — because VS Code only offers 
 for both and fills a missing one from its twin; `workspaceContent()` in `clone-config.ts` is only
 the fallback for a clone that has neither.
 
+### VS Code is ranked above the other editors, and the code says so
+
+`editor.kinds` accepts thirteen kinds; **one of them is verified against a live install and the
+other twelve are written from documented contracts.** So the rank is in the code rather than in a
+caveat:
+
+- **`DEFAULT_EDITOR_KIND` (`app/src/editor/kinds.ts`) is the only place that names the default.**
+  The zod default is `[DEFAULT_EDITOR_KIND]`, and the fallback for a config too broken to parse is
+  `editorSchema.parse({})` — i.e. it reaches the same constant through the same default. Two
+  literals here would be two things to keep in agreement, and the failure would be silent.
+- **`editors()` builds the drivers in a loop with a per-kind catch**, not a `.map`. Several
+  constructors probe the machine (`vimDriver` looks for four binaries, `jetbrainsDriver` resolves
+  a launcher), and a `.map` would let one of them take the default editor down with it. `open`
+  and `doctor` then isolate each driver again around `isAvailable`/`launch`, so `[zed, vscode]`
+  cannot lose VS Code to Zed's launcher — listing order alone would have decided that.
+- **`editorFor(kind)` builds only the kind asked for and does NOT catch.** It used to pick from
+  `editors()`, which made `hangar vscode sync` construct every other configured driver first and
+  depend on all of them. And an editor the developer named by running `hangar <kind> sync` is not
+  a bystander: its failure is the answer to that command.
+
+What this was checked with, since there is no test suite: `kinds` set to all seven families at
+once (`doctor` printed seven honest rows, no throw), VS Code placed **third** in that list (its
+row still green), and `zedDriver` temporarily made to throw at construction — `doctor` reported
+`the zed editor driver would not build: …` and VS Code's row survived, while `hangar zed sync`
+raised, which is the intended asymmetry. The live VS Code path: `openWorkspaceFile` found
+clone_03's already-open workspace and `launch` returned `reused: true`, so it focused that window
+instead of opening a second one on the identical twin.
+
+`doctor`'s editor row names the two things that differ **between** these editors, both the
+editor's doing: who works out which window already has the clone open (`focus-existing` when
+Hangar must, `self-deduping` when the editor does, `a terminal tab` for terminal vim, which is not
+a window at all), and whether there is a setup to keep in step (`sync` / `sync, per-clone paths` /
+`launch only`). It used to print `$PROJECT_DIR$` for Xcode and vim, describing a mechanism neither
+has.
+
 Two rules for anything `hangar` GENERATES into a clone, both learned from the identity file:
 
 - **It has to satisfy that clone's own tooling.** `.git/info/exclude` hides a file from git, not

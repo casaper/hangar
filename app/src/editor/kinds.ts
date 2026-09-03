@@ -51,6 +51,17 @@ export const VSCODE_FORKS = Object.keys(VSCODE_FAMILY) as VscodeFork[];
 export const isVscodeFork = (kind: EditorKind): kind is VscodeFork =>
   (VSCODE_FORKS as readonly string[]).includes(kind);
 
+/**
+ * The one editor that has to work.
+ *
+ * Both the schema default and the fallback in `index.ts` read it from here, so "VS Code is the
+ * default" is stated once rather than agreed on by two files. Every other kind is best effort --
+ * supported so a developer can pick it, written from each editor's documented contract, and (bar
+ * this one) never exercised against a live install. That asymmetry is deliberate and is why the
+ * multi-editor paths isolate their drivers: an optional editor must never cost a clone this one.
+ */
+export const DEFAULT_EDITOR_KIND: EditorKind = 'vscode';
+
 // Spelled out rather than spread from VSCODE_FORKS: zod's `z.enum` wants a non-empty tuple, and
 // a spread of a `VscodeFork[]` cannot prove to TypeScript that there is a first element.
 export const EDITOR_KINDS = [

@@ -242,7 +242,17 @@ rather than resuming.
 
 `editor.kinds` in `hangar.config.yaml` is a **list**, because a clone can be open in more than one
 editor at once — their project files are different files. `hangar open` opens every one of them;
-`hangar <kind> sync` keeps one editor's shareable project files in step. VS Code is the default.
+`hangar <kind> sync` keeps one editor's shareable project files in step.
+
+**VS Code is the default and the only editor that has to work; every other kind is best effort.**
+That is a rank, not a disclaimer, and it is enforced rather than hoped for: `DEFAULT_EDITOR_KIND`
+in `app/src/editor/kinds.ts` is the one place that names it (the schema default reads it, and the
+fallback for a config that will not parse goes through that same default, so the two cannot
+disagree). `editors()` builds each configured driver in a loop with a per-kind catch, and `open`
+and `doctor` isolate each one again around `isAvailable`/`launch` — so a clone configured
+`[zed, vscode]` cannot lose VS Code to Zed's launcher, which listing order alone would have done.
+`hangar <kind> sync` is the deliberate exception: there the developer named the editor, so its
+failure is the answer to their command rather than something to step over.
 
 | kind                                                                      | launch                                              | Hangar syncs                       |
 | ------------------------------------------------------------------------- | --------------------------------------------------- | ---------------------------------- |
