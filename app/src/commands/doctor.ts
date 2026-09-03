@@ -434,7 +434,7 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
 
   // Both copies: VS Code only offers a `*.code-workspace` from the directory you opened, and
   // this repo is opened at its root and at `angular/`. `workspaceContent` is the fallback for
-  // a clone that has neither -- `hangar vscode sync` is what keeps existing ones in step.
+  // a clone that has neither -- `hangar ide vscode sync` is what keeps existing ones in step.
   const wsPaths = [workspacePath(clone), workspaceAngularPath(clone)];
   const wsMissing = wsPaths.filter((p) => !existsSync(p));
   checks.push({

@@ -33,7 +33,7 @@ export const workspacePath = (clone: Clone): string => join(clone.path, workspac
  *
  * VS Code only offers `*.code-workspace` files from the directory you opened, and this repo
  * is opened both at its root and at `angular/` -- so the file has to exist in both. Keep
- * them in step with `hangar vscode sync`.
+ * them in step with `hangar ide vscode sync`.
  */
 export const workspaceAngularPath = (clone: Clone): string =>
   join(clone.path, 'angular', workspaceName(clone));

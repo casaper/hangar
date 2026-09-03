@@ -70,7 +70,7 @@ export type EditorArtifact = {
    * out, and rewriting it dirties that branch and can end up committed. This flag is a FLOOR,
    * never a verdict -- `isTracked` below may add protection, and must never remove it. A purely
    * dynamic `git ls-files` test would make the protection conditional on the checked-out branch,
-   * so a branch that happens not to track `launch.json` would let `vscode sync` push one
+   * so a branch that happens not to track `launch.json` would let `ide vscode sync` push one
    * branch's copy into a sibling, which is the exact failure this flag exists to prevent.
    */
   readonly tracked: boolean;

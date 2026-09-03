@@ -11,6 +11,17 @@ import { hangarConfigSchema, type HangarConfig } from './schema.ts';
 /** The marker file. Its presence is what makes a directory a hangar. */
 export const CONFIG_FILENAME = 'hangar.config.yaml';
 
+/**
+ * The committed example beside it, documenting every key and every variant.
+ *
+ * A separate name and NOT a second marker: `isHangarRoot` tests `CONFIG_FILENAME` exactly, so
+ * this file can sit in a hangar root without being mistaken for one. It matters because
+ * `CONFIG_FILENAME` is normally gitignored -- it names one machine's paths, ports and token
+ * variables -- which makes this the only committed record of a hangar's shape, and the fastest
+ * way to recover a config that is missing.
+ */
+export const EXAMPLE_CONFIG_FILENAME = 'hangar.config.example.yaml';
+
 /** How the hangar we are operating on was chosen -- reported by errors and by `doctor`. */
 export type HangarSource = 'flag' | 'walk' | 'env';
 
@@ -139,7 +150,8 @@ export const loadConfigFile = (configPath: string): HangarConfig => {
   if (!existsSync(configPath)) {
     throw new CliError(
       `no ${basename(configPath)} at ${tildify(dirname(configPath))}`,
-      `Run \`hangar setup\` there to create one.`,
+      `Run \`hangar setup\` there to create one, or copy the committed example:\n` +
+        `         cp ${EXAMPLE_CONFIG_FILENAME} ${CONFIG_FILENAME}`,
     );
   }
 

@@ -10,6 +10,11 @@
 clone_*/
 node_modules/
 
+# This machine's own hangar config: local paths, ports and token variable names. The committed
+# record of it is hangar.config.example.yaml, which is kept a faithful superset. `hangar.schema.json`
+# stays TRACKED -- it is generated from the zod schema and both YAML files reference it.
+hangar.config.yaml
+
 # The two shared directories the clones cannot share by symlink or by setting:
 #   plans/ -- the plan archive. `plansDirectory` must resolve INSIDE the project root (Claude
 #             Code follows symlinks and rejects an escape), so each clone keeps its own real

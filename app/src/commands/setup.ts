@@ -4,7 +4,12 @@ import { join } from 'node:path';
 
 import { configJsonSchemaText } from '../config/json-schema.ts';
 import { deriveDefaults, derivedPortRoles, derivedPortStep } from '../config/derive.ts';
-import { CONFIG_FILENAME, jsonSchemaFileName, loadConfigFile } from '../config/load.ts';
+import {
+  CONFIG_FILENAME,
+  EXAMPLE_CONFIG_FILENAME,
+  jsonSchemaFileName,
+  loadConfigFile,
+} from '../config/load.ts';
 import { MANAGER_COMMANDS } from '../config/schema.ts';
 import { inspectEnvironment, type EnvironmentReport } from '../environment.ts';
 import { CliError } from '../exec.ts';
@@ -155,9 +160,13 @@ $schema: ${SCHEMA_REF}
 
 _: >-
   Configuration for one hangar: a directory holding a fleet of full clones of one repo.
-  Written by \`hangar setup\`. Validated strictly -- an unknown key is an error, not something
-  ignored, because a silently dropped key is a setting that looks configured and is not.
-  Check it with \`hangar config validate\`; see every applied default with \`hangar config show\`.
+
+# Written by \`hangar setup\`, and yours to edit from here. This file is normally GITIGNORED --
+# it names this machine's paths, ports and token variables. Every key, its default and every
+# alternative is documented in ${EXAMPLE_CONFIG_FILENAME}; \`hangar config validate\` reports
+# every problem at once, and \`hangar config show\` prints this file with all defaults applied.
+# Validation is strict: an unknown key is an error, because a silently dropped key is a setting
+# that looks configured and is not.
 
 # Namespaces everything this hangar writes OUTSIDE its own root: ~/.claude/hangar/<id>,
 # the theme filenames, and the shell function in the generated colour table. No dashes --
@@ -245,27 +254,13 @@ terminal:
     - { role: shell, dir: '.' }
 ${a.appDir === '' ? '' : `    - { role: app, dir: ${a.appDir} }\n`}
 editor:
-  # A list: a clone can be open in more than one editor, and they do not conflict -- their
-  # project files are different files. \`hangar <kind> sync\` then keeps each editor's shareable
-  # project files in step for the ones that have any.
-  #
-  #   vscode cursor windsurf vscodium code-insiders positron trae   the VS Code family; all read
-  #                                                                 .vscode/, so one \`vscode sync\`
-  #                                                                 covers every fork
-  #   jetbrains   IntelliJ, WebStorm, PyCharm, ... (pick with \`product\` below)
-  #   zed         .zed/settings.json and tasks.json
-  #   emacs       emacsclient into a running session, else a fresh Emacs; .dir-locals.el
-  #   vim         a GUI vim (mvim/gvim) if there is one, else nvim/vim in an extra clone tab
-  #   xcode       launch only -- .xcodeproj is generated state, never shared
-  #   eclipse     launch only -- .project/.classpath are tracked, so git owns them
+  # A list, because a clone can be open in more than one editor at once. VS Code is the default
+  # and the only kind that has to work; jetbrains, zed, emacs, vim, xcode, eclipse and the six
+  # VS Code forks are best effort. The full list, with what each one syncs, is in
+  # ${EXAMPLE_CONFIG_FILENAME} -- along with the per-editor blocks (editor.jetbrains,
+  # editor.vim, editor.eclipse), which are left out here because they configure nothing until
+  # their kind is listed below.
   kinds: ['vscode']
-  jetbrains:
-    product: idea # idea | webstorm | pycharm | phpstorm | goland | rubymine | clion | rider | …
-    launcher: '' # an explicit path, if Toolbox generated no shell scripts
-  vim:
-    command: '' # empty prefers mvim/gvim, then nvim/vim in a terminal tab
-  eclipse:
-    launcher: '' # Eclipse ships no launcher script; point at the one in the app bundle
   workspaceFileName: '${a.id}_{index2}.code-workspace'
   workspaceFolderLabel: '{index}: ${a.id}'
   workspaceDirs: ['.'${a.appDir === '' ? '' : `, '${a.appDir}'`}]

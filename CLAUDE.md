@@ -22,8 +22,23 @@ own package lives in `app/` — never at this level.
 
 It _is_ itself a small local-only git repo — branch `main`, no remote — tracking this file,
 `bin/hangar`, the CLI package in `app/**`, `.envrc`, `.editorconfig`, the shell helpers,
-`colour-assignments.json`, `.gitignore` and `.claude/**`. Never the application, and
-never the two shared directories it now also holds (`plans/`, `tmp/`).
+`colour-assignments.json`, `hangar.config.example.yaml`, `hangar.schema.json`, `.gitignore` and
+`.claude/**`. Never the application, and never the two shared directories it now also holds
+(`plans/`, `tmp/`).
+
+**`hangar.config.yaml` is the exception, and it is deliberately NOT tracked.** It names this
+machine's paths, ports and token variables, so it is gitignored; `hangar.config.example.yaml`
+is the committed record, documenting every key, its default and every alternative, and kept a
+faithful superset of the live file (identical `hangar config show` output bar the free-text
+note). So the recovery from a lost config is `cp hangar.config.example.yaml hangar.config.yaml`,
+which is what the error message says — because **every `hangar` command now refuses to run
+without that file**: the marker file IS the hangar, and acting without one would mean acting on
+schema defaults while looking like a configured run. Two commands are exempt, both because they
+have to be: `setup`, which writes the file, and `jira hook`, whose `PreToolUse` contract is
+fail-open (a non-zero exit there can block the tool call it exists to accelerate). An *invalid*
+config is a different matter and is reported rather than refused — `config validate` and
+`doctor` exist to diagnose it, and a gate that parsed the file would stop them before they
+could.
 
 Full clones, not `git worktree`: each needs its own `node_modules`, its own dev server, its own
 Storybook and its own Playwright run. That is the whole reason the fleet exists.
@@ -210,11 +225,14 @@ directly, and the CLI's own `npm run lint`, `npm run typecheck` and `npm run for
 | `hangar plans stamp`                | date-prefix the plans in `plans/`, skipping any a live agent is using |
 | `hangar tmp merge`                  | pool every clone's `tmp/` cache in `tmp/`, a symlink per entry back   |
 | `hangar jira hook`                  | `PreToolUse`: serve a cached ticket instead of re-fetching it         |
-| `hangar vscode sync`                | one VS Code setup everywhere, per-clone paths still per clone         |
-| `hangar jetbrains\|zed\|emacs sync` | the same, for whichever other editor this hangar lists                |
+| `hangar ide vscode sync`            | one VS Code setup everywhere, per-clone paths still per clone         |
+| `hangar ide <kind> sync`            | the same for `jetbrains`, `zed` or `emacs`, if this hangar lists one  |
 | `hangar colours sync`               | regenerate the palette-derived artifacts                              |
 | `hangar colours change`             | give one clone another hue, and rebuild everything that names it      |
 | `hangar colours list`               | the palette, painted, and which clone holds each hue                  |
+
+The editor commands live under **`ide`**, aliased **`editor`**, so the top level carries one
+entry for the editors rather than one per editor. `colours` is aliased **`colors`**.
 
 **Read freely; do not integrate.** `list`, `ports`, `status`, `colours list` and a bare `doctor`
 only report, and every `-n` is a dry run — a clone session is welcome to all of them, and
@@ -267,7 +285,7 @@ Four things in that table are decisions rather than gaps:
 
 - **Only the VS Code family needs `rootPathKeys`.** A handful of its settings take an absolute
   path into the checkout and it resolves them against nothing, so those values must differ per
-  clone — which is what makes `vscode sync` a text transform. Everyone else escapes it:
+  clone — which is what makes `ide vscode sync` a text transform. Everyone else escapes it:
   JetBrains has `$PROJECT_DIR$`, Zed resolves from the project root itself. So the config's
   cross-check asks "is there a kind that CONSUMES these keys", not "is an editor configured".
 - **Only the VS Code family needs deduplicating.** It identifies a workspace by its config
@@ -339,7 +357,7 @@ which is the first thing to look at.
 
 **Everything else about this CLI is rationale, and it lives in the `hangar-internals` skill** —
 why `sync` asks Bitbucket for a branch's PR target instead of guessing `master`, how `tmp merge`
-collapses a ticket's many cached names onto one inode, what `vscode sync` rewrites per clone and
+collapses a ticket's many cached names onto one inode, what `ide vscode sync` rewrites per clone and
 what it refuses to write, what `doctor` checks and the two rules for anything generated into a
 clone, the Jira hook's fail-open design, and the two conventions for changing the CLI (a pure
 exported builder for anything a human or an agent reads; derive state at the moment you report it).
@@ -546,10 +564,11 @@ clones — direnv loads the nearest `.envrc` only, and every clone has its own �
 clone repeats the same `PATH_add` in its untracked `.envrc.private`.
 
 `.gitignore` here is load-bearing, not leftover: `clone_*/`, `.env.shared`, `node_modules/`,
-`plans/` and `tmp/` are the only reason the clones, the secrets, the CLI's dependencies, the plan
-archive and the shared scratch directory stay out of the parent repo. Do not remove any of those
-lines. (`clone_*/`, not `clone_0*/`: the old glob stopped
-matching at `clone_10`.)
+`plans/`, `tmp/` and `hangar.config.yaml` are the only reason the clones, the secrets, the CLI's
+dependencies, the plan archive, the shared scratch directory and this machine's own config stay
+out of the parent repo. Do not remove any of those lines. (`clone_*/`, not `clone_0*/`: the old
+glob stopped matching at `clone_10`. And `hangar.schema.json` stays TRACKED — it is generated
+from the zod schema, and both YAML files point at it for editor validation.)
 
 **Do not run project work from here.** `ng`, `jest`, `playwright`, the project's lint and format
 and the project skills all require a clone's root (or its `angular/` subdirectory) as the working

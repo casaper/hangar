@@ -328,7 +328,7 @@ const configPath = (window: unknown): string | undefined => {
  *
  * `declared || inGit`, never `inGit` alone. A purely dynamic test would make the protection
  * conditional on the checked-out branch: a branch that happens not to track `launch.json` would
- * make it writable, and `vscode sync` would then push one branch's copy into a sibling -- the
+ * make it writable, and `ide vscode sync` would then push one branch's copy into a sibling -- the
  * exact failure the declared flag exists to prevent. Git can only ADD protection, which is what
  * catches a file this table calls untracked because it is gitignored HERE while some other
  * project tracks it (`.idea/` is precisely that file).

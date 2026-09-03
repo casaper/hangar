@@ -1,4 +1,7 @@
-import { Argument, Command, Option } from '@commander-js/extra-typings';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { Argument, Command, Option, type CommandUnknownOpts } from '@commander-js/extra-typings';
 import pc from 'picocolors';
 
 import { addClone } from './commands/add-clone.ts';
@@ -19,7 +22,9 @@ import { sync } from './commands/sync.ts';
 import { tmpMerge } from './commands/tmp.ts';
 import { syncEditor } from './commands/vscode.ts';
 import type { EditorKind } from './editor/index.ts';
+import { CONFIG_FILENAME, EXAMPLE_CONFIG_FILENAME } from './config/load.ts';
 import { CliError } from './exec.ts';
+import { fleetRoot, tildify } from './paths.ts';
 import { PALETTE_NAMES } from './palette.ts';
 
 /**
@@ -43,7 +48,58 @@ const program = new Command()
    * carrying HANGAR_ROOT for one hangar while sitting in another would act on the wrong
    * repo's clones.
    */
-  .option('--hangar <path>', 'the hangar root to operate on (default: nearest above cwd)');
+  .option('--hangar <path>', 'the hangar root to operate on (default: nearest above cwd)')
+  .hook('preAction', (_thisCommand, actionCommand) => {
+    requireHangarConfig(commandPath(actionCommand));
+  });
+
+/**
+ * A command's full path, e.g. `ide vscode sync`. Commander gives the leaf; the parents carry
+ * the rest, and the root program's own name is not part of it.
+ */
+const commandPath = (leaf: CommandUnknownOpts): string => {
+  const parts: string[] = [];
+  let cmd: CommandUnknownOpts = leaf;
+  while (cmd.parent !== null) {
+    parts.unshift(cmd.name());
+    cmd = cmd.parent;
+  }
+  return parts.join(' ');
+};
+
+/**
+ * Commands that must run where no `hangar.config.yaml` exists yet.
+ *
+ * `setup` writes the file, so requiring it would be circular. `jira hook` is a Claude Code
+ * `PreToolUse` hook with a FAIL-OPEN contract -- it exits 0 and stays silent when it cannot
+ * help -- and a non-zero exit from a PreToolUse hook can block the tool call it was meant to
+ * accelerate. Neither exemption is a convenience; both are the difference between a clear
+ * error and a broken clone session.
+ */
+const NEEDS_NO_CONFIG: readonly string[] = ['setup', 'jira hook'];
+
+/**
+ * Refuse to do anything in a directory that is not a hangar.
+ *
+ * The marker file IS the hangar -- ports, colours, the forge, the tracker and the editors all
+ * come from it -- so acting without one would mean acting on schema defaults while looking like
+ * a configured run. `hangar.config.yaml` is also untracked by design (it names one machine's
+ * paths and token variables), so a fresh checkout of a hangar repo has none, and this is the
+ * message that says what to do about it.
+ *
+ * EXISTENCE only, deliberately, not validity: `hangar config validate` and `hangar doctor` exist
+ * to report an invalid config, and a gate that parsed it would stop them before they could.
+ */
+const requireHangarConfig = (path: string): void => {
+  if (NEEDS_NO_CONFIG.includes(path)) return;
+  const configPath = join(fleetRoot, CONFIG_FILENAME);
+  if (existsSync(configPath)) return;
+  throw new CliError(
+    `no ${CONFIG_FILENAME} in ${tildify(fleetRoot)}, so this is not a hangar`,
+    `Run \`hangar setup\` to write one, or start from the committed example:\n` +
+      `         cp ${EXAMPLE_CONFIG_FILENAME} ${CONFIG_FILENAME}`,
+  );
+};
 
 program
   .command('list')
@@ -258,7 +314,7 @@ tmp
  * `editor.kinds` is already the single place that says which editors this hangar has, and each
  * command refuses when its editor is not in that list.
  *
- * The VS Code forks share `vscode sync`: Cursor, Windsurf and the rest all read `.vscode/`, so
+ * The VS Code forks share `ide vscode sync`: Cursor, Windsurf and the rest all read `.vscode/`, so
  * there is one set of files for the family rather than one per fork.
  */
 const SYNCABLE: readonly { kind: EditorKind; command: string; what: string; syncs: string }[] = [
@@ -288,8 +344,19 @@ const SYNCABLE: readonly { kind: EditorKind; command: string; what: string; sync
   },
 ];
 
+/*
+ * They live under one `ide` command (aliased `editor`), so `hangar --help` shows one entry for
+ * the editors instead of one per editor -- and adding a fifth does not make the top level
+ * longer. `ide` is the primary name because `editor.kinds` is already the config key: two
+ * spellings of the same idea at the top level would read as two different things.
+ */
+const ide = program
+  .command('ide')
+  .alias('editor')
+  .description("The editors' shared project files: one setup per editor across the fleet");
+
 for (const editor of SYNCABLE) {
-  program
+  ide
     .command(editor.command)
     .description(editor.what)
     .command('sync')
@@ -303,6 +370,9 @@ for (const editor of SYNCABLE) {
 
 const colours = program
   .command('colours')
+  // `colors` too: the code spells it the British way throughout and the flag names follow, but
+  // nobody should have to remember which spelling a CLI chose.
+  .alias('colors')
   .description("The clones' colour identity: the palette, the themes and the shell artifacts");
 
 colours

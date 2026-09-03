@@ -1,6 +1,6 @@
 ---
 name: hangar-internals
-description: Design rationale for the hangar fleet CLI - why sync asks Bitbucket for a branch's PR target rather than guessing master, how tmp merge collapses a ticket's cached names onto one inode, what vscode sync rewrites per clone, doctor's checks, the Jira PreToolUse hook's fail-open rules, and the two conventions for changing the CLI. Load before editing app/src or debugging a sync, tmp merge, plans collect, vscode sync, colours or doctor run.
+description: Design rationale for the hangar fleet CLI - the two config files and the no-config gate, why sync asks Bitbucket for a branch's PR target rather than guessing master, how tmp merge collapses a ticket's cached names onto one inode, what ide vscode sync rewrites per clone, doctor's checks, and the Jira hook's fail-open rules. Load before editing app/src or debugging a sync, tmp merge, plans collect, ide sync, colours or doctor run.
 ---
 
 # `hangar` internals
@@ -50,7 +50,7 @@ Two conventions for changing it, both of which exist because they caught somethi
 | `hangar plans stamp`           | date-prefix the plans in `plans/`, skipping any a live agent is using |
 | `hangar tmp merge`             | pool every clone's `tmp/` cache in `tmp/`, a symlink per entry back   |
 | `hangar jira hook`             | `PreToolUse`: serve a cached ticket instead of re-fetching it         |
-| `hangar vscode sync`           | one VS Code setup everywhere, per-clone paths still per clone         |
+| `hangar ide vscode sync`       | one VS Code setup everywhere, per-clone paths still per clone         |
 | `hangar colours sync`          | regenerate the palette-derived artifacts                              |
 | `hangar colours change`        | give one clone another hue, and rebuild everything that names it      |
 | `hangar colours list`          | the palette, painted, and which clone holds each hue                  |
@@ -158,7 +158,7 @@ Six behaviours are worth knowing before you run them:
   nothing can tell which transcript a running session owns, and resuming the one already open
   puts two Claude Code sessions in one clone.
 
-**`hangar vscode sync` is a text transform, not a copy** — and it is the only editor for which that is true ($PROJECT_DIR$ and project-relative settings spare the others) —, and for two reasons. A handful of
+**`hangar ide vscode sync` is a text transform, not a copy** — and it is the only editor for which that is true ($PROJECT_DIR$ and project-relative settings spare the others) —, and for two reasons. A handful of
 VS Code settings take an **absolute** path into the checkout — `stylelint.stylelintPath`,
 `stylelint.configFile`, `stylelint.configBasedir`, `prettier.prettierPath`, `prettier.configPath`,
 `jestrunner.projectPath`, `coverage-gutters.manualCoverageFilePaths`,
@@ -194,6 +194,51 @@ and `clone_NN/angular/dvb_gn_NN.code-workspace` — because VS Code only offers 
 `*.code-workspace` from the directory you opened, and this repo is opened at both. `doctor` checks
 for both and fills a missing one from its twin; `workspaceContent()` in `clone-config.ts` is only
 the fallback for a clone that has neither.
+
+### The config file is split in two, and one of them is not in git
+
+`hangar.config.yaml` is **gitignored**. It names one machine's paths, ports and token variable
+names, and it is written by `hangar setup` per machine, so tracking it would mean every hangar
+sharing one machine's answers. What is committed is **`hangar.config.example.yaml`**: every key,
+its default, and every alternative that the cross-field checks will not let stand beside it.
+
+Three properties hold that pair together, and each is a decision:
+
+- **The example is a faithful SUPERSET of the live file, and that is checkable.** `hangar config
+  show` on each must differ only in the free-text `_` note. It is the only committed record of
+  how this hangar is configured, so a drifting example is a lost config.
+- **It is not a second marker.** `isHangarRoot` tests `CONFIG_FILENAME` exactly, so the example
+  can sit in a hangar root without being mistaken for one — and `hangar --hangar <dir>` on a
+  copy is how you validate it (nothing loads the example's own filename).
+- **You cannot uncomment two alternatives.** `superRefine` rejects two port roles whose bases
+  are congruent mod `step`, an `install` step naming both `manager` and `command`,
+  `rootPathKeys` with no VS Code-family kind to read them, and a tracker with no `baseUrl`. So
+  the example carries alternatives as COMMENTS beside one live choice.
+
+**The rule for what a live config keeps:** a value that pins state already on disk or already
+running stays written down even when it equals the default — `clones.prefix` and `clones.pad`
+name directories that exist, `ports.step`/`ports.offset` place dev servers that are serving, and
+a future change to a default must not move either. A value that only configures a feature this
+hangar does not use goes — `editor.jetbrains` in a hangar listing only `vscode` configures
+nothing.
+
+### Absence is a gate; invalidity is a report
+
+A `preAction` hook in `cli.ts` refuses **every** command when `hangar.config.yaml` is missing:
+the marker file IS the hangar, and running without one means running on schema defaults while
+looking like a configured run. Two exemptions, both load-bearing rather than convenient —
+`setup`, which writes the file, and **`jira hook`, whose `PreToolUse` contract is fail-open**,
+because a non-zero exit from a PreToolUse hook can block the tool call it exists to accelerate.
+The two `SessionEnd` hooks (`plans collect`, `tmp merge`) are deliberately NOT exempt: a missing
+config there is worth surfacing, and a session ending is the safe moment to surface it.
+
+The gate tests EXISTENCE and never parses. That is what keeps `config validate` and `doctor`
+able to do their jobs: both exist to report an invalid config, and a gate that parsed the file
+would stop them before they could. So the three config readers that are reached outside a
+command's own `loadConfigFile` — `currentHangarId`, `terminalColourSettings`, `terminal`, plus
+`editorConfig` — now catch only the UNPARSEABLE case, where falling back beats refusing (a
+`colours sync` that regenerates with default colouring is better than one that will not run).
+`EditorSelection.fellBack` therefore means exactly one thing now: the config would not parse.
 
 ### VS Code is ranked above the other editors, and the code says so
 

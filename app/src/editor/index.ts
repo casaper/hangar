@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CONFIG_FILENAME, loadConfigFile } from '../config/load.ts';
@@ -85,7 +84,7 @@ export const editors = (): EditorSelection => {
  * One named editor, for the `<kind> sync` commands. No `driver` when it is not configured.
  *
  * Builds ONLY the kind asked for, deliberately -- it used to go through `editors()` and pick from
- * the result, which made `hangar vscode sync` construct every other configured driver first and
+ * the result, which made `hangar ide vscode sync` construct every other configured driver first and
  * so depend on all of them. And no catch here, unlike `editors()`: the developer named this
  * editor, so a driver that cannot be built is the answer to their command rather than a bystander
  * to be stepped over.
@@ -104,18 +103,15 @@ export const editorFor = (kind: EditorKind): { driver?: EditorDriver; fellBack: 
 type EditorConfig = ReturnType<typeof editorSchema.parse>;
 
 const editorConfig = (): { editor: EditorConfig; fellBack: boolean } => {
-  const configPath = join(fleetRoot, CONFIG_FILENAME);
-  if (existsSync(configPath)) {
-    try {
-      return { editor: loadConfigFile(configPath).editor, fellBack: false };
-    } catch {
-      // A config too broken to parse must not stop `open` from working -- but the caller is
-      // told, because the default it gets instead is not inert.
-      return { editor: editorSchema.parse({}), fellBack: true };
-    }
+  try {
+    return { editor: loadConfigFile(join(fleetRoot, CONFIG_FILENAME)).editor, fellBack: false };
+  } catch {
+    // Only an UNPARSEABLE config reaches here: an absent one is refused by the gate in `cli.ts`,
+    // because a hangar is its marker file. A YAML typo elsewhere in the file must still not stop
+    // `open` from opening an editor -- but the caller is told, because the default it gets
+    // instead is not inert.
+    return { editor: editorSchema.parse({}), fellBack: true };
   }
-  // No config at all is not a fallback, it is an unconfigured hangar: the default IS the answer.
-  return { editor: editorSchema.parse({}), fellBack: false };
 };
 
 const driverFor = (kind: EditorKind, editor: EditorConfig): EditorDriver => {

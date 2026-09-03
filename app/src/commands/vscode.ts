@@ -28,7 +28,7 @@ import {
 } from '../editor/vscode.ts';
 
 /**
- * `hangar vscode sync` -- one VS Code setup across the fleet, with the per-clone paths
+ * `hangar ide vscode sync` -- one VS Code setup across the fleet, with the per-clone paths
  * still per clone.
  *
  * The mechanics live in `../vscode.ts`; this file is the report. Each artifact is handled on
@@ -291,7 +291,7 @@ export const editorSync = (driver: EditorDriver, opts: EditorSyncOptions): void 
   }
 };
 
-/** `hangar <kind> sync` -- refuses rather than acting on an editor this hangar is not set up for. */
+/** `hangar ide <kind> sync` -- refuses rather than acting on an editor this hangar is not set up for. */
 export const syncEditor = (kind: EditorKind, opts: EditorSyncOptions): void => {
   const { driver, fellBack } = editorFor(kind);
   if (fellBack) {

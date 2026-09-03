@@ -1,0 +1,451 @@
+# yaml-language-server: $schema=./hangar.schema.json
+$schema: ./hangar.schema.json
+
+# ============================================================================================
+#  hangar.config.example.yaml -- every key, every variant, and why each one exists.
+#
+#  This file is DOCUMENTATION and a STARTING POINT. Hangar never reads it: the marker that makes
+#  a directory a hangar is `hangar.config.yaml` exactly, so this one can sit beside a live config
+#  without being mistaken for it. To use it:
+#
+#      cp hangar.config.example.yaml hangar.config.yaml   # then delete what you do not need
+#      hangar config validate                             # every problem at once, not the first
+#      hangar config show                                 # the same file with every default applied
+#
+#  `hangar.config.yaml` is GITIGNORED and untracked -- it is one machine's setup, and it names
+#  that machine's paths, tokens and ports. So this file is also the only COMMITTED record of how
+#  this hangar is configured, and it is kept a faithful superset of the live one: the values below
+#  are the ones this hangar actually runs, and everything the live file leaves out is here with the
+#  reason it was left out. When the schema changes, this file changes with it.
+#
+#  ## Two things to know before editing
+#
+#  **Every object is strict: an unknown key is an error.** Not ignored -- `orgin_url` would leave
+#  the hangar cloning nothing and say why nowhere. So a typo fails loudly, and a key you delete
+#  falls back to the default printed beside it here.
+#
+#  **You cannot uncomment two alternatives and expect it to validate.** The cross-field checks are
+#  real: two port roles whose bases differ by a multiple of `ports.step` are rejected (their clones
+#  would share ports), an `install` step must name exactly one of `manager` or `command`,
+#  `editor.rootPathKeys` needs a VS Code-family kind in `editor.kinds` to read them, and
+#  `tracker.baseUrl` is required unless `tracker.kind: none`. Alternatives are therefore shown as
+#  COMMENTS beside one live choice -- swap them, do not add them.
+#
+#  ## What to keep in a live config, and what to delete
+#
+#  The rule that decides it: **keep a value that pins state already on disk or already running;
+#  delete one that only configures a feature you do not use.** `clones.prefix` and `clones.pad`
+#  name directories that exist, and `ports.step`/`ports.offset` place dev servers that are
+#  serving -- so they stay written down even though they equal the defaults, because a future
+#  change to a default must not silently move them. `editor.jetbrains` in a hangar that lists only
+#  `vscode` configures nothing and should go.
+#
+#  ## `{token}` placeholders
+#
+#  Several values below are templates. The token set is what the schema declares and what
+#  `hangar setup` writes: `{id}` `{index}` `{index2}` (zero-padded to `clones.pad`) `{port}`
+#  `{secretsFile}` `{baseUrl}` `{key}`. Expansion is still being threaded through the CLI
+#  (the hardcoded equivalents are what run today), so treat these as declared, not yet live.
+# ============================================================================================
+
+# A free-text note. YAML comments do not survive `hangar config show`, so anything that must
+# appear in the effective config goes here instead. Optional; delete it freely.
+_: >-
+  Configuration for one hangar: a directory holding a fleet of full clones of one repo.
+
+# --------------------------------------------------------------------------------------------
+# Identity
+# --------------------------------------------------------------------------------------------
+
+# REQUIRED. 2-24 chars, lowercase, starts with a letter, [a-z0-9_].
+#
+# This namespaces everything the hangar writes OUTSIDE its own root -- `~/.claude/hangar/<id>`,
+# the generated theme filenames, and the shell FUNCTION NAME in the colour table. Hence no
+# dashes: `-` is the separator inside those generated names, and a leading digit is not a legal
+# shell identifier.
+#
+# Never derived from the directory basename, and that is deliberate: `~/work/dvb_gn` and
+# `~/code/dvb_gn` would collide, and the collision lands in shared mutable state where the only
+# symptom is "the other hangar's clones changed colour".
+id: dvb_gn
+
+# How the hangar is titled in output. Optional; falls back to `id`.
+displayName: storefront_ui
+
+# Selects a profile from the tool's `profiles/` directory for the project-specific behaviour
+# config cannot express. `generic` (the default) needs no profile code at all and degrades into
+# behaviour the CLI already has: no PR lookup, so `sync` says its target is a guess.
+profile: storefront-ui
+# profile: generic
+
+# --------------------------------------------------------------------------------------------
+# The clones -- how their directories are named
+# --------------------------------------------------------------------------------------------
+clones:
+  # Directory prefix. Must not end in a digit, or the generated index regex is ambiguous.
+  prefix: clone_
+  # prefix: wt_          # -> wt_01, wt_02
+  # prefix: repo-        # -> repo-01 (a dash is fine HERE; only `id` forbids it)
+
+  # Zero-padding width for the index, 1-6. The generated discovery regex is `\d{pad,}` --
+  # open at the top on purpose, because the old `clone_0[0-9]` globs stopped matching at
+  # clone_10. Pinned even though it equals the default: it names directories that exist.
+  pad: 2
+
+# --------------------------------------------------------------------------------------------
+# The forge -- where clones come from, and where PR/repo links point
+# --------------------------------------------------------------------------------------------
+forge:
+  # Selects a built-in adapter. `none` means no PR lookup and no web links, which makes `sync`
+  # integrate onto `defaultBranch` and say so. Optional.
+  kind: bitbucketCloud
+  # kind: none
+
+  # REQUIRED, and the one field with no sensible default: it is what `add-clone` clones from.
+  originUrl: git@bitbucket.org:acme/storefront_ui.git
+  # originUrl: https://github.com/acme/widgets.git
+
+  # Web base for repo and PR links. The adapter derives it from `originUrl` when absent, so set
+  # it only for a self-hosted forge whose web host differs from its git host.
+  # webBaseUrl: https://bitbucket.org/acme/storefront_ui
+
+  # ABSENT MEANS NO FALLBACK, which is a feature. `sync` asks `origin/HEAD` first; if that is
+  # unset too it ABORTS and asks for `--onto` rather than guessing. Guessing `master` for an
+  # unknown repo is confidently wrong, and it contradicts sync's own rule that a destination
+  # missing from origin aborts -- a rebase onto the wrong base is the expensive thing to undo.
+  defaultBranch: master
+
+  # Which environment variable holds the API token, read from `secrets.file`. Never the token
+  # itself: this file is committed, and that one is mode 600 and outside every clone.
+  tokenEnvKey: BITBUCKET_TOKEN
+
+# --------------------------------------------------------------------------------------------
+# The issue tracker -- ticket links, and the shared ticket cache
+# --------------------------------------------------------------------------------------------
+tracker:
+  # `jira` or `none` (the default). `none` switches off ticket links and the cache hook.
+  kind: jira
+
+  # Required unless `kind: none`.
+  baseUrl: https://acme.atlassian.net
+
+  # Default: "{baseUrl}/browse/{key}". Change it for a tracker with a different URL shape.
+  # issueUrlTemplate: "{baseUrl}/browse/{key}"
+  # issueUrlTemplate: "{baseUrl}/issues/{key}"        # GitHub-style
+
+  # A WHITELIST of issue-key prefixes. Absent means any key-shaped token minus a denylist, so a
+  # branch containing `UTF-8` or `SHA-1` can be read as an issue key; naming the prefixes is the
+  # better fix. `hangar setup` derives this from the repo's own branch names.
+  keyPrefixes: [DN]
+  # keyPrefixes: [PROJ, OPS]
+
+  cache:
+    # How long a fetched ticket is served from the store instead of being re-fetched.
+    # Default 60. `0` disables the freshness window without disabling the store.
+    ttlMinutes: 60
+    # Set this variable in front of a command to bypass the cache for that one run. An env var
+    # and not a flag, because the repo's own sync script dies on an unknown flag.
+    # Default: HANGAR_TRACKER_NO_CACHE.
+    bypassEnvKey: JIRA_SYNC_NO_CACHE
+
+  # Repo-relative paths to the repo's OWN scripts, and deliberately so. The namer is the
+  # tracked, branch-versioned authority on cache filenames, so Hangar ASKS it rather than
+  # reimplementing the naming -- an untracked copy drifts the first time a branch changes a
+  # relation slug. Omit both for a repo with no such scripts; the cache then keys on the plain
+  # issue key.
+  syncScript: .claude/skills/jira-ticket-sync/sync.mjs
+  namerScript: .claude/skills/jira-scope/jira-cache.mjs
+
+# --------------------------------------------------------------------------------------------
+# The repo -- its shape, and what a new clone needs before it can build
+# --------------------------------------------------------------------------------------------
+repo:
+  # Where the app package lives. `''` (the default) means the repo root.
+  appDir: angular
+  # appDir: ''           # a repo whose package.json is at the top
+  # appDir: packages/web  # a monorepo package
+
+  # Fallback union for direnv discovery. `git ls-files -- *.envrc` is tried FIRST and
+  # discovery beats declaration, so this only matters for a repo whose .envrc files are
+  # untracked. Default: ['.'].
+  envrcDirs: ['.', 'angular', 'tests/playwright-regression-tests']
+
+  cloneEnv:
+    # The per-clone dotenv Hangar writes the ports into. Default `.env.local`.
+    file: .env.local
+    # Written as `<key>=<clone path>`. Omit to write no root-path line at all.
+    rootPathEnvKey: PROJECT_GIT_ROOT_PATH
+
+  # Symlinks every clone needs. Empty by default; most repos need none.
+  symlinks:
+    - path: tests/playwright-regression-tests/.env.local
+      # Templated. `{secretsFile}` is the usual target and resolves to `secrets.file`.
+      target: '{secretsFile}'
+      # Default true: a clone whose branch lacks that directory is skipped, not failed.
+      skipIfDirMissing: true
+      # REQUIRED, and not pedantry. Nothing in the filesystem explains a symlink, and this
+      # string is what `add-clone` and `doctor` print -- so the next person reads the reason
+      # instead of deleting the link to see what breaks.
+      why: >-
+        the tracked tests/.env sets USER_READWRITE_PASSWORD= (empty) and direnv loads it
+        AFTER .envrc.private, so this reload is what wins; delete it and Playwright logs in
+        with an empty password
+
+  # What `add-clone` runs to make a fresh clone buildable, in order. `doctor` replays the same
+  # list as checks, which is what stops the two drifting. Empty by default.
+  #
+  # A step names EXACTLY ONE of `manager` (whose canonical command is built in) or `command`
+  # (argv, never a shell string). Nothing here assumes Node -- the built-in managers are:
+  #
+  #   npm      -> npm ci                          maven    -> mvn -q -B dependency:go-offline
+  #   pnpm     -> pnpm install --frozen-lockfile  gradle   -> gradle --quiet dependencies
+  #   yarn     -> yarn install --immutable        bundler  -> bundle install
+  #   bun      -> bun install --frozen-lockfile   pip      -> pip install -r requirements.txt
+  #   deno     -> deno install --frozen           poetry   -> poetry install
+  #   cargo    -> cargo fetch --locked            uv       -> uv sync --frozen
+  #   go       -> go mod download                 composer -> composer install
+  install:
+    - # Clone-relative; defaults to `repo.appDir`.
+      dir: angular
+      manager: npm
+      # Run the step under the Node version this file names (fnm, else nvm).
+      nodeVersionFile: .nvmrc
+      # Default false. True reports a failure and lets the run continue.
+      # optional: false
+    # An explicit command instead of a manager -- the escape hatch for anything not listed:
+    # - dir: .
+    #   command: [make, bootstrap]
+    #   optional: true
+
+  # The repo's OWN port resolver, run INSIDE a clone (where direnv has loaded its dotenv) and
+  # compared against `ports` below. This turns the by-convention agreement between Hangar and a
+  # repo's own port table into a checked one.
+  #
+  # Never run it from the hangar root: there it reports clone_01's fallbacks for EVERY clone and
+  # does not error -- it just answers wrong. Omit for a repo with no port table of its own.
+  portCheckCommand: [node, dev/ports.mjs, --json]
+
+# --------------------------------------------------------------------------------------------
+# Ports -- one set per clone, derived from the index
+# --------------------------------------------------------------------------------------------
+#     port = base + offset + (index - 1) * step
+# --------------------------------------------------------------------------------------------
+ports:
+  # Spacing between clones, 1-10000. Must match across hangars for the offset guarantee below
+  # to hold. Pinned even though it equals the default: it places servers that are running.
+  step: 100
+
+  # This hangar's residue class, `0 <= offset < step`.
+  #
+  # Two hangars with the same step and DIFFERENT offsets produce ports in different classes mod
+  # step, so their clones can never collide for any clone counts -- unlike a reserved block,
+  # which fails silently the moment a hangar outgrows it. `offset: 0` keeps an existing hangar
+  # exactly where it is, which matters because changing a port moves a running dev server out
+  # from under a live session. A second hangar on this machine would use 1, a third 2.
+  offset: 0
+  # offset: 1
+
+  # Ordered; the order is the display order. `roles: []` is legal and means this hangar assigns
+  # no ports -- but the `ports` key itself is required, so "no ports" has to be said out loud.
+  roles:
+    - # lowerCamelCase identifier.
+      id: ng
+      # UPPER_SNAKE env var name, written into `repo.cloneEnv.file`.
+      envKey: NG_DEV_SERVER_PORT
+      # 1024-65535. Two roles whose bases differ by a multiple of `step` are REJECTED: role A of
+      # clone 2 would land on role B of clone 1, and a dev server answering on another role's
+      # port verifies the wrong code without erroring.
+      base: 4200
+      label: Angular dev server
+      # Default "http://localhost:{port}". `null` for a role that has no URL.
+      # url: http://localhost:{port}
+    - id: storybook
+      envKey: STORYBOOK_DEV_SERVER_PORT
+      base: 6006
+      label: Storybook
+      # Declaring the check is what lets the `permissions.allow` matcher be GENERATED and stay
+      # fully anchored. A looser hand-written pattern rewrites the wrong allow entry and leaves
+      # a health check aimed at a SIBLING clone's port.
+      healthCheck:
+        kind: httpCurl        # the only kind
+        timeoutSeconds: 3     # 1-60, default 3
+        # path: /health       # default '' -- appended to the URL
+    - id: playwrightReport
+      envKey: PLAYWRIGHT_REPORT_PORT
+      base: 9323
+      label: Playwright HTML report
+    # A role with no URL and no check -- a backend port an app merely connects to:
+    # - id: api
+    #   envKey: API_PORT
+    #   base: 3000
+    #   label: API server
+    #   url: null
+
+# --------------------------------------------------------------------------------------------
+# The terminal -- which emulator `open` drives, and what the shell hook paints
+# --------------------------------------------------------------------------------------------
+terminal:
+  # `auto` (the default) detects the emulator from the environment, then from what is running.
+  # Set it explicitly when detection has no correct answer available -- a machine with both
+  # iTerm2 and Terminal.app, or both Konsole and GNOME Terminal.
+  #
+  # `none` switches terminal automation off entirely: `open` refuses instead of guessing, and
+  # `sync` ASKS before touching a clone with a live Claude Code session rather than claiming to
+  # have paused it.
+  #
+  # Capabilities differ, and every caller degrades one at a time rather than pretending they are
+  # equivalent:
+  #
+  #   iterm2          tabs, list, tag, type   the reference driver: scriptable per-session user
+  #                                           variables are what make tagging a tab possible
+  #   apple-terminal  tabs, list, type        tag via `custom title`; needs Accessibility
+  #                                           permission, because a new tab can only be made by
+  #                                           sending Cmd-T through System Events
+  #   konsole         tabs; the rest with qdbus
+  #   gnome-terminal  tabs only -- VTE exposes no way to type into a live tab, and the generic
+  #                   POSIX route (TIOCSTI) has been off by default since Linux 6.2, so `sync`
+  #                   reports every session as missed and asks first
+  #
+  # The Linux drivers are written from Konsole's documented D-Bus interface and gnome-terminal's
+  # documented command line and have NOT been exercised against live ones. `hangar doctor` prints
+  # the detected driver and its capabilities.
+  # kind: auto
+  # kind: iterm2
+
+  # What the generated `clone-terminal.sh` paints when a shell moves into a clone. Three
+  # independent layers, because the emulators support wildly different amounts:
+  colour:
+    # The tab or window colour, through whichever escape sequence the emulator understands
+    # (iTerm2's OSC 6 tab colour; everyone else's OSC 11 background). Terminal.app understands
+    # neither, so there `hangar open` paints the tab over AppleScript at creation instead --
+    # which is why a Terminal.app tab opened by hand stays uncoloured.
+    chrome: true
+    # The window/tab title (OSC 0, plus OSC 30 for Konsole's tab label).
+    title: true
+    # The HANGAR_CLONE* variables. THE FLOOR, and the reason this works on terminals nobody has
+    # thought about: a prompt, a starship config or a tmux status line can colour itself from
+    # HANGAR_CLONE_SGR with no emulator co-operation at all.
+    env: true
+    # How much of the hue reaches a BACKGROUND tint, 0-1. Default 0.16. A saturated hue behind
+    # text is unreadable, so the background gets a dark fraction of it -- enough to tell four
+    # windows apart at a glance, not enough to fight the theme. iTerm2 is unaffected: it colours
+    # the tab itself, where full strength is exactly right.
+    tint: 0.16
+
+  # The tabs `hangar open` creates per clone, in order. Order is creation order and nothing
+  # else -- iTerm2's AppleScript interface accepts `move` on a tab and silently does nothing.
+  # Default: one `claude` tab.
+  tabs:
+    - { role: claude, dir: '.', command: claude }
+    - { role: shell, dir: '.' } # omit `command` for a plain shell
+    - { role: app, dir: angular }
+    # - { role: logs, dir: '.', command: 'npm run logs' }
+
+# --------------------------------------------------------------------------------------------
+# Editors -- which ones `open` opens, and whose project files `<kind> sync` keeps in step
+# --------------------------------------------------------------------------------------------
+editor:
+  # A LIST, because a clone can be open in more than one editor at once and they do not
+  # conflict -- their project files are different files. `[]` is legal and means Hangar opens no
+  # editor at all.
+  #
+  # **VS Code is the default and the only kind that has to work; the rest are best effort.**
+  # That rank is enforced, not hoped for: the drivers are built one at a time so a broken
+  # optional editor cannot cost a clone its VS Code window. Only the VS Code path is exercised
+  # on the machine this was written on -- the others are written from each editor's documented
+  # contract, and `hangar doctor` prints a row per configured editor saying whether it can
+  # actually be launched.
+  #
+  #   vscode cursor windsurf vscodium code-insiders positron trae
+  #                 the VS Code family. All read `.vscode/`, so one `vscode sync` covers every
+  #                 fork -- but each has its own window-state file, which is why they are
+  #                 separate kinds rather than one.
+  #   jetbrains     IntelliJ, WebStorm, PyCharm, ... -- one kind, picked with `product` below,
+  #                 because two JetBrains IDEs on one project is unusual
+  #   zed           `.zed/settings.json` and `tasks.json`
+  #   emacs         emacsclient into a running server, else a fresh Emacs; `.dir-locals.el`
+  #   vim           a GUI vim (mvim/gvim) if there is one, else nvim/vim in an EXTRA CLONE TAB
+  #                 -- launching terminal vim as a subprocess would attach it to the tty
+  #                 `hangar` is on and hold the command hostage
+  #   xcode         launch only -- `.xcodeproj` is a directory of generated state, never shared
+  #   eclipse       launch only -- `.project`/`.classpath` are normally tracked, so git owns them
+  kinds: ['vscode']
+  # kinds: ['vscode', 'jetbrains']
+  # kinds: []
+
+  # Only read when the matching kind is in `kinds`. Delete these blocks in a live config that
+  # does not list the kind -- they configure nothing.
+  # jetbrains:
+  #   # idea webstorm pycharm phpstorm goland rubymine clion rider datagrip rustrover aqua
+  #   # android-studio. Default: idea.
+  #   product: webstorm
+  #   # An explicit launcher path, for a Toolbox install that generated no shell scripts.
+  #   # Empty (the default) means "find `<product>` on PATH", with a macOS `open -a` fallback.
+  #   launcher: ''
+  # vim:
+  #   # Empty (the default) prefers a GUI vim (mvim, gvim) and falls back to nvim/vim in a
+  #   # terminal tab -- a GUI window is the better answer whenever there is one.
+  #   command: ''
+  # eclipse:
+  #   # Eclipse ships no launcher script, so this is usually the one inside the app bundle.
+  #   launcher: /Applications/Eclipse.app/Contents/MacOS/eclipse
+
+  # The VS Code workspace file, one per clone. Default '{id}_{index2}.code-workspace'.
+  workspaceFileName: 'dvb_gn_{index2}.code-workspace'
+  # The folder label inside it. Default '{index}: {id}'.
+  workspaceFolderLabel: '{index}: dvb_gn'
+  # Which directories of the clone get a copy. Two here, because VS Code only offers a
+  # `*.code-workspace` from the directory you OPENED, and this repo is opened at both its root
+  # and at `angular/`. Default: ['.'].
+  workspaceDirs: ['.', 'angular']
+
+  # Settings whose value is an ABSOLUTE path into the checkout, mapped to where each one must
+  # point relative to the clone root. This is the whole reason `vscode sync` is a text transform
+  # rather than a copy: VS Code resolves these against nothing, so they must differ per clone
+  # while every other key stays identical.
+  #
+  # DECLARED, never sniffed. A clone-specific setting missing from this table gets copied
+  # verbatim and leaves one clone's tool path aimed at another clone's node_modules -- silent,
+  # exactly like a health check on a sibling's port. So a rendered file that still names another
+  # clone is a hard error, and the fix is to add the key here.
+  #
+  # Only the VS Code family reads these. JetBrains has `$PROJECT_DIR$` and Zed resolves from the
+  # project root, so setting them with no VS Code-family kind in `kinds` is rejected rather than
+  # ignored. Default: {}.
+  rootPathKeys:
+    stylelint.configBasedir: angular
+    stylelint.configFile: angular/stylelint.config.mjs
+    stylelint.stylelintPath: angular/node_modules/stylelint
+    jestrunner.projectPath: angular
+    coverage-gutters.manualCoverageFilePaths: angular/coverage/lcov.info
+    prettier.configPath: angular/.prettierrc
+    prettier.prettierPath: angular/node_modules/prettier
+    storyExplorer.server.internal.npm.dir: angular
+
+# --------------------------------------------------------------------------------------------
+# Secrets
+# --------------------------------------------------------------------------------------------
+secrets:
+  # Hangar-root-relative, so it sits OUTSIDE every clone and no clone can commit it -- which is
+  # also why no `Read(./**/.env*.local)` deny rule reaches it, and it has to be denied by
+  # absolute path in each clone's Claude Code settings. Default `.env.shared`.
+  file: .env.shared
+  # Octal, 3 or 4 digits. `doctor` checks it. Default '600'.
+  mode: '600'
+
+# --------------------------------------------------------------------------------------------
+# Palette -- the per-clone hues
+# --------------------------------------------------------------------------------------------
+# Omit the whole section to use the built-in 16 hues unrotated, which is what this hangar does.
+# palette:
+#   # REPLACES the built-in 16 rather than extending them. Order is load-bearing and
+#   # append-only: clone N takes hues[N-1], so inserting a hue re-colours every clone after it.
+#   hues:
+#     - { name: cyan, hex: '#00ccff' }
+#     - { name: yellow, hex: '#ffcc00' }
+#     - { name: green, hex: '#00cc00' }
+#     - { name: red, hex: '#ff4444' }
+#
+#   # Index rotation, so a second hangar's clone 1 does not get the same hue as this one's.
+#   # Applied on READ, which is what preserves the append-only property above. Default 0.
+#   rotate: 0
