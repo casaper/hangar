@@ -82,18 +82,23 @@ export const editors = (): EditorSelection => {
 };
 
 /**
- * One named editor, for the `<kind> sync` commands. Undefined when it is not configured.
+ * One named editor, for the `<kind> sync` commands. No `driver` when it is not configured.
  *
  * Builds ONLY the kind asked for, deliberately -- it used to go through `editors()` and pick from
  * the result, which made `hangar vscode sync` construct every other configured driver first and
  * so depend on all of them. And no catch here, unlike `editors()`: the developer named this
  * editor, so a driver that cannot be built is the answer to their command rather than a bystander
  * to be stepped over.
+ *
+ * `fellBack` comes back even when the kind was not found, and that is the case it exists for:
+ * on a config too broken to parse, `kinds` is the default `['vscode']`, so `hangar zed sync`
+ * would otherwise be told to add zed to `editor.kinds` -- which it is already in, in a file
+ * nothing here managed to read.
  */
-export const editorFor = (kind: EditorKind): EditorDriver | undefined => {
-  const { editor } = editorConfig();
-  if (!editor.kinds.includes(kind)) return undefined;
-  return driverFor(kind, editor);
+export const editorFor = (kind: EditorKind): { driver?: EditorDriver; fellBack: boolean } => {
+  const { editor, fellBack } = editorConfig();
+  if (!editor.kinds.includes(kind)) return { fellBack };
+  return { driver: driverFor(kind, editor), fellBack };
 };
 
 type EditorConfig = ReturnType<typeof editorSchema.parse>;

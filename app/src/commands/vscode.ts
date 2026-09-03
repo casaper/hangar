@@ -3,6 +3,7 @@ import { relative } from 'node:path';
 
 import pc from 'picocolors';
 
+import { CONFIG_FILENAME } from '../config/load.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import { currentBranch } from '../git.ts';
@@ -292,7 +293,16 @@ export const editorSync = (driver: EditorDriver, opts: EditorSyncOptions): void 
 
 /** `hangar <kind> sync` -- refuses rather than acting on an editor this hangar is not set up for. */
 export const syncEditor = (kind: EditorKind, opts: EditorSyncOptions): void => {
-  const driver = editorFor(kind);
+  const { driver, fellBack } = editorFor(kind);
+  if (fellBack) {
+    // The list this was checked against is the schema default, not the developer's -- so
+    // "add it to editor.kinds" would be the wrong advice, and syncing the default editor
+    // silently would be worse.
+    throw new CliError(
+      `${CONFIG_FILENAME} would not parse, so this hangar's editors are unknown`,
+      '`hangar config validate` says what is wrong.',
+    );
+  }
   if (driver === undefined) {
     throw new CliError(
       `${kind} is not one of this hangar's editors`,
