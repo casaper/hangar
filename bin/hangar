@@ -1,0 +1,18 @@
+#!/bin/sh
+# Entry point for the Hangar clone-fleet orchestrator.
+#
+# There is no build step: Node strips the TypeScript at load time, so this runs the CLI
+# source directly. The hangar root is resolved from this script's own location rather than
+# $PWD, so `hangar` works from inside a clone or anywhere else beneath it.
+#
+# This script is per-hangar and reached only through direnv's `PATH_add bin`, which is what
+# lets several hangars each have a `hangar` of their own: the one on PATH is always the one
+# belonging to the hangar you are standing in. There is deliberately no global install.
+#
+# The CLI's package lives in app/, NOT at the hangar root, and that is load-bearing: the
+# hangar root is an ancestor of every clone, so a package.json here would be the nearest one
+# for every clone file outside the app directory. Its `"type": "module"` once flipped the
+# clones' .claude/hooks/*.js to ESM and broke them all. Keep this directory free of it.
+set -eu
+hangar="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)"
+exec node "$hangar/app/src/cli.ts" "$@"

@@ -1,0 +1,416 @@
+import { z } from 'zod';
+
+/**
+ * The `hangar.config.yaml` schema, and the single authority on it.
+ *
+ * `hangar.schema.json` is GENERATED from this file (`hangar config schema`), so editors get
+ * completion and validation from the same rules the loader enforces. Two hand-maintained
+ * definitions of one shape would drift; one generated from the other cannot.
+ *
+ * Every object is STRICT. An unknown key is an error, not something to ignore, because the
+ * failure mode of a silently dropped key is a setting that appears configured and is not --
+ * `orgin_url` would leave the hangar cloning nothing and say why nowhere. This is a
+ * deliberate departure from `colour-assignments.ts`, whose lenient parsing is right *there*
+ * only because a safe fallback exists (the index formula). Here there is none: a typo'd
+ * origin clones the wrong repo, a wrong offset silently shares a port with another hangar,
+ * and a mistyped envKey writes a dotenv the app ignores.
+ */
+
+/** A path inside a clone or the hangar: relative, and not allowed to escape upward. */
+const containedPath = (what: string) =>
+  z
+    .string()
+    .min(1)
+    .refine((p) => !p.startsWith('/'), { message: `${what} must be relative, not absolute` })
+    .refine((p) => !p.split('/').includes('..'), { message: `${what} must not contain ".."` });
+
+/**
+ * The hangar id. Tighter than it looks, and every constraint is load-bearing.
+ *
+ * It becomes a path segment (`~/.claude/hangar/<id>`), a filename fragment
+ * (`hangar-<id>-01-cyan.json`) and a SHELL FUNCTION NAME (`<id>_clone_rgb`) -- so no dashes,
+ * because `-` is the separator inside the generated names, and a leading digit is not a legal
+ * identifier. It is required and never derived from the directory basename: `~/work/dvb_gn`
+ * and `~/code/dvb_gn` would collide, and the collision lands in shared mutable state where
+ * the symptom is "the other hangar's clones changed colour".
+ */
+const hangarId = z
+  .string()
+  .regex(/^[a-z][a-z0-9_]{1,23}$/, 'must be 2-24 chars, lowercase, start with a letter, [a-z0-9_]');
+
+const clonesSchema = z.strictObject({
+  /** Directory prefix. Must not end in a digit, or the generated index regex is ambiguous. */
+  prefix: z
+    .string()
+    .min(1)
+    .regex(/[^0-9]$/, 'must not end in a digit')
+    .default('clone_'),
+  /**
+   * Zero-padding width for the index. The generated discovery regex is `\d{pad,}` -- open at
+   * the top on purpose: the old `clone_0[0-9]` globs stopped matching at clone_10.
+   */
+  pad: z.int().min(1).max(6).default(2),
+});
+
+const forgeSchema = z.strictObject({
+  /** Selects a built-in adapter. `none` means no PR lookup and no web links. */
+  kind: z.enum(['bitbucketCloud', 'none']).optional(),
+  /** What `add-clone` clones from. The one field with no sensible default. */
+  originUrl: z.string().min(1),
+  /** Web base for repo/PR links. Derived from `originUrl` by the adapter when absent. */
+  webBaseUrl: z.url().optional(),
+  /**
+   * ABSENT MEANS NO FALLBACK. `sync` asks `origin/HEAD` first; if that is unset too it
+   * ABORTS and asks for `--onto` rather than guessing. Guessing `master` for an unknown repo
+   * is confidently wrong, and it contradicts sync's own rule that a destination missing from
+   * origin aborts -- a rebase onto the wrong base is the expensive thing to undo.
+   */
+  defaultBranch: z.string().min(1).optional(),
+  tokenEnvKey: z.string().min(1).optional(),
+});
+
+const trackerSchema = z.strictObject({
+  kind: z.enum(['jira', 'none']).default('none'),
+  baseUrl: z.url().optional(),
+  issueUrlTemplate: z.string().min(1).default('{baseUrl}/browse/{key}'),
+  /**
+   * Issue-key prefixes, e.g. `["DN"]`. Absent means any key-shaped token, minus a denylist.
+   * Present turns the open pattern into a whitelist, which is the better fix.
+   */
+  keyPrefixes: z.array(z.string().regex(/^[A-Z][A-Z0-9]+$/)).optional(),
+  cache: z
+    .strictObject({
+      ttlMinutes: z.int().min(0).default(60),
+      bypassEnvKey: z.string().min(1).default('HANGAR_TRACKER_NO_CACHE'),
+    })
+    .default({ ttlMinutes: 60, bypassEnvKey: 'HANGAR_TRACKER_NO_CACHE' }),
+  /** Repo-relative. The command the PreToolUse hook recognises as a fetch. */
+  syncScript: containedPath('tracker.syncScript').optional(),
+  /**
+   * Repo-relative. The repo's own authority on cache filenames -- Hangar ASKS it and never
+   * reimplements it, because an untracked copy drifts the first time a branch changes a
+   * relation slug.
+   */
+  namerScript: containedPath('tracker.namerScript').optional(),
+});
+
+/**
+ * One install step. Generic on purpose: any package manager, Node or not.
+ *
+ * Give either a known `manager` (whose canonical install command is built in) or an explicit
+ * `command`. Exactly one -- a step that names both would have two answers to "what runs".
+ */
+const installStepSchema = z
+  .strictObject({
+    /** Clone-relative directory to run in. Defaults to `repo.appDir`. */
+    dir: containedPath('repo.install[].dir').optional(),
+    manager: z
+      .enum([
+        'npm',
+        'pnpm',
+        'yarn',
+        'bun',
+        'deno',
+        'maven',
+        'gradle',
+        'bundler',
+        'pip',
+        'poetry',
+        'uv',
+        'cargo',
+        'go',
+        'composer',
+      ])
+      .optional(),
+    /** Overrides `manager`'s canonical command. argv form, never a shell string. */
+    command: z.array(z.string().min(1)).min(1).optional(),
+    /** When present, the step runs under the Node version this file names. */
+    nodeVersionFile: containedPath('repo.install[].nodeVersionFile').optional(),
+    /** A failure is reported and the run continues. */
+    optional: z.boolean().default(false),
+  })
+  .refine((s) => (s.manager === undefined) !== (s.command === undefined), {
+    message: 'give exactly one of `manager` or `command`',
+  });
+
+/** The canonical install command per known manager. `command` overrides these. */
+export const MANAGER_COMMANDS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  npm: ['npm', 'ci'],
+  pnpm: ['pnpm', 'install', '--frozen-lockfile'],
+  yarn: ['yarn', 'install', '--immutable'],
+  bun: ['bun', 'install', '--frozen-lockfile'],
+  deno: ['deno', 'install', '--frozen'],
+  maven: ['mvn', '-q', '-B', 'dependency:go-offline'],
+  gradle: ['gradle', '--quiet', 'dependencies'],
+  bundler: ['bundle', 'install'],
+  pip: ['pip', 'install', '-r', 'requirements.txt'],
+  poetry: ['poetry', 'install'],
+  uv: ['uv', 'sync', '--frozen'],
+  cargo: ['cargo', 'fetch', '--locked'],
+  go: ['go', 'mod', 'download'],
+  composer: ['composer', 'install'],
+});
+
+const symlinkSchema = z.strictObject({
+  path: containedPath('repo.symlinks[].path'),
+  /** Templated. `{secretsFile}` is the usual target. */
+  target: z.string().min(1),
+  skipIfDirMissing: z.boolean().default(true),
+  /**
+   * REQUIRED, and not pedantry: every symlink here exists for a reason nobody can
+   * reconstruct from the filesystem, and this string is what `add-clone` and `doctor` print.
+   */
+  why: z.string().min(1),
+});
+
+const repoSchema = z.strictObject({
+  /** Where the app package lives. `""` means the repo root. */
+  appDir: z.union([z.literal(''), containedPath('repo.appDir')]).default(''),
+  /** Fallback union for direnv discovery; `git ls-files -- *.envrc` is tried first. */
+  envrcDirs: z.array(z.string().min(1)).default(['.']),
+  cloneEnv: z
+    .strictObject({
+      file: z.string().min(1).default('.env.local'),
+      /** Omit to write no root-path line at all. */
+      rootPathEnvKey: z.string().min(1).optional(),
+    })
+    .default({ file: '.env.local' }),
+  symlinks: z.array(symlinkSchema).default([]),
+  install: z.array(installStepSchema).default([]),
+  /**
+   * The repo's own port resolver, run INSIDE a clone so direnv has loaded its dotenv, and
+   * compared against this config. Turns the by-convention agreement between Hangar and a
+   * repo's own port table into a checked one.
+   */
+  portCheckCommand: z.array(z.string().min(1)).min(1).optional(),
+});
+
+const healthCheckSchema = z.strictObject({
+  kind: z.literal('httpCurl'),
+  timeoutSeconds: z.int().min(1).max(60).default(3),
+  path: z.string().default(''),
+});
+
+const portRoleSchema = z.strictObject({
+  id: z.string().regex(/^[a-z][A-Za-z0-9]*$/, 'must be a lowerCamelCase identifier'),
+  envKey: z.string().regex(/^[A-Z][A-Z0-9_]*$/, 'must be an UPPER_SNAKE env var name'),
+  base: z.int().min(1024).max(65535),
+  label: z.string().min(1),
+  /** `null` for a role with no URL. */
+  url: z.string().min(1).nullable().default('http://localhost:{port}'),
+  healthCheck: healthCheckSchema.optional(),
+});
+
+const portsSchema = z.strictObject({
+  /** Spacing between clones. Must match across hangars for the offset guarantee to hold. */
+  step: z.int().min(1).max(10000).default(100),
+  /**
+   * This hangar's residue class, `0 <= offset < step`.
+   *
+   * Two hangars with the same step and different offsets produce ports in different classes
+   * mod step, so their clones can never collide for ANY clone counts -- unlike a reserved
+   * block, which fails silently once a hangar outgrows it. `offset: 0` keeps an existing
+   * hangar exactly where it is, which matters because changing a port moves a running dev
+   * server out from under a live session.
+   */
+  offset: z.int().min(0).default(0),
+  /** Ordered; the order is the display order. Empty means this hangar assigns no ports. */
+  roles: z.array(portRoleSchema),
+});
+
+export const terminalSchema = z.strictObject({
+  /**
+   * Which emulator to drive. `auto` detects it from the environment, then from what is running.
+   *
+   * Set it explicitly when detection picks the wrong one -- a machine with both iTerm2 and
+   * Terminal.app installed, or both Konsole and GNOME Terminal, has no correct answer available
+   * from the filesystem. `none` switches terminal automation off entirely: `hangar open` then
+   * refuses instead of guessing, and `hangar sync` asks before touching a clone that has a live
+   * Claude Code session rather than claiming to have paused it.
+   */
+  kind: z
+    .enum(['auto', 'iterm2', 'apple-terminal', 'konsole', 'gnome-terminal', 'none'])
+    .default('auto'),
+  /**
+   * What the generated shell hook paints when a shell moves into a clone.
+   *
+   * Three independent layers, because the emulators support wildly different amounts and the
+   * bottom one always works:
+   *
+   * - `chrome` -- the tab or window colour, through whichever escape sequence the emulator
+   *   understands (iTerm2's tab colour, everyone else's background colour). Terminal.app
+   *   understands neither, so there it is painted by AppleScript when the tab is created.
+   * - `title` -- the window/tab title, which every terminal since the 1980s supports.
+   * - `env` -- `HANGAR_CLONE*` variables, which need no terminal support at all and are what a
+   *   prompt, a starship config or a tmux status line can colour itself from.
+   */
+  colour: z
+    .strictObject({
+      chrome: z.boolean().default(true),
+      title: z.boolean().default(true),
+      env: z.boolean().default(true),
+      /**
+       * How much of the hue reaches a background tint, 0-1.
+       *
+       * A saturated hue behind text is unreadable, so the background gets a dark fraction of it
+       * -- enough to tell four windows apart at a glance, not enough to fight the theme. iTerm2
+       * is unaffected: it colours the tab itself, where the full hue is exactly right.
+       */
+      tint: z.number().min(0).max(1).default(0.16),
+    })
+    .prefault({}),
+  tabs: z
+    .array(
+      z.strictObject({
+        role: z.string().min(1),
+        dir: containedPath('terminal.tabs[].dir').default('.'),
+        /** Omit for a plain shell. */
+        command: z.string().min(1).optional(),
+      }),
+    )
+    .default([{ role: 'claude', dir: '.', command: 'claude' }]),
+});
+
+const editorSchema = z.strictObject({
+  kind: z.enum(['vscode', 'none']).default('none'),
+  workspaceFileName: z.string().min(1).default('{id}_{index2}.code-workspace'),
+  workspaceFolderLabel: z.string().min(1).default('{index}: {id}'),
+  workspaceDirs: z.array(z.string().min(1)).min(1).default(['.']),
+  /** Settings keys whose value is a clone-relative path needing per-clone rewriting. */
+  rootPathKeys: z.record(z.string(), z.string()).default({}),
+});
+
+const secretsSchema = z.strictObject({
+  /** Hangar-root-relative. Lives outside every clone so no clone can commit it. */
+  file: containedPath('secrets.file').default('.env.shared'),
+  mode: z
+    .string()
+    .regex(/^[0-7]{3,4}$/, 'must be an octal file mode like "600"')
+    .default('600'),
+});
+
+const paletteSchema = z.strictObject({
+  /** REPLACES the built-in 16. Order is load-bearing and append-only. */
+  hues: z
+    .array(
+      z.strictObject({
+        name: z.string().regex(/^[a-z][a-z0-9]*$/),
+        hex: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+      }),
+    )
+    .min(1)
+    .optional(),
+  /**
+   * Index rotation, so a second hangar's clones start on different hues.
+   * Applied on READ, which is what preserves the append-only property of the hue list.
+   */
+  rotate: z.int().min(0).default(0),
+});
+
+export const hangarConfigSchema = z
+  .strictObject({
+    /** Editor completion only; never read at runtime. */
+    $schema: z.string().optional(),
+    /** A free-text note. JSON/YAML have no comments the schema can carry. */
+    _: z.string().optional(),
+
+    id: hangarId,
+    displayName: z.string().min(1).optional(),
+    profile: z.string().min(1).default('generic'),
+
+    clones: clonesSchema.prefault({}),
+    forge: forgeSchema,
+    tracker: trackerSchema.prefault({}),
+    repo: repoSchema.prefault({}),
+    ports: portsSchema,
+    terminal: terminalSchema.prefault({}),
+    editor: editorSchema.prefault({}),
+    secrets: secretsSchema.prefault({}),
+    palette: paletteSchema.prefault({}),
+  })
+  .superRefine((cfg, ctx) => {
+    const { ports, tracker, editor } = cfg;
+
+    // Two hangars can only be guaranteed apart if the offset is inside one step.
+    if (ports.offset >= ports.step) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ports', 'offset'],
+        message: `must be less than ports.step (${String(ports.step)}); ${String(ports.offset)} would overlap the next clone`,
+      });
+    }
+
+    const seenId = new Map<string, number>();
+    const seenEnv = new Map<string, number>();
+    ports.roles.forEach((role, i) => {
+      const priorId = seenId.get(role.id);
+      if (priorId !== undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['ports', 'roles', i, 'id'],
+          message: `duplicate role id "${role.id}" (already used at roles[${String(priorId)}])`,
+        });
+      }
+      seenId.set(role.id, i);
+
+      const priorEnv = seenEnv.get(role.envKey);
+      if (priorEnv !== undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['ports', 'roles', i, 'envKey'],
+          message: `duplicate envKey "${role.envKey}" (already used at roles[${String(priorEnv)}])`,
+        });
+      }
+      seenEnv.set(role.envKey, i);
+    });
+
+    /*
+     * Two roles whose bases are congruent mod step collide ACROSS clones: role A of clone 2
+     * lands on role B of clone 1. Statically checkable, and silent at runtime -- a dev server
+     * answering on another role's port is the kind of thing that verifies the wrong code.
+     */
+    for (let i = 0; i < ports.roles.length; i += 1) {
+      for (let j = i + 1; j < ports.roles.length; j += 1) {
+        const a = ports.roles[i];
+        const b = ports.roles[j];
+        if (a === undefined || b === undefined) continue;
+        if ((a.base - b.base) % ports.step === 0) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['ports', 'roles', j, 'base'],
+            message: `${a.id} (${String(a.base)}) and ${b.id} (${String(b.base)}) differ by a multiple of step ${String(ports.step)}, so their clones would share ports`,
+          });
+        }
+      }
+    }
+
+    if (tracker.kind !== 'none' && tracker.baseUrl === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['tracker', 'baseUrl'],
+        message: `required when tracker.kind is "${tracker.kind}"`,
+      });
+    }
+
+    if (editor.kind === 'none' && Object.keys(editor.rootPathKeys).length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['editor', 'rootPathKeys'],
+        message: 'set but editor.kind is "none", so nothing would ever read them',
+      });
+    }
+  });
+
+export type HangarConfig = z.infer<typeof hangarConfigSchema>;
+export type PortRole = HangarConfig['ports']['roles'][number];
+export type InstallStep = HangarConfig['repo']['install'][number];
+export type SymlinkSpec = HangarConfig['repo']['symlinks'][number];
+
+/** The argv an install step runs, resolving `manager` to its canonical command. */
+export const installCommandFor = (step: InstallStep): readonly string[] => {
+  if (step.command !== undefined) return step.command;
+  const canonical = step.manager === undefined ? undefined : MANAGER_COMMANDS[step.manager];
+  // The schema guarantees exactly one of the two is set, so this is unreachable.
+  if (canonical === undefined) throw new Error(`install step has neither manager nor command`);
+  return canonical;
+};

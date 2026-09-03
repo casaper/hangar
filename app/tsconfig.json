@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+
+    // No build step: Node 24 strips the types at load time, so `bin/hangar` runs src/cli.ts
+    // directly. `erasableSyntaxOnly` is what keeps that honest -- it rejects enums,
+    // parameter properties and namespaces, which the stripper cannot handle.
+    "noEmit": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts", "eslint.config.ts"]
+}

@@ -1,0 +1,194 @@
+import { existsSync, readdirSync } from 'node:fs';
+import { basename, join } from 'node:path';
+
+import { discoverClones } from '../fleet.ts';
+import { run } from '../exec.ts';
+import { atlassianUrl } from '../paths.ts';
+import { PORT_ROLE_ORDER, PORT_ROLES, PORT_STEP } from '../ports.ts';
+
+/**
+ * Best-effort defaults for a hangar that already exists.
+ *
+ * `hangar setup` runs against a live hangar far more often than a bare directory -- this one
+ * has four clones, three dev servers and an origin URL already -- so every answer it can
+ * read off the disk is one the user does not have to retype, and one they cannot get wrong.
+ *
+ * Every field is a SUGGESTION. Nothing here writes, and the caller confirms each value.
+ */
+
+export type DerivedDefaults = {
+  readonly id: string;
+  readonly displayName: string | undefined;
+  readonly originUrl: string | undefined;
+  readonly defaultBranch: string | undefined;
+  readonly appDir: string;
+  readonly secretsFile: string | undefined;
+  readonly hasVscodeWorkspaces: boolean;
+  readonly installManager: string | undefined;
+  readonly trackerBaseUrl: string | undefined;
+  readonly trackerKeyPrefix: string | undefined;
+  readonly cloneCount: number;
+};
+
+/** Sanitise a directory name into a legal hangar id, or give up rather than mangle it. */
+export const idFromDirName = (name: string): string | undefined => {
+  const candidate = name
+    .toLowerCase()
+    .replace(/[\s.-]+/g, '_')
+    .replace(/[^a-z0-9_]/g, '');
+  return /^[a-z][a-z0-9_]{1,23}$/.test(candidate) ? candidate : undefined;
+};
+
+/** `git@host:workspace/repo.git` and `https://host/workspace/repo` both yield `repo`. */
+export const repoNameFromOrigin = (url: string): string | undefined => {
+  const tail = url
+    .replace(/\.git$/, '')
+    .split(/[:/]/)
+    .pop();
+  return tail === undefined || tail === '' ? undefined : tail;
+};
+
+/**
+ * The subdirectory holding the app package, or '' for the repo root.
+ *
+ * A repo whose package lives one level down is common enough (and is this hangar's shape)
+ * that guessing it saves a step; more importantly, `appDir` wrong means `install` runs in the
+ * wrong directory, which is the kind of thing a suggestion-plus-confirmation catches.
+ */
+export const detectAppDir = (clonePath: string): string => {
+  if (existsSync(join(clonePath, 'package.json'))) return '';
+  let entries: string[];
+  try {
+    entries = readdirSync(clonePath, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules')
+      .map((e) => e.name);
+  } catch {
+    return '';
+  }
+  return entries.find((dir) => existsSync(join(clonePath, dir, 'package.json'))) ?? '';
+};
+
+/** Which package manager a checkout's lockfile implies. */
+export const detectManager = (dir: string): string | undefined => {
+  const lockfiles: readonly (readonly [string, string])[] = [
+    ['pnpm-lock.yaml', 'pnpm'],
+    ['package-lock.json', 'npm'],
+    ['yarn.lock', 'yarn'],
+    ['bun.lockb', 'bun'],
+    ['poetry.lock', 'poetry'],
+    ['uv.lock', 'uv'],
+    ['Gemfile.lock', 'bundler'],
+    ['Cargo.lock', 'cargo'],
+    ['go.sum', 'go'],
+    ['composer.lock', 'composer'],
+    ['pom.xml', 'maven'],
+  ];
+  for (const [file, manager] of lockfiles) {
+    if (existsSync(join(dir, file))) return manager;
+  }
+  return undefined;
+};
+
+/**
+ * The issue-key prefix this repo actually uses, read off its branch names.
+ *
+ * Derived rather than asked, and derived rather than hardcoded: the prefix is the one tracker
+ * value a repo demonstrates on every branch it has. Takes the most frequent match so a stray
+ * `UTF-8` or `SHA-1` in one branch name cannot win, and returns undefined when there is no
+ * clear answer rather than inventing one.
+ */
+export const detectKeyPrefix = (clonePath: string): string | undefined => {
+  const res = run('git', ['-C', clonePath, 'branch', '-a', '--format=%(refname:short)']);
+  if (!res.ok) return undefined;
+  const counts = new Map<string, number>();
+  for (const match of res.stdout.matchAll(/(?<![A-Za-z0-9])([A-Z][A-Z0-9]+)-\d+/g)) {
+    const prefix = match[1];
+    if (prefix === undefined) continue;
+    counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
+  }
+  let best: string | undefined;
+  let bestCount = 0;
+  for (const [prefix, count] of counts) {
+    if (count > bestCount) {
+      best = prefix;
+      bestCount = count;
+    }
+  }
+  // One or two hits is noise, not a convention.
+  return bestCount >= 3 ? best : undefined;
+};
+
+export const deriveDefaults = (hangarRoot: string): DerivedDefaults => {
+  const clones = discoverClones();
+  const first = clones[0];
+
+  const originUrl =
+    first === undefined
+      ? undefined
+      : (() => {
+          const res = run('git', ['-C', first.path, 'remote', 'get-url', 'origin']);
+          const url = res.stdout.trim();
+          return res.ok && url !== '' ? url : undefined;
+        })();
+
+  /*
+   * `origin/HEAD` is the repo's own answer, and the only one worth suggesting. Absent, the
+   * suggestion is left EMPTY rather than filled with `master`: a wrong default branch means
+   * `sync` rebases onto the wrong base, which is the expensive thing to undo here.
+   */
+  const defaultBranch =
+    first === undefined
+      ? undefined
+      : (() => {
+          const res = run('git', [
+            '-C',
+            first.path,
+            'symbolic-ref',
+            '--short',
+            'refs/remotes/origin/HEAD',
+          ]);
+          const ref = res.stdout.trim().replace(/^origin\//, '');
+          return res.ok && ref !== '' ? ref : undefined;
+        })();
+
+  const appDir = first === undefined ? '' : detectAppDir(first.path);
+
+  return {
+    id: idFromDirName(basename(hangarRoot)) ?? 'hangar',
+    displayName: originUrl === undefined ? undefined : repoNameFromOrigin(originUrl),
+    originUrl,
+    defaultBranch,
+    appDir,
+    secretsFile: existsSync(join(hangarRoot, '.env.shared')) ? '.env.shared' : undefined,
+    hasVscodeWorkspaces:
+      first !== undefined &&
+      readdirSync(first.path).some((entry) => entry.endsWith('.code-workspace')),
+    installManager:
+      first === undefined
+        ? undefined
+        : detectManager(join(first.path, appDir === '' ? '.' : appDir)),
+    /*
+     * Taken from the constant the config is replacing. This IS the migration: the value
+     * moves out of paths.ts into a file, and nothing about it changes on the way.
+     */
+    trackerBaseUrl: atlassianUrl,
+    trackerKeyPrefix: first === undefined ? undefined : detectKeyPrefix(first.path),
+    cloneCount: clones.length,
+  };
+};
+
+/** The port-role rows this hangar already uses, as config rows. */
+export const derivedPortRoles = (): readonly {
+  id: string;
+  envKey: string;
+  base: number;
+  label: string;
+}[] =>
+  PORT_ROLE_ORDER.map((role) => ({
+    id: role,
+    envKey: PORT_ROLES[role].envKey,
+    base: PORT_ROLES[role].base,
+    label: PORT_ROLES[role].label,
+  }));
+
+export const derivedPortStep = (): number => PORT_STEP;

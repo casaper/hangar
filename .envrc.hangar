@@ -1,0 +1,114 @@
+# Hangar's direnv helpers. Sourced by this hangar's `.envrc` and, once B7 lands, by
+# `.envrc.clone` on behalf of every clone -- one implementation, two consumers, so the
+# hangar root and its clones cannot drift on how Node is resolved.
+#
+# Contains FUNCTIONS ONLY, no side effects: sourcing it must be safe from any directory.
+# Callers invoke the functions themselves, because `source_env` runs this file with the
+# working directory set to ITS OWN directory (direnv's `source_env` does `pushd`), so a
+# relative path here would resolve against the hangar root rather than the caller.
+
+# Put the Node version named by an .nvmrc on PATH, without mutating fnm's shared
+# multishell symlink.
+#
+# `fnm use` would rewrite $FNM_MULTISHELL_PATH, which direnv inherits from the parent
+# shell -- so it changes the Node version of every OTHER shell too. Resolving the
+# version's own bin directory and PATH_add-ing that keeps the change scoped to this
+# directory, which is the whole point of using direnv for it.
+hangar_use_node() {
+    local nvmrc="${1:-.nvmrc}" version node_exec node_bin
+    if [[ ! -f "$nvmrc" ]]; then
+        log_error "hangar: no ${nvmrc} -- cannot resolve a Node version"
+        return 1
+    fi
+    watch_file "$nvmrc"
+    version="$(tr -d '[:space:]' <"$nvmrc")"
+
+    if command -v fnm >/dev/null 2>&1; then
+        # `fnm exec` fails rather than installing, so install on the first miss.
+        if ! node_exec="$(fnm exec --using="$version" -- node -e 'process.stdout.write(process.execPath)' 2>/dev/null)"; then
+            log_status "hangar: installing Node ${version} with fnm"
+            fnm install "$version" >&2 || return 1
+            node_exec="$(fnm exec --using="$version" -- node -e 'process.stdout.write(process.execPath)')" || return 1
+        fi
+    elif [[ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]]; then
+        # nvm is a shell FUNCTION, not a binary -- `command -v nvm` never finds it, which
+        # is why this branch tests for the script instead. (The app repo's own
+        # .envrc.base checks `command -v nvm` and so always falls through to fnm.)
+        # shellcheck disable=SC1091
+        . "${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+        nvm install "$version" >&2 || return 1
+        node_exec="$(nvm which "$version")" || return 1
+    else
+        log_error "hangar requires a Node version manager: install fnm (https://github.com/Schniz/fnm) or nvm (https://github.com/nvm-sh/nvm)"
+        return 1
+    fi
+
+    node_bin="$(dirname "$node_exec")"
+    PATH_add "$node_bin"
+    export HANGAR_NODE_BIN="$node_bin"
+}
+
+# Make `pnpm` resolvable at the version pinned by package.json's `packageManager`.
+#
+# pnpm deliberately is NOT installed into the Node version's own bin directory: on this
+# machine it lived only inside whichever fnm multishell happened to be active, so
+# `command -v pnpm` moved with the Node version and vanished when it changed. corepack
+# ships with Node, reads `packageManager`, and can write its shims anywhere -- so the
+# shims go in a gitignored directory inside the hangar, regenerated whenever the Node
+# version moves (the shims symlink into a specific version's corepack).
+#
+# Expect `pnpm --version` to differ by directory, and do not "fix" it: corepack reads
+# `packageManager` from the NEAREST package.json walking up, so inside app/ it answers
+# 11.7.0 as pinned, while at the hangar root -- which has no package.json, deliberately
+# and permanently -- it answers corepack's own bundled default. app/ is the only place
+# pnpm is ever run, so the pin governs every real invocation.
+hangar_use_pnpm() {
+    local shim_dir="${1:-.hangar/pnpm-bin}"
+    if [[ ! -x "$shim_dir/pnpm" ]] || [[ ! -e "$shim_dir/pnpm" ]]; then
+        mkdir -p "$shim_dir"
+        corepack enable pnpm --install-directory "$shim_dir" >&2 || {
+            log_error "hangar: corepack could not install pnpm shims into ${shim_dir}"
+            return 1
+        }
+    fi
+    PATH_add "$shim_dir"
+}
+
+# Put GNU userland ahead of macOS's BSD versions.
+#
+# Homebrew already ships each formula's un-prefixed GNU names in its own
+# `libexec/gnubin`, so five PATH_adds do what ~45 `gsed`->`sed` symlinks would, stay
+# correct across `brew upgrade`, and leave nothing generated to repair. Verified: the
+# coreutils gnubin alone carries 103 entries and covers every name of interest.
+#
+# Two things to know. `echo`, `printf` and `test` are zsh BUILTINS -- a builtin always
+# beats PATH, so those three keep BSD semantics no matter what is on PATH. And this puts
+# GNU `ls`, `date`, `sort`, `grep` and `sed` ahead of BSD for every command run inside
+# the hangar, the clones' own build tooling included. That is the intent; it is
+# occasionally a behaviour difference rather than purely more features.
+#
+# No-op on Linux, where the userland is already GNU.
+hangar_use_gnu() {
+    [[ "$(uname -s)" == "Darwin" ]] || return 0
+
+    local brew_prefix="${HOMEBREW_PREFIX:-/opt/homebrew}" f
+    if [[ ! -d "$brew_prefix" ]]; then
+        log_error "hangar on macOS requires Homebrew (https://brew.sh)"
+        return 1
+    fi
+
+    # gnubin holds the un-prefixed names; formulae without one are handled below.
+    for f in coreutils grep gnu-sed gnu-tar gawk; do
+        [[ -d "$brew_prefix/opt/$f/libexec/gnubin" ]] && PATH_add "$brew_prefix/opt/$f/libexec/gnubin"
+    done
+
+    # gnu-getopt ships no gnubin -- its bin/ IS the GNU getopt.
+    [[ -d "$brew_prefix/opt/gnu-getopt/bin" ]] && PATH_add "$brew_prefix/opt/gnu-getopt/bin"
+
+    # Homebrew's own bin, and rsync, only if the login shell has not already added them.
+    case ":$PATH:" in *":$brew_prefix/bin:"*) ;; *) PATH_add "$brew_prefix/bin" ;; esac
+    case ":$PATH:" in
+        *":$brew_prefix/opt/rsync/bin:"*) ;;
+        *) [[ -d "$brew_prefix/opt/rsync/bin" ]] && PATH_add "$brew_prefix/opt/rsync/bin" ;;
+    esac
+}

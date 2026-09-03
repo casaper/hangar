@@ -1,0 +1,21 @@
+# pnpm settings for the Hangar CLI package.
+#
+# pnpm 11 no longer reads its own settings from `.npmrc` -- only registry and auth
+# entries are honoured there. Verified: with `save-exact=true` in .npmrc,
+# `pnpm config get save-exact` answers `undefined`. So the security settings live
+# here. The old `.npmrc` is gone: every key in it was a pnpm no-op.
+#
+# These mirror ~/Library/Preferences/pnpm/rc, which already sets them machine-wide.
+# Repeated here so a fresh machine or another developer gets them from the repo.
+
+# Wait 14 days before installing a newly published version -- the supply-chain
+# window in which a compromised release is usually caught and unpublished.
+# pnpm counts MINUTES, unlike npm's `min-release-age` which counts days.
+minimumReleaseAge: 20160
+
+# Never run a dependency's install scripts. This is the single most effective
+# defence against a malicious package, and nothing here needs them.
+ignoreScripts: true
+
+# Pin exact versions on install; the lockfile is not the only record.
+savePrefix: ''
