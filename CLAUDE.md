@@ -41,19 +41,20 @@ There is **no fixed number of clones and no list of them anywhere.** They are wh
 `clone_NN/` directories exist; everything per-clone is a pure function of the index `N`, so
 adding or removing one needs no bookkeeping:
 
-| Derived    | Formula                            | clone_01 / 02 / 03    |
-| ---------- | ---------------------------------- | --------------------- |
-| `ng serve` | `4200 + (N-1) * 100`               | 4200 / 4300 / 4400    |
-| Storybook  | `6006 + (N-1) * 100`               | 6006 / 6106 / 6206    |
-| Playwright | `9323 + (N-1) * 100`               | 9323 / 9423 / 9523    |
-| colour     | `PALETTE[N-1]` in `src/palette.ts` | cyan / yellow / green |
+| Derived    | Formula                            |
+| ---------- | ---------------------------------- |
+| `ng serve` | `4200 + (N-1) * 100`               |
+| Storybook  | `6006 + (N-1) * 100`               |
+| Playwright | `9323 + (N-1) * 100`               |
+| colour     | `PALETTE[N-1]` in `src/palette.ts` |
 
 The colour is the one derived value a human can override — `orch-util colours change <clone>
 <colour>` — and the only thing in the fleet that needs a file to remember it. See below.
 
-**Run `orch-util list` and `orch-util ports`; do not treat the numbers above as a roster.** Clones come
-and go, and index gaps are normal — `remove-clone` never renumbers, because renumbering would
-move another clone's ports out from under a running server.
+**Run `orch-util list` and `orch-util ports`; never infer which clones exist from the formula
+above, or from anything else in this file.** Clones come and go, and index gaps are normal —
+`remove-clone` never renumbers, because renumbering would move another clone's ports out from
+under a running server.
 
 A clone is **addressed by its index**: `orch-util status 2`, `sync 3`, `open 1` — `clone_02` and
 `02` are accepted too. `orch-util` prints the index for the same reason (`● 1`), and keeps the
@@ -699,7 +700,7 @@ Claude Code loads `CLAUDE.md` (then `CLAUDE.local.md`) from the working director
 directory above it**, ordered filesystem-root-down. There is no repository boundary. So this file
 is prepended to the context of every session started in a clone, whether or not anyone asked for
 it — which is exactly why it stays short and says nothing about the application. Every line here
-is paid for three times over and cannot be branch-specific.
+is paid for once per clone and cannot be branch-specific.
 
 Note that this ancestor walk is specific to `CLAUDE.md`. It does **not** apply to
 `.claude/settings.json`, `.mcp.json`, hooks, agents or skills — those come from the clone's own
