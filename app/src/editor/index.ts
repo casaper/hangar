@@ -28,27 +28,46 @@ export { isTracked } from './vscode.ts';
  * Never throws. A config that will not parse falls back to the schema's default -- VS Code --
  * rather than refusing to open an editor over a YAML typo; `doctor` is what reports the config.
  */
-export const editors = (): EditorDriver[] => {
-  const editor = editorConfig();
-  return editor.kinds.map((kind) => driverFor(kind, editor));
+export type EditorSelection = {
+  readonly drivers: readonly EditorDriver[];
+  /**
+   * True when the config exists but would not parse, so these drivers come from the SCHEMA
+   * DEFAULT rather than from anything the developer wrote.
+   *
+   * Worth carrying rather than swallowing, and this is where it differs from the terminal seam.
+   * There the fallback is inert -- a `none` driver does nothing. Here the default is
+   * `kinds: ['vscode']`, so a hangar that configured `kinds: ['zed']` and then broke an
+   * unrelated line of its YAML would get VS Code opened at it and no hint as to why. Falling
+   * back is still right (refusing to open an editor over a typo elsewhere is worse), but it has
+   * to be said out loud, which `open` does.
+   */
+  readonly fellBack: boolean;
+};
+
+export const editors = (): EditorSelection => {
+  const { editor, fellBack } = editorConfig();
+  return { drivers: editor.kinds.map((kind) => driverFor(kind, editor)), fellBack };
 };
 
 /** One named editor, for the `<kind> sync` commands. Undefined when it is not configured. */
 export const editorFor = (kind: EditorKind): EditorDriver | undefined =>
-  editors().find((driver) => driver.kind === kind);
+  editors().drivers.find((driver) => driver.kind === kind);
 
 type EditorConfig = ReturnType<typeof editorSchema.parse>;
 
-const editorConfig = (): EditorConfig => {
+const editorConfig = (): { editor: EditorConfig; fellBack: boolean } => {
   const configPath = join(fleetRoot, CONFIG_FILENAME);
   if (existsSync(configPath)) {
     try {
-      return loadConfigFile(configPath).editor;
+      return { editor: loadConfigFile(configPath).editor, fellBack: false };
     } catch {
-      // fall through to the schema defaults
+      // A config too broken to parse must not stop `open` from working -- but the caller is
+      // told, because the default it gets instead is not inert.
+      return { editor: editorSchema.parse({}), fellBack: true };
     }
   }
-  return editorSchema.parse({});
+  // No config at all is not a fallback, it is an unconfigured hangar: the default IS the answer.
+  return { editor: editorSchema.parse({}), fellBack: false };
 };
 
 const driverFor = (kind: EditorKind, editor: EditorConfig): EditorDriver => {

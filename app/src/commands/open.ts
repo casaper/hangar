@@ -188,7 +188,9 @@ const openTabs = (
   }
 
   if (foreignWindowFor(clone, windows, fleet) !== undefined) {
-    warn(`${clone.name} already has tabs in a ${driver.label} window this CLI did not open`);
+    warn(
+      `${clone.name} already has tabs in an existing ${driver.label} window this CLI did not open`,
+    );
     note('Opened by hand, or before the one-window change — it may hold a live Claude session.');
     if (!confirm(`Open a second set of tabs for ${clone.name} anyway?`)) {
       note(`left ${clone.name}'s tabs alone — close that window, then open ${clone.index} again`);
@@ -285,7 +287,16 @@ const SOURCE_LABEL = {
 export const open = (refs: readonly string[], opts: OpenOptions): void => {
   const clones = resolveClones(refs, opts);
   const { driver, source } = terminal();
-  const drivers = opts.editor === false ? [] : editors();
+  const editorChoice = editors();
+  const drivers = opts.editor === false ? [] : editorChoice.drivers;
+  if (drivers.length > 0 && editorChoice.fellBack) {
+    warn(
+      `hangar.config.yaml would not parse — opening ${drivers.map((d) => d.label).join(', ')} by default`,
+    );
+    note(
+      '`hangar config validate` says what is wrong; the editors you configured are not being used.',
+    );
+  }
 
   if (!driver.capabilities.openTabs) {
     throw new CliError(`no terminal to open tabs in — ${driver.label}`, driver.unavailableHint());

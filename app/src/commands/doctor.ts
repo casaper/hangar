@@ -641,7 +641,7 @@ export const doctor = (ref: string | undefined, opts: DoctorOptions): void => {
    * was never installed into PATH, and a JetBrains Toolbox that generated no shell scripts, both
    * mean `hangar open` silently opens no editor at all.
    */
-  for (const editor of editors()) {
+  for (const editor of editors().drivers) {
     if (editor.isAvailable()) {
       const can = [
         editor.capabilities.focusExisting ? 'focus-existing' : 'self-deduping',
