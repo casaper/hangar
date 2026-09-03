@@ -10,10 +10,12 @@ import {
   requireClone,
   type Clone,
 } from '../fleet.ts';
+import { tintedHex } from '../palette.ts';
 import { tildify } from '../paths.ts';
 import {
   pickFleetWindow,
   terminal,
+  terminalColourSettings,
   type TerminalDriver,
   type TerminalTabSpec,
   type TerminalWindow,
@@ -61,7 +63,13 @@ export type OpenOptions = {
 const tabsFor = (clone: Clone, opts: OpenOptions, driver: TerminalDriver): TerminalTabSpec[] => {
   // Only handed to drivers that paint at creation, so a tab that will be coloured by the shell
   // hook a moment later does not also get an AppleScript colour it did not ask for.
-  const colour = driver.capabilities.paintOnCreate ? clone.colour.main : undefined;
+  //
+  // TINTED, not the hue: the surface a `paintOnCreate` driver paints is the terminal BACKGROUND
+  // -- the same one the hook's OSC 11 covers elsewhere -- so the full hue would put `#00ccff`
+  // behind the text. Same `terminal.colour.tint` factor the hook uses.
+  const colour = driver.capabilities.paintOnCreate
+    ? tintedHex(clone.colour, terminalColourSettings().tint)
+    : undefined;
   return [
     {
       cwd: clone.path,

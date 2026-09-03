@@ -154,6 +154,20 @@ export const colourFor = (index: number, override?: string): CloneColour => {
   };
 };
 
+/**
+ * The hue darkened to a fraction of itself, for use as a BACKGROUND.
+ *
+ * A saturated hue behind text is unreadable, so anything that paints the terminal's background
+ * -- the shell hook's OSC 11, and Terminal.app's AppleScript `background color` -- uses a dark
+ * fraction of the hue instead. iTerm2 needs none of this: OSC 6 colours the tab in the tab bar,
+ * where full strength is exactly what is wanted.
+ *
+ * The hook computes the same thing in shell arithmetic from the same `terminal.colour.tint`
+ * value, so the two agree by construction rather than by anyone remembering to keep them equal.
+ */
+export const tintedHex = (colour: CloneColour, fraction: number): string =>
+  toHex(scale(parseHex(colour.main), fraction));
+
 const ESC = '\u001b';
 
 /** Wrap text in the clone's hue for terminal output (24-bit colour). */

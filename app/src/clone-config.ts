@@ -288,6 +288,29 @@ export type SettingsJson = {
  * It lives in the untracked per-clone settings, not in the repo: it names an absolute path in
  * this fleet, and a teammate with a single checkout has nothing to collect into.
  */
+/**
+ * Does this hook command invoke THIS hangar's CLI with this subcommand, whatever the binary was
+ * called at the time it was written?
+ *
+ * The distinction matters exactly once per rename, and it is invisible when it goes wrong. The
+ * `with*Hook` writers replace by filtering the existing matchers, so a filter keyed on the
+ * CURRENT command string leaves a matcher naming yesterday's binary untouched and appends a
+ * second one beside it. Every clone then carries a dead hook -- and the Jira one is designed to
+ * fail open, so it would never say a word about the path not existing.
+ *
+ * Matching on the hangar's own `bin/` directory plus the subcommand is what survives a rename:
+ * `bin/orch-util jira hook` and `bin/hangar jira hook` are both recognised as ours, while
+ * another hangar's identically-named binary is not (different directory) and a different
+ * subcommand is not either.
+ *
+ * The `has*Hook` readers deliberately do NOT use this: they answer "is the hook `doctor` would
+ * write already in place", so a stale one has to read as a PROBLEM rather than as fine.
+ */
+const HANGAR_BIN_DIR = join(fleetRoot, 'bin');
+
+const invokesOurCli = (command: string | undefined, subcommand: string): boolean =>
+  command !== undefined && command.startsWith(`${HANGAR_BIN_DIR}/`) && command.includes(subcommand);
+
 export const PLANS_HOOK_COMMAND = `${join(fleetRoot, 'bin', 'hangar')} plans collect --quiet`;
 
 const plansHook = (): HookMatcher => ({
@@ -326,7 +349,7 @@ export const hasJiraHook = (settings: SettingsJson | undefined): boolean =>
 export const withJiraHook = (settings: SettingsJson): SettingsJson => {
   const hooks = { ...settings.hooks };
   const existing = (hooks['PreToolUse'] ?? []).filter(
-    (matcher) => !matcher.hooks.some((hook) => hook.command === JIRA_HOOK_COMMAND),
+    (matcher) => !matcher.hooks.some((hook) => invokesOurCli(hook.command, 'jira hook')),
   );
   hooks['PreToolUse'] = [...existing, jiraHookMatcher()];
   return { ...settings, hooks };
@@ -364,7 +387,7 @@ export const hasTmpHook = (settings: SettingsJson | undefined): boolean =>
 export const withTmpHook = (settings: SettingsJson): SettingsJson => {
   const hooks = { ...settings.hooks };
   const existing = (hooks['SessionEnd'] ?? []).filter(
-    (matcher) => !matcher.hooks.some((hook) => hook.command === TMP_HOOK_COMMAND),
+    (matcher) => !matcher.hooks.some((hook) => invokesOurCli(hook.command, 'tmp merge')),
   );
   hooks['SessionEnd'] = [...existing, tmpHook()];
   return { ...settings, hooks };
@@ -381,7 +404,7 @@ export const withPlansHook = (settings: SettingsJson): SettingsJson => {
   const { plansDirectory: _dropped, ...rest } = settings;
   const hooks = { ...rest.hooks };
   const existing = (hooks['SessionEnd'] ?? []).filter(
-    (matcher) => !matcher.hooks.some((hook) => hook.command === PLANS_HOOK_COMMAND),
+    (matcher) => !matcher.hooks.some((hook) => invokesOurCli(hook.command, 'plans collect')),
   );
   hooks['SessionEnd'] = [...existing, plansHook()];
   return { ...rest, hooks };
