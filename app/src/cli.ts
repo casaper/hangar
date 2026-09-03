@@ -17,7 +17,8 @@ import { status } from './commands/status.ts';
 import { teachRg } from './commands/teach-rg.ts';
 import { sync } from './commands/sync.ts';
 import { tmpMerge } from './commands/tmp.ts';
-import { vscodeSync } from './commands/vscode.ts';
+import { syncEditor } from './commands/vscode.ts';
+import type { EditorKind } from './editor/index.ts';
 import { CliError } from './exec.ts';
 import { PALETTE_NAMES } from './palette.ts';
 
@@ -87,12 +88,12 @@ program
 program
   .command('open')
   .description(
-    'Open clones in one shared terminal window: three tabs each (Claude, shell, angular/) plus the VS Code workspace',
+    'Open clones in one shared terminal window: three tabs each (Claude, shell, angular/) plus every configured editor',
   )
   .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2) — opened in ascending order')
   .option('--all', 'open every clone in the fleet')
   .option('--no-claude', 'do not start Claude Code in the first tab')
-  .option('--no-code', 'do not open the VS Code workspace')
+  .option('--no-editor', 'do not open the clone in any configured editor')
   .action((clones: string[], options) => {
     open(clones, options);
   });
@@ -247,18 +248,58 @@ tmp
     tmpMerge(options);
   });
 
-const vscode = program
-  .command('vscode')
-  .description('The VS Code setup: settings, MCP servers, launchers and the workspace files');
+/*
+ * One `<editor> sync` subcommand per editor that has files worth keeping in step, registered in
+ * a loop rather than written out four times.
+ *
+ * Deliberately NOT one unified `editor sync`. The editors keep different files in step, only the
+ * VS Code family's path can be exercised on the machine this was built on, and folding them
+ * together would rename the command that works to make room for three that are unverified.
+ * `editor.kinds` is already the single place that says which editors this hangar has, and each
+ * command refuses when its editor is not in that list.
+ *
+ * The VS Code forks share `vscode sync`: Cursor, Windsurf and the rest all read `.vscode/`, so
+ * there is one set of files for the family rather than one per fork.
+ */
+const SYNCABLE: readonly { kind: EditorKind; command: string; what: string; syncs: string }[] = [
+  {
+    kind: 'vscode',
+    command: 'vscode',
+    what: 'The VS Code setup: settings, MCP servers, launchers and the workspace files',
+    syncs: 'Give every clone the same VS Code setup, keeping its per-clone paths its own',
+  },
+  {
+    kind: 'jetbrains',
+    command: 'jetbrains',
+    what: "The JetBrains setup: the shareable half of each clone's .idea/ directory",
+    syncs: 'Give every clone the same JetBrains project settings (never workspace.xml)',
+  },
+  {
+    kind: 'zed',
+    command: 'zed',
+    what: "The Zed setup: each clone's .zed/ settings and tasks",
+    syncs: 'Give every clone the same Zed settings and tasks',
+  },
+  {
+    kind: 'emacs',
+    command: 'emacs',
+    what: "The Emacs setup: each clone's .dir-locals.el",
+    syncs: 'Give every clone the same .dir-locals.el',
+  },
+];
 
-vscode
-  .command('sync')
-  .description('Give every clone the same VS Code setup, keeping its per-clone paths its own')
-  .option('--from <clone>', 'sync from this clone instead of the most recently edited file')
-  .option('-n, --dry-run', 'show what would change, write nothing')
-  .action((options) => {
-    vscodeSync(options);
-  });
+for (const editor of SYNCABLE) {
+  program
+    .command(editor.command)
+    .description(editor.what)
+    .command('sync')
+    .description(editor.syncs)
+    .option('--from <clone>', 'sync from this clone instead of the most recently edited file')
+    .option('-n, --dry-run', 'show what would change, write nothing')
+    .action((options) => {
+      syncEditor(editor.kind, options);
+    });
+}
 
 const colours = program
   .command('colours')

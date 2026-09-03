@@ -195,25 +195,26 @@ which is where you usually are. There is no build step: Node strips the types an
 directly, and the CLI's own `npm run lint`, `npm run typecheck` and `npm run format` run **from
 `app/`** (they cover the CLI, not the app).
 
-| Command                        | What it does                                                           |
-| ------------------------------ | ---------------------------------------------------------------------- |
-| `hangar list`                  | every clone, its branch and last commit                                |
-| `hangar ports [--json]`        | the whole port map, and any `.env.local` that disagrees with it        |
-| `hangar status <clone>\|--all` | branch, sync vs origin, Jira link, PR link, ports, servers, sessions   |
-| `hangar sync <clone>\|--all`   | stash, fetch, rebase-or-merge onto its PR's target branch, restore     |
-| `hangar open <clone>\|--all`   | each clone's three tabs in one terminal window + its VS Code workspace |
-| `hangar resume [clone]`        | pick one of a clone's past Claude Code sessions and resume it          |
-| `hangar add-clone`             | create the next clone and wire it in completely                        |
-| `hangar remove-clone <clone>`  | detach it (`--delete` also removes the directory, guarded)             |
-| `hangar doctor [--fix]`        | verify/repair every untracked per-clone artifact                       |
-| `hangar plans collect`         | gather every clone's finished plans into the shared `plans/`           |
-| `hangar plans stamp`           | date-prefix the plans in `plans/`, skipping any a live agent is using  |
-| `hangar tmp merge`             | pool every clone's `tmp/` cache in `tmp/`, a symlink per entry back    |
-| `hangar jira hook`             | `PreToolUse`: serve a cached ticket instead of re-fetching it          |
-| `hangar vscode sync`           | one VS Code setup everywhere, per-clone paths still per clone          |
-| `hangar colours sync`          | regenerate the palette-derived artifacts                               |
-| `hangar colours change`        | give one clone another hue, and rebuild everything that names it       |
-| `hangar colours list`          | the palette, painted, and which clone holds each hue                   |
+| Command                             | What it does                                                          |
+| ----------------------------------- | --------------------------------------------------------------------- |
+| `hangar list`                       | every clone, its branch and last commit                               |
+| `hangar ports [--json]`             | the whole port map, and any `.env.local` that disagrees with it       |
+| `hangar status <clone>\|--all`      | branch, sync vs origin, Jira link, PR link, ports, servers, sessions  |
+| `hangar sync <clone>\|--all`        | stash, fetch, rebase-or-merge onto its PR's target branch, restore    |
+| `hangar open <clone>\|--all`        | each clone's tabs in one terminal window + every configured editor    |
+| `hangar resume [clone]`             | pick one of a clone's past Claude Code sessions and resume it         |
+| `hangar add-clone`                  | create the next clone and wire it in completely                       |
+| `hangar remove-clone <clone>`       | detach it (`--delete` also removes the directory, guarded)            |
+| `hangar doctor [--fix]`             | verify/repair every untracked per-clone artifact                      |
+| `hangar plans collect`              | gather every clone's finished plans into the shared `plans/`          |
+| `hangar plans stamp`                | date-prefix the plans in `plans/`, skipping any a live agent is using |
+| `hangar tmp merge`                  | pool every clone's `tmp/` cache in `tmp/`, a symlink per entry back   |
+| `hangar jira hook`                  | `PreToolUse`: serve a cached ticket instead of re-fetching it         |
+| `hangar vscode sync`                | one VS Code setup everywhere, per-clone paths still per clone         |
+| `hangar jetbrains\|zed\|emacs sync` | the same, for whichever other editor this hangar lists                |
+| `hangar colours sync`               | regenerate the palette-derived artifacts                              |
+| `hangar colours change`             | give one clone another hue, and rebuild everything that names it      |
+| `hangar colours list`               | the palette, painted, and which clone holds each hue                  |
 
 **Read freely; do not integrate.** `list`, `ports`, `status`, `colours list` and a bare `doctor`
 only report, and every `-n` is a dry run — a clone session is welcome to all of them, and
@@ -236,6 +237,57 @@ pause exists to prevent. **That resolver takes one to three minutes and streams 
 tool call; let it run, and do not resolve the same files by hand while it is working.** If the
 closing line never comes, or describes a tree that does not match what you find, tell the user
 rather than resuming.
+
+### Which editors it opens
+
+`editor.kinds` in `hangar.config.yaml` is a **list**, because a clone can be open in more than one
+editor at once — their project files are different files. `hangar open` opens every one of them;
+`hangar <kind> sync` keeps one editor's shareable project files in step. VS Code is the default.
+
+| kind                                                                      | launch                                              | Hangar syncs                       |
+| ------------------------------------------------------------------------- | --------------------------------------------------- | ---------------------------------- |
+| `vscode` `cursor` `windsurf` `vscodium` `code-insiders` `positron` `trae` | the workspace copy it already has open              | `.vscode/*` + the workspace pair   |
+| `jetbrains` (`product:` idea, webstorm, pycharm, …)                       | the clone directory                                 | the shareable half of `.idea/`     |
+| `zed`                                                                     | the clone directory                                 | `.zed/settings.json`, `tasks.json` |
+| `emacs`                                                                   | `emacsclient -n`, else fresh `emacs`                | `.dir-locals.el`                   |
+| `vim`                                                                     | `mvim`/`gvim --remote-silent`, else **a clone tab** | nothing                            |
+| `xcode` `eclipse`                                                         | the clone directory                                 | nothing                            |
+
+Four things in that table are decisions rather than gaps:
+
+- **Only the VS Code family needs `rootPathKeys`.** A handful of its settings take an absolute
+  path into the checkout and it resolves them against nothing, so those values must differ per
+  clone — which is what makes `vscode sync` a text transform. Everyone else escapes it:
+  JetBrains has `$PROJECT_DIR$`, Zed resolves from the project root itself. So the config's
+  cross-check asks "is there a kind that CONSUMES these keys", not "is an editor configured".
+- **Only the VS Code family needs deduplicating.** It identifies a workspace by its config
+  file's URI, so a clone's two byte-identical `*.code-workspace` twins are two different
+  workspaces to it and it has to be handed the copy it already has open. Every other editor here
+  keys on the project DIRECTORY and focuses its own window; `focusExisting: false` means "the
+  editor handles it", not "expect duplicates". **A fork has its own window-state file**
+  (`Cursor`, `Windsurf`, `Code - Insiders`, …) — reading the wrong one answers about another
+  application's windows.
+- **`vim` may not be a window at all.** With `mvim` or `gvim` it behaves like any other editor.
+  With only `nvim`/`vim` it gets **an extra terminal tab in the clone**, built alongside the
+  other three so it lands in the fleet window in clone order. Launching terminal vim as a
+  subprocess would attach it to the tty `hangar` itself is on and hold the command hostage.
+- **`xcode` and `eclipse` are launch-only, deliberately.** Xcode's `.xcodeproj` is a directory of
+  generated state — copying it imports another checkout's index rather than a setting. Eclipse's
+  `.project`/`.classpath` are normally tracked, so the sync engine refuses them anyway, and its
+  per-user state lives in the `-data` workspace, which Hangar puts in the gitignored
+  `.hangar/eclipse/<clone>` — outside every clone, one per clone.
+
+**Trackedness is a floor, never a verdict.** `launch.json` and `tasks.json` are declared tracked
+and are compared, never written, with no flag to force it — they are versioned per branch, so the
+newest copy is not the right one. Git can only ADD to that: any artifact a clone turns out to
+track is protected too, which is what catches `.idea/` (gitignored in this repo, tracked in
+plenty of others). Never the reverse — a purely dynamic test would make the protection depend on
+which branch happens to be checked out.
+
+Of these, **only the VS Code path is exercised**: nothing else is installed on this machine. Each
+driver header says so, and `hangar doctor` prints a row per configured editor with whether it can
+actually be launched — a `code` command never installed into PATH and a Toolbox that generated no
+shell scripts both mean `hangar open` silently opens no editor at all.
 
 ### Which terminal it drives
 

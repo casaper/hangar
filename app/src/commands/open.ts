@@ -1,8 +1,7 @@
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { workspacePath } from '../clone-config.ts';
-import { CliError, run } from '../exec.ts';
+import { editors, type EditorDriver } from '../editor/index.ts';
+import { CliError } from '../exec.ts';
 import {
   CLONE_DIR_RE,
   discoverClones,
@@ -21,7 +20,6 @@ import {
   type TerminalWindow,
 } from '../terminal/index.ts';
 import { confirm, note, ok, warn } from '../ui.ts';
-import { openWorkspaceFile } from '../vscode.ts';
 
 /**
  * `hangar open <clone>…` -- the clones' whole working set in one command.
@@ -55,12 +53,26 @@ import { openWorkspaceFile } from '../vscode.ts';
  * `assumedWindow` -- so `open --all` does not scatter four windows across the desktop.
  */
 export type OpenOptions = {
-  code?: boolean | undefined;
+  /**
+   * `--no-editor`, not `--no-code`: with a list of editors the flag means "open none of them",
+   * and a JetBrains-only hangar controlled by a flag called `code` reads as a bug in the help.
+   */
+  editor?: boolean | undefined;
   claude?: boolean | undefined;
   all?: boolean | undefined;
 };
 
-const tabsFor = (clone: Clone, opts: OpenOptions, driver: TerminalDriver): TerminalTabSpec[] => {
+/**
+ * The tabs a clone gets. Exported and pure: what lands in a tab is what the developer sees, and
+ * this repo's convention is that anything producing text for a human gets a builder that can be
+ * printed side by side without opening a terminal to find out.
+ */
+export const tabsFor = (
+  clone: Clone,
+  opts: OpenOptions,
+  driver: TerminalDriver,
+  editorDrivers: readonly EditorDriver[],
+): TerminalTabSpec[] => {
   // Only handed to drivers that paint at creation, so a tab that will be coloured by the shell
   // hook a moment later does not also get an AppleScript colour it did not ask for.
   //
@@ -80,6 +92,19 @@ const tabsFor = (clone: Clone, opts: OpenOptions, driver: TerminalDriver): Termi
     },
     { cwd: clone.path, clone: clone.name, role: 'shell', colour },
     { cwd: join(clone.path, 'angular'), clone: clone.name, role: 'angular', colour },
+    // An editor that lives INSIDE a terminal gets a tab rather than a window: terminal vim has
+    // no window to hand a path to. The tab is built here, with the others, so it lands in the
+    // fleet window in clone order -- the editor driver could not manage that, since it knows
+    // nothing about which window is the fleet's. See `EditorCapabilities.inTerminalTab`.
+    ...editorDrivers
+      .filter((editor) => editor.capabilities.inTerminalTab === true)
+      .map((editor) => ({
+        cwd: clone.path,
+        command: editor.terminalCommand,
+        clone: clone.name,
+        role: editor.kind,
+        colour,
+      })),
   ];
 };
 
@@ -135,9 +160,10 @@ const openTabs = (
   clone: Clone,
   opts: OpenOptions,
   assumed: TerminalWindow | undefined,
+  editorDrivers: readonly EditorDriver[],
 ): TerminalWindow | undefined => {
   if (!driver.capabilities.inspect) {
-    const res = driver.openTabs(tabsFor(clone, opts, driver), assumed);
+    const res = driver.openTabs(tabsFor(clone, opts, driver, editorDrivers), assumed);
     if (res === undefined) {
       warn(`${driver.label} refused to open tabs for ${clone.name}`);
       return assumed;
@@ -170,7 +196,7 @@ const openTabs = (
     }
   }
 
-  const res = driver.openTabs(tabsFor(clone, opts, driver), fleet);
+  const res = driver.openTabs(tabsFor(clone, opts, driver, editorDrivers), fleet);
   if (res === undefined) {
     warn(`${driver.label} refused the request — no tabs opened for ${clone.name}`);
     return undefined;
@@ -181,29 +207,46 @@ const openTabs = (
 };
 
 /**
- * Hand the clone's workspace to VS Code, reusing the window that already has it open.
+ * Open the clone in every editor this hangar is configured for.
  *
- * The path matters twice over. The workspace file lives at the CLONE ROOT, so
- * `code *.code-workspace` from `angular/` would match nothing -- hence the full path. And the
- * clone carries that file twice, at the root and in `angular/`; VS Code treats the two copies as
- * two different workspaces, so `openWorkspaceFile` asks it which copy it is already showing and
- * that exact path is what gets passed, which is what makes VS Code focus the existing window
- * instead of opening a second one on identical content.
+ * Every one, not the first that works: two editors can both have the same clone open, because
+ * their project files are different files, and a developer who listed both meant both.
+ *
+ * How much each driver has to be helped differs, and the drivers own that. VS Code is handed the
+ * exact workspace-file copy it already has open, because it counts the clone's two byte-identical
+ * twins as two different workspaces and would otherwise open a second window on identical
+ * content. JetBrains is handed the clone DIRECTORY and dedupes itself, which is why it reports
+ * `reused: false` and there is nothing to say about it either way.
  */
-const openWorkspace = (clone: Clone): void => {
-  const alreadyOpen = openWorkspaceFile(clone);
-  const workspace = alreadyOpen ?? workspacePath(clone);
-  if (!existsSync(workspace)) {
-    warn(`no workspace file at ${workspace} — run \`hangar doctor --fix\` to create it`);
-    return;
+const openEditors = (clone: Clone, drivers: readonly EditorDriver[]): void => {
+  for (const driver of drivers) {
+    // Already opened as one of the clone's terminal tabs, above -- not a window to launch.
+    if (driver.capabilities.inTerminalTab === true) continue;
+    if (!driver.capabilities.launch) {
+      warn(`${driver.label} cannot be opened by Hangar`);
+      note(driver.unavailableHint());
+      continue;
+    }
+    if (!driver.isAvailable()) {
+      warn(`${driver.label} is not available — ${clone.name} not opened in it`);
+      note(driver.unavailableHint());
+      continue;
+    }
+    const res = driver.launch(clone);
+    if (res === undefined) {
+      warn(`${driver.label} would not open ${clone.name}`);
+      note(driver.unavailableHint());
+      continue;
+    }
+    if (res.note !== undefined) {
+      warn(`${driver.label}: ${res.note}`);
+      continue;
+    }
+    const what = res.target.split('/').pop() ?? res.target;
+    if (res.reused)
+      ok(`reusing ${driver.label}'s window for ${clone.name} — ${tildify(res.target)}`);
+    else ok(`opened ${what} in ${driver.label}`);
   }
-  const res = run('code', [workspace]);
-  if (!res.ok) {
-    warn(`could not launch VS Code: ${res.stderr.trim() || 'is the `code` command installed?'}`);
-    return;
-  }
-  if (alreadyOpen === undefined) ok(`opened ${workspace.split('/').pop() ?? workspace} in VS Code`);
-  else ok(`reusing VS Code's window for ${clone.name} — ${tildify(alreadyOpen)}`);
 };
 
 /**
@@ -242,6 +285,7 @@ const SOURCE_LABEL = {
 export const open = (refs: readonly string[], opts: OpenOptions): void => {
   const clones = resolveClones(refs, opts);
   const { driver, source } = terminal();
+  const drivers = opts.editor === false ? [] : editors();
 
   if (!driver.capabilities.openTabs) {
     throw new CliError(`no terminal to open tabs in — ${driver.label}`, driver.unavailableHint());
@@ -258,8 +302,8 @@ export const open = (refs: readonly string[], opts: OpenOptions): void => {
 
   let assumed: TerminalWindow | undefined;
   for (const clone of clones) {
-    assumed = openTabs(driver, clone, opts, assumed) ?? assumed;
-    if (opts.code !== false) openWorkspace(clone);
+    assumed = openTabs(driver, clone, opts, assumed, drivers) ?? assumed;
+    if (opts.editor !== false) openEditors(clone, drivers);
     note(
       `ports: ng ${clone.ports.ng} · storybook ${clone.ports.storybook} · playwright ${clone.ports.playwrightReport}`,
     );

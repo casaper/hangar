@@ -54,6 +54,7 @@ import {
   colourAssignments,
   colourAssignmentsLabel,
 } from '../colour-assignments.ts';
+import { editors } from '../editor/index.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import { applyArtifact } from '../generate/index.ts';
@@ -631,6 +632,27 @@ export const doctor = (ref: string | undefined, opts: DoctorOptions): void => {
     }
   }
   reportShellHook();
+
+  /*
+   * The editors, and whether each one can actually be launched.
+   *
+   * Reported rather than repaired, like the terminal: which IDE is installed is a fact about the
+   * machine. Worth a row because the failure is quiet in both directions -- a `code` command that
+   * was never installed into PATH, and a JetBrains Toolbox that generated no shell scripts, both
+   * mean `hangar open` silently opens no editor at all.
+   */
+  for (const editor of editors()) {
+    if (editor.isAvailable()) {
+      const can = [
+        editor.capabilities.focusExisting ? 'focus-existing' : 'self-deduping',
+        editor.capabilities.rewritesRootPaths ? 'per-clone paths' : '$PROJECT_DIR$',
+      ];
+      ok(`${'editor'.padEnd(22)} ${pc.dim(`${editor.label} — ${can.join(', ')}`)}`);
+    } else {
+      warn(`${editor.label} cannot be launched`);
+      note(editor.unavailableHint());
+    }
+  }
 
   const strays = strayPidFilesInStore();
   if (strays.length > 0) {

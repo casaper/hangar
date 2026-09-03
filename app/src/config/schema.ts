@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { EDITOR_KINDS, JETBRAINS_PRODUCT_NAMES, KINDS_USING_ROOT_PATHS } from '../editor/kinds.ts';
+
 /**
  * The `hangar.config.yaml` schema, and the single authority on it.
  *
@@ -271,8 +273,43 @@ export const terminalSchema = z.strictObject({
     .default([{ role: 'claude', dir: '.', command: 'claude' }]),
 });
 
-const editorSchema = z.strictObject({
-  kind: z.enum(['vscode', 'none']).default('none'),
+export const editorSchema = z.strictObject({
+  /**
+   * Which editors `hangar open` opens a clone in, and which ones `<kind> sync` keeps in step.
+   *
+   * A LIST, not one choice: a developer may well keep a clone open in VS Code and in a JetBrains
+   * IDE at once, and the two do not conflict -- their project files are different files. An
+   * empty list is legal and means Hangar opens no editor at all.
+   *
+   * VS Code is the default because it is the editor this fleet is set up for and the one whose
+   * per-clone workspace files `doctor` already maintains.
+   */
+  kinds: z.array(z.enum(EDITOR_KINDS)).default(['vscode']),
+  jetbrains: z
+    .strictObject({
+      product: z.enum(JETBRAINS_PRODUCT_NAMES).default('idea'),
+      /**
+       * An explicit launcher path, for a Toolbox install that generated no shell scripts.
+       * Empty means "find `<product>` on PATH", with a macOS `open -a` fallback.
+       */
+      launcher: z.string().default(''),
+    })
+    .prefault({}),
+  vim: z
+    .strictObject({
+      /**
+       * Which vim. Empty prefers a GUI one (`mvim`, `gvim`) and falls back to `nvim`/`vim` in a
+       * terminal tab -- a GUI window is the better answer whenever there is one.
+       */
+      command: z.string().default(''),
+    })
+    .prefault({}),
+  eclipse: z
+    .strictObject({
+      /** Eclipse ships no launcher script, so this is usually the one inside the app bundle. */
+      launcher: z.string().default(''),
+    })
+    .prefault({}),
   workspaceFileName: z.string().min(1).default('{id}_{index2}.code-workspace'),
   workspaceFolderLabel: z.string().min(1).default('{index}: {id}'),
   workspaceDirs: z.array(z.string().min(1)).min(1).default(['.']),
@@ -392,11 +429,20 @@ export const hangarConfigSchema = z
       });
     }
 
-    if (editor.kind === 'none' && Object.keys(editor.rootPathKeys).length > 0) {
+    // "No kind that CONSUMES these keys", not "no editor configured": `$PROJECT_DIR$` makes
+    // JetBrains project files clone-portable, so `rootPathKeys` is exactly as inert in a
+    // JetBrains-only hangar as in one with no editor -- and silently ignoring them is the same
+    // bug either way.
+    if (
+      Object.keys(editor.rootPathKeys).length > 0 &&
+      !editor.kinds.some((kind) => KINDS_USING_ROOT_PATHS.includes(kind))
+    ) {
+      const listed =
+        editor.kinds.length === 0 ? 'no editor is configured' : editor.kinds.join(', ');
       ctx.addIssue({
         code: 'custom',
         path: ['editor', 'rootPathKeys'],
-        message: 'set but editor.kind is "none", so nothing would ever read them',
+        message: `set, but nothing would ever read them (${listed}); only ${KINDS_USING_ROOT_PATHS.join(', ')} rewrites absolute paths`,
       });
     }
   });

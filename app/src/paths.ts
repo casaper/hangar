@@ -21,18 +21,14 @@ export const claudeDir = join(home, '.claude');
 export const themesDir = join(claudeDir, 'themes');
 
 /**
- * VS Code's own window state -- which workspace each window has open. Written by VS Code as
- * windows come and go, so it is LAST KNOWN rather than live; see `openWorkspaceFile`.
+ * A VS Code-family editor's window state -- which workspace each window has open. Written by the
+ * editor as windows come and go, so it is LAST KNOWN rather than live; see `openWorkspaceFile`.
+ *
+ * Takes the directory name because every fork has its own: `Code`, `Cursor`, `Windsurf`,
+ * `Code - Insiders`. Reading the wrong one answers about a different application's windows.
  */
-export const vscodeWindowState = join(
-  home,
-  'Library',
-  'Application Support',
-  'Code',
-  'User',
-  'globalStorage',
-  'storage.json',
-);
+export const vscodeWindowState = (stateDir = 'Code'): string =>
+  join(home, 'Library', 'Application Support', stateDir, 'User', 'globalStorage', 'storage.json');
 
 /** Claude Code's session transcripts, one directory per working directory a session started in. */
 export const projectsDir = join(claudeDir, 'projects');

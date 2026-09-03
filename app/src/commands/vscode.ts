@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { relative } from 'node:path';
 
 import pc from 'picocolors';
@@ -8,6 +9,13 @@ import { currentBranch } from '../git.ts';
 import { tildify } from '../paths.ts';
 import { cloneLabel, heading, note, ok, table, warn } from '../ui.ts';
 import {
+  editorFor,
+  isTracked,
+  type EditorArtifact,
+  type EditorDriver,
+  type EditorKind,
+} from '../editor/index.ts';
+import {
   changedKeys,
   foreignClonePaths,
   pickSource,
@@ -15,10 +23,8 @@ import {
   render,
   templatize,
   writeCopy,
-  VSCODE_ARTIFACTS,
   type CopyState,
-  type VscodeArtifact,
-} from '../vscode.ts';
+} from '../editor/vscode.ts';
 
 /**
  * `hangar vscode sync` -- one VS Code setup across the fleet, with the per-clone paths
@@ -29,7 +35,7 @@ import {
  * they drift independently: `settings.json` may be newest in one clone while `mcp.json` exists
  * in only two.
  */
-export type VscodeSyncOptions = {
+export type EditorSyncOptions = {
   from?: string | undefined;
   dryRun?: boolean | undefined;
 };
@@ -60,7 +66,7 @@ type Result = { changed: number; blocked: boolean; drifted: string[] };
 
 const nothing = (): Result => ({ changed: 0, blocked: false, drifted: [] });
 
-const readCopies = (artifact: VscodeArtifact, clones: readonly Clone[]): CopyState[] =>
+const readCopies = (artifact: EditorArtifact, clones: readonly Clone[]): CopyState[] =>
   clones.flatMap((clone) => artifact.copies(clone).map((path) => readCopy(clone, path)));
 
 /**
@@ -73,9 +79,39 @@ const readCopies = (artifact: VscodeArtifact, clones: readonly Clone[]): CopySta
  * branch-specific guidance out of a clone. Drift here is git's to resolve, and the branch is
  * printed because that is almost always the explanation.
  */
-const compareTracked = (artifact: VscodeArtifact, clones: readonly Clone[]): Result => {
+/**
+ * Is this artifact off-limits, taking the declared flag as a floor and letting git only ADD?
+ *
+ * Asked of every copy in every clone, and ANY yes wins. That is the conservative direction and
+ * the only safe one: an artifact one clone tracks is versioned per branch for the whole fleet,
+ * so writing it anywhere would import one branch's content into another's checkout. The declared
+ * flag alone would miss a file that is gitignored in this repo and tracked in someone else's --
+ * `.idea/` is exactly that -- and git alone would make the protection depend on which branch
+ * happens to be checked out, which is worse than not having it.
+ */
+const trackedAnywhere = (
+  artifact: EditorArtifact,
+  clones: readonly Clone[],
+): { tracked: boolean; byGit: Clone | undefined } => {
+  if (artifact.tracked) return { tracked: true, byGit: undefined };
+  const byGit = clones.find((clone) =>
+    artifact.copies(clone).some((path) => isTracked(artifact, clone, path)),
+  );
+  return { tracked: byGit !== undefined, byGit };
+};
+
+const compareTracked = (
+  artifact: EditorArtifact,
+  clones: readonly Clone[],
+  byGit: Clone | undefined,
+): Result => {
   heading(artifact.id);
   note('tracked by git — compared only; git is what syncs it, per branch');
+  if (byGit !== undefined) {
+    // Worth saying out loud: this artifact's table calls it untracked, and it is only protected
+    // because a clone turned out to track it. That is a fact about the repo, not about Hangar.
+    note(`not in the declared table — ${byGit.name} tracks it, so no clone is written`);
+  }
 
   const copies = readCopies(artifact, clones).filter((c) => c.text !== undefined);
   if (copies.length === 0) {
@@ -109,9 +145,9 @@ const compareTracked = (artifact: VscodeArtifact, clones: readonly Clone[]): Res
 
 /** An untracked artifact: templated from one clone's copy and rendered into every clone. */
 const syncUntracked = (
-  artifact: VscodeArtifact,
+  artifact: EditorArtifact,
   clones: readonly Clone[],
-  opts: VscodeSyncOptions,
+  opts: EditorSyncOptions,
 ): Result => {
   const copies = readCopies(artifact, clones);
   const from = opts.from === undefined ? undefined : requireClone(opts.from);
@@ -198,17 +234,30 @@ const syncUntracked = (
   return { changed, blocked, drifted: [] };
 };
 
-export const vscodeSync = (opts: VscodeSyncOptions): void => {
+/**
+ * The engine, for whichever editor was asked for.
+ *
+ * One implementation serves both editors with no branch in it, and that falls out of the config
+ * rather than being arranged: JetBrains artifacts declare no `rootKeys`, which makes
+ * `templatize`/`render` an identity transform, so "copy it everywhere" is just the degenerate
+ * case of "template it and render it per clone".
+ */
+export const editorSync = (driver: EditorDriver, opts: EditorSyncOptions): void => {
   const clones = discoverClones();
   if (clones.length === 0) throw new CliError('no clones in the fleet');
 
   let changed = 0;
   let blocked = false;
+  let present = 0;
   const drifted: string[] = [];
-  for (const artifact of VSCODE_ARTIFACTS) {
-    const result = artifact.tracked
-      ? compareTracked(artifact, clones)
+  for (const artifact of driver.artifacts) {
+    const { tracked, byGit } = trackedAnywhere(artifact, clones);
+    const result = tracked
+      ? compareTracked(artifact, clones, byGit)
       : syncUntracked(artifact, clones, opts);
+    if (clones.some((clone) => artifact.copies(clone).some((path) => existsSync(path)))) {
+      present += 1;
+    }
     changed += result.changed;
     blocked = blocked || result.blocked;
     drifted.push(...result.drifted);
@@ -218,11 +267,20 @@ export const vscodeSync = (opts: VscodeSyncOptions): void => {
   if (blocked) {
     throw new CliError(
       'a rendered file still points into another clone',
-      'A clone-specific setting is missing from SETTINGS_ROOT_KEYS in app/src/vscode.ts.\n' +
+      'A clone-specific setting is missing from SETTINGS_ROOT_KEYS in app/src/editor/vscode.ts.\n' +
         '       Add it there (key -> path relative to the clone root) and run this again.',
     );
   }
-  if (changed === 0) ok('every clone has the same untracked VS Code setup');
+  // Distinct from "nothing changed": an editor nobody has opened a clone in yet has no files at
+  // all, and reporting that as "in sync" would hide the reason there is nothing to do.
+  if (present === 0) {
+    warn(`no clone has any ${driver.label} project files yet — nothing to sync`);
+    note(
+      `Open a clone in ${driver.label} once; it writes them itself, and Hangar never invents them.`,
+    );
+    return;
+  }
+  if (changed === 0) ok(`every clone has the same untracked ${driver.label} setup`);
   else if (opts.dryRun === true) warn(`${changed} file(s) would change — rerun without --dry-run`);
   else ok(`${changed} file(s) updated`);
 
@@ -230,4 +288,22 @@ export const vscodeSync = (opts: VscodeSyncOptions): void => {
     warn(`${drifted.join(' and ')} differ between clones — resolve with git, not this command`);
     note('they are versioned per branch, so the newest copy is not automatically the right one');
   }
+};
+
+/** `hangar <kind> sync` -- refuses rather than acting on an editor this hangar is not set up for. */
+export const syncEditor = (kind: EditorKind, opts: EditorSyncOptions): void => {
+  const driver = editorFor(kind);
+  if (driver === undefined) {
+    throw new CliError(
+      `${kind} is not one of this hangar's editors`,
+      'Add it to `editor.kinds` in hangar.config.yaml.',
+    );
+  }
+  if (!driver.capabilities.syncArtifacts) {
+    throw new CliError(
+      `${driver.label} has nothing Hangar can sync`,
+      'Its project files are either generated state or tracked by git — see the driver header for which.',
+    );
+  }
+  editorSync(driver, opts);
 };

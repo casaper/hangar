@@ -438,13 +438,80 @@
       "default": {},
       "type": "object",
       "properties": {
-        "kind": {
-          "default": "none",
-          "type": "string",
-          "enum": [
-            "vscode",
-            "none"
-          ]
+        "kinds": {
+          "default": [
+            "vscode"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "vscode",
+              "cursor",
+              "windsurf",
+              "vscodium",
+              "code-insiders",
+              "positron",
+              "trae",
+              "jetbrains",
+              "zed",
+              "emacs",
+              "vim",
+              "xcode",
+              "eclipse"
+            ]
+          }
+        },
+        "jetbrains": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "product": {
+              "default": "idea",
+              "type": "string",
+              "enum": [
+                "idea",
+                "webstorm",
+                "pycharm",
+                "phpstorm",
+                "goland",
+                "rubymine",
+                "clion",
+                "rider",
+                "datagrip",
+                "rustrover",
+                "aqua",
+                "android-studio"
+              ]
+            },
+            "launcher": {
+              "default": "",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "vim": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "command": {
+              "default": "",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "eclipse": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "launcher": {
+              "default": "",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
         },
         "workspaceFileName": {
           "default": "{id}_{index2}.code-workspace",

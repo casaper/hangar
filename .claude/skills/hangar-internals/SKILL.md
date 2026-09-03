@@ -41,7 +41,7 @@ Two conventions for changing it, both of which exist because they caught somethi
 | `hangar ports [--json]`        | the whole port map, and any `.env.local` that disagrees with it       |
 | `hangar status <clone>\|--all` | branch, sync vs origin, Jira link, PR link, ports, servers, sessions  |
 | `hangar sync <clone>\|--all`   | stash, fetch, rebase-or-merge onto its PR's target branch, restore    |
-| `hangar open <clone>\|--all`   | each clone's three tabs in one iTerm2 window + its VS Code workspace  |
+| `hangar open <clone>\|--all`   | each clone's tabs in one terminal window + every configured editor    |
 | `hangar resume [clone]`        | pick one of a clone's past Claude Code sessions and resume it         |
 | `hangar add-clone`             | create the next clone and wire it in completely                       |
 | `hangar remove-clone <clone>`  | detach it (`--delete` also removes the directory, guarded)            |
@@ -158,7 +158,7 @@ Six behaviours are worth knowing before you run them:
   nothing can tell which transcript a running session owns, and resuming the one already open
   puts two Claude Code sessions in one clone.
 
-**`hangar vscode sync` is a text transform, not a copy**, and for two reasons. A handful of
+**`hangar vscode sync` is a text transform, not a copy** — and it is the only editor for which that is true ($PROJECT_DIR$ and project-relative settings spare the others) —, and for two reasons. A handful of
 VS Code settings take an **absolute** path into the checkout — `stylelint.stylelintPath`,
 `stylelint.configFile`, `stylelint.configBasedir`, `prettier.prettierPath`, `prettier.configPath`,
 `jestrunner.projectPath`, `coverage-gutters.manualCoverageFilePaths`,

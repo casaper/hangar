@@ -1,11 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { workspaceAngularPath, workspacePath } from './clone-config.ts';
-import { CliError } from './exec.ts';
-import type { Clone } from './fleet.ts';
-import { fleetRoot, vscodeWindowState } from './paths.ts';
+import { workspaceAngularPath, workspacePath } from '../clone-config.ts';
+import { CliError, run } from '../exec.ts';
+import type { Clone } from '../fleet.ts';
+import { git } from '../git.ts';
+import { fleetRoot, vscodeWindowState } from '../paths.ts';
+import { VSCODE_FAMILY, type VscodeFork } from './kinds.ts';
+import type { EditorArtifact, EditorDriver, LaunchResult } from './types.ts';
 
 /**
  * The VS Code side of a clone: `.vscode/*` plus the two `*.code-workspace` copies.
@@ -56,25 +59,9 @@ const SETTINGS_ROOT_KEYS: Readonly<Record<string, string>> = {
 /** A workspace file names the clone root itself, as the one folder it opens. */
 const WORKSPACE_ROOT_KEYS: Readonly<Record<string, string>> = { path: '' };
 
-export type VscodeArtifact = {
-  readonly id: string;
-  /**
-   * Whether git already versions this file. A tracked file is NOT ours to write: it belongs
-   * to whatever branch the clone has checked out, and rewriting it dirties that branch and
-   * can end up committed. Compared and reported, written only with `--include-tracked`.
-   */
-  readonly tracked: boolean;
-  /** Every copy of this file in a clone. They are byte-identical; the first is canonical. */
-  readonly copies: (clone: Clone) => readonly string[];
-  /** Setting key -> the path, relative to the clone root, its absolute value must point at. */
-  readonly rootKeys: Readonly<Record<string, string>>;
-  /** Whether the file carries the `"<index>: dvb_gn"` workspace folder label. */
-  readonly indexLabel: boolean;
-};
-
 const vscodeFile = (clone: Clone, name: string): string => join(clone.path, '.vscode', name);
 
-export const VSCODE_ARTIFACTS: readonly VscodeArtifact[] = [
+export const VSCODE_ARTIFACTS: readonly EditorArtifact[] = [
   {
     id: '.vscode/settings.json',
     tracked: false,
@@ -147,7 +134,7 @@ export type Templatized = {
  * two directories that no longer exist. Rendering therefore repairs those paths as a side
  * effect of syncing, and is idempotent afterwards.
  */
-export const templatize = (artifact: VscodeArtifact, text: string, clone: Clone): Templatized => {
+export const templatize = (artifact: EditorArtifact, text: string, clone: Clone): Templatized => {
   const roots = new Map<string, string[]>();
   const nonconforming: string[] = [];
 
@@ -295,10 +282,10 @@ export const writeCopy = (path: string, text: string): void => {
  * an unreadable or unfamiliar file just means "no opinion", and the caller falls back to the
  * root copy.
  */
-export const openWorkspaceFile = (clone: Clone): string | undefined => {
+export const openWorkspaceFile = (clone: Clone, stateDir = 'Code'): string | undefined => {
   let state: unknown;
   try {
-    state = JSON.parse(readFileSync(vscodeWindowState, 'utf8'));
+    state = JSON.parse(readFileSync(vscodeWindowState(stateDir), 'utf8'));
   } catch {
     return undefined;
   }
@@ -334,4 +321,97 @@ const configPath = (window: unknown): string | undefined => {
   } catch {
     return undefined;
   }
+};
+
+/**
+ * Whether git versions this copy, taking the DECLARED flag as a floor.
+ *
+ * `declared || inGit`, never `inGit` alone. A purely dynamic test would make the protection
+ * conditional on the checked-out branch: a branch that happens not to track `launch.json` would
+ * make it writable, and `vscode sync` would then push one branch's copy into a sibling -- the
+ * exact failure the declared flag exists to prevent. Git can only ADD protection, which is what
+ * catches a file this table calls untracked because it is gitignored HERE while some other
+ * project tracks it (`.idea/` is precisely that file).
+ *
+ * `git ls-files --error-unmatch` is the question asked of the index rather than of `.gitignore`,
+ * so a file that is merely ignored does not count -- and a failure to ask (not a repo, git
+ * missing) leaves the declared answer standing rather than inventing one.
+ */
+export const isTracked = (artifact: EditorArtifact, clone: Clone, path: string): boolean => {
+  if (artifact.tracked) return true;
+  const rel = relative(clone.path, path);
+  if (rel.startsWith('..')) return false;
+  return git(clone.path, ['ls-files', '--error-unmatch', '--', rel]).ok;
+};
+
+/**
+ * VS Code, the default editor and the one that needs the most done for it.
+ *
+ * `focusExisting` is true because of the `.code-workspace` twins: VS Code identifies a workspace
+ * by its config file's URI, so handing it the root copy while the developer has the `angular/`
+ * copy open produces a second window on identical content. `rewritesRootPaths` is true because a
+ * handful of its settings hold an absolute path into the checkout -- see the header.
+ */
+/**
+ * One driver for the whole VS Code family: VS Code itself, Cursor, Windsurf, VSCodium and the
+ * rest. They differ in exactly two values -- the launcher binary and which directory holds their
+ * window-state file -- so a fork costs one row in `VSCODE_FAMILY` rather than a driver.
+ *
+ * The state directory is the half that matters. The point of reading that file is to hand the
+ * editor the exact `*.code-workspace` copy it ALREADY has open; read a sibling fork's state file
+ * and the answer is not stale but about another application's windows, which is precisely how you
+ * open a second window on identical content while believing you avoided one.
+ */
+export const vscodeDriver = (fork: VscodeFork = 'vscode'): EditorDriver => {
+  const { binary, label, stateDir } = VSCODE_FAMILY[fork];
+  return {
+    kind: fork,
+    label,
+    capabilities: {
+      launch: true,
+      focusExisting: true,
+      syncArtifacts: true,
+      rewritesRootPaths: true,
+    },
+    isAvailable: () => run('sh', ['-c', `command -v ${binary} >/dev/null 2>&1`]).ok,
+    unavailableHint: () =>
+      `the \`${binary}\` command is not on PATH — in ${label}, run “Shell Command: Install '${binary}' command in PATH”.`,
+    launch: (clone) => launchVscode(binary, label, stateDir, clone),
+    artifacts: VSCODE_ARTIFACTS,
+  };
+};
+
+/**
+ * Hand the clone's workspace to VS Code, reusing the window that already has it open.
+ *
+ * The path matters twice over. The workspace file lives at the CLONE ROOT, so
+ * `code *.code-workspace` from `angular/` would match nothing -- hence the full path. And the
+ * clone carries that file twice; `openWorkspaceFile` asks VS Code which copy it is already
+ * showing and that exact path is what gets passed, which is what makes it focus the existing
+ * window instead of opening a second one on identical content.
+ */
+const launchVscode = (
+  binary: string,
+  label: string,
+  stateDir: string,
+  clone: Clone,
+): LaunchResult | undefined => {
+  const alreadyOpen = openWorkspaceFile(clone, stateDir);
+  const workspace = alreadyOpen ?? workspacePath(clone);
+  if (!existsSync(workspace)) {
+    return {
+      target: workspace,
+      reused: false,
+      note: `no workspace file at ${workspace} — run \`hangar doctor --fix\` to create it`,
+    };
+  }
+  const res = run(binary, [workspace]);
+  if (!res.ok) {
+    return {
+      target: workspace,
+      reused: false,
+      note: `could not launch ${label}: ${res.stderr.trim() || `is the \`${binary}\` command installed?`}`,
+    };
+  }
+  return { target: workspace, reused: alreadyOpen !== undefined };
 };
