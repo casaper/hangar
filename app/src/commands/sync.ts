@@ -1,6 +1,7 @@
 import pc from 'picocolors';
 
 import { openPullRequests, repoRef, type PullRequest } from '../bitbucket.ts';
+import { requireDefaultBranch } from '../config/default-branch.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import {
@@ -11,7 +12,6 @@ import {
   gitTry,
   inProgressOperation,
   refExists,
-  remoteHeadBranch,
   remotes,
   syncStashes,
   syncState,
@@ -125,15 +125,6 @@ type Target = {
  * 2024), which must never become a sync target.
  */
 const resolveTarget = async (clone: Clone, branch: string, opts: SyncOptions): Promise<Target> => {
-  const defaultBranch = remoteHeadBranch(clone.path);
-  const onDefault = (why: string, guessed = false): Target => ({
-    branch: defaultBranch,
-    ref: `origin/${defaultBranch}`,
-    why,
-    guessed,
-    pr: undefined,
-  });
-
   if (opts.onto !== undefined) {
     // A bare name is qualified with `origin/` when that exists, for the ambiguity reason above;
     // anything already qualified (`origin/release9`, `clone_01/some-branch`) is taken verbatim.
@@ -150,6 +141,23 @@ const resolveTarget = async (clone: Clone, branch: string, opts: SyncOptions): P
       pr: undefined,
     };
   }
+
+  /*
+   * Asked AFTER `--onto`, and from the CONFIG rather than from this clone's `origin/HEAD`.
+   * Every clone here is a clone of one repo, so its default branch is a property of the hangar:
+   * it is resolved once, recorded in `forge.defaultBranch`, and read from there afterwards. A
+   * run that was given its base needs none of that, which is why the question is asked here and
+   * not at the top -- and `-n` never records anything, so a dry run cannot change the config.
+   */
+  const defaultBranch = requireDefaultBranch({ persist: opts.dryRun !== true });
+  const onDefault = (why: string, guessed = false): Target => ({
+    branch: defaultBranch,
+    ref: `origin/${defaultBranch}`,
+    why,
+    guessed,
+    pr: undefined,
+  });
+
   if (branch === defaultBranch) return onDefault(`on the default branch (${defaultBranch})`);
   if (branch === DETACHED) return onDefault('detached HEAD — no branch to look a PR up by');
 

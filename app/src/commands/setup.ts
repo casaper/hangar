@@ -187,11 +187,10 @@ forge:
   originUrl: ${a.originUrl}
 ${
   a.defaultBranch === ''
-    ? `  # defaultBranch is deliberately UNSET: \`sync\` asks origin/HEAD, and if that is unset too
-  # it aborts and asks for --onto rather than guessing. A rebase onto the wrong base is the
-  # expensive thing to undo.
+    ? `  # defaultBranch is left blank on purpose: the first command that needs it detects it from
+  # git and writes the line here itself. Nothing guesses \`master\` -- undetectable aborts.
 `
-    : `  # Asked only when origin/HEAD is unset. Absent would mean "abort rather than guess".
+    : `  # Detected once and read from here afterwards; no command asks git for it again.
   defaultBranch: ${a.defaultBranch}
 `
 }  tokenEnvKey: BITBUCKET_TOKEN
@@ -329,7 +328,7 @@ export const setup = async (opts: SetupOptions): Promise<void> => {
       originUrl: await ask(rl, 'git origin URL', derived.originUrl ?? '', { yes }),
       defaultBranch: await ask(
         rl,
-        'default branch (blank = abort rather than guess)',
+        'default branch (blank = detect it on first use)',
         derived.defaultBranch ?? '',
         { yes, allowEmpty: true },
       ),

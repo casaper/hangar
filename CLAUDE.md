@@ -40,6 +40,17 @@ config is a different matter and is reported rather than refused — `config val
 `doctor` exist to diagnose it, and a gate that parsed the file would stop them before they
 could.
 
+**One key writes itself, so do not be surprised to find the file modified:** `forge.defaultBranch`
+is what every command means by "the default branch", and it is **required in effect but never
+typed by hand** — the first command that needs it detects it from git (a clone's `origin/HEAD`,
+then `git remote set-head --auto`, then `git ls-remote` on the origin URL) and adds the line,
+with a comment saying it did. Every command afterwards reads it from there, which is the point:
+one question per hangar instead of one per clone per command, and no `master` fallback to be
+silently wrong about. The write is a three-line text insertion, guarded so it cannot reformat
+anything else, and **nothing writes on a dry run or from a report-only command**. Edit the line
+if the repo renames its default branch; `hangar doctor` compares it with each clone's own
+`origin/HEAD` and says so when they disagree.
+
 Full clones, not `git worktree`: each needs its own `node_modules`, its own dev server, its own
 Storybook and its own Playwright run. That is the whole reason the fleet exists.
 

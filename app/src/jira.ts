@@ -1,5 +1,6 @@
 import type { Clone } from './fleet.ts';
-import { currentBranch, gitTry, remoteHeadBranch } from './git.ts';
+import { tryDefaultBranch } from './config/default-branch.ts';
+import { currentBranch, gitTry } from './git.ts';
 import { atlassianUrl } from './paths.ts';
 
 /**
@@ -95,7 +96,11 @@ export const inferTicket = (
   const fromBranch = firstIssueKey(branch);
   if (fromBranch !== undefined) return { key: fromBranch, source: 'branch' };
 
-  const base = gitTry(clone.path, ['merge-base', `origin/${remoteHeadBranch(clone.path)}`, 'HEAD']);
+  // The non-throwing, non-networking form on purpose: this function's contract is that "no
+  // ticket" is a normal answer, and it is reachable from paths that must not fail.
+  const defaultBranch = tryDefaultBranch();
+  if (defaultBranch === undefined) return undefined;
+  const base = gitTry(clone.path, ['merge-base', `origin/${defaultBranch}`, 'HEAD']);
   if (base === undefined) return undefined;
   // Subjects only, not bodies: subjects follow the repo's commit convention, whereas a body
   // is free prose and a much richer source of key-shaped noise.

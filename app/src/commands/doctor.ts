@@ -60,6 +60,7 @@ import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import { applyArtifact } from '../generate/index.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
 import {
+  defaultBranchFromGit,
   FLEET_GIT_CONFIG,
   isGitRepo,
   remotes,
@@ -582,6 +583,54 @@ const reportEditor = (editor: EditorDriver): void => {
   ok(`${'editor'.padEnd(22)} ${pc.dim(`${editor.label} — ${how}, ${setup}`)}`);
 };
 
+/**
+ * `forge.defaultBranch` against what the clones' own `origin/HEAD` says.
+ *
+ * The config value is detected once and trusted afterwards -- that is the whole point of having
+ * it, and the price is that a repo which RENAMES its default branch leaves the hangar
+ * confidently wrong, with every command agreeing. This is the row that notices.
+ *
+ * Local refs only, never a network call: `doctor` has to work on a train, and a check that
+ * sometimes hangs for twenty seconds is a check people stop running.
+ *
+ * A WARNING with no repair, deliberately. Which of the two is right is genuinely unknown here:
+ * `origin/HEAD` is a local symref that git writes at clone time and then never updates, so a
+ * clone predating the rename keeps the old answer for good and the config may well be the newer
+ * one. Naming both and letting the developer decide is the honest report.
+ */
+const reportDefaultBranch = (recorded: string | undefined, clones: readonly Clone[]): void => {
+  if (recorded === undefined) {
+    warn('`forge.defaultBranch` is not recorded yet');
+    note('The next command that needs it detects it from git and writes the line itself.');
+    return;
+  }
+
+  const disagree = clones
+    .map((clone) => ({ clone, branch: defaultBranchFromGit(clone.path) }))
+    .filter((seen) => seen.branch !== undefined && seen.branch !== recorded);
+  if (disagree.length > 0) {
+    warn(
+      `${CONFIG_FILENAME} says the default branch is ${recorded}, but ${disagree
+        .map((seen) => `${seen.clone.name} says ${String(seen.branch)}`)
+        .join(', ')}`,
+    );
+    note(
+      `Edit \`forge.defaultBranch\` if the repo renamed it, or refresh a stale clone ` +
+        `(\`git -C <clone> remote set-head origin --auto\`). Every command trusts the config.`,
+    );
+    return;
+  }
+
+  const agree = clones.filter((clone) => defaultBranchFromGit(clone.path) === recorded).length;
+  ok(
+    `${'default branch'.padEnd(22)} ${pc.dim(
+      agree === 0
+        ? `${recorded} — from the config; no clone has an origin/HEAD to compare with`
+        : `${recorded} — origin/HEAD agrees in ${String(agree)} clone(s)`,
+    )}`,
+  );
+};
+
 export const doctor = (ref: string | undefined, opts: DoctorOptions): void => {
   const all = discoverClones();
   if (!existsSync(fleetPlans)) {
@@ -624,7 +673,7 @@ export const doctor = (ref: string | undefined, opts: DoctorOptions): void => {
       note('`hangar config schema` regenerates it from src/config/schema.ts.');
     }
     try {
-      loadConfigFile(configPath);
+      reportDefaultBranch(loadConfigFile(configPath).forge.defaultBranch, all);
     } catch (error) {
       warn(`${tildify(configPath)} does not validate`);
       note(error instanceof CliError ? (error.hint ?? error.message) : String(error));

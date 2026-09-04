@@ -67,9 +67,17 @@ const forgeSchema = z.strictObject({
   /** Web base for repo/PR links. Derived from `originUrl` by the adapter when absent. */
   webBaseUrl: z.url().optional(),
   /**
-   * ABSENT MEANS NO FALLBACK. `sync` asks `origin/HEAD` first; if that is unset too it
-   * ABORTS and asks for `--onto` rather than guessing. Guessing `master` for an unknown repo
-   * is confidently wrong, and it contradicts sync's own rule that a destination missing from
+   * The branch the repo treats as its default. REQUIRED IN EFFECT, optional in the schema.
+   *
+   * Nobody has to write it: the first command that needs it detects it (a clone's
+   * `origin/HEAD`, then `git remote set-head --auto`, then `git ls-remote --symref` on
+   * `originUrl`) and records it here, after which no command asks git again. It is optional
+   * HERE because a hard requirement would make `config validate` and `doctor` fail on the
+   * very file they exist to diagnose, before the autofill could run -- and because detection
+   * needs a clone or a network, neither of which a schema can promise.
+   *
+   * Undetectable means ABORT, never `master`. Guessing a branch name for an unknown repo is
+   * confidently wrong, and it contradicts sync's own rule that a destination missing from
    * origin aborts -- a rebase onto the wrong base is the expensive thing to undo.
    */
   defaultBranch: z.string().min(1).optional(),

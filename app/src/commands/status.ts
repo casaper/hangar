@@ -1,6 +1,7 @@
 import pc from 'picocolors';
 
 import { prSearchUrl, repoRef } from '../bitbucket.ts';
+import { tryDefaultBranch } from '../config/default-branch.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import {
@@ -177,13 +178,17 @@ const resolveOne = (ref: string | undefined): Clone[] => {
 /** Two clones on one branch is legal but almost always a mistake worth surfacing. */
 const warnOnDuplicateBranches = (clones: readonly Clone[]): void => {
   if (clones.length < 2) return;
+  // Two clones on the DEFAULT branch is the normal resting state, so it is the one pair not
+  // worth a warning. This used to be the literal `master`, which made the exemption wrong in
+  // every hangar but this one.
+  const defaultBranch = tryDefaultBranch();
   const byBranch = new Map<string, string[]>();
   for (const clone of clones) {
     const branch = currentBranch(clone.path);
     byBranch.set(branch, [...(byBranch.get(branch) ?? []), clone.name]);
   }
   for (const [branch, names] of byBranch) {
-    if (names.length > 1 && branch !== 'master') {
+    if (names.length > 1 && branch !== defaultBranch) {
       warn(`${names.join(' and ')} are both on ${branch}`);
     }
   }

@@ -148,10 +148,38 @@ export const setFleetGitConfig = (repo: string): { set: string[]; failed: string
   return { set, failed };
 };
 
-/** The repo's default branch, from origin/HEAD, falling back to master. */
-export const remoteHeadBranch = (repo: string): string => {
+/**
+ * The repo's default branch as GIT reports it, or `undefined` when it does not know.
+ *
+ * `origin/HEAD` is the repo's own answer and the only one worth having: `master` is this repo's
+ * default branch, plenty of others use `main`, and a few use neither. It is a LOCAL ref, though.
+ * `git clone` writes it, `git remote set-head` writes it, and since git 2.45 a `git fetch` fills
+ * it in when it is MISSING (verified on the 2.55 this machine has) -- but nothing updates it
+ * once it exists, so a clone whose remote later moved its default branch keeps answering with
+ * the old one, and an older git leaves it unset for good. `setRemoteHeadAuto` is how a caller
+ * asks origin to settle it.
+ *
+ * **Commands do not call this.** They ask `config/default-branch.ts`, which answers from
+ * `forge.defaultBranch` -- one value for the whole hangar, detected through here exactly once
+ * and then written to the config. There used to be a `remoteHeadBranch` beside this that fell
+ * back to the literal `master`; it is gone, because a wrong branch name is the one thing here
+ * that fails silently.
+ */
+export const defaultBranchFromGit = (repo: string): string | undefined => {
   const ref = gitTry(repo, ['symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD']);
-  return ref?.replace('refs/remotes/origin/', '') ?? 'master';
+  return ref?.replace('refs/remotes/origin/', '');
+};
+
+/**
+ * Ask origin which branch its HEAD points at and record it in `refs/remotes/origin/HEAD`.
+ *
+ * A network call, and the only write in this file that is not scoped to a branch -- it touches
+ * one remote-tracking symref and nothing a working tree can see. Returns what it resolved, so a
+ * caller need not re-read it.
+ */
+export const setRemoteHeadAuto = (repo: string): string | undefined => {
+  if (!git(repo, ['remote', 'set-head', 'origin', '--auto']).ok) return undefined;
+  return defaultBranchFromGit(repo);
 };
 
 /**

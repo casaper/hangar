@@ -109,11 +109,18 @@ forge:
   # it only for a self-hosted forge whose web host differs from its git host.
   # webBaseUrl: https://bitbucket.org/acme/storefront_ui
 
-  # ABSENT MEANS NO FALLBACK, which is a feature. `sync` asks `origin/HEAD` first; if that is
-  # unset too it ABORTS and asks for `--onto` rather than guessing. Guessing `master` for an
-  # unknown repo is confidently wrong, and it contradicts sync's own rule that a destination
-  # missing from origin aborts -- a rebase onto the wrong base is the expensive thing to undo.
-  defaultBranch: master
+  # The branch the repo treats as its default. REQUIRED IN EFFECT -- but never something to
+  # look up by hand: leave it out and the first command that needs it detects it (a clone's
+  # `origin/HEAD`, then `git remote set-head --auto`, then `git ls-remote --symref` on
+  # `originUrl`) and writes the line here, with a comment saying it did. Every command after
+  # that reads it from here, so the question is asked once per hangar rather than once per
+  # clone per command. Nothing writes it on a dry run or from a report-only command.
+  #
+  # Undetectable means ABORT, never `master`: guessing a branch name for an unknown repo is
+  # confidently wrong, and a rebase onto the wrong base is the expensive thing to undo. Edit
+  # the line if the repo renames its default branch -- `hangar doctor` compares it with each
+  # clone's own `origin/HEAD` and says so when they disagree.
+  defaultBranch: main
 
   # Which environment variable holds the API token, read from `secrets.file`. Never the token
   # itself: this file is committed, and that one is mode 600 and outside every clone.

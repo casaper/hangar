@@ -3,6 +3,7 @@ import { basename, join } from 'node:path';
 
 import { discoverClones } from '../fleet.ts';
 import { run } from '../exec.ts';
+import { tryDefaultBranch } from './default-branch.ts';
 import { atlassianUrl } from '../paths.ts';
 import { PORT_ROLE_ORDER, PORT_ROLES, PORT_STEP } from '../ports.ts';
 
@@ -132,24 +133,12 @@ export const deriveDefaults = (hangarRoot: string): DerivedDefaults => {
         })();
 
   /*
-   * `origin/HEAD` is the repo's own answer, and the only one worth suggesting. Absent, the
-   * suggestion is left EMPTY rather than filled with `master`: a wrong default branch means
-   * `sync` rebases onto the wrong base, which is the expensive thing to undo here.
+   * The same function every command asks, so `setup` cannot suggest one branch while the CLI
+   * would resolve another. Absent, the suggestion is left EMPTY rather than filled with
+   * `master`, and the first command that needs it detects and records it -- so a blank answer
+   * here costs nothing.
    */
-  const defaultBranch =
-    first === undefined
-      ? undefined
-      : (() => {
-          const res = run('git', [
-            '-C',
-            first.path,
-            'symbolic-ref',
-            '--short',
-            'refs/remotes/origin/HEAD',
-          ]);
-          const ref = res.stdout.trim().replace(/^origin\//, '');
-          return res.ok && ref !== '' ? ref : undefined;
-        })();
+  const defaultBranch = tryDefaultBranch();
 
   const appDir = first === undefined ? '' : detectAppDir(first.path);
 
