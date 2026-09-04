@@ -19,6 +19,7 @@ Configuration
 
 >   would write %SETUP%/hangar.config.yaml
 >   would write %SETUP%/hangar.schema.json
+>   would write %SETUP%/.claude/settings.json
 >   would create %SETUP%/.env.shared (mode 600)
 ok  the rendered config validates against the schema
 

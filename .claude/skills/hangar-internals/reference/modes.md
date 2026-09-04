@@ -175,6 +175,35 @@ presence" rule in `reference/doctor.md` does not apply. A `doctor` row for them 
 the five files exist, that the two JSON files parse, and that `statusline.sh` is executable —
 presence and validity, never content — and that is the deliberate exception, stated out loud.
 
+## Why the mode settings are the one generated-file candidate that stays tracked
+
+Publication forced the question for every tracked file naming `/Users/someone`, and these two
+answered differently from the rest. `.claude/settings.json` became generated and gitignored;
+`.claude/modes/{ops,dev}.settings.json` did not.
+
+The reason is an escalation path, not tidiness. `ops.settings.json`'s ~40 `allow`/`ask`/`deny`
+entries **are** operator mode's boundary. Operator mode is denied `Edit(./.claude/modes/**)` —
+that denial is the whole reason the mode pair exists — and it is *allowed* `Bash(hangar doctor:*)`.
+So a `doctor --fix` that generated that file would let operator mode rewrite its own permission
+list through a command it is permitted to run, and the asymmetry this file spends its length
+justifying would be gone. `setup` is no better: it is not in operator mode's deny list either,
+only unlisted, so `hangar setup --force` reaches it behind one prompt about "hangar setup".
+
+So `doctor` **reports and offers no repair**, the same shape as the `settings targets` check for
+an unresolvable theme. Only one line in each file is machine-specific — `statusLine.command`, an
+absolute path into this hangar — and a fresh clone of a published hangar carries the previous
+owner's. Claude Code fails silently on it, exactly as it does on an unresolvable theme: the badge
+simply never appears, and a session with no badge is a session whose permission rules nobody can
+see at a glance. `doctor` names the file, the value and what to point it at; editing two lines is
+the manual step.
+
+Three alternatives were considered and all three trade a security property or a certainty for one
+line saved. A generated statusline path breaks the asymmetry above. A relative command depends on
+which cwd Claude Code runs a status line in, and the two modes have different ones. A
+PATH-resolved `bin/hangar-statusline` depends on direnv having loaded — which is the assumption
+the clone hooks deliberately do NOT make (`bin/hangar --hangar <root>` is baked absolute because a
+hook runs with an unpredictable PATH), and getting it wrong is the same silent failure.
+
 ## Four probes that produced confident wrong answers — do not repeat them
 
 The fleet has no test suite, so this is the regression record for the next person who assumes one

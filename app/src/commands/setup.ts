@@ -22,7 +22,9 @@ import { MANAGER_COMMANDS } from '../config/schema.ts';
 import { inspectEnvironment, type EnvironmentReport } from '../environment.ts';
 import { CliError } from '../exec.ts';
 
-import { tildify } from '../user-paths.ts';
+import { hangarSettingsContent, hangarSettingsPath } from '../hangar-files.ts';
+import { pathsFor } from '../hangar.ts';
+import { claudeDir, tildify } from '../user-paths.ts';
 import { blank, fail, heading, note, ok, step, warn } from '../ui.ts';
 
 /**
@@ -577,6 +579,14 @@ export const setup = async (root: string, opts: SetupOptions): Promise<void> => 
   const schema = configJsonSchemaText();
   const schemaPath = join(root, jsonSchemaFileName);
   const secretsPath = join(root, '.env.shared');
+  /*
+   * The settings file needs a `Hangar`, which does not exist until the config is on disk -- so it
+   * is rendered from the answers rather than from a loaded hangar. `pathsFor` is a pure function
+   * of its arguments precisely so this is possible before anything has been written.
+   */
+  const paths = pathsFor(root, answers.id, '.env.shared', claudeDir);
+  const settingsFile = hangarSettingsPath(root);
+  const settingsBody = hangarSettingsContent(root, paths.memory);
 
   /*
    * Validate the rendered YAML BEFORE printing or writing it, and in memory.
@@ -592,6 +602,7 @@ export const setup = async (root: string, opts: SetupOptions): Promise<void> => 
   if (dryRun) {
     step(`would write ${tildify(configPath)}`);
     step(`would write ${tildify(schemaPath)}`);
+    step(`would write ${tildify(settingsFile)}`);
     if (!existsSync(secretsPath)) step(`would create ${tildify(secretsPath)} (mode 600)`);
     ok('the rendered config validates against the schema');
     process.stdout.write(`\n${yaml}`);
@@ -606,6 +617,16 @@ export const setup = async (root: string, opts: SetupOptions): Promise<void> => 
   } else {
     note(`unchanged ${tildify(schemaPath)}`);
   }
+
+  /*
+   * The hangar root's own Claude Code settings: shared memory, the plan archive, the mode badge.
+   *
+   * Written here rather than shipped tracked, because two of its three values are absolute paths
+   * on THIS machine -- and Claude Code fails silently on all three, so a stranger cloning a
+   * tracked copy would get no shared memory, no archive and no badge, with nothing said.
+   */
+  writeFileSync(settingsFile, settingsBody);
+  ok(`written  ${tildify(settingsFile)}`);
 
   /*
    * The secrets file, created empty-but-named. Never overwritten: it holds live credentials.

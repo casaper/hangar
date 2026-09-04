@@ -81,6 +81,7 @@ import {
 import { paletteEntry } from '../palette.ts';
 import { portSummary } from '../ports.ts';
 import { terminal, type TerminalCapabilities } from '../terminal/index.ts';
+import { hangarSettingsContent, hangarSettingsPath } from '../hangar-files.ts';
 import { installChecks } from '../install.ts';
 import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
@@ -154,6 +155,19 @@ const addHook =
     if (current === undefined) return;
     writeFile(settingsPath(clone), `${JSON.stringify(add(current), null, 2)}\n`);
   };
+
+/** `statusLine.command` out of a mode settings file, or undefined if it has none. */
+const readModeStatusLine = (path: string): string | undefined => {
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as {
+      statusLine?: { command?: unknown };
+    };
+    const command = parsed.statusLine?.command;
+    return typeof command === 'string' ? command : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Check[] => {
   const checks: Check[] = [];
@@ -730,6 +744,67 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
     );
     note('Harmless now; `hangar add-clone` reuses free indices, so it would inherit the hue.');
   }
+  /*
+   * The hangar root's own `.claude/settings.json`, by CONTENT, like every generated artifact.
+   *
+   * It was tracked with `/Users/someone` in two of its three values, so on any other machine the
+   * memory directory pointed at nothing and the status line's command was not there -- and
+   * Claude Code fails both SILENTLY. No error, no log; the mode badge simply never appears. That
+   * is the failure this hangar could never observe, because here the paths happen to be right.
+   */
+  const settingsFile = hangarSettingsPath(hangar.root);
+  const wantHangarSettings = hangarSettingsContent(hangar.root, hangar.paths.memory);
+  const haveHangarSettings = existsSync(settingsFile)
+    ? readFileSync(settingsFile, 'utf8')
+    : undefined;
+  if (haveHangarSettings !== wantHangarSettings) {
+    if (opts.fix === true) {
+      writeFile(settingsFile, wantHangarSettings);
+      ok(`wrote ${tildify(settingsFile)}`);
+      note('A fleet-root session reads it at startup, so this one is still on the old values.');
+    } else {
+      warn(
+        haveHangarSettings === undefined
+          ? `${tildify(settingsFile)} is missing — no shared memory, no plan archive, no mode badge`
+          : `${tildify(settingsFile)} differs from what the generator produces`,
+      );
+      note('`hangar doctor --fix` writes it. Claude Code fails silently on all three values.');
+    }
+  }
+
+  /*
+   * The two mode settings files, REPORTED and never repaired.
+   *
+   * Their `statusLine.command` is an absolute path into this hangar, so a fresh clone of a
+   * published hangar repo carries the previous owner's -- and Claude Code fails silently on it,
+   * exactly like an unresolvable theme: the mode badge simply never appears, and a session with
+   * no badge is a session whose permission rules nobody can see at a glance.
+   *
+   * There is deliberately NO `--fix`, and this is the one check where that is a security
+   * property rather than a limitation. `ops.settings.json`'s ~40 `allow`/`ask`/`deny` entries ARE
+   * operator mode's boundary; operator mode is denied `Edit(./.claude/modes/**)` and allowed
+   * `Bash(hangar doctor:*)`, so a repair that rewrote that file would let operator mode edit its
+   * own permission list through a command it is permitted to run. `setup` does not write them
+   * either, for the same reason. Editing one line in two tracked files is the manual step, and it
+   * is named here.
+   */
+  for (const mode of ['ops', 'dev'] as const) {
+    const path = join(hangar.root, '.claude', 'modes', `${mode}.settings.json`);
+    if (!existsSync(path)) continue;
+    const command = readModeStatusLine(path);
+    const script = command?.split(' ')[0];
+    if (script !== undefined && existsSync(script) && script.startsWith(hangar.root)) continue;
+    warn(
+      `${tildify(path)}: statusLine.command ${
+        script === undefined ? 'is missing' : `→ ${tildify(script)} does not resolve in this hangar`
+      }`,
+    );
+    note(
+      `Point it at ${tildify(join(hangar.root, '.claude', 'modes', 'statusline.sh'))} ${mode}. ` +
+        "Not repairable on purpose: that file is operator mode's permission boundary.",
+    );
+  }
+
   /*
    * The colour assignments, if they are still at the old tracked root-level path.
    *
