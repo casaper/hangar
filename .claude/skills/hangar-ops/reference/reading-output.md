@@ -2,11 +2,11 @@
 
 ## `hangar status <n>`
 
-Twelve rows, in this order: `dir`, `colour`, `branch`, `sync`, `worktree`, then `jira`,
+Ten rows always, in this order: `dir`, `colour`, `branch`, `sync`, `worktree`, `jira`,
 `pull request`, `ports`, `servers`, `claude`.
 
-**Two rows appear only when there is something to say**, and a clone showing neither is the healthy
-case, not a missing feature:
+**Two more appear only when there is something to say**, between `worktree` and `jira`, and a clone
+showing neither is the healthy case, not a missing feature:
 
 - **`pending`** — a rebase or merge is half-applied. Its detail says
   `` `--continue` or `--abort` it; sync will refuse to start ``, which is the whole story: this is
@@ -68,12 +68,15 @@ Three things to say correctly when you relay a report:
   using.** Claude Code reads `.claude/settings.local.json` and `CLAUDE.local.md` once at startup, so
   a hook wired in by `--fix` or a theme swapped by `colours change` reaches that clone at its
   **next** session. A green report says nothing about the sessions open right now.
-- **The default-branch row only warns**, and there is no `--fix` for it. Which of the two is right
+- **The default-branch row only warns**, and there is no `--fix` for it. (Why, at length:
+  `hangar-internals/reference/config.md`, which states the same rule — change one and change
+  both.) Which of the two is right
   is genuinely unknown: git writes `origin/HEAD` at clone time and never updates it, so a clone
   predating a rename keeps the old answer for good and the config may well be the newer one.
 - **How much of the shared cache a clone has linked is deliberately not checked.** A ticket fetched
   in one clone reaches the others at the next `tmp merge`; a check that is red in normal operation
-  is a check nobody reads.
+  is a check nobody reads. (`hangar-internals/reference/doctor.md` says the same — change one and
+  change both.)
 
 ## `hangar list`
 

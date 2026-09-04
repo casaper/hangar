@@ -15,9 +15,7 @@
   clone keeps its own `tmp/` directory and its own PID files in it, and a running dev server is no
   obstacle to running the command. Only the cache entries inside `tmp/` are shared, one symlink
   each. It moves every clone's cache into the store BEFORE it links any of it back, so a conflict
-  copy created for the last clone still reaches the first, and it drains
-  `~/.claude/dvb-gn-jira` in the same run (nothing is left pointing into a store that has been
-  emptied). See **Shared `tmp/`** below.
+  copy created for the last clone still reaches the first. See **Shared `tmp/`** below.
   **Each clone runs `tmp merge --quiet` from a `SessionEnd` hook**, so a ticket first fetched in
   one clone reaches the others when that session ends. It is `SessionEnd` and not a trigger on
   the write itself for a reason that cannot be tuned away: the store pass deliberately leaves
@@ -45,7 +43,7 @@ skills leave there — which lives in `~/code/dvb_gn/tmp/<name>` with `clone_NN/
 **The links go one level down, and `tmp/` itself is never a symlink.** `tmp/` also holds the
 dev-server PID files: `dev/run-with-pid.mjs` refuses a name that is already live and
 `node dev/pids.mjs --kill <name>` finds a server by that file, so a shared `tmp/` would let the
-first clone to start a dev server block the other two and let a kill reach into a sibling. With
+first clone to start a dev server block every other clone and let a kill reach into a sibling. With
 the links one level down, **PID files are never moved, linked or even read** — a running dev
 server is no obstacle to sharing, and nothing has to have landed on a clone's branch first.
 Whether a clone writes `tmp/<name>.pid` or `tmp/_<clone>/<name>.pid` is its branch's business and
@@ -153,9 +151,10 @@ contributor and must work without this fleet, so the record store appears in no 
 skill writes exactly what it always wrote, and `tmp merge` and the hook do the rest.
 
 The old per-key mechanism — `tmp/<KEY>` linked into `~/.claude/dvb-gn-jira` by
-`hangar jira link` — is **gone**, and so is that command: `tmp merge` drains the store into
-`~/code/dvb_gn/tmp` and removes it, and links every entry rather than only the `DN-####`
-directories (which left `pr-*.md` and `author-aliases.md` unshared in whichever clone made them).
+`hangar jira link` — is **gone**, and so are that command and the pass that drained the old store
+into this one. The store is `~/code/dvb_gn/tmp`, and `tmp merge` links every entry rather than
+only the `DN-####` directories (which left `pr-*.md` and `author-aliases.md` unshared in whichever
+clone made them).
 
 This needs **no change to the tracked skill tooling**:
 `.claude/skills/jira-scope/jira-cache.mjs` hardcodes `<git toplevel>/tmp/<KEY>` with no

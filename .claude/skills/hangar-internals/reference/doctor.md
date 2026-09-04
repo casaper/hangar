@@ -25,9 +25,10 @@ that `tmp/` is the clone's own directory, the three hooks in
 re-reads the file, so a clone missing two of them gets both in one `--fix` pass), the sibling
 remotes in both directions, and the `checkout.defaultRemote=origin` those remotes make necessary.
 Run it after any re-clone. **How much of the shared cache a clone links is deliberately not a
-check** — a ticket fetched here reaches
-the others at the next `tmp merge`, which is what linking per entry means, and a check that is red
-in normal operation is a check nobody reads.
+check** — a ticket fetched here reaches the others at the next `tmp merge`, which is what linking
+per entry means, and a check that is red in normal operation is a check nobody reads.
+(`hangar-ops/reference/reading-output.md` says the same to whoever reads the report — change one
+and change both.)
 
 ## The plan archive, and why sharing it is a command rather than a setting
 

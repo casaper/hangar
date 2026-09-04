@@ -90,7 +90,7 @@ export const editors = (): EditorSelection => {
  * to be stepped over.
  *
  * `fellBack` comes back even when the kind was not found, and that is the case it exists for:
- * on a config too broken to parse, `kinds` is the default `['vscode']`, so `hangar zed sync`
+ * on a config too broken to parse, `kinds` is the default `['vscode']`, so `hangar ide zed sync`
  * would otherwise be told to add zed to `editor.kinds` -- which it is already in, in a file
  * nothing here managed to read.
  */

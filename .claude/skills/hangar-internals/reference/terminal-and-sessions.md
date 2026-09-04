@@ -4,8 +4,11 @@
 `sessions.ts` (164). The terminal-driver capability table is in `app/CLAUDE.md`; this is what the
 two commands do with those capabilities.
 
-- **`hangar open` puts every clone in ONE iTerm2 window and reuses whatever is already
-  open.** It finds that window by the user variables it stamps on the sessions it creates, so a
+- **`hangar open` puts every clone in ONE terminal window and reuses whatever is already
+  open.** Every part of that is gated on the driver's capabilities (`open.ts:184` `inspect`,
+  `:201` `select`, `:370` `openTabs`), and iTerm2 is simply the only driver that has all of
+  them — on GNOME Terminal `open` says so once and only appends.
+  It finds that window by the user variables it stamps on the sessions it creates, so a
   clone that already has tabs there is selected rather than opened a second time, and a clone
   whose VS Code workspace is already open gets that window focused — the workspace file exists
   twice per clone and VS Code counts the two copies as two different workspaces, so it is handed

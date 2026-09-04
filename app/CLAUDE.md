@@ -52,8 +52,6 @@ of those commands is not found, the answer is almost always that direnv has not 
 
 Both exist because they caught something, and both apply to every edit under `app/src/**`.
 
-Two conventions for changing it, both of which exist because they caught something:
-
 - **There is no test suite, so anything that produces text for a human or an agent gets a PURE
   builder, given its facts and exported.** Every variant can then be printed side by side
   without constructing the state that produces it, which is how `sync`'s eight closing messages
@@ -67,21 +65,23 @@ Two conventions for changing it, both of which exist because they caught somethi
 
 ## The code, by role
 
-68 files, ~15k lines. Sizes are the honest guide to where the risk is: `commands/sync.ts` (882) and
-`commands/doctor.ts` (777) are the two files worth reading in full before changing either.
+68 files, ~15k lines. **`commands/sync.ts` (882 lines) and `commands/doctor.ts` (777) are the two
+worth reading in full before changing either** — they are also the two whose mistakes reach a live
+working tree. The rest of the table names files without sizing them on purpose: a count here goes
+stale on the next commit and nothing checks it, so run `wc -l` when you want one.
 
-| Role                  | Files                                                                                                                                                                                                                                                                                                                                 |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| entry point           | `cli.ts` (499) — every command, option and alias is registered here, plus the `preAction` config gate and the `configureHelp` that prints all of a command's aliases                                                                                                                                                                  |
-| commands              | `commands/*.ts`, one per command — `sync` (882), `doctor` (777), `tmp` (607), `jira` (432), `setup` (394), `open` (394), `checkout-default` (328), `vscode` (319), `plans` (250), `add-clone` (246), `resume` (235), `colours` (209), `status` (195), `remove-clone` (140), `teach-rg` (97), `config` (91), `ports` (86), `list` (33) |
-| config                | `config/schema.ts` (479, the zod authority), `default-branch.ts` (306), `load.ts` (211, discovery + precedence), `derive.ts` (183), `json-schema.ts` (48)                                                                                                                                                                             |
-| per-clone artifacts   | `clone-config.ts` (493) — the byte-compared builders `doctor` holds every clone to; `colour-assignments.ts` (107); `ports.ts` (49)                                                                                                                                                                                                    |
-| generators            | `generate/terminal-sh.ts` (279), `statusline-sh.ts` (85), `colours-sh.ts` (78), `theme-json.ts` (40), `index.ts` (45, the dry-run-aware writer)                                                                                                                                                                                       |
-| editor drivers        | `editor/vscode.ts` (417), `jetbrains.ts` (152), `index.ts` (134), `kinds.ts` (133), `types.ts` (112), `launch-only.ts` (103), `emacs.ts` (86), `vim.ts` (82), `zed.ts` (67)                                                                                                                                                           |
-| terminal drivers      | `terminal/apple-terminal.ts` (289), `konsole.ts` (282), `iterm2.ts` (265), `index.ts` (183), `types.ts` (163), `gnome-terminal.ts` (85), `applescript.ts` (42), `none.ts` (33)                                                                                                                                                        |
-| git / forge / tracker | `git.ts` (270), `bitbucket.ts` (156), `jira-records.ts` (373), `jira.ts` (110)                                                                                                                                                                                                                                                        |
-| fleet                 | `fleet.ts` (119) — clone discovery, and everything per-clone derived from the index                                                                                                                                                                                                                                                   |
-| shared                | `dedupe.ts` (311), `claude-sessions.ts` (310), `resolve-conflicts.ts` (289), `procs.ts` (222), `plans.ts` (203), `environment.ts` (198), `tui.ts` (185), `palette.ts` (175), `tmp.ts` (172), `sessions.ts` (164), `adopt.ts` (162), `ui.ts` (141), `paths.ts` (96), `exec.ts` (66)                                                    |
+| Role                  | Files                                                                                                                                                                                                                        |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| entry point           | `cli.ts` — every command, option and alias is registered here, plus the `preAction` config gate and the `configureHelp` that prints all of a command's aliases                                                               |
+| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list` |
+| config                | `config/schema.ts` (the zod authority), `default-branch.ts`, `load.ts` (discovery + precedence), `derive.ts`, `json-schema.ts`                                                                                               |
+| per-clone artifacts   | `clone-config.ts` — the byte-compared builders `doctor` holds every clone to; `colour-assignments.ts`; `ports.ts`                                                                                                            |
+| generators            | `generate/` — `terminal-sh.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                  |
+| editor drivers        | `editor/` — `vscode.ts`, `jetbrains.ts`, `index.ts`, `kinds.ts`, `types.ts`, `launch-only.ts`, `emacs.ts`, `vim.ts`, `zed.ts`                                                                                                |
+| terminal drivers      | `terminal/` — `apple-terminal.ts`, `konsole.ts`, `iterm2.ts`, `index.ts`, `types.ts`, `gnome-terminal.ts`, `applescript.ts`, `none.ts`                                                                                       |
+| git / forge / tracker | `git.ts`, `bitbucket.ts`, `jira-records.ts`, `jira.ts`                                                                                                                                                                       |
+| fleet                 | `fleet.ts` — clone discovery, and everything per-clone derived from the index                                                                                                                                                |
+| shared                | `dedupe.ts`, `claude-sessions.ts`, `resolve-conflicts.ts`, `procs.ts`, `plans.ts`, `environment.ts`, `tui.ts`, `palette.ts`, `tmp.ts`, `sessions.ts`, `adopt.ts`, `ui.ts`, `paths.ts`, `exec.ts`                             |
 
 **Four seams**, each a capability record plus a driver interface rather than a pretence that the
 implementations are equivalent. Adding a kind means implementing the interface and registering it;
@@ -101,7 +101,7 @@ plan's Track B fixes; and `resolve-conflicts.ts` reads `ORCH_UTIL_RESOLVE_TIMEOU
 
 `editor.kinds` in `hangar.config.yaml` is a **list**, because a clone can be open in more than one
 editor at once — their project files are different files. `hangar open` opens every one of them;
-`hangar <kind> sync` keeps one editor's shareable project files in step.
+`hangar ide <kind> sync` keeps one editor's shareable project files in step.
 
 **VS Code is the default and the only editor that has to work; every other kind is best effort.**
 That is a rank, not a disclaimer, and it is enforced rather than hoped for: `DEFAULT_EDITOR_KIND`
@@ -110,7 +110,7 @@ fallback for a config that will not parse goes through that same default, so the
 disagree). `editors()` builds each configured driver in a loop with a per-kind catch, and `open`
 and `doctor` isolate each one again around `isAvailable`/`launch` — so a clone configured
 `[zed, vscode]` cannot lose VS Code to Zed's launcher, which listing order alone would have done.
-`hangar <kind> sync` is the deliberate exception: there the developer named the editor, so its
+`hangar ide <kind> sync` is the deliberate exception: there the developer named the editor, so its
 failure is the answer to their command rather than something to step over.
 
 | kind                                                                      | launch                                              | Hangar syncs                       |

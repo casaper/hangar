@@ -3,8 +3,9 @@
 `app/src/commands/vscode.ts` (319), `app/src/editor/**` (nine drivers). The user-visible table of
 which editor gets launched how, and what Hangar keeps in step for each, is in `app/CLAUDE.md`.
 
-**`hangar ide vscode sync` is a text transform, not a copy** — and it is the only editor for which that is true ($PROJECT_DIR$ and project-relative settings spare the others) —, and for two reasons. A handful of
-VS Code settings take an **absolute** path into the checkout — `stylelint.stylelintPath`,
+**`hangar ide vscode sync` is a text transform, not a copy**, and it is the only editor for which
+that is true — `$PROJECT_DIR$` and project-relative settings spare all the others. Two reasons. A
+handful of VS Code settings take an **absolute** path into the checkout — `stylelint.stylelintPath`,
 `stylelint.configFile`, `stylelint.configBasedir`, `prettier.prettierPath`, `prettier.configPath`,
 `jestrunner.projectPath`, `coverage-gutters.manualCoverageFilePaths`,
 `storyExplorer.server.internal.npm.dir` — and VS Code resolves them against nothing, so those must
@@ -16,13 +17,17 @@ reserialised; key order and the hand-maintained tab indentation are preserved as
 
 Three things follow that are worth knowing:
 
-- **The key list is declared, in `app/src/vscode.ts`, not sniffed.** A clone-specific setting
-  that is missing from it gets copied verbatim and leaves one clone's tool path aimed at another
-  clone's `node_modules` — silent, exactly like a Storybook health check on a sibling's port. A
-  rendered file that still contains `clone_NN` for another `NN` is therefore a **hard error**
-  naming the file; the fix is to add the key to the table, not to force the write. Absolute paths
-  _outside_ the fleet root are left alone — the `~/.vscode/extensions/…` YAML schema URL in the
-  workspace file is genuinely shared.
+- **The key list is declared, not sniffed** — and it is **config**, not code:
+  `editor.rootPathKeys` in `hangar.config.yaml` (`config/schema.ts:334`, a `z.record` of setting
+  key → path relative to the clone root), seeded by `hangar setup` (`commands/setup.ts:267`) from
+  the eight defaults in `editor/vscode.ts:51`. It used to be a hard-coded table in an
+  `app/src/vscode.ts` that no longer exists; the move changed where you add a key, not what
+  happens if you forget to. A clone-specific setting that is missing from it gets copied
+  verbatim and leaves one clone's tool path aimed at another clone's `node_modules` — silent,
+  exactly like a Storybook health check on a sibling's port. A rendered file that still contains
+  `clone_NN` for another `NN` is therefore a **hard error** naming the file; the fix is to add the
+  key to the config, not to force the write. Absolute paths _outside_ the fleet root are left
+  alone — the `~/.vscode/extensions/…` YAML schema URL in the workspace file is genuinely shared.
 - **`launch.json` and `tasks.json` are tracked by git**, unlike `settings.json`, `mcp.json` and the
   workspace files, so they are **compared and never written** — there is no flag to force it. They
   are versioned per branch, so the newest copy is not the right one, it is just whatever branch
@@ -56,14 +61,14 @@ caveat:
   and `doctor` then isolate each driver again around `isAvailable`/`launch`, so `[zed, vscode]`
   cannot lose VS Code to Zed's launcher — listing order alone would have decided that.
 - **`editorFor(kind)` builds only the kind asked for and does NOT catch.** It used to pick from
-  `editors()`, which made `hangar vscode sync` construct every other configured driver first and
-  depend on all of them. And an editor the developer named by running `hangar <kind> sync` is not
-  a bystander: its failure is the answer to that command.
+  `editors()`, which made `hangar ide vscode sync` construct every other configured driver
+  first and depend on all of them. And an editor the developer named by running
+  `hangar ide <kind> sync` is not a bystander: its failure is the answer to that command.
 
 What this was checked with, since there is no test suite: `kinds` set to all seven families at
 once (`doctor` printed seven honest rows, no throw), VS Code placed **third** in that list (its
 row still green), and `zedDriver` temporarily made to throw at construction — `doctor` reported
-`the zed editor driver would not build: …` and VS Code's row survived, while `hangar zed sync`
+`the zed editor driver would not build: …` and VS Code's row survived, while `hangar ide zed sync`
 raised, which is the intended asymmetry. The live VS Code path: `openWorkspaceFile` found
 clone_03's already-open workspace and `launch` returned `reused: true`, so it focused that window
 instead of opening a second one on the identical twin.

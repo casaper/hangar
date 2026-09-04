@@ -42,12 +42,11 @@ config there is worth surfacing, and a session ending is the safe moment to surf
 
 The gate tests EXISTENCE and never parses. That is what keeps `config validate` and `doctor`
 able to do their jobs: both exist to report an invalid config, and a gate that parsed the file
-would stop them before they could. So the three config readers that are reached outside a
-command's own `loadConfigFile` — `currentHangarId`, `terminalColourSettings`, `terminal`, plus
+would stop them before they could. So the four config readers that are reached outside a
+command's own `loadConfigFile` — `currentHangarId`, `terminalColourSettings`, `terminal` and
 `editorConfig` — now catch only the UNPARSEABLE case, where falling back beats refusing (a
 `colours sync` that regenerates with default colouring is better than one that will not run).
 `EditorSelection.fellBack` therefore means exactly one thing now: the config would not parse.
-
 
 ## `forge.defaultBranch` — asked once per hangar, not once per command
 
@@ -102,7 +101,9 @@ Five properties, each of which is a decision:
   `config show` and `config validate` (which walk from the cwd) and nothing else, so do not read
   the `Map` as evidence that the flag already works; it starts working at B6, and this module
   takes the threaded root then.
-- **`doctor` compares the stored value with each clone's `origin/HEAD`, and only warns.** Storing
+- **`doctor` compares the stored value with each clone's `origin/HEAD`, and only warns.** (How to
+  relay that row to a user is `hangar-ops/reference/reading-output.md`, which states the same
+  rule — change one and change both.) Storing
   the answer is what makes a repo that RENAMES its default branch a hazard, so this is the row
   that notices; it uses local refs only, because a check that sometimes hangs for twenty seconds
   is a check people stop running. A warning with no `--fix`, because which of the two is right is

@@ -1,7 +1,8 @@
 # `sync`, its two other names, and `checkout-default`
 
-The most dangerous command in the CLI and the two that share its machinery. `app/src/commands/sync.ts`
-(882 lines) and `checkout-default.ts` (328); the shared landing step is `landOnBranch`.
+The most dangerous command in the CLI and the two that share its machinery.
+`app/src/commands/sync.ts` (882 lines) and `checkout-default.ts` (328); the shared landing step is
+`landOnBranch`.
 
 - **`hangar sync` types into a live Claude session.** There is no CLI mechanism to message a
   running interactive session, so it finds the session's tty, maps it to an iTerm2 tab and writes
@@ -62,7 +63,6 @@ The most dangerous command in the CLI and the two that share its machinery. `app
   fails closed with no tty, so an unattended invocation refuses rather than swapping the branch
   under a working agent. Every guard runs BEFORE the fetch so a refusal is instant, and under `-n`
   none of them throws: a dry run reports every reason the run would stop, not just the first.
-
 - **Conflicts are delegated to a headless `claude -p` inside the clone**, then verified
   mechanically (no unmerged paths, no markers). If that fails the whole operation is aborted and
   the pre-sync state restored — never left half-merged. **One exception, and it is inherent:**
@@ -82,7 +82,6 @@ The most dangerous command in the CLI and the two that share its machinery. `app
   hand while it is working.** It is aborted after 10 minutes
   (`ORCH_UTIL_RESOLVE_TIMEOUT_MS` overrides), and the headless session id it prints is the
   transcript to read afterwards.
-
 - **`hangar open` lands each clone on a branch before it opens a single tab**, through the same
   `landOnBranch` that `checkout-default` is built on — one implementation, so the two cannot end
   up with different ideas of which trees are safe to move. Order matters: one of those tabs runs

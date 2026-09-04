@@ -63,15 +63,14 @@ import {
  * with a symlink at `clone_NN/tmp/<name>` in every clone. See `tmp.ts` for why the links go
  * one level down instead of `tmp/` itself being one.
  *
- * Three passes, in this order, and the order is what keeps it safe:
+ * Two loops over the fleet, and the order between them is what keeps it safe -- every clone
+ * contributes BEFORE any clone is linked, or a conflict copy created in the second clone would
+ * reach every clone except the first:
  *
- * 1. A clone whose whole `tmp` is a symlink to the store -- what an earlier version of this
- *    command produced -- gets its own directory back.
- * 2. The legacy `~/.claude/dvb-gn-jira` store is drained into the fleet store. FIRST, because
- *    every clone's `tmp/<KEY>` currently points into it: draining it before the links are
- *    rebuilt is what stops any of them dangling in between.
- * 3. Each clone's remaining real entries are adopted into the store, then every shareable
- *    store entry is linked back into every clone.
+ * 1. Each clone contributes. A clone whose whole `tmp` is a symlink to the store -- what an
+ *    earlier version of this command produced -- gets its own directory back (pass 1) and
+ *    contributes nothing; otherwise its real entries are adopted into the store (pass 2a).
+ * 2. Every shareable store entry is linked back into every clone (pass 2b).
  *
  * Idempotent, and nothing is ever overwritten: byte-identical copies collapse to one and
  * anything that differs is kept beside the winner as `<name>.from-clone_NN` (see `adopt.ts`).
@@ -98,7 +97,7 @@ const isOurLink = (target: string): boolean => isInside(target, fleetTmp);
 /**
  * Pass 1: undo the whole-directory symlink an earlier version of this command created.
  *
- * The clone gets an empty real `tmp/` back; pass 3 fills it with links. Anything that was in
+ * The clone gets an empty real `tmp/` back; pass 2 fills it with links. Anything that was in
  * the shared directory stays in the shared directory -- it is the store now.
  */
 const restoreOwnTmp = (clone: Clone, dryRun: boolean): boolean => {
@@ -122,7 +121,7 @@ const report = (actions: readonly AdoptAction[], counts: Counts): void => {
 };
 
 /**
- * Pass 3a: move a clone's own cache into the store.
+ * Pass 2a: move a clone's own cache into the store.
  *
  * Returns the entry names it contributed, so a DRY RUN can still say what would be linked
  * back -- on a real run the store is simply read again.
@@ -140,19 +139,18 @@ const adoptCloneEntries = (clone: Clone, dryRun: boolean, counts: Counts): strin
     if (isPrivateTmpEntry(clone, entry)) continue;
 
     // Handled here rather than by `adoptInto`, whose symlink branch decides by RESOLVING the
-    // target: a link into the legacy store resolves to nothing once pass 2 has drained it, and
-    // one into a store entry that pass 2 could not remove resolves to stale content beside a
-    // fresh copy. By recorded target instead -- ours goes, a link somewhere else is the
-    // developer's and is left alone -- and pass 3b puts ours back.
+    // target: a link into a store entry that pass 2a could not remove resolves to stale content
+    // beside a fresh copy. By recorded target instead -- ours goes, a link somewhere else is the
+    // developer's and is left alone -- and pass 2b puts ours back.
     const target = linkTargetOf(path);
     if (target !== undefined) {
-      // Already exactly the link pass 3b would make: left alone, so a re-run does not delete
+      // Already exactly the link pass 2b would make: left alone, so a re-run does not delete
       // and recreate every link in the fleet -- which churns them for nothing and leaves a
       // window where a session looking for its ticket cache finds none.
       if (target === join(fleetTmp, entry)) {
         // Unless what it points at is gone. Deleting a store entry -- reviewing a
         // `.from-clone_NN` conflict copy, throwing away a note that has served its purpose --
-        // otherwise leaves this link dangling in every clone for ever, since pass 3b only ever
+        // otherwise leaves this link dangling in every clone for ever, since pass 2b only ever
         // iterates entries the store still HAS.
         if (existsSync(target)) continue;
         note(pc.dim(`${entry}: link to a store entry that is gone, removing`));
@@ -171,14 +169,14 @@ const adoptCloneEntries = (clone: Clone, dryRun: boolean, counts: Counts): strin
 };
 
 /**
- * Pass 3b: every shareable store entry gets a symlink in this clone.
+ * Pass 2b: every shareable store entry gets a symlink in this clone.
  *
  * `lstat`, not `existsSync`: a dangling link has to be replaced (and reads as absent to
  * `existsSync`), while a real file or directory left behind by a skipped adoption has to be
  * left where it is -- `symlinkSync` would throw EEXIST on it either way.
  */
 type LinkOptions = {
-  /** What pass 3a moved out of this clone -- still on disk during a dry run. */
+  /** What pass 2a moved out of this clone -- still on disk during a dry run. */
   readonly movedAway: ReadonlySet<string>;
   /** True for a clone whose `tmp` is being replaced wholesale -- see `restoreOwnTmp`. */
   readonly tmpWillBeEmpty: boolean;
@@ -202,7 +200,7 @@ const linkStoreEntries = (
       continue;
     }
     // Both exemptions are dry-run-only, and both are the command's own preview showing up as
-    // an obstacle: an entry pass 3a reported as moving to the store is still sitting here, and
+    // an obstacle: an entry pass 2a reported as moving to the store is still sitting here, and
     // a clone whose `tmp` symlink has not actually been replaced yet can still see every store
     // entry through it. On a real run the name is free -- and a name that is NOT free is a
     // skipped adoption, which must be left exactly where it is.
