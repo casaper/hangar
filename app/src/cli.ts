@@ -342,10 +342,24 @@ program
   .command('setup')
   .description('Guided first-run: check the machine, then write hangar.config.yaml')
   .option('-y, --yes', 'accept every derived default without asking')
+  .option('--origin <url>', 'the git origin URL — the one answer nothing can derive')
+  .option('--preset <name>', 'port roles and per-clone variables: generic, node-web, sql-postgrest')
   .option('--force', 'rewrite an existing config')
   .option('-n, --dry-run', 'print what would be written and stop')
   .action(async (options) => {
-    await setup(resolved?.root ?? process.cwd(), options);
+    /*
+     * `--hangar` names the directory to set UP, when it is given.
+     *
+     * Every other command resolves it through `preAction`, which cannot help here: `setup` is
+     * in `NEEDS_NO_CONFIG` precisely because the marker file does not exist yet, so there is
+     * no hangar to resolve. Reading the flag directly is what makes `setup` scriptable --
+     * without it, `--hangar /somewhere` was accepted and silently ignored, and setup wrote its
+     * config into the working directory instead. `pnpm golden` needs exactly that, and would
+     * otherwise have written a config into `app/`.
+     */
+    const flag: unknown = program.opts().hangar;
+    const root = typeof flag === 'string' ? flag : (resolved?.root ?? process.cwd());
+    await setup(root, options);
   });
 
 const config = program

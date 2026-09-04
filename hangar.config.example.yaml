@@ -77,9 +77,18 @@ id: dvb_gn
 # How the hangar is titled in output. Optional; falls back to `id`.
 displayName: storefront_ui
 
-# Selects a profile from the tool's `profiles/` directory for the project-specific behaviour
-# config cannot express. `generic` (the default) needs no profile code at all and degrades into
-# behaviour the CLI already has: no PR lookup, so `sync` says its target is a guess.
+# The `hangar setup` PRESET this config was written from -- a label, and nothing more.
+#
+# It once named a directory of profile code (`app/src/profiles/`) that would supply the
+# project-specific behaviour config could not express. That directory was never written and now
+# never will be: the two hangars this tool is built for need no profile code at all, which was
+# the evidence the config boundary had been drawn in the right place. No code reads this key,
+# and changing it changes nothing.
+#
+# A preset supplies only the two answers no checkout can produce -- the port roles and the
+# per-clone environment variables -- and writes them out as plain config below, where they can
+# be edited. `hangar setup --preset <name>`; the presets are `generic`, `node-web` and
+# `sql-postgrest`.
 profile: storefront-ui
 # profile: generic
 

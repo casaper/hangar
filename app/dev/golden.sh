@@ -70,6 +70,29 @@ capture gated ports ports --json
 capture gated config-show config show
 capture gated colours-sync-dry colours sync -n
 
+# --- 3b. `setup -n` in an EMPTY directory ---------------------------------------------------
+# The one command whose whole job is a repo this hangar is not, so it is captured against a
+# fresh temp directory rather than against this hangar. Two reasons, and the second matters:
+#
+#   * With no clones there is nothing to derive from, which is exactly what a colleague's first
+#     run looks like -- and the path that used to emit `envrcDirs: ['.', '', 'tests/...']` and
+#     then reject its own file. Byte-stable for the same reason: no disk state to read.
+#   * `setup` needs `--force` to render over an existing config, and pointing that at THIS
+#     hangar on every `pnpm golden` run would put the live gitignored config one `-n` regression
+#     away from being overwritten by the regression net itself.
+#
+# One capture per preset, because a preset is the only thing that varies the roles and the
+# per-clone variables, and the schema rejects role bases that would collide -- a preset shipping
+# that is a config nobody can load, and this is where it shows.
+setupdir="$(cd "$(mktemp -d)" && pwd -P)"
+trap 'rm -rf "$fixture" "$setupdir"' EXIT INT TERM
+for preset in generic node-web sql-postgrest; do
+  NO_COLOR=1 "$bin" setup --yes --force -n \
+    --origin 'git@bitbucket.org:acme/warehouse_sql.git' --preset "$preset" \
+    --hangar "$setupdir" 2>&1 |
+    sed -e "s|$setupdir|%SETUP%|g" | normalise > "$out/gated/commands/setup-dry-$preset.txt" || true
+done
+
 capture advisory list list
 capture advisory status status --all
 capture advisory doctor doctor --all
@@ -96,7 +119,12 @@ Derived from the config and the clone index alone, so it is byte-stable across d
   the verbatim copy names a temp directory. **This is the half that certifies anything.** While
   a config agrees with the defaults, "read the file" and "fell into a catch and used the
   defaults" produce identical output.
-- `gated/commands/` — the three command outputs that are genuinely derived.
+- `gated/commands/` — the command outputs that are genuinely derived. `setup-dry-*.txt` is one
+  per preset, rendered in an EMPTY temp directory: with no clones to read, `setup` is on the
+  path a colleague's first run takes, and every value in the result is either asked for or
+  admitted to be absent. It is not captured against this hangar deliberately — `setup` needs
+  `--force` to re-render, and aiming that here would leave the live gitignored config one `-n`
+  regression away from being destroyed by the net meant to protect it.
 
 The gate is `pnpm golden && git diff --exit-code dev/golden/gated`.
 

@@ -1,10 +1,9 @@
-import { existsSync, readdirSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 import { clonesSchema } from './schema.ts';
 import { run } from '../exec.ts';
 import { defaultBranchFromGit } from '../git.ts';
-import { atlassianUrl } from '../paths.ts';
 
 /**
  * Best-effort defaults for a hangar that already exists.
@@ -27,6 +26,8 @@ export type DerivedDefaults = {
   readonly installManager: string | undefined;
   readonly trackerBaseUrl: string | undefined;
   readonly trackerKeyPrefix: string | undefined;
+  readonly envrcDirs: readonly string[];
+  readonly rootPathKeys: Readonly<Record<string, string>>;
   readonly cloneCount: number;
 };
 
@@ -149,6 +150,73 @@ const cloneDirsIn = (root: string): string[] => {
   }
 };
 
+/**
+ * Every directory of a checkout that has an `.envrc`, root first.
+ *
+ * DISCOVERED, and this replaces a literal. `setup` wrote
+ * `envrcDirs: ['.', '<appDir>', 'tests/playwright-regression-tests']` into every config it
+ * produced -- this one repo's three directories -- and for a repo with no `package.json`
+ * `detectAppDir` returns `''`, so it emitted `['.', '', 'tests/...']` and then REJECTED its own
+ * file: `envrcDirs` is `z.array(z.string().min(1))`, so `loadConfigFile` at the end of setup threw
+ * on the config setup had just written. The bug was only reachable for a foreign repo, which is
+ * the only repo this command exists to serve.
+ *
+ * `git ls-files` because they are tracked, so it is exact and costs nothing. This is the same
+ * question `add-clone`'s `direnvDirs` asks; the answer is written to config here so a hangar with
+ * no clone yet still has one.
+ */
+export const detectEnvrcDirs = (clonePath: string): string[] => {
+  const res = run('git', ['-C', clonePath, 'ls-files', '-z', '--', '*.envrc']);
+  const dirs = new Set<string>(['.']);
+  if (res.ok) {
+    for (const file of res.stdout.split('\0')) {
+      if (file.endsWith('.envrc')) dirs.add(dirname(file));
+    }
+  }
+  return [...dirs].sort((a, b) => (a === '.' ? -1 : b === '.' ? 1 : a.localeCompare(b)));
+};
+
+/**
+ * The VS Code settings whose value is an absolute path into the checkout, and where each points.
+ *
+ * `editor.rootPathKeys` used to be eight stylelint / prettier / jestrunner / coverage keys under
+ * `angular/`, written into every config `setup` produced. The consequence for another repo was not
+ * a missing feature: with the wrong list `templatize` finds no checkout root, rewrites nothing, and
+ * `hangar ide vscode sync` is a no-op that reports success.
+ *
+ * Read off a real settings file rather than guessed, because the whole list is observable: a value
+ * that starts with the clone's own path IS a per-clone path, whatever extension put it there. The
+ * recorded value is the clone-relative remainder, which is what `templatize` needs to find the
+ * root again. Nothing is invented for a hangar with no clones -- an empty table is legal and means
+ * "no setting here holds an absolute path into the checkout", which is true of most repos.
+ *
+ * JSONC, so it is scanned as TEXT: comments and trailing commas do not survive `JSON.parse`, and
+ * the same regex reads a single-element array (`coverage-gutters.manualCoverageFilePaths` puts its
+ * one path on the line after the key) as a plain string.
+ */
+export const detectRootPathKeys = (clonePath: string): Record<string, string> => {
+  let text: string;
+  try {
+    text = readFileSync(join(clonePath, '.vscode', 'settings.json'), 'utf8');
+  } catch {
+    return {};
+  }
+  const found: Record<string, string> = {};
+  const re = new RegExp(
+    `"([^"\\n]+)"\\s*:\\s*(?:\\[\\s*)?"${escapeRegExp(clonePath)}/([^"]*)"`,
+    'g',
+  );
+  for (const match of text.matchAll(re)) {
+    const key = match[1];
+    const rest = match[2];
+    if (key === undefined || rest === undefined) continue;
+    found[key] = rest;
+  }
+  return found;
+};
+
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export const deriveDefaults = (hangarRoot: string): DerivedDefaults => {
   const clones = cloneDirsIn(hangarRoot).map((path) => ({ path }));
   const first = clones[0];
@@ -187,11 +255,16 @@ export const deriveDefaults = (hangarRoot: string): DerivedDefaults => {
         ? undefined
         : detectManager(join(first.path, appDir === '' ? '.' : appDir)),
     /*
-     * Taken from the constant the config is replacing. This IS the migration: the value
-     * moves out of paths.ts into a file, and nothing about it changes on the way.
+     * NOT suggested. It used to be `atlassianUrl`, this fleet's own Jira, offered as the default
+     * to every hangar setup ever ran -- and accepted by `--yes` without a human seeing it, which
+     * put one organisation's tracker URL into another's config. A tracker base URL is not
+     * observable from a checkout: the issue keys in the branch names are (see `detectKeyPrefix`),
+     * the host they live on is not.
      */
-    trackerBaseUrl: atlassianUrl,
+    trackerBaseUrl: undefined,
     trackerKeyPrefix: first === undefined ? undefined : detectKeyPrefix(first.path),
+    envrcDirs: first === undefined ? ['.'] : detectEnvrcDirs(first.path),
+    rootPathKeys: first === undefined ? {} : detectRootPathKeys(first.path),
     cloneCount: clones.length,
   };
 };

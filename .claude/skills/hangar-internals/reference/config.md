@@ -131,3 +131,57 @@ Five properties, each of which is a decision:
   is a check people stop running. A warning with no `--fix`, because which of the two is right is
   genuinely unknown: git writes `origin/HEAD` at clone time and never updates it, so a clone
   predating the rename keeps the old answer for good and the config may well be the newer one.
+
+
+## `setup` emits only what it observed
+
+The rule, and it was broken in a way only a foreign repo could reach: **a value `setup` cannot
+observe is asked for, offered by a preset, or left out with a comment saying what it would do.**
+
+What it used to write into every config it produced was this fleet: the Playwright symlink, the
+eight VS Code path keys under `angular/`, `portCheckCommand: [node, dev/ports.mjs, --json]`, this
+organisation's Jira host as the tracker default, and
+`envrcDirs: ['.', '<appDir>', 'tests/playwright-regression-tests']`. That last one is the tell that
+none of it was ever exercised against another repo: `detectAppDir` returns `''` for a repo with no
+`package.json`, so the rendered list was `['.', '', 'tests/...']`, `envrcDirs` is
+`z.array(z.string().min(1))`, and **`setup` wrote a config to disk and then threw validating it.**
+
+Three things now hold it to the rule:
+
+- **`envrcDirs` and `editor.rootPathKeys` are DERIVED**, from `git ls-files -- '*.envrc'` and from
+  a clone's own `.vscode/settings.json` (any value starting with the clone's path is a per-clone
+  path, whatever extension put it there). Both reproduce this hangar's hand-maintained config
+  exactly, which is the identity substitution that proves the derivation rather than the literal.
+- **`setup -n` validates the render**, through `parseConfigText` — the parse/validate half of
+  `loadConfigFile`, split out to work over text. The dry run used to `return` before the only parse
+  in the command, so the one invocation that could have caught a config setup cannot load was the
+  one that skipped the check. That gap is where the `envrcDirs` bug lived.
+- **The golden net captures `setup -n` per preset in an EMPTY temp directory**, not against this
+  hangar. With no clones there is nothing to derive from, which is exactly a colleague's first run.
+  Pointing it here would need `--force`, which would leave the live gitignored config one `-n`
+  regression away from being destroyed by the net meant to protect it.
+
+### Presets are templates, not code
+
+A preset supplies the two answers no checkout can produce — `ports.roles[]` and
+`repo.cloneEnv.vars` — and writes them out as plain config. **It is never read again at runtime**,
+which is the whole design constraint: a runtime `if (profile === 'sql-postgrest')` would
+re-introduce exactly the hardcoding this track spent five items deleting. `profile:` in a written
+config is a label; no code consults it, and `app/src/profiles/` was never written and now never
+will be. Two hangars needing zero profile code was the evidence the config boundary had been drawn
+in the right place.
+
+Every preset's port bases sit in different residue classes mod the default step of 100, because the
+schema rejects two roles whose clones would collide — correctly: `api: 3000` beside `admin: 3100`
+puts clone 1's admin on clone 2's api. A preset shipping that would be a config nobody can load,
+found by whoever ran setup rather than whoever wrote it, which is why each preset is rendered and
+parsed in the gated capture.
+
+### The secrets file is created, and every line is commented out
+
+`setup` used to NAME a secrets file it never created, so a fresh hangar had `doctor` red and `sync`
+with no token to read — both of which get diagnosed as bugs rather than as "nobody has filled this
+in yet". It is created at `secrets.mode` (0600) with the variable names the config implies, all
+commented out. Not `BITBUCKET_TOKEN=`: a set-but-empty variable is indistinguishable from a real
+one to everything downstream, so an empty token makes `sync` report a 401 instead of "no token
+configured". An existing file is never overwritten — it holds live credentials.

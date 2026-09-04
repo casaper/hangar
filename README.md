@@ -148,15 +148,39 @@ non-zero exit would block the tool call it was only meant to observe.
 ### 3. `hangar setup`
 
 ```bash
-hangar setup          # interactive
-hangar setup -y       # take every derived default
-hangar setup -n       # print what it would write, and stop
-hangar setup --force  # rewrite an existing config
+hangar setup                                   # interactive
+hangar setup -n                                # print what it would write, and stop
+hangar setup --preset sql-postgrest             # start from a preset
+hangar setup -y --origin git@host:acme/repo.git # unattended
+hangar setup --force                           # rewrite an existing config
 ```
 
-Two jobs, in this order: prove the machine has the tooling, then write `hangar.config.yaml` and
-`hangar.schema.json`. It is re-runnable against a hangar that already has clones and running
-servers, so every question arrives with an answer already derived from disk. It asks for:
+Three jobs, in this order: prove the machine has the tooling, then write `hangar.config.yaml` and
+`hangar.schema.json`, then create the secrets file it names (mode 600, every variable commented
+out — filling it in is your one manual step). It is re-runnable against a hangar that already has
+clones and running servers, so every question arrives with an answer already derived from disk.
+
+**It writes only what it could observe in your repository, or was told.** `appDir`, the package
+manager, the directories that get a direnv file, the default branch, the issue-key prefix and the
+VS Code settings holding absolute paths are all read off an existing clone. Anything it could not
+observe — the symlinks a clone needs, the command that reports your repo's ports, the tracker host
+— is **left out**, with a comment saying what the key would do. An absent key is a hangar that
+does one less thing; a guessed one is a hangar that checks the wrong port or links the wrong file.
+
+Two answers no checkout can supply are what the `--preset` flag is for: the **port roles** (what
+your repo runs, on which port, under which environment variable) and the **per-clone environment
+variables** beyond the ports. A preset is a template that writes plain config and is never read
+again — `profile:` in the result is a label, and no code consults it.
+
+| Preset          | What it declares                                                        |
+| --------------- | ----------------------------------------------------------------------- |
+| `generic`       | no ports, no per-clone variables — declare what you need afterwards      |
+| `node-web`      | one dev server on 3000, with a health check                              |
+| `sql-postgrest` | PostgREST on 3000 and Postgres on 5432, plus `PGDATABASE` and `COMPOSE_PROJECT_NAME` per clone |
+
+`--origin <url>` is what makes `-y` work in a fresh checkout: it is the one field with no
+derivable default, so with neither the flag nor a terminal to ask on, setup refuses and names the
+flag. It asks for:
 
 | Question              | What it is                                                          |
 | --------------------- | ------------------------------------------------------------------- |
@@ -168,6 +192,7 @@ servers, so every question arrives with an answer already derived from disk. It 
 | package manager       | for the install step in a new clone                                  |
 | issue tracker base URL + key prefix | ticket links and the shared ticket cache. Blank switches it off |
 | port offset           | `0` keeps the ports the existing clones are already serving on       |
+| preset                | the port roles and per-clone variables — the two answers nothing can derive |
 
 Then:
 
@@ -242,20 +267,13 @@ The config surface above describes the whole tool, and most of it is now wired. 
 evaluating this for your own repository, these are the gaps that remain, in the order they will
 bite:
 
-1. **`hangar setup` cannot yet ask about your ports.** It writes a valid config, but with an empty
-   `ports.roles: []` — because a role is a decision about your repo (what it runs, on which port,
-   under which environment variable) and nothing in a checkout answers it. Add the roles by hand
-   after setup, or wait for `setup` to learn the question.
-2. **`add-clone` cannot bootstrap the *first* clone.** It copies an existing sibling's
+1. **`add-clone` cannot bootstrap the *first* clone.** It copies an existing sibling's
    `.claude/settings.local.json` as its template and refuses when there is none, so clone #1 is
    still made by hand.
-3. **`profile:` names a `profiles/` directory that does not exist**, and now never will: the two
-   hangars this tool is built for need no profile code, which was the evidence the config boundary
-   was drawn in the right place. Treat the key as a label; it changes no behaviour.
-4. **The forge and tracker identity is still four literals** in `app/src/paths.ts`, so
+2. **The forge and tracker identity is still four literals** in `app/src/paths.ts`, so
    `forge.originUrl` and `tracker.baseUrl` are read for some purposes and ignored for others.
    Notably `add-clone` falls back to this repo's origin URL when none is given.
-5. **Linux is unexercised.** The VS Code window-state path is macOS-only, two generated scripts
+3. **Linux is unexercised.** The VS Code window-state path is macOS-only, two generated scripts
    fall back to a Homebrew `jq`, every install hint says `brew install`, and the Konsole and GNOME
    Terminal drivers have never run against a live terminal. GNOME Terminal structurally cannot
    deliver a `SYNC PAUSE`.

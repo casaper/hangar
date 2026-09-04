@@ -133,24 +133,39 @@ export const loadConfigFile = (configPath: string): HangarConfig => {
     );
   }
 
+  return parseConfigText(readFileSync(configPath, 'utf8'), tildify(configPath));
+};
+
+/**
+ * The parse-and-validate half of `loadConfigFile`, over TEXT rather than a path.
+ *
+ * Split out so `hangar setup -n` can validate the config it has rendered without writing it
+ * anywhere. That was the gap the `envrcDirs: ['.', '', ...]` bug lived in: the dry run returned
+ * before the only parse in the command, so the one invocation that could have caught a config
+ * setup cannot load was the one that skipped the check.
+ *
+ * `what` names the source in every message, because "not a valid hangar config" about a file on
+ * disk and about a render in memory need different follow-up actions.
+ */
+export const parseConfigText = (text: string, what: string): HangarConfig => {
   let raw: unknown;
   try {
-    raw = parseYaml(readFileSync(configPath, 'utf8'));
+    raw = parseYaml(text);
   } catch (error) {
     throw new CliError(
-      `${tildify(configPath)} is not valid YAML`,
+      `${what} is not valid YAML`,
       error instanceof Error ? error.message : String(error),
     );
   }
 
   if (raw === null || raw === undefined) {
-    throw new CliError(`${tildify(configPath)} is empty`, 'Run `hangar setup` to rewrite it.');
+    throw new CliError(`${what} is empty`, 'Run `hangar setup` to rewrite it.');
   }
 
   const result = hangarConfigSchema.safeParse(raw);
   if (!result.success) {
     throw new CliError(
-      `${tildify(configPath)} is not a valid hangar config`,
+      `${what} is not a valid hangar config`,
       `${String(result.error.issues.length)} problem(s):\n${formatIssues(result.error.issues)}`,
     );
   }

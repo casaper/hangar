@@ -1,0 +1,156 @@
+
+hangar setup — %SETUP%
+
+Environment
+ok  git                found
+ok  direnv             found
+ok  node (.nvmrc)      found
+ok  pnpm               found
+ok  jq                 found
+ok  yq                 found
+ok  fnm                found (of fnm / nvm)
+ok  homebrew           found at /opt/homebrew
+
+ok  all 6 recommended tools present
+
+
+Configuration
+    No clones here yet — answers come from your input.
+
+>   would write %SETUP%/hangar.config.yaml
+>   would write %SETUP%/hangar.schema.json
+>   would create %SETUP%/.env.shared (mode 600)
+ok  the rendered config validates against the schema
+
+# yaml-language-server: $schema=./hangar.schema.json
+$schema: ./hangar.schema.json
+
+_: >-
+  Configuration for one hangar: a directory holding a fleet of full clones of one repo.
+
+# Written by `hangar setup`, and yours to edit from here. This file is normally GITIGNORED --
+# it names this machine's paths, ports and token variables. Every key, its default and every
+# alternative is documented in hangar.config.example.yaml; `hangar config validate` reports
+# every problem at once, and `hangar config show` prints this file with all defaults applied.
+# Validation is strict: an unknown key is an error, because a silently dropped key is a setting
+# that looks configured and is not.
+#
+# Setup writes only what it could OBSERVE in this repo or was told. Anything it could not
+# observe is left out with a comment saying what it would do -- an absent key is a hangar that
+# does one less thing, and a guessed one is a hangar that checks the wrong port.
+
+# Namespaces everything this hangar writes OUTSIDE its own root: the theme filenames, the
+# statusline script and the shell function in the generated colour table. No dashes -- it has
+# to be a legal shell identifier. Never derived from the directory name, because ~/work/tmp_lvj1i0wliy
+# and ~/code/tmp_lvj1i0wliy would collide in that shared state.
+id: tmp_lvj1i0wliy
+displayName: 'tmp_lvj1i0wliy'
+# The setup preset this config was written from. A LABEL: no code reads it, and changing it
+# changes nothing. Everything the preset chose is spelled out below, where you can edit it.
+profile: sql-postgrest
+
+clones:
+  prefix: clone_
+  # The generated discovery regex is \d{2,} -- open at the top on purpose. The old
+  # clone_0[0-9] glob stopped matching at clone_10.
+  pad: 2
+
+forge:
+  kind: bitbucketCloud
+  originUrl: git@bitbucket.org:acme/warehouse_sql.git
+  # defaultBranch is left blank on purpose: the first command that needs it detects it from
+  # git and writes the line here itself. Nothing guesses `master` -- undetectable aborts.
+  # The variable in the secrets file holding an API token. Without it `sync` cannot ask which
+  # branch a pull request targets, so it falls back to defaultBranch and says the target is a
+  # guess -- a soft failure, never an error.
+  tokenEnvKey: BITBUCKET_TOKEN
+
+tracker:
+  # No tracker. `hangar status` then infers no issue key and links nothing, and the Jira
+  # PreToolUse cache hook does nothing. Set kind: jira and a baseUrl to turn both on;
+  # hangar.config.example.yaml has the syncScript/namerScript pair the cache hook needs.
+  kind: none
+
+repo:
+  # Where the app package lives; '' means the repo root.
+  appDir: ''
+  # Fallback for direnv discovery -- `git ls-files -- *.envrc` is tried first, and discovery
+  # beats declaration. Read off this repo's tracked .envrc files.
+  envrcDirs: ['.']
+  cloneEnv:
+    file: .env.local
+    rootPathEnvKey: PROJECT_GIT_ROOT_PATH
+    # A database and a compose project per clone, derived from the index like the ports -- so two
+    # clones can run migrations at once without meeting.
+    # Rendered per clone into the dotenv above, so `doctor` byte-compares them and `--fix`
+    # repairs them with no new check.
+    vars:
+      PGDATABASE: '{id}_{index2}'
+      COMPOSE_PROJECT_NAME: '{id}-{index2}'
+  # Symlinks every clone needs, each with a REQUIRED `why` -- nothing in a filesystem explains
+  # a link, and that string is what add-clone and doctor print. The usual target is
+  # '{secretsFile}', for a path that has to reload the shared secrets at a later point than
+  # direnv would. Nothing here can be guessed from a checkout, so the list starts empty.
+  symlinks: []
+  # No install step: nothing in this repo declared a lockfile, which is the normal answer for
+  # a repo whose dependencies are not fetched per checkout (SQL, docs, infrastructure).
+  install: []
+  # portCheckCommand names the repo's OWN port resolver, run inside a clone and compared
+  # against the roles below -- which turns the by-convention agreement between Hangar and the
+  # repo's port table into a checked one. Left out because it is a command inside YOUR repo.
+  # portCheckCommand: [node, dev/ports.mjs, --json]
+
+ports:
+  # Spacing between clones. Must match across hangars for the offset guarantee to hold.
+  step: 100
+  # This hangar's residue class mod step. Two hangars with different offsets can never
+  # collide for ANY clone counts -- unlike a reserved block, which fails silently once a
+  # hangar outgrows it. 0 keeps this hangar exactly where it already is, which matters
+  # because changing a port moves a running dev server out from under a live session.
+  offset: 0
+  # PostgREST answers HTTP so it gets a URL and a health check; a database port does not.
+  roles:
+    - id: api
+      envKey: PGRST_SERVER_PORT
+      base: 3000
+      label: 'PostgREST'
+      url: 'http://localhost:{port}'
+      # Declared, so the permissions.allow matcher can be GENERATED and stay fully anchored.
+      # A looser pattern rewrites the wrong allow entry and leaves a check aimed at a
+      # sibling's port.
+      healthCheck:
+        kind: httpCurl
+        timeoutSeconds: 3
+        path: '/'
+    - id: db
+      envKey: PGPORT
+      base: 5432
+      label: 'Postgres'
+      url: null
+
+terminal:
+  tabs:
+    - { role: claude, dir: '.', command: claude }
+    - { role: shell, dir: '.' }
+
+editor:
+  # A list, because a clone can be open in more than one editor at once. VS Code is the default
+  # and the only kind that has to work; jetbrains, zed, emacs, vim, xcode, eclipse and the six
+  # VS Code forks are best effort. The full list, with what each one syncs, is in
+  # hangar.config.example.yaml -- along with the per-editor blocks (editor.jetbrains,
+  # editor.vim, editor.eclipse), which are left out here because they configure nothing until
+  # their kind is listed below.
+  kinds: ['vscode']
+  workspaceFileName: 'tmp_lvj1i0wliy_{index2}.code-workspace'
+  workspaceFolderLabel: '{index}: tmp_lvj1i0wliy'
+  workspaceDirs: ['.']
+  # Settings whose value is an absolute path into the checkout, and so must be rewritten per
+  # clone by `hangar ide vscode sync`. None were found in this repo's .vscode/settings.json,
+  # which is the normal answer -- most settings are relative and shared. An entry's value is
+  # the clone-relative path it should point at.
+  rootPathKeys: {}
+
+secrets:
+  # Hangar-root-relative, so it sits OUTSIDE every clone and no clone can commit it.
+  file: .env.shared
+  mode: '600'

@@ -25,7 +25,7 @@ Global: `--hangar <path>` (the hangar root to operate on; **only `config show` a
 | `install` | `[clone]` | `--all` · `-n, --dry-run` | **act [user]** |
 | `remove-clone` | `<clone>` | `--delete` · `--force` | **act [user]**, no `-n` |
 | `doctor` | `[clone]` (defaults to every clone) | `-a, --all` · `--fix` | report bare; **act [user]** with `--fix` |
-| `setup` | — | `-y, --yes` · `--force` · `-n, --dry-run` | act |
+| `setup` | — | `-y, --yes` · `--origin <url>` · `--preset <name>` · `--force` · `-n, --dry-run` | act |
 | `teach-rg` | `<clone>` | `-n, --dry-run` · `-y, --yes` | act |
 
 ## Groups
@@ -87,6 +87,17 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   means the directory exists and the manager's marker is there. A **dim** row (rather than green)
   means the manager leaves nothing inside the clone to look at — maven, go, cargo, pip, poetry,
   gradle, deno, bundler — so there is genuinely no answer, which it says rather than guessing.
+- **`hangar setup --force` is the one command that destroys live untracked state.** The config is
+  gitignored, so git cannot restore it — back it up before running `--force` anywhere that already
+  has a config. `-n` is safe: it validates the render in memory and writes nothing.
+- **`setup -y` needs `--origin <url>` in a fresh checkout.** The origin URL is the one field with
+  no derivable default. With neither the flag nor a terminal to ask on, setup refuses and names the
+  flag rather than exiting quietly.
+- **`setup --preset <name>` supplies the two answers no checkout can:** the port roles and the
+  per-clone environment variables. `generic`, `node-web`, `sql-postgrest`. A preset writes plain
+  config and is never read again; `profile:` in the result is a label no code consults.
+- **`--hangar <path>` means "the directory to set up"** for `setup`, since there is no config yet
+  to resolve. Every other command resolves it as the hangar to act on.
 - **`doctor` with no clone argument already checks every clone**, so `-a` is only needed to be
   explicit.
 - **`resume -n` is `--limit`.** Everywhere else `-n` is `--dry-run`.

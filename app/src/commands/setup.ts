@@ -1,15 +1,23 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { join } from 'node:path';
 
 import { configJsonSchemaText } from '../config/json-schema.ts';
-import { deriveDefaults, derivedPortRoles, derivedPortStep } from '../config/derive.ts';
+import { deriveDefaults, derivedPortStep } from '../config/derive.ts';
 import {
   CONFIG_FILENAME,
   EXAMPLE_CONFIG_FILENAME,
   jsonSchemaFileName,
   loadConfigFile,
+  parseConfigText,
 } from '../config/load.ts';
+import {
+  presetByName,
+  presetChoices,
+  presetNames,
+  PRESETS,
+  type Preset,
+} from '../config/presets.ts';
 import { MANAGER_COMMANDS } from '../config/schema.ts';
 import { inspectEnvironment, type EnvironmentReport } from '../environment.ts';
 import { CliError } from '../exec.ts';
@@ -31,6 +39,16 @@ export type SetupOptions = {
   readonly yes?: boolean | undefined;
   readonly force?: boolean | undefined;
   readonly dryRun?: boolean | undefined;
+  /**
+   * The origin URL, for `--yes` in a directory with no clone to read one off.
+   *
+   * Without it `--yes` ALWAYS failed in a fresh checkout, which is the only place `--yes` is
+   * useful: `deriveDefaults` leaves `originUrl` undefined with no clone to ask, `ask` returns
+   * the empty fallback under `--yes`, and setup threw "a git origin URL is required" after
+   * printing a full environment report. There was no flag that could get past it.
+   */
+  readonly origin?: string | undefined;
+  readonly preset?: string | undefined;
 };
 
 /**
@@ -97,17 +115,51 @@ export const reportEnvironment = (report: EnvironmentReport): void => {
   }
 };
 
-type Answers = {
-  id: string;
-  displayName: string;
-  originUrl: string;
-  defaultBranch: string;
-  appDir: string;
-  installManager: string;
-  trackerBaseUrl: string;
-  trackerKeyPrefix: string;
-  portOffset: string;
+export type Answers = {
+  readonly id: string;
+  readonly displayName: string;
+  readonly originUrl: string;
+  readonly defaultBranch: string;
+  readonly appDir: string;
+  readonly installManager: string;
+  readonly trackerBaseUrl: string;
+  readonly trackerKeyPrefix: string;
+  readonly portOffset: string;
+  /** Supplies the two things no checkout can answer: the port roles and the per-clone vars. */
+  readonly preset: Preset;
+  /** Discovered from a clone's tracked `*.envrc` files, never a literal list. */
+  readonly envrcDirs: readonly string[];
+  /** Discovered from a clone's `.vscode/settings.json`; empty is the normal answer. */
+  readonly rootPathKeys: Readonly<Record<string, string>>;
 };
+
+/**
+ * A comment block, wrapped to this repo's 100-column width at the given indent.
+ *
+ * Preset prose is a plain sentence in `presets.ts` rather than pre-wrapped lines, so it can be
+ * read and edited there without counting columns; the wrapping belongs to the renderer.
+ */
+const wrapComment = (text: string, indent: string): string => {
+  const width = 100 - indent.length - 2;
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(/\s+/)) {
+    if (line === '') line = word;
+    else if (`${line} ${word}`.length <= width) line = `${line} ${word}`;
+    else {
+      lines.push(line);
+      line = word;
+    }
+  }
+  if (line !== '') lines.push(line);
+  return lines.map((l) => `${indent}# ${l}`).join('\n');
+};
+
+/** Single-quote a YAML scalar. Everything templated needs it: `{id}_{index2}` reads as a map. */
+const yq = (value: string): string => `'${value.replaceAll("'", "''")}'`;
+
+const yamlRecord = (entries: readonly (readonly [string, string])[], indent: string): string =>
+  entries.map(([key, value]) => `${indent}${key}: ${yq(value)}`).join('\n');
 
 /**
  * Render the config file.
@@ -116,14 +168,27 @@ type Answers = {
  * anything -- the convention this CLI already uses in place of a test suite. The comments are
  * the point: this file is read far more often than it is written, and a value whose reason is
  * not beside it gets "simplified" later.
+ *
+ * **It emits only what was observed or answered.** That is the rule this builder broke, and it
+ * broke it in a way only a foreign repo could reach: it wrote this fleet's Playwright symlink,
+ * this fleet's eight VS Code path keys, this repo's `node dev/ports.mjs` port check, this
+ * organisation's Jira host, and `envrcDirs: ['.', '<appDir>', 'tests/playwright-regression-tests']`
+ * -- which for a repo with no `package.json` renders as `['.', '', 'tests/...']`, and `envrcDirs`
+ * is `z.array(z.string().min(1))`. So `setup` wrote a config and then threw validating it.
+ *
+ * A value that cannot be observed is either asked, offered by a preset, or LEFT OUT with a
+ * comment saying what it would do. Left out is not a lesser answer: every one of those keys is
+ * optional in the schema, and an absent key is a hangar that does one less thing, while a
+ * confidently wrong one is a hangar that checks the wrong port or links the wrong file.
  */
 export const configYamlContent = (a: Answers): string => {
-  const roles = derivedPortRoles();
-  const step = derivedPortStep();
   const command = MANAGER_COMMANDS[a.installManager];
   const install =
     a.installManager === ''
-      ? '  install: []\n'
+      ? `  # No install step: nothing in this repo declared a lockfile, which is the normal answer for
+  # a repo whose dependencies are not fetched per checkout (SQL, docs, infrastructure).
+  install: []
+`
       : `  install:
       # A step names either a \`manager\` (whose canonical command is built in) or an explicit
       # \`command\`. Any ecosystem works here -- maven, bundler, pip, cargo -- because Hangar
@@ -132,28 +197,105 @@ export const configYamlContent = (a: Answers): string => {
     - dir: ${a.appDir === '' ? '.' : a.appDir}
       manager: ${a.installManager}
       nodeVersionFile: .nvmrc
+      # Required. Printed beside the step by add-clone, \`hangar install\` and doctor -- the only
+      # place a reader learns whether it is load-bearing. Say why THIS repo needs it.
+      why: each clone needs its own installed dependencies, which is what the fleet is for
 `;
 
   const tracker =
     a.trackerBaseUrl === ''
       ? `tracker:
+  # No tracker. \`hangar status\` then infers no issue key and links nothing, and the Jira
+  # PreToolUse cache hook does nothing. Set kind: jira and a baseUrl to turn both on;
+  # ${EXAMPLE_CONFIG_FILENAME} has the syncScript/namerScript pair the cache hook needs.
   kind: none
 `
       : `tracker:
   kind: jira
   baseUrl: ${a.trackerBaseUrl}
-  # A whitelist, so a token like ISO-8601 or SHA-1 in a branch name is never mistaken for an
-  # issue key. Without it the pattern stays open and leans on a denylist instead.
+${
+  a.trackerKeyPrefix === ''
+    ? `  # keyPrefixes is a whitelist, so a token like ISO-8601 or SHA-1 in a branch name is never
+  # mistaken for an issue key. None was detected from this repo's branch names; without it the
+  # pattern stays open and leans on a denylist instead.
+`
+    : `  # A whitelist, so a token like ISO-8601 or SHA-1 in a branch name is never mistaken for an
+  # issue key. Read off this repo's own branch names.
   keyPrefixes: [${a.trackerKeyPrefix}]
-  cache:
+`
+}  cache:
     ttlMinutes: 60
     bypassEnvKey: JIRA_SYNC_NO_CACHE
-  # Repo-relative, and deliberately the repo's OWN scripts: the namer is the tracked,
-  # branch-versioned authority on cache filenames, so Hangar asks it instead of
-  # reimplementing the naming -- an untracked copy drifts the first time a branch changes a
-  # relation slug.
-  syncScript: .claude/skills/jira-ticket-sync/sync.mjs
-  namerScript: .claude/skills/jira-scope/jira-cache.mjs
+  # The per-ticket cache hook needs the repo's OWN scripts -- the namer is the tracked,
+  # branch-versioned authority on cache filenames, so Hangar asks it instead of reimplementing
+  # the naming. Left out because they are paths inside YOUR repo and nothing here can guess
+  # them; the hook stays inert until both are set.
+  # syncScript: .claude/skills/jira-ticket-sync/sync.mjs
+  # namerScript: .claude/skills/jira-scope/jira-cache.mjs
+`;
+
+  const isBitbucket = a.originUrl.includes('bitbucket.org');
+
+  const roles =
+    a.preset.roles.length === 0
+      ? `  # ${wrapComment(a.preset.roleNote, '  ')}
+  # Each role becomes one environment variable in every clone's dotenv, one column in
+  # \`hangar ports\`, and optionally one generated health-check permission. A hangar with no
+  # roles is legal and manages no ports at all.
+  roles: []
+`
+      : `${wrapComment(a.preset.roleNote, '  ')}
+  roles:
+${a.preset.roles
+  .map(
+    (r) => `    - id: ${r.id}
+      envKey: ${r.envKey}
+      base: ${String(r.base)}
+      label: ${yq(r.label)}
+      url: ${r.url === null ? 'null' : yq(r.url)}${
+        r.healthCheck === undefined
+          ? ''
+          : `
+      # Declared, so the permissions.allow matcher can be GENERATED and stay fully anchored.
+      # A looser pattern rewrites the wrong allow entry and leaves a check aimed at a
+      # sibling's port.
+      healthCheck:
+        kind: httpCurl
+        timeoutSeconds: ${String(r.healthCheck.timeoutSeconds)}${
+          r.healthCheck.path === '' ? '' : `\n        path: ${yq(r.healthCheck.path)}`
+        }`
+      }`,
+  )
+  .join('\n')}
+`;
+
+  const cloneVars =
+    Object.keys(a.preset.cloneEnvVars).length === 0
+      ? `    # Per-clone values beyond the ports, as templated KEY: value pairs -- this is where a
+    # clone gets its own database or container set: PGDATABASE: '${a.id}_{index2}'.
+    vars: {}
+`
+      : `${wrapComment(a.preset.varsNote, '    ')}
+    # Rendered per clone into the dotenv above, so \`doctor\` byte-compares them and \`--fix\`
+    # repairs them with no new check.
+    vars:
+${yamlRecord(Object.entries(a.preset.cloneEnvVars), '      ')}
+`;
+
+  const rootPathKeys =
+    Object.keys(a.rootPathKeys).length === 0
+      ? `  # Settings whose value is an absolute path into the checkout, and so must be rewritten per
+  # clone by \`hangar ide vscode sync\`. None were found in this repo's .vscode/settings.json,
+  # which is the normal answer -- most settings are relative and shared. An entry's value is
+  # the clone-relative path it should point at.
+  rootPathKeys: {}
+`
+      : `  # Settings whose value is an absolute path into the checkout, and so must be rewritten per
+  # clone. Read off a clone's own .vscode/settings.json: each value is the clone-relative path
+  # the setting points at. A key missing from here is copied verbatim between clones, which
+  # aims one clone's tooling at another clone's tree and fails silently.
+  rootPathKeys:
+${yamlRecord(Object.entries(a.rootPathKeys), '    ')}
 `;
 
   return `# yaml-language-server: $schema=${SCHEMA_REF}
@@ -168,14 +310,20 @@ _: >-
 # every problem at once, and \`hangar config show\` prints this file with all defaults applied.
 # Validation is strict: an unknown key is an error, because a silently dropped key is a setting
 # that looks configured and is not.
+#
+# Setup writes only what it could OBSERVE in this repo or was told. Anything it could not
+# observe is left out with a comment saying what it would do -- an absent key is a hangar that
+# does one less thing, and a guessed one is a hangar that checks the wrong port.
 
-# Namespaces everything this hangar writes OUTSIDE its own root: ~/.claude/hangar/<id>,
-# the theme filenames, and the shell function in the generated colour table. No dashes --
-# it has to be a legal shell identifier. Never derived from the directory name, because
-# ~/work/${a.id} and ~/code/${a.id} would collide in that shared state.
+# Namespaces everything this hangar writes OUTSIDE its own root: the theme filenames, the
+# statusline script and the shell function in the generated colour table. No dashes -- it has
+# to be a legal shell identifier. Never derived from the directory name, because ~/work/${a.id}
+# and ~/code/${a.id} would collide in that shared state.
 id: ${a.id}
-displayName: ${a.displayName}
-profile: ${a.trackerBaseUrl === '' ? 'generic' : 'storefront-ui'}
+displayName: ${yq(a.displayName)}
+# The setup preset this config was written from. A LABEL: no code reads it, and changing it
+# changes nothing. Everything the preset chose is spelled out below, where you can edit it.
+profile: ${a.preset.name}
 
 clones:
   prefix: clone_
@@ -184,7 +332,7 @@ clones:
   pad: 2
 
 forge:
-  kind: ${a.originUrl.includes('bitbucket.org') ? 'bitbucketCloud' : 'none'}
+  kind: ${isBitbucket ? 'bitbucketCloud' : 'none'}
   originUrl: ${a.originUrl}
 ${
   a.defaultBranch === ''
@@ -194,60 +342,47 @@ ${
     : `  # Detected once and read from here afterwards; no command asks git for it again.
   defaultBranch: ${a.defaultBranch}
 `
-}  tokenEnvKey: BITBUCKET_TOKEN
-
+}${
+    isBitbucket
+      ? `  # The variable in the secrets file holding an API token. Without it \`sync\` cannot ask which
+  # branch a pull request targets, so it falls back to defaultBranch and says the target is a
+  # guess -- a soft failure, never an error.
+  tokenEnvKey: BITBUCKET_TOKEN
+`
+      : `  # tokenEnvKey names the variable in the secrets file holding an API token, which lets
+  # \`sync\` ask which branch a pull request targets instead of guessing. Only the
+  # bitbucketCloud adapter uses it.
+`
+  }
 ${tracker}
 repo:
   # Where the app package lives; '' means the repo root.
   appDir: ${a.appDir === '' ? "''" : a.appDir}
-  # Fallback only -- \`git ls-files -- *.envrc\` is tried first, and discovery beats declaration.
-  envrcDirs: ['.', '${a.appDir}', 'tests/playwright-regression-tests']
+  # Fallback for direnv discovery -- \`git ls-files -- *.envrc\` is tried first, and discovery
+  # beats declaration. Read off this repo's tracked .envrc files.
+  envrcDirs: [${a.envrcDirs.map((dir) => yq(dir)).join(', ')}]
   cloneEnv:
     file: .env.local
     rootPathEnvKey: PROJECT_GIT_ROOT_PATH
-  symlinks:
-    - path: tests/playwright-regression-tests/.env.local
-      target: '{secretsFile}'
-      skipIfDirMissing: true
-      # \`why\` is required, and this is a worked example of the reason: nothing in the
-      # filesystem explains this link, and it is printed by add-clone and by doctor.
-      why: >-
-        the tracked tests/.env sets USER_READWRITE_PASSWORD= (empty) and direnv loads it
-        AFTER .envrc.private, so this reload is what wins; delete it and Playwright logs in
-        with an empty password
-${install}  # Run inside a clone, where direnv has loaded its dotenv, and compared against the ports
-  # below. Never run from the hangar root: there it reports clone_01's fallbacks for every
-  # clone and does not error -- it just answers wrong.
-  portCheckCommand: [node, dev/ports.mjs, --json]
+${cloneVars}  # Symlinks every clone needs, each with a REQUIRED \`why\` -- nothing in a filesystem explains
+  # a link, and that string is what add-clone and doctor print. The usual target is
+  # '{secretsFile}', for a path that has to reload the shared secrets at a later point than
+  # direnv would. Nothing here can be guessed from a checkout, so the list starts empty.
+  symlinks: []
+${install}  # portCheckCommand names the repo's OWN port resolver, run inside a clone and compared
+  # against the roles below -- which turns the by-convention agreement between Hangar and the
+  # repo's port table into a checked one. Left out because it is a command inside YOUR repo.
+  # portCheckCommand: [node, dev/ports.mjs, --json]
 
 ports:
   # Spacing between clones. Must match across hangars for the offset guarantee to hold.
-  step: ${String(step)}
+  step: ${String(derivedPortStep())}
   # This hangar's residue class mod step. Two hangars with different offsets can never
   # collide for ANY clone counts -- unlike a reserved block, which fails silently once a
   # hangar outgrows it. 0 keeps this hangar exactly where it already is, which matters
   # because changing a port moves a running dev server out from under a live session.
   offset: ${a.portOffset}
-  roles:
-${roles
-  .map(
-    (r) => `    - id: ${r.id}
-      envKey: ${r.envKey}
-      base: ${String(r.base)}
-      label: ${r.label}${
-        r.id === 'storybook'
-          ? `
-      # Declared, so the permissions.allow matcher can be GENERATED and stay fully anchored.
-      # A looser pattern rewrites the wrong allow entry and leaves a check aimed at a
-      # sibling's port.
-      healthCheck:
-        kind: httpCurl
-        timeoutSeconds: 3`
-          : ''
-      }`,
-  )
-  .join('\n')}
-
+${roles}
 terminal:
   tabs:
     - { role: claude, dir: '.', command: claude }
@@ -264,22 +399,37 @@ editor:
   workspaceFileName: '${a.id}_{index2}.code-workspace'
   workspaceFolderLabel: '{index}: ${a.id}'
   workspaceDirs: ['.'${a.appDir === '' ? '' : `, '${a.appDir}'`}]
-  # Settings whose value is a clone-relative path and so must be rewritten per clone.
-  rootPathKeys:
-    stylelint.configBasedir: ${a.appDir}
-    stylelint.configFile: ${a.appDir}/stylelint.config.mjs
-    stylelint.stylelintPath: ${a.appDir}/node_modules/stylelint
-    jestrunner.projectPath: ${a.appDir}
-    coverage-gutters.manualCoverageFilePaths: ${a.appDir}/coverage/lcov.info
-    prettier.configPath: ${a.appDir}/.prettierrc
-    prettier.prettierPath: ${a.appDir}/node_modules/prettier
-    storyExplorer.server.internal.npm.dir: ${a.appDir}
-
+${rootPathKeys}
 secrets:
   # Hangar-root-relative, so it sits OUTSIDE every clone and no clone can commit it.
   file: .env.shared
   mode: '600'
 `;
+};
+
+/**
+ * The secrets file, as `setup` creates it: variable names, commented out, and nothing else.
+ *
+ * A PURE builder, and it exists because `setup` used to NAME a secrets file it never created.
+ * On a fresh hangar `.env.shared` is therefore absent, which makes `doctor` red and leaves
+ * `sync` with no token to read -- both diagnosed as bugs rather than as "nobody filled this in".
+ *
+ * Every line is commented out. An empty `BITBUCKET_TOKEN=` would be worse than a missing file:
+ * a set-but-empty variable is indistinguishable from a real one to everything downstream, so
+ * `sync` would send an empty bearer token and report a 401 rather than "no token configured".
+ * Filling this in is the one manual step, and it says so.
+ */
+export const secretsFileContent = (a: Answers): string => {
+  const names = a.originUrl.includes('bitbucket.org') ? ['BITBUCKET_TOKEN'] : [];
+  if (a.trackerBaseUrl !== '') names.push('ATLASSIAN_USER_EMAIL', 'ATLASSIAN_API_TOKEN');
+  return `# Every credential this hangar needs, in ONE file, outside every clone -- so no clone can
+# commit it. Mode 600. Each clone's .envrc.private loads it by ABSOLUTE path; a relative one
+# would resolve against the clone's subdirectory and silently load nothing.
+#
+# UNCOMMENT AND FILL IN what you use. Left commented on purpose: a set-but-empty variable is
+# indistinguishable from a real one downstream, so an empty token makes \`sync\` report a 401
+# instead of "no token configured".
+${names.length === 0 ? '#\n# This hangar declared no forge token and no tracker, so it needs nothing yet.\n' : names.map((name) => `#\n# ${name}=\n`).join('')}`;
 };
 
 const ask = async (
@@ -327,13 +477,53 @@ export const setup = async (root: string, opts: SetupOptions): Promise<void> => 
       : `Read off ${String(derived.cloneCount)} existing clone(s); press enter to accept each.`,
   );
 
+  const namedPreset = opts.preset === undefined ? undefined : presetByName(opts.preset);
+  if (opts.preset !== undefined && namedPreset === undefined) {
+    throw new CliError(
+      `unknown preset "${opts.preset}"`,
+      `Known presets: ${presetNames().join(', ')}`,
+    );
+  }
+
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   let answers: Answers;
   try {
+    const id = await ask(rl, 'hangar id', derived.id, { yes });
+    /*
+     * Asked even under `--yes`, unlike every other question.
+     *
+     * It is the one field with no derivable default and no usable empty value -- there is
+     * nothing for `add-clone` to clone from without it. `--origin` is what lets `--yes` work
+     * unattended; without either, asking is strictly better than the throw this used to do
+     * after the whole environment report had scrolled past.
+     */
+    const knownOrigin = opts.origin ?? derived.originUrl ?? '';
+    /*
+     * Only ASK when there is a terminal to ask.
+     *
+     * With stdin closed -- a script, a CI job, `</dev/null` -- `rl.question` never settles, so
+     * the process exited 0 with an "unsettled top-level await" warning and no config written.
+     * That is worse than the throw it replaced: it looks like success. No tty and no origin is
+     * a missing `--origin`, and it says so.
+     */
+    if (knownOrigin === '' && !process.stdin.isTTY) {
+      throw new CliError(
+        'a git origin URL is required, and there is no terminal to ask on',
+        'Pass --origin <url>. There is nothing for `hangar add-clone` to clone from without it.',
+      );
+    }
+    const originUrl =
+      knownOrigin === ''
+        ? await ask(rl, 'git origin URL (required)', '', { yes: false })
+        : knownOrigin;
+
+    const preset = namedPreset ?? (await askPreset(rl, yes));
+
     answers = {
-      id: await ask(rl, 'hangar id', derived.id, { yes }),
-      displayName: await ask(rl, 'display name', derived.displayName ?? derived.id, { yes }),
-      originUrl: await ask(rl, 'git origin URL', derived.originUrl ?? '', { yes }),
+      id,
+      displayName: await ask(rl, 'display name', derived.displayName ?? id, { yes }),
+      originUrl,
+      preset,
       defaultBranch: await ask(
         rl,
         'default branch (blank = detect it on first use)',
@@ -359,6 +549,9 @@ export const setup = async (root: string, opts: SetupOptions): Promise<void> => 
         allowEmpty: true,
       }),
       portOffset: await ask(rl, 'port offset (0 keeps existing ports)', '0', { yes }),
+      // Not asked: both are observations, and both used to be literals of this one repo.
+      envrcDirs: derived.envrcDirs,
+      rootPathKeys: derived.rootPathKeys,
     };
   } finally {
     rl.close();
@@ -367,18 +560,31 @@ export const setup = async (root: string, opts: SetupOptions): Promise<void> => 
   if (answers.originUrl === '') {
     throw new CliError(
       'a git origin URL is required',
-      'There is nothing for `hangar add-clone` to clone from.',
+      'Pass --origin <url>, or answer the question. There is nothing for `hangar add-clone` to clone from without it.',
     );
   }
 
   const yaml = configYamlContent(answers);
   const schema = configJsonSchemaText();
   const schemaPath = join(root, jsonSchemaFileName);
+  const secretsPath = join(root, '.env.shared');
+
+  /*
+   * Validate the rendered YAML BEFORE printing or writing it, and in memory.
+   *
+   * The dry run used to return before `loadConfigFile`, so `setup -n` never validated what it
+   * would write -- which is why the `envrcDirs: ['.', '', ...]` bug was reachable at all: the
+   * one command that could have caught it was the one that skipped the check. Now both paths go
+   * through the same parse, so `-n` is a real rehearsal.
+   */
+  validateRendered(yaml);
 
   blank();
   if (dryRun) {
     step(`would write ${tildify(configPath)}`);
     step(`would write ${tildify(schemaPath)}`);
+    if (!existsSync(secretsPath)) step(`would create ${tildify(secretsPath)} (mode 600)`);
+    ok('the rendered config validates against the schema');
     process.stdout.write(`\n${yaml}`);
     return;
   }
@@ -392,6 +598,21 @@ export const setup = async (root: string, opts: SetupOptions): Promise<void> => 
     note(`unchanged ${tildify(schemaPath)}`);
   }
 
+  /*
+   * The secrets file, created empty-but-named. Never overwritten: it holds live credentials.
+   *
+   * `setup` used to name this file and not create it, so a fresh hangar had `doctor` red and
+   * `sync` with no token to read -- both of which get diagnosed as bugs rather than as "nobody
+   * has filled this in yet".
+   */
+  if (existsSync(secretsPath)) {
+    note(`unchanged ${tildify(secretsPath)} (it already exists — never overwritten)`);
+  } else {
+    writeFileSync(secretsPath, secretsFileContent(answers));
+    chmodSync(secretsPath, 0o600);
+    ok(`created  ${tildify(secretsPath)} (mode 600) — filling it in is your one manual step`);
+  }
+
   // Validating what we just wrote is the only proof the builder and the schema agree.
   loadConfigFile(configPath);
   blank();
@@ -399,4 +620,36 @@ export const setup = async (root: string, opts: SetupOptions): Promise<void> => 
   note(
     'Next: `hangar config show` to see every applied default, `hangar doctor --all` to check the clones.',
   );
+};
+
+/**
+ * Parse the rendered YAML without touching the filesystem.
+ *
+ * Written as a temp-file-free check on purpose: the point is that `-n` proves the render is
+ * loadable, and a check that had to write the file first would not be a dry run.
+ */
+const validateRendered = (yaml: string): void => {
+  try {
+    parseConfigText(yaml, '(the config setup just rendered)');
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new CliError(
+      `the config setup rendered does not validate: ${detail}`,
+      'This is a bug in `hangar setup`, not in your answers. Report the answers you gave.',
+    );
+  }
+};
+
+const askPreset = async (rl: ReturnType<typeof createInterface>, yes: boolean): Promise<Preset> => {
+  const fallback = PRESETS[0];
+  if (fallback === undefined) throw new CliError('no setup presets are defined');
+  if (yes) return fallback;
+  note('Preset — supplies the port roles and per-clone variables no checkout can answer:');
+  note(presetChoices());
+  const answer = await ask(rl, 'preset', fallback.name, { yes: false });
+  const chosen = presetByName(answer);
+  if (chosen === undefined) {
+    throw new CliError(`unknown preset "${answer}"`, `Known presets: ${presetNames().join(', ')}`);
+  }
+  return chosen;
 };

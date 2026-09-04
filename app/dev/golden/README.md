@@ -15,7 +15,12 @@ Derived from the config and the clone index alone, so it is byte-stable across d
   the verbatim copy names a temp directory. **This is the half that certifies anything.** While
   a config agrees with the defaults, "read the file" and "fell into a catch and used the
   defaults" produce identical output.
-- `gated/commands/` — the three command outputs that are genuinely derived.
+- `gated/commands/` — the command outputs that are genuinely derived. `setup-dry-*.txt` is one
+  per preset, rendered in an EMPTY temp directory: with no clones to read, `setup` is on the
+  path a colleague's first run takes, and every value in the result is either asked for or
+  admitted to be absent. It is not captured against this hangar deliberately — `setup` needs
+  `--force` to re-render, and aiming that here would leave the live gitignored config one `-n`
+  regression away from being destroyed by the net meant to protect it.
 
 The gate is `pnpm golden && git diff --exit-code dev/golden/gated`.
 
