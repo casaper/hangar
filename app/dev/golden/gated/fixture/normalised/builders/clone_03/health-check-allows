@@ -1,0 +1,1 @@
+Bash(curl -s -o /dev/null -w "%{http_code}" --max-time 7 http://localhost:3237/ready)

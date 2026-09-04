@@ -16,6 +16,7 @@ import { inferTicket, jiraUrl } from '../jira.ts';
 import { claudeSessionsIn, runningServersIn } from '../procs.ts';
 import { cloneLabel, fail, heading, note, ok, table, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
+import { portSummary } from '../ports.ts';
 
 /**
  * `hangar status` -- everything you need to know about a clone before touching it.
@@ -124,10 +125,7 @@ export const statusOf = (clone: Clone, fetched: boolean): void => {
         : `${jiraUrl(ticket.key)}${ticket.source === 'commit' ? pc.dim('  (from a commit on this branch, not from the branch name)') : ''}`,
     ],
     ['pull request', prSearchUrl(ref, branch)],
-    [
-      'ports',
-      `ng ${clone.ports.ng} · storybook ${clone.ports.storybook} · playwright ${clone.ports.playwrightReport}`,
-    ],
+    ['ports', portSummary(clone.ports)],
     [
       'servers',
       servers.length === 0

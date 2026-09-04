@@ -3,6 +3,7 @@ import { dirname, join, relative } from 'node:path';
 
 import {
   claudeLocalMdContent,
+  healthCheckAllows,
   claudeLocalMdPath,
   envLocalContent,
   envLocalPath,
@@ -31,6 +32,7 @@ import { cloneLabel, heading, note, ok, step, warn } from '../ui.ts';
 import { coloursSync } from './colours.ts';
 import { statusOf } from './status.ts';
 import type { Hangar } from '../hangar.ts';
+import { portSummary } from '../ports.ts';
 
 /**
  * `hangar add-clone` -- a new clone, wired into the fleet completely.
@@ -74,7 +76,7 @@ export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
   }
 
   heading(`Creating ${cloneLabel(clone)}`);
-  note(`ports ${clone.ports.ng} / ${clone.ports.storybook} / ${clone.ports.playwrightReport}`);
+  note(`ports ${portSummary(clone.ports)}`);
 
   // 1. the clone itself
   step(`git clone ${remoteUrl}`);
@@ -104,7 +106,7 @@ export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
 
   // 3-5. environment
   writeFile(envLocalPath(clone), envLocalContent(clone));
-  ok(`.env.local (${clone.ports.ng} / ${clone.ports.storybook} / ${clone.ports.playwrightReport})`);
+  ok(`.env.local (${portSummary(clone.ports)})`);
 
   writeFile(envrcPrivatePath(clone), envrcPrivateContent(hangar));
   ok(
@@ -143,7 +145,9 @@ export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
 
   // 7. Claude Code settings: copied, except the two values that must not be.
   writeFile(settingsPath(clone), settingsContentFor(clone, settingsTemplate(existing)));
-  ok(`.claude/settings.local.json (theme + Storybook health check on ${clone.ports.storybook})`);
+  ok(
+    `.claude/settings.local.json (theme + ${String(healthCheckAllows(clone).length)} health check(s))`,
+  );
 
   // 8-9. theme + workspace. BOTH copies of the workspace file: VS Code only offers a
   //       `*.code-workspace` from the directory you opened, and this repo is opened at its

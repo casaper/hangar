@@ -3,44 +3,116 @@
     "clone": "clone_01",
     "index": 1,
     "colour": "cyan",
-    "ng": 4200,
-    "storybook": 6006,
-    "playwrightReport": 9323,
-    "devServerUrl": "http://localhost:4200",
-    "storybookUrl": "http://localhost:6006",
+    "ports": [
+      {
+        "id": "ng",
+        "envKey": "NG_DEV_SERVER_PORT",
+        "label": "Angular dev server",
+        "port": 4200,
+        "url": "http://localhost:4200"
+      },
+      {
+        "id": "storybook",
+        "envKey": "STORYBOOK_DEV_SERVER_PORT",
+        "label": "Storybook",
+        "port": 6006,
+        "url": "http://localhost:6006"
+      },
+      {
+        "id": "playwrightReport",
+        "envKey": "PLAYWRIGHT_REPORT_PORT",
+        "label": "Playwright HTML report",
+        "port": 9323,
+        "url": "http://localhost:9323"
+      }
+    ],
     "drift": []
   },
   {
     "clone": "clone_02",
     "index": 2,
     "colour": "yellow",
-    "ng": 4300,
-    "storybook": 6106,
-    "playwrightReport": 9423,
-    "devServerUrl": "http://localhost:4300",
-    "storybookUrl": "http://localhost:6106",
+    "ports": [
+      {
+        "id": "ng",
+        "envKey": "NG_DEV_SERVER_PORT",
+        "label": "Angular dev server",
+        "port": 4300,
+        "url": "http://localhost:4300"
+      },
+      {
+        "id": "storybook",
+        "envKey": "STORYBOOK_DEV_SERVER_PORT",
+        "label": "Storybook",
+        "port": 6106,
+        "url": "http://localhost:6106"
+      },
+      {
+        "id": "playwrightReport",
+        "envKey": "PLAYWRIGHT_REPORT_PORT",
+        "label": "Playwright HTML report",
+        "port": 9423,
+        "url": "http://localhost:9423"
+      }
+    ],
     "drift": []
   },
   {
     "clone": "clone_03",
     "index": 3,
     "colour": "green",
-    "ng": 4400,
-    "storybook": 6206,
-    "playwrightReport": 9523,
-    "devServerUrl": "http://localhost:4400",
-    "storybookUrl": "http://localhost:6206",
+    "ports": [
+      {
+        "id": "ng",
+        "envKey": "NG_DEV_SERVER_PORT",
+        "label": "Angular dev server",
+        "port": 4400,
+        "url": "http://localhost:4400"
+      },
+      {
+        "id": "storybook",
+        "envKey": "STORYBOOK_DEV_SERVER_PORT",
+        "label": "Storybook",
+        "port": 6206,
+        "url": "http://localhost:6206"
+      },
+      {
+        "id": "playwrightReport",
+        "envKey": "PLAYWRIGHT_REPORT_PORT",
+        "label": "Playwright HTML report",
+        "port": 9523,
+        "url": "http://localhost:9523"
+      }
+    ],
     "drift": []
   },
   {
     "clone": "clone_04",
     "index": 4,
     "colour": "red",
-    "ng": 4500,
-    "storybook": 6306,
-    "playwrightReport": 9623,
-    "devServerUrl": "http://localhost:4500",
-    "storybookUrl": "http://localhost:6306",
+    "ports": [
+      {
+        "id": "ng",
+        "envKey": "NG_DEV_SERVER_PORT",
+        "label": "Angular dev server",
+        "port": 4500,
+        "url": "http://localhost:4500"
+      },
+      {
+        "id": "storybook",
+        "envKey": "STORYBOOK_DEV_SERVER_PORT",
+        "label": "Storybook",
+        "port": 6306,
+        "url": "http://localhost:6306"
+      },
+      {
+        "id": "playwrightReport",
+        "envKey": "PLAYWRIGHT_REPORT_PORT",
+        "label": "Playwright HTML report",
+        "port": 9623,
+        "url": "http://localhost:9623"
+      }
+    ],
     "drift": []
   }
 ]

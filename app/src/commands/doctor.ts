@@ -37,7 +37,7 @@ import {
   type SettingsJson,
   settingsContentFor,
   settingsPath,
-  storybookHealthCheckAllow,
+  healthCheckAllows,
   workspaceAngularPath,
   workspaceContent,
   workspacePath,
@@ -77,7 +77,7 @@ import {
   tmpIsOwnDirectory,
 } from '../tmp.ts';
 import { paletteEntry } from '../palette.ts';
-import { PORT_ROLES, PORT_ROLE_ORDER } from '../ports.ts';
+import { portSummary } from '../ports.ts';
 import { terminal, type TerminalCapabilities } from '../terminal/index.ts';
 import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
@@ -154,21 +154,18 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
 
   // --- ports -------------------------------------------------------------------------
   const actual = readEnvLocalPorts(clone);
-  const portProblems = PORT_ROLE_ORDER.flatMap((role) => {
-    const key = PORT_ROLES[role].envKey;
+  const portProblems = clone.ports.flatMap((entry) => {
+    const key = entry.role.envKey;
     const found = actual[key];
     if (found === undefined) return [`${key} missing`];
-    return found === clone.ports[role]
+    return found === entry.port
       ? []
-      : [`${key}=${found}, formula says ${clone.ports[role]}`];
+      : [`${key}=${String(found)}, formula says ${String(entry.port)}`];
   });
   checks.push({
     name: '.env.local ports',
     ok: portProblems.length === 0,
-    detail:
-      portProblems.length === 0
-        ? `${clone.ports.ng} / ${clone.ports.storybook} / ${clone.ports.playwrightReport}`
-        : portProblems.join('; '),
+    detail: portProblems.length === 0 ? portSummary(clone.ports) : portProblems.join('; '),
     repair: () => {
       writeFile(envLocalPath(clone), envLocalContent(clone));
     },
@@ -302,9 +299,11 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
         ? 'the theme and statusline it names are both on disk'
         : `${unresolved.join('; ')} — Claude Code fails both SILENTLY; run \`hangar colours sync\``,
   });
-  const wantAllow = storybookHealthCheckAllow(clone);
+  const wantAllows = healthCheckAllows(clone);
   const themeOk = settings?.theme === wantTheme;
-  const allowOk = settings?.permissions?.allow?.includes(wantAllow) === true;
+  const allow = settings?.permissions?.allow ?? [];
+  const missingAllows = wantAllows.filter((want) => !allow.includes(want));
+  const allowOk = missingAllows.length === 0;
   checks.push({
     name: 'settings.local.json',
     ok: settings !== undefined && themeOk && allowOk,
@@ -315,10 +314,10 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
             themeOk ? undefined : `theme is ${String(settings.theme)}, expected ${wantTheme}`,
             allowOk
               ? undefined
-              : `Storybook health check does not target port ${clone.ports.storybook}`,
+              : `health check missing or aimed elsewhere: ${missingAllows.join('; ')}`,
           ]
             .filter((x) => x !== undefined)
-            .join('; ') || `${wantTheme}, health check on ${clone.ports.storybook}`,
+            .join('; ') || `${wantTheme}, ${String(wantAllows.length)} health check(s)`,
     repair:
       settings === undefined
         ? undefined

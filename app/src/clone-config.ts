@@ -1,12 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { CliError } from './exec.ts';
 import type { Clone } from './fleet.ts';
 import { themeName } from './generate/theme-json.ts';
 import type { Hangar } from './hangar.ts';
 import { tildify } from './user-paths.ts';
-import { PORT_ROLES } from './ports.ts';
+import { roleUrl, type ClonePort } from './ports.ts';
 
 /**
  * The per-clone files that are NOT in git and must be recreated whenever a clone is created
@@ -88,9 +87,7 @@ export const envLocalContent = (clone: Clone): string =>
     '',
     `PROJECT_GIT_ROOT_PATH='${clone.path}'`,
     '',
-    `${PORT_ROLES.ng.envKey}=${clone.ports.ng}`,
-    `${PORT_ROLES.storybook.envKey}=${clone.ports.storybook}`,
-    `${PORT_ROLES.playwrightReport.envKey}=${clone.ports.playwrightReport}`,
+    ...clone.ports.map((entry) => `${entry.role.envKey}=${String(entry.port)}`),
     '',
   ].join('\n');
 
@@ -192,9 +189,7 @@ export const claudeLocalMdContent = (clone: Clone): string => {
     ...paddedTable([
       ['Root', `\`${clone.path}\``],
       ['Colour', clone.colour.name],
-      ['`ng serve`', String(clone.ports.ng)],
-      ['Storybook', String(clone.ports.storybook)],
-      ['Playwright report', String(clone.ports.playwrightReport)],
+      ...clone.ports.map((entry): [string, string] => [entry.role.label, String(entry.port)]),
     ]),
     '',
     "These ports are **yours alone**. They come from this clone's untracked `.env.local`; resolve",
@@ -267,16 +262,37 @@ export const workspaceContent = (clone: Clone): string =>
     2,
   )}\n`;
 
-/** The Storybook health-check permission, which embeds the clone's own port. */
-export const storybookHealthCheckAllow = (clone: Clone): string =>
-  `Bash(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://localhost:${clone.ports.storybook})`;
+/**
+ * The health-check permission for one role, which embeds that role's own port.
+ *
+ * Per ROLE now, not per clone: `ports.roles[].healthCheck` says which roles want one and with
+ * what timeout and path, so a hangar with three servers gets three allows and a hangar with none
+ * gets none. It used to be hardcoded to Storybook -- one allow, one port, one product.
+ */
+export const healthCheckAllow = (entry: ClonePort): string | undefined => {
+  const check = entry.role.healthCheck;
+  if (check === undefined) return undefined;
+  const url = roleUrl(entry);
+  if (url === undefined) return undefined;
+  return `Bash(curl -s -o /dev/null -w "%{http_code}" --max-time ${String(check.timeoutSeconds)} ${url}${check.path})`;
+};
 
-// Deliberately narrow: it must match the Storybook health check and nothing else. A looser
-// pattern would also match a future dev-server curl allow, and rewriting the wrong one leaves
-// a health check pointed at the template clone's port -- exactly the silent cross-clone
-// verification the per-clone ports exist to prevent.
+/** Every health-check allow this clone's roles ask for, in config order. */
+export const healthCheckAllows = (clone: Clone): string[] =>
+  clone.ports.map((entry) => healthCheckAllow(entry)).filter((x) => x !== undefined);
+
+/*
+ * Matches a health-check allow THIS generator wrote, and nothing else.
+ *
+ * It stays anchored to the exact template rather than loosening to "any curl allow", for the
+ * original reason: a looser pattern would also match a hand-written curl permission, and
+ * replacing the wrong one leaves a health check pointed at another clone's port -- exactly the
+ * silent cross-clone verification the per-clone ports exist to prevent. What widened is only
+ * the timeout and the path, because those now come from each role's `healthCheck` instead of
+ * being fixed at 3 seconds and no path.
+ */
 const HEALTH_CHECK_RE =
-  /^Bash\(curl -s -o \/dev\/null -w "%\{http_code\}" --max-time 3 http:\/\/localhost:\d+\)$/;
+  /^Bash\(curl -s -o \/dev\/null -w "%\{http_code\}" --max-time \d+ https?:\/\/[^\s)]+\)$/;
 
 export type HookEntry = { type: string; command: string; timeout?: number };
 export type HookMatcher = { matcher?: string; hooks: HookEntry[] };
@@ -443,20 +459,18 @@ export const settingsContentFor = (clone: Clone, template: SettingsJson): string
   settings.theme = `custom:${themeName(clone)}`;
   const allow = settings.permissions?.allow;
   if (allow) {
-    const healthCheck = storybookHealthCheckAllow(clone);
-    const matches = allow.reduce<number[]>(
-      (acc, entry, i) => (HEALTH_CHECK_RE.test(entry) ? [...acc, i] : acc),
-      [],
-    );
-    if (matches.length > 1) {
-      throw new CliError(
-        `the settings template has ${matches.length} Storybook health-check allows`,
-        'Leave exactly one in the template clone, so there is no doubt which port to rewrite.',
-      );
-    }
-    const index = matches[0];
-    if (index === undefined) allow.push(healthCheck);
-    else allow[index] = healthCheck;
+    /*
+     * Drop every allow this generator wrote, then write this clone's own.
+     *
+     * It used to find the ONE match and replace it in place, refusing when there were two
+     * because there was no way to tell which port was meant. With a role table there is no
+     * ambiguity to protect against: the generated set IS the answer, however many roles declare
+     * a health check, so removing and re-appending is both simpler and correct for N. The order
+     * follows `ports.roles[]`, so the file is stable across runs.
+     */
+    const kept = allow.filter((entry) => !HEALTH_CHECK_RE.test(entry));
+    allow.length = 0;
+    allow.push(...kept, ...healthCheckAllows(clone));
   }
   return `${JSON.stringify(settings, null, 2)}\n`;
 };

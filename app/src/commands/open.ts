@@ -22,6 +22,7 @@ import {
 } from '../terminal/index.ts';
 import { confirm, note, ok, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
+import { portSummary } from '../ports.ts';
 
 /**
  * `hangar open <clone>…` -- the clones' whole working set in one command.
@@ -389,9 +390,7 @@ export const open = (hangar: Hangar, refs: readonly string[], opts: OpenOptions)
     if (opts.checkout !== false) land(clone, opts, clones.length > 1);
     assumed = openTabs(hangar, driver, clone, opts, assumed, drivers) ?? assumed;
     if (opts.editor !== false) openEditors(hangar, clone, drivers);
-    note(
-      `ports: ng ${clone.ports.ng} · storybook ${clone.ports.storybook} · playwright ${clone.ports.playwrightReport}`,
-    );
+    note(`ports: ${portSummary(clone.ports)}`);
   }
 
   if (driver.capabilities.inspect) reportTabOrder(hangar, driver);

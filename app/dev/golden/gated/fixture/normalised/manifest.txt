@@ -9,10 +9,11 @@ plans-hook         %HANGAR%/bin/hangar --hangar %HANGAR% plans collect --quiet
 jira-hook          %HANGAR%/bin/hangar --hangar %HANGAR% jira hook
 tmp-hook           %HANGAR%/bin/hangar --hangar %HANGAR% tmp merge --quiet
 fleet-bin-path     PATH_add "%HANGAR%/bin"
-port-roles         ng=4200 storybook=6006 playwrightReport=9323
+port-roles         api(FIXTURE_API_PORT)=3000 db(FIXTURE_DB_PORT)=5432 swagger(FIXTURE_SWAGGER_PORT)=8080
+port-step/offset   100 / 37
 
 clone clone_01  index=1  colour=cyan  theme=wt-clone-01-cyan
-  ports  ng=4200 storybook=6006 playwrightReport=9323
+  ports  FIXTURE_API_PORT=3037 FIXTURE_DB_PORT=5469 FIXTURE_SWAGGER_PORT=8117
   env.local              -> %HANGAR%/clone_01/.env.local
   envrc.private          -> %HANGAR%/clone_01/.envrc.private
   CLAUDE.local.md        -> %HANGAR%/clone_01/CLAUDE.local.md
@@ -22,11 +23,11 @@ clone clone_01  index=1  colour=cyan  theme=wt-clone-01-cyan
   theme.json             -> %HOME%/.claude/themes/wt-clone-01-cyan.json
   git-info-exclude       -> %HANGAR%/clone_01/.git/info/exclude
   direnv-snippet         -> %HANGAR%/clone_01/.envrc.private
-  health-check-allow     -> %HANGAR%/clone_01/.claude/settings.local.json
+  health-check-allows    -> %HANGAR%/clone_01/.claude/settings.local.json
   playwright-symlink     -> %HANGAR%/clone_01/tests/playwright-regression-tests/.env.local
 
 clone clone_02  index=2  colour=yellow  theme=wt-clone-02-yellow
-  ports  ng=4300 storybook=6106 playwrightReport=9423
+  ports  FIXTURE_API_PORT=3137 FIXTURE_DB_PORT=5569 FIXTURE_SWAGGER_PORT=8217
   env.local              -> %HANGAR%/clone_02/.env.local
   envrc.private          -> %HANGAR%/clone_02/.envrc.private
   CLAUDE.local.md        -> %HANGAR%/clone_02/CLAUDE.local.md
@@ -36,11 +37,11 @@ clone clone_02  index=2  colour=yellow  theme=wt-clone-02-yellow
   theme.json             -> %HOME%/.claude/themes/wt-clone-02-yellow.json
   git-info-exclude       -> %HANGAR%/clone_02/.git/info/exclude
   direnv-snippet         -> %HANGAR%/clone_02/.envrc.private
-  health-check-allow     -> %HANGAR%/clone_02/.claude/settings.local.json
+  health-check-allows    -> %HANGAR%/clone_02/.claude/settings.local.json
   playwright-symlink     -> %HANGAR%/clone_02/tests/playwright-regression-tests/.env.local
 
 clone clone_03  index=3  colour=green  theme=wt-clone-03-green
-  ports  ng=4400 storybook=6206 playwrightReport=9523
+  ports  FIXTURE_API_PORT=3237 FIXTURE_DB_PORT=5669 FIXTURE_SWAGGER_PORT=8317
   env.local              -> %HANGAR%/clone_03/.env.local
   envrc.private          -> %HANGAR%/clone_03/.envrc.private
   CLAUDE.local.md        -> %HANGAR%/clone_03/CLAUDE.local.md
@@ -50,7 +51,7 @@ clone clone_03  index=3  colour=green  theme=wt-clone-03-green
   theme.json             -> %HOME%/.claude/themes/wt-clone-03-green.json
   git-info-exclude       -> %HANGAR%/clone_03/.git/info/exclude
   direnv-snippet         -> %HANGAR%/clone_03/.envrc.private
-  health-check-allow     -> %HANGAR%/clone_03/.claude/settings.local.json
+  health-check-allows    -> %HANGAR%/clone_03/.claude/settings.local.json
   playwright-symlink     -> %HANGAR%/clone_03/tests/playwright-regression-tests/.env.local
 
 artifact clone-colours.sh       -> %HANGAR%/clone-colours.sh

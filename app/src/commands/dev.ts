@@ -16,7 +16,7 @@ import {
   playwrightEnvLocalPath,
   settingsContentFor,
   settingsPath,
-  storybookHealthCheckAllow,
+  healthCheckAllows,
   tmpHookCommand,
   withJiraHook,
   withPlansHook,
@@ -37,7 +37,6 @@ import { terminalHookArtifact } from '../generate/terminal-sh.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
 
 import { home } from '../user-paths.ts';
-import { PORT_ROLE_ORDER, PORT_ROLES } from '../ports.ts';
 
 import { heading, note, ok } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
@@ -136,7 +135,7 @@ const cloneCaptures = (
     ['theme.json', themePath(clone), theme.content],
     ['git-info-exclude', excludePath(clone), excludeBlock(hangar)],
     ['direnv-snippet', envrcPrivatePath(clone), direnvSnippet(clone)],
-    ['health-check-allow', settingsPath(clone), `${storybookHealthCheckAllow(clone)}\n`],
+    ['health-check-allows', settingsPath(clone), `${healthCheckAllows(clone).join('\n')}\n`],
     ['playwright-symlink', playwrightEnvLocalPath(clone), '(symlink; target in the manifest)\n'],
   ];
 };
@@ -174,14 +173,15 @@ export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
     `jira-hook          ${jiraHookCommand(hangar)}`,
     `tmp-hook           ${tmpHookCommand(hangar)}`,
     `fleet-bin-path     ${fleetBinPathLine(hangar)}`,
-    `port-roles         ${PORT_ROLE_ORDER.map((r) => `${r}=${String(PORT_ROLES[r].base)}`).join(' ')}`,
+    `port-roles         ${hangar.config.ports.roles.map((r) => `${r.id}(${r.envKey})=${String(r.base)}`).join(' ')}`,
+    `port-step/offset   ${String(hangar.config.ports.step)} / ${String(hangar.config.ports.offset)}`,
     '',
   ];
 
   for (const clone of clones) {
     manifest.push(
       `clone ${clone.name}  index=${String(clone.index)}  colour=${clone.colour.name}  theme=${themeName(clone)}`,
-      `  ports  ${PORT_ROLE_ORDER.map((r) => `${r}=${String(clone.ports[r])}`).join(' ')}`,
+      `  ports  ${clone.ports.map((e) => `${e.role.envKey}=${String(e.port)}`).join(' ')}`,
     );
     for (const [rel, destination, content] of cloneCaptures(hangar, clone)) {
       write(hangar, out, join('builders', clone.name, rel), content);

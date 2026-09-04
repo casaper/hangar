@@ -3,7 +3,7 @@
     "allow": [
       "Bash(git status)",
       "Bash(curl -s -o /dev/null --max-time 3 http://localhost:9999)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" --max-time 3 http://localhost:6006)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" --max-time 7 http://localhost:3037/ready)"
     ],
     "deny": [
       "Read(./.env)"

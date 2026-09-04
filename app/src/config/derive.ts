@@ -5,7 +5,6 @@ import { CLONE_DIR_RE } from '../fleet.ts';
 import { run } from '../exec.ts';
 import { defaultBranchFromGit } from '../git.ts';
 import { atlassianUrl } from '../paths.ts';
-import { PORT_ROLE_ORDER, PORT_ROLES, PORT_STEP } from '../ports.ts';
 
 /**
  * Best-effort defaults for a hangar that already exists.
@@ -185,18 +184,34 @@ export const deriveDefaults = (hangarRoot: string): DerivedDefaults => {
   };
 };
 
-/** The port-role rows this hangar already uses, as config rows. */
+/**
+ * The port roles `setup` suggests, which is now NONE.
+ *
+ * It used to render the three hardcoded roles of this one repo -- an Angular dev server, a
+ * Storybook and a Playwright report -- into every config it wrote, which is why `setup` could
+ * not describe a repo that serves anything else. There is nothing left to derive: a role is a
+ * decision about the repo (what it runs, on which port, under which env var), and no amount of
+ * looking at a checkout answers it.
+ *
+ * So the template writes an empty `roles: []`, which the schema accepts -- a hangar that manages
+ * no ports is legal -- and F7 is where `setup` learns to ASK. Returning an empty list rather
+ * than deleting the function keeps that seam in one place.
+ */
 export const derivedPortRoles = (): readonly {
   id: string;
   envKey: string;
   base: number;
   label: string;
-}[] =>
-  PORT_ROLE_ORDER.map((role) => ({
-    id: role,
-    envKey: PORT_ROLES[role].envKey,
-    base: PORT_ROLES[role].base,
-    label: PORT_ROLES[role].label,
-  }));
+}[] => [];
 
-export const derivedPortStep = (): number => PORT_STEP;
+/**
+ * The spacing `setup` suggests between clones.
+ *
+ * A plain default rather than a reading of anything: 100 leaves room for a role's own port range
+ * (a dev server that also opens an HMR socket, say) while keeping four clones inside one
+ * thousand. `hangar-internals/reference/config.md` records why it must match across hangars for
+ * the offset guarantee to hold.
+ */
+export const DEFAULT_PORT_STEP = 100;
+
+export const derivedPortStep = (): number => DEFAULT_PORT_STEP;

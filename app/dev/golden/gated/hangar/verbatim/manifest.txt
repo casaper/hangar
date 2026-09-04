@@ -9,10 +9,11 @@ plans-hook         /Users/someone/code/dvb_gn/bin/hangar --hangar /Users/someone
 jira-hook          /Users/someone/code/dvb_gn/bin/hangar --hangar /Users/someone/code/dvb_gn jira hook
 tmp-hook           /Users/someone/code/dvb_gn/bin/hangar --hangar /Users/someone/code/dvb_gn tmp merge --quiet
 fleet-bin-path     PATH_add "$HOME/code/dvb_gn/bin"
-port-roles         ng=4200 storybook=6006 playwrightReport=9323
+port-roles         ng(NG_DEV_SERVER_PORT)=4200 storybook(STORYBOOK_DEV_SERVER_PORT)=6006 playwrightReport(PLAYWRIGHT_REPORT_PORT)=9323
+port-step/offset   100 / 0
 
 clone clone_01  index=1  colour=cyan  theme=dvb_gn-clone-01-cyan
-  ports  ng=4200 storybook=6006 playwrightReport=9323
+  ports  NG_DEV_SERVER_PORT=4200 STORYBOOK_DEV_SERVER_PORT=6006 PLAYWRIGHT_REPORT_PORT=9323
   env.local              -> /Users/someone/code/dvb_gn/clone_01/.env.local
   envrc.private          -> /Users/someone/code/dvb_gn/clone_01/.envrc.private
   CLAUDE.local.md        -> /Users/someone/code/dvb_gn/clone_01/CLAUDE.local.md
@@ -22,11 +23,11 @@ clone clone_01  index=1  colour=cyan  theme=dvb_gn-clone-01-cyan
   theme.json             -> /Users/someone/.claude/themes/dvb_gn-clone-01-cyan.json
   git-info-exclude       -> /Users/someone/code/dvb_gn/clone_01/.git/info/exclude
   direnv-snippet         -> /Users/someone/code/dvb_gn/clone_01/.envrc.private
-  health-check-allow     -> /Users/someone/code/dvb_gn/clone_01/.claude/settings.local.json
+  health-check-allows    -> /Users/someone/code/dvb_gn/clone_01/.claude/settings.local.json
   playwright-symlink     -> /Users/someone/code/dvb_gn/clone_01/tests/playwright-regression-tests/.env.local
 
 clone clone_02  index=2  colour=yellow  theme=dvb_gn-clone-02-yellow
-  ports  ng=4300 storybook=6106 playwrightReport=9423
+  ports  NG_DEV_SERVER_PORT=4300 STORYBOOK_DEV_SERVER_PORT=6106 PLAYWRIGHT_REPORT_PORT=9423
   env.local              -> /Users/someone/code/dvb_gn/clone_02/.env.local
   envrc.private          -> /Users/someone/code/dvb_gn/clone_02/.envrc.private
   CLAUDE.local.md        -> /Users/someone/code/dvb_gn/clone_02/CLAUDE.local.md
@@ -36,11 +37,11 @@ clone clone_02  index=2  colour=yellow  theme=dvb_gn-clone-02-yellow
   theme.json             -> /Users/someone/.claude/themes/dvb_gn-clone-02-yellow.json
   git-info-exclude       -> /Users/someone/code/dvb_gn/clone_02/.git/info/exclude
   direnv-snippet         -> /Users/someone/code/dvb_gn/clone_02/.envrc.private
-  health-check-allow     -> /Users/someone/code/dvb_gn/clone_02/.claude/settings.local.json
+  health-check-allows    -> /Users/someone/code/dvb_gn/clone_02/.claude/settings.local.json
   playwright-symlink     -> /Users/someone/code/dvb_gn/clone_02/tests/playwright-regression-tests/.env.local
 
 clone clone_03  index=3  colour=green  theme=dvb_gn-clone-03-green
-  ports  ng=4400 storybook=6206 playwrightReport=9523
+  ports  NG_DEV_SERVER_PORT=4400 STORYBOOK_DEV_SERVER_PORT=6206 PLAYWRIGHT_REPORT_PORT=9523
   env.local              -> /Users/someone/code/dvb_gn/clone_03/.env.local
   envrc.private          -> /Users/someone/code/dvb_gn/clone_03/.envrc.private
   CLAUDE.local.md        -> /Users/someone/code/dvb_gn/clone_03/CLAUDE.local.md
@@ -50,11 +51,11 @@ clone clone_03  index=3  colour=green  theme=dvb_gn-clone-03-green
   theme.json             -> /Users/someone/.claude/themes/dvb_gn-clone-03-green.json
   git-info-exclude       -> /Users/someone/code/dvb_gn/clone_03/.git/info/exclude
   direnv-snippet         -> /Users/someone/code/dvb_gn/clone_03/.envrc.private
-  health-check-allow     -> /Users/someone/code/dvb_gn/clone_03/.claude/settings.local.json
+  health-check-allows    -> /Users/someone/code/dvb_gn/clone_03/.claude/settings.local.json
   playwright-symlink     -> /Users/someone/code/dvb_gn/clone_03/tests/playwright-regression-tests/.env.local
 
 clone clone_04  index=4  colour=red  theme=dvb_gn-clone-04-red
-  ports  ng=4500 storybook=6306 playwrightReport=9623
+  ports  NG_DEV_SERVER_PORT=4500 STORYBOOK_DEV_SERVER_PORT=6306 PLAYWRIGHT_REPORT_PORT=9623
   env.local              -> /Users/someone/code/dvb_gn/clone_04/.env.local
   envrc.private          -> /Users/someone/code/dvb_gn/clone_04/.envrc.private
   CLAUDE.local.md        -> /Users/someone/code/dvb_gn/clone_04/CLAUDE.local.md
@@ -64,7 +65,7 @@ clone clone_04  index=4  colour=red  theme=dvb_gn-clone-04-red
   theme.json             -> /Users/someone/.claude/themes/dvb_gn-clone-04-red.json
   git-info-exclude       -> /Users/someone/code/dvb_gn/clone_04/.git/info/exclude
   direnv-snippet         -> /Users/someone/code/dvb_gn/clone_04/.envrc.private
-  health-check-allow     -> /Users/someone/code/dvb_gn/clone_04/.claude/settings.local.json
+  health-check-allows    -> /Users/someone/code/dvb_gn/clone_04/.claude/settings.local.json
   playwright-symlink     -> /Users/someone/code/dvb_gn/clone_04/tests/playwright-regression-tests/.env.local
 
 artifact clone-colours.sh       -> /Users/someone/code/dvb_gn/clone-colours.sh

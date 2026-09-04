@@ -65,7 +65,7 @@ const makeClone = (hangar: Hangar, index: number): Clone => ({
   index,
   path: join(hangar.root, cloneNameFor(index)),
   colour: colourFor(index, colourAssignmentFor(hangar, index)),
-  ports: portsFor(index),
+  ports: portsFor(hangar, index),
   hangar,
 });
 

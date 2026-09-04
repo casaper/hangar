@@ -2,7 +2,7 @@ import pc from 'picocolors';
 
 import { readEnvLocalPorts } from '../clone-config.ts';
 import { discoverClones, type Clone } from '../fleet.ts';
-import { devServerUrl, PORT_ROLES, PORT_ROLE_ORDER, storybookUrl } from '../ports.ts';
+import { roleUrl } from '../ports.ts';
 import { cloneLabel, note, table, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
 
@@ -28,12 +28,12 @@ const inspect = (hangar: Hangar): Row[] =>
   discoverClones(hangar).map((clone) => {
     const actual = readEnvLocalPorts(clone);
     const drift: string[] = [];
-    for (const role of PORT_ROLE_ORDER) {
-      const key = PORT_ROLES[role].envKey;
-      const expected = clone.ports[role];
+    for (const entry of clone.ports) {
+      const key = entry.role.envKey;
       const found = actual[key];
       if (found === undefined) drift.push(`${key} missing from .env.local`);
-      else if (found !== expected) drift.push(`${key} is ${found}, formula says ${expected}`);
+      else if (found !== entry.port)
+        drift.push(`${key} is ${String(found)}, formula says ${String(entry.port)}`);
     }
     return { clone, actual, drift };
   });
@@ -48,9 +48,13 @@ export const ports = (hangar: Hangar, opts: PortsOptions): void => {
           clone: clone.name,
           index: clone.index,
           colour: clone.colour.name,
-          ...clone.ports,
-          devServerUrl: devServerUrl(clone.ports),
-          storybookUrl: storybookUrl(clone.ports),
+          ports: clone.ports.map((entry) => ({
+            id: entry.role.id,
+            envKey: entry.role.envKey,
+            label: entry.role.label,
+            port: entry.port,
+            url: roleUrl(entry) ?? null,
+          })),
           drift,
         })),
         null,
@@ -60,18 +64,13 @@ export const ports = (hangar: Hangar, opts: PortsOptions): void => {
     return;
   }
 
+  // One column per configured role, labelled from the config. A hangar with no roles gets the
+  // CLONE column alone, which is the honest rendering of "this hangar manages no ports".
   table([
-    [
-      pc.dim('CLONE'),
-      pc.dim(PORT_ROLES.ng.label),
-      pc.dim(PORT_ROLES.storybook.label),
-      pc.dim(PORT_ROLES.playwrightReport.label),
-    ],
+    [pc.dim('CLONE'), ...hangar.config.ports.roles.map((role) => pc.dim(role.label))],
     ...rows.map(({ clone }) => [
       cloneLabel(clone),
-      String(clone.ports.ng),
-      String(clone.ports.storybook),
-      String(clone.ports.playwrightReport),
+      ...clone.ports.map((entry) => String(entry.port)),
     ]),
   ]);
 

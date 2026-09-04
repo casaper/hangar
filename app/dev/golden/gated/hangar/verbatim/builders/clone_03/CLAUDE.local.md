@@ -11,13 +11,13 @@ Your colour is wired the same way as every other clone: the shared statusline sc
 input-box border only does in Manual mode, which is expected — see the shared memory
 `clone-colour-identity` before "fixing" it.
 
-|                   |                                     |
-| ----------------- | ----------------------------------- |
-| Root              | `/Users/someone/code/dvb_gn/clone_03` |
-| Colour            | green                               |
-| `ng serve`        | 4400                                |
-| Storybook         | 6206                                |
-| Playwright report | 9523                                |
+|                        |                                     |
+| ---------------------- | ----------------------------------- |
+| Root                   | `/Users/someone/code/dvb_gn/clone_03` |
+| Colour                 | green                               |
+| Angular dev server     | 4400                                |
+| Storybook              | 6206                                |
+| Playwright HTML report | 9523                                |
 
 These ports are **yours alone**. They come from this clone's untracked `.env.local`; resolve
 them at run time with `node dev/ports.mjs` rather than typing a number. A server answering on
