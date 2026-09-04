@@ -1,0 +1,47 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(curl -s -o /dev/null --max-time 3 http://localhost:9999)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" --max-time 7 http://localhost:3037/ready)"
+    ],
+    "deny": [
+      "Read(./.env)"
+    ]
+  },
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%HANGAR%/bin/hangar --hangar %HANGAR% plans collect --quiet",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%HANGAR%/bin/hangar --hangar %HANGAR% tmp merge --quiet",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%HANGAR%/bin/hangar --hangar %HANGAR% jira hook",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  },
+  "theme": "custom:wt-clone-001-cyan"
+}

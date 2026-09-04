@@ -6,6 +6,7 @@ import { themeName } from './generate/theme-json.ts';
 import type { Hangar } from './hangar.ts';
 import { tildify } from './user-paths.ts';
 import { roleUrl, type ClonePort } from './ports.ts';
+import { render, type TokenValues } from './template.ts';
 
 /**
  * The per-clone files that are NOT in git and must be recreated whenever a clone is created
@@ -17,15 +18,50 @@ import { roleUrl, type ClonePort } from './ports.ts';
  * only the first leaves it as untracked noise that eventually gets committed into a branch.
  */
 
-export const envLocalPath = (clone: Clone): string => join(clone.path, '.env.local');
+/**
+ * The token values available for one clone.
+ *
+ * `{port}` is absent on purpose: it belongs to a port ROLE, not to a clone, and leaving it out
+ * is what makes `render` throw rather than silently produce a truncated value.
+ */
+export const cloneTokens = (clone: Clone): TokenValues => ({
+  id: clone.hangar.id,
+  displayName: clone.hangar.config.displayName ?? clone.hangar.id,
+  index: String(clone.index),
+  index2: String(clone.index).padStart(clone.hangar.config.clones.pad, '0'),
+  clone: clone.name,
+  root: clone.path,
+  secretsFile: clone.hangar.paths.envShared,
+});
+
+export const envLocalPath = (clone: Clone): string =>
+  join(clone.path, clone.hangar.config.repo.cloneEnv.file);
 export const envrcPrivatePath = (clone: Clone): string => join(clone.path, '.envrc.private');
 export const claudeLocalMdPath = (clone: Clone): string => join(clone.path, 'CLAUDE.local.md');
 export const settingsPath = (clone: Clone): string =>
   join(clone.path, '.claude', 'settings.local.json');
 export const excludePath = (clone: Clone): string => join(clone.path, '.git', 'info', 'exclude');
 const workspaceName = (clone: Clone): string =>
-  `dvb_gn_${String(clone.index).padStart(2, '0')}.code-workspace`;
+  render(
+    clone.hangar.config.editor.workspaceFileName,
+    cloneTokens(clone),
+    'editor.workspaceFileName',
+  );
 
+/**
+ * Every directory of this clone a `*.code-workspace` copy belongs in, from `editor.workspaceDirs`.
+ *
+ * A list, because VS Code only offers a `*.code-workspace` from the directory you opened, and
+ * this repo is opened at its root AND at its app directory -- so the file exists twice,
+ * byte-identical. `workspaceDirs: ['.']` is a repo that is only ever opened at its root, which
+ * is most of them; it was `['.', 'angular']` hardcoded.
+ */
+export const workspacePaths = (clone: Clone): string[] =>
+  clone.hangar.config.editor.workspaceDirs.map((dir) =>
+    join(clone.path, dir === '.' ? '' : dir, workspaceName(clone)),
+  );
+
+/** The first (and canonical) workspace copy -- the one at the clone root. */
 export const workspacePath = (clone: Clone): string => join(clone.path, workspaceName(clone));
 
 /**
@@ -35,10 +71,32 @@ export const workspacePath = (clone: Clone): string => join(clone.path, workspac
  * is opened both at its root and at `angular/` -- so the file has to exist in both. Keep
  * them in step with `hangar ide vscode sync`.
  */
-export const workspaceAngularPath = (clone: Clone): string =>
-  join(clone.path, 'angular', workspaceName(clone));
-export const playwrightEnvLocalPath = (clone: Clone): string =>
-  join(clone.path, 'tests', 'playwright-regression-tests', '.env.local');
+
+/**
+ * The symlinks this hangar's config asks for, resolved against one clone.
+ *
+ * `repo.symlinks[]` has been in the schema since it was written and nothing read it: the one
+ * link this fleet needs was hardcoded in `add-clone` and again in `doctor`, so a hangar for
+ * another repo could declare a link and watch it be ignored. Each entry's `why` is required by
+ * the schema and is printed by both -- nothing in the filesystem explains a symlink, which is
+ * the whole reason that field is not optional.
+ */
+export type CloneSymlink = {
+  readonly path: string;
+  readonly target: string;
+  readonly skipIfDirMissing: boolean;
+  readonly why: string;
+  readonly relPath: string;
+};
+
+export const cloneSymlinks = (clone: Clone): CloneSymlink[] =>
+  clone.hangar.config.repo.symlinks.map((link) => ({
+    path: join(clone.path, link.path),
+    target: render(link.target, cloneTokens(clone), `repo.symlinks target for ${link.path}`),
+    skipIfDirMissing: link.skipIfDirMissing,
+    why: link.why,
+    relPath: link.path,
+  }));
 
 /**
  * What `.git/info/exclude` has to hide, and why it cannot be the tracked `.gitignore`:
@@ -73,8 +131,9 @@ export const missingExcludeLines = (exclude: string): string[] => {
   return EXCLUDE_LINES.filter((line) => !present.has(line));
 };
 
-export const envLocalContent = (clone: Clone): string =>
-  [
+export const envLocalContent = (clone: Clone): string => {
+  const { rootPathEnvKey } = clone.hangar.config.repo.cloneEnv;
+  return [
     '# Per-clone values ONLY. Secrets shared by every clone live one level up in',
     `# ${tildify(clone.hangar.paths.envShared)}, loaded by this clone's .envrc.private before this file`,
     '# (so anything set here still overrides the shared value).',
@@ -85,11 +144,17 @@ export const envLocalContent = (clone: Clone): string =>
     `# Generated by \`hangar add-clone\` from the clone index (${clone.index}); repair a drifted`,
     '# value with `hangar doctor --fix` rather than by hand.',
     '',
-    `PROJECT_GIT_ROOT_PATH='${clone.path}'`,
-    '',
+    ...(rootPathEnvKey === undefined ? [] : [`${rootPathEnvKey}='${clone.path}'`, '']),
     ...clone.ports.map((entry) => `${entry.role.envKey}=${String(entry.port)}`),
+    // Whatever else a clone needs to itself: its own database, its own container set. Rendered
+    // from the index like the ports, so adding a clone needs no bookkeeping here either.
+    ...Object.entries(clone.hangar.config.repo.cloneEnv.vars).map(
+      ([key, template]) =>
+        `${key}=${render(template, cloneTokens(clone), `repo.cloneEnv.vars.${key}`)}`,
+    ),
     '',
   ].join('\n');
+};
 
 export const envrcPrivateContent = (hangar: Hangar): string =>
   [
@@ -256,7 +321,16 @@ export const workspaceContent = (clone: Clone): string =>
   `${JSON.stringify(
     {
       settings: { 'yaml.maxItemsComputed': 25000 },
-      folders: [{ name: `${clone.index}: dvb_gn`, path: clone.path }],
+      folders: [
+        {
+          name: render(
+            clone.hangar.config.editor.workspaceFolderLabel,
+            cloneTokens(clone),
+            'editor.workspaceFolderLabel',
+          ),
+          path: clone.path,
+        },
+      ],
     },
     null,
     2,

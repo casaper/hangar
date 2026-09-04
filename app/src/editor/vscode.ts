@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { workspaceAngularPath, workspacePath } from '../clone-config.ts';
+import { workspacePath, workspacePaths } from '../clone-config.ts';
 import { CliError, run } from '../exec.ts';
 import type { Clone } from '../fleet.ts';
 import { git } from '../git.ts';
@@ -46,28 +46,33 @@ const INDEX_TOKEN = '__HANGAR_CLONE_INDEX__';
  * `jestrunner.configPath` is deliberately absent -- it is already relative
  * (`angular/jest.config.ts`), so it is shared, not per clone.
  */
-const SETTINGS_ROOT_KEYS: Readonly<Record<string, string>> = {
-  'stylelint.configBasedir': 'angular',
-  'stylelint.configFile': 'angular/stylelint.config.mjs',
-  'stylelint.stylelintPath': 'angular/node_modules/stylelint',
-  'jestrunner.projectPath': 'angular',
-  'coverage-gutters.manualCoverageFilePaths': 'angular/coverage/lcov.info',
-  'prettier.configPath': 'angular/.prettierrc',
-  'prettier.prettierPath': 'angular/node_modules/prettier',
-  'storyExplorer.server.internal.npm.dir': 'angular',
-};
+/*
+ * The key list comes from `editor.rootPathKeys` in the config now, and it had to.
+ *
+ * It was hardcoded here as eight stylelint / prettier / jestrunner / coverage paths under
+ * `angular/`, while `editor.rootPathKeys` sat in the schema and was read by NOTHING -- the
+ * comment in `editor/kinds.ts` describing it as configuration was simply wrong. The consequence
+ * was not a missing feature: with the wrong list, `templatize` finds no checkout root in another
+ * repo's settings, templatizes nothing, and `hangar ide vscode sync` becomes a no-op that
+ * reports success.
+ *
+ * An EMPTY table is legal and means "no setting here holds an absolute path into the checkout",
+ * which is true of most repos. `doctor` says so rather than leaving it to be discovered.
+ */
 
 /** A workspace file names the clone root itself, as the one folder it opens. */
 const WORKSPACE_ROOT_KEYS: Readonly<Record<string, string>> = { path: '' };
 
 const vscodeFile = (clone: Clone, name: string): string => join(clone.path, '.vscode', name);
 
-export const VSCODE_ARTIFACTS: readonly EditorArtifact[] = [
+export const vscodeArtifacts = (
+  rootPathKeys: Readonly<Record<string, string>>,
+): readonly EditorArtifact[] => [
   {
     id: '.vscode/settings.json',
     tracked: false,
     copies: (clone) => [vscodeFile(clone, 'settings.json')],
-    rootKeys: SETTINGS_ROOT_KEYS,
+    rootKeys: rootPathKeys,
     indexLabel: false,
   },
   {
@@ -96,7 +101,7 @@ export const VSCODE_ARTIFACTS: readonly EditorArtifact[] = [
     // open, and this repo is opened both at its root and at `angular/`.
     id: '*.code-workspace',
     tracked: false,
-    copies: (clone) => [workspacePath(clone), workspaceAngularPath(clone)],
+    copies: (clone) => workspacePaths(clone),
     rootKeys: WORKSPACE_ROOT_KEYS,
     indexLabel: true,
   },
@@ -292,7 +297,7 @@ export const openWorkspaceFile = (clone: Clone, stateDir = 'Code'): string | und
     return undefined;
   }
   const windows = windowStates(state);
-  const twins = [workspacePath(clone), workspaceAngularPath(clone)];
+  const twins = workspacePaths(clone);
   for (const window of windows) {
     const path = configPath(window);
     if (path !== undefined && twins.includes(path)) return path;
@@ -364,7 +369,10 @@ export const isTracked = (artifact: EditorArtifact, clone: Clone, path: string):
  * and the answer is not stale but about another application's windows, which is precisely how you
  * open a second window on identical content while believing you avoided one.
  */
-export const vscodeDriver = (fork: VscodeFork = 'vscode'): EditorDriver => {
+export const vscodeDriver = (
+  fork: VscodeFork = 'vscode',
+  rootPathKeys: Readonly<Record<string, string>> = {},
+): EditorDriver => {
   const { binary, label, stateDir } = VSCODE_FAMILY[fork];
   return {
     kind: fork,
@@ -379,7 +387,7 @@ export const vscodeDriver = (fork: VscodeFork = 'vscode'): EditorDriver => {
     unavailableHint: () =>
       `the \`${binary}\` command is not on PATH — in ${label}, run “Shell Command: Install '${binary}' command in PATH”.`,
     launch: (clone) => launchVscode(binary, label, stateDir, clone),
-    artifacts: VSCODE_ARTIFACTS,
+    artifacts: vscodeArtifacts(rootPathKeys),
   };
 };
 

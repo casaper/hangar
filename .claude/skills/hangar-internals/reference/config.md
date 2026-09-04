@@ -119,12 +119,10 @@ Five properties, each of which is a decision:
   naming this branch. Anything else and it writes nothing and says what to add by hand — the
   caller already has the value, so a failure costs one re-detection and nothing else. The rename
   is atomic because four clone sessions and their `SessionEnd` hooks share this file.
-- **It keys on `fleetRoot`, like every other command, and not on `--hangar`.** The cache is a
-  `Map` by root because two hangars resolved in one process must stay disjoint — but the only key
-  there can be today is `fleetRoot`, since clone discovery is not threaded yet. `--hangar` reaches
-  `config show` and `config validate` (which walk from the cwd) and nothing else, so do not read
-  the `Map` as evidence that the flag already works; it starts working at B6, and this module
-  takes the threaded root then.
+- **It keys on the threaded hangar's root, and the `Map` is now load-bearing rather than
+  aspirational.** Two hangars resolved in one process must stay disjoint, and since the root comes
+  from real discovery (`--hangar`, then the walk, then `HANGAR_ROOT`) there can genuinely be more
+  than one key. `pnpm golden` renders two in a single run.
 - **`doctor` compares the stored value with each clone's `origin/HEAD`, and only warns.** (How to
   relay that row to a user is `hangar-ops/reference/reading-output.md`, which states the same
   rule — change one and change both.) Storing

@@ -76,10 +76,11 @@ pre-approve one without the other.
   dependencies were never installed). The message carries the exact command; run it rather than
   guessing. `hangar jira hook` is exempt and stays silent, so a hook never blocks a tool call over
   this.
-- **`--hangar <path>` is a global option, but only `config show` and `config validate` honour it
-  today.** Every other command resolves the hangar from the CLI's own location (or `HANGAR_ROOT`),
-  **not** from the working directory — so `--hangar` cannot be used to act on another hangar, and
-  neither can `cd`. To act on a second hangar, run that hangar's own `bin/hangar`.
+- **Which hangar a command acts on is `--hangar <path>`, then the nearest `hangar.config.yaml`
+  above the working directory, then `HANGAR_ROOT`** — and every command honours all three. The
+  walk outranks the variable deliberately: a shell still carrying `HANGAR_ROOT` for one hangar
+  while standing in another acts on the one it is standing in. `hangar config show` prints which
+  mechanism answered (`found by walk`), which is the fastest way to settle "why did it do that".
 
 ## `sync` will be killed by the default Bash timeout
 

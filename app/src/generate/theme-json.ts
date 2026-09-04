@@ -16,7 +16,7 @@ import type { Artifact } from './index.ts';
  * so the value in settings.local.json reads as `custom:<id>-clone-01-cyan`.
  */
 export const themeName = (clone: Clone): string =>
-  `${clone.hangar.id}-clone-${String(clone.index).padStart(2, '0')}-${clone.colour.name}`;
+  `${clone.hangar.id}-clone-${String(clone.index).padStart(clone.hangar.config.clones.pad, '0')}-${clone.colour.name}`;
 
 export const themePath = (clone: Clone): string => join(themesDir, `${themeName(clone)}.json`);
 

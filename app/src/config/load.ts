@@ -197,7 +197,7 @@ export const loadHangar = (opts: LoadOptions): Hangar => {
     id: config.id,
     config,
     source,
-    paths: pathsFor(root, config.id, claudeDir),
+    paths: pathsFor(root, config.id, config.secrets.file, claudeDir),
     configFellBack: false,
   });
 };
@@ -243,7 +243,7 @@ export const loadHangarTolerant = (opts: LoadOptions): Hangar => {
       id: config.id,
       config,
       source: found.source,
-      paths: pathsFor(found.root, config.id, claudeDir),
+      paths: pathsFor(found.root, config.id, config.secrets.file, claudeDir),
       configFellBack: true,
       configError: error instanceof Error ? error.message : String(error),
     });

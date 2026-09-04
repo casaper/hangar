@@ -12,47 +12,44 @@ fleet-bin-path     PATH_add "%HANGAR%/bin"
 port-roles         api(FIXTURE_API_PORT)=3000 db(FIXTURE_DB_PORT)=5432 swagger(FIXTURE_SWAGGER_PORT)=8080
 port-step/offset   100 / 37
 
-clone clone_01  index=1  colour=cyan  theme=wt-clone-01-cyan
+clone wt-001  index=1  colour=cyan  theme=wt-clone-001-cyan
   ports  FIXTURE_API_PORT=3037 FIXTURE_DB_PORT=5469 FIXTURE_SWAGGER_PORT=8117
-  env.local              -> %HANGAR%/clone_01/.env.local
-  envrc.private          -> %HANGAR%/clone_01/.envrc.private
-  CLAUDE.local.md        -> %HANGAR%/clone_01/CLAUDE.local.md
-  settings.local.json    -> %HANGAR%/clone_01/.claude/settings.local.json
-  workspace.json         -> %HANGAR%/clone_01/dvb_gn_01.code-workspace
-  workspace-appdir.json  -> %HANGAR%/clone_01/angular/dvb_gn_01.code-workspace
-  theme.json             -> %HOME%/.claude/themes/wt-clone-01-cyan.json
-  git-info-exclude       -> %HANGAR%/clone_01/.git/info/exclude
-  direnv-snippet         -> %HANGAR%/clone_01/.envrc.private
-  health-check-allows    -> %HANGAR%/clone_01/.claude/settings.local.json
-  playwright-symlink     -> %HANGAR%/clone_01/tests/playwright-regression-tests/.env.local
+  env.local              -> %HANGAR%/wt-001/.env.fixture
+  envrc.private          -> %HANGAR%/wt-001/.envrc.private
+  CLAUDE.local.md        -> %HANGAR%/wt-001/CLAUDE.local.md
+  settings.local.json    -> %HANGAR%/wt-001/.claude/settings.local.json
+  workspace-1.json       -> %HANGAR%/wt-001/wt-001.fixture-workspace
+  theme.json             -> %HOME%/.claude/themes/wt-clone-001-cyan.json
+  git-info-exclude       -> %HANGAR%/wt-001/.git/info/exclude
+  direnv-snippet         -> %HANGAR%/wt-001/.envrc.private
+  health-check-allows    -> %HANGAR%/wt-001/.claude/settings.local.json
+  symlink-sql_local.env  -> %HANGAR%/wt-001/sql/local.env
 
-clone clone_02  index=2  colour=yellow  theme=wt-clone-02-yellow
+clone wt-002  index=2  colour=yellow  theme=wt-clone-002-yellow
   ports  FIXTURE_API_PORT=3137 FIXTURE_DB_PORT=5569 FIXTURE_SWAGGER_PORT=8217
-  env.local              -> %HANGAR%/clone_02/.env.local
-  envrc.private          -> %HANGAR%/clone_02/.envrc.private
-  CLAUDE.local.md        -> %HANGAR%/clone_02/CLAUDE.local.md
-  settings.local.json    -> %HANGAR%/clone_02/.claude/settings.local.json
-  workspace.json         -> %HANGAR%/clone_02/dvb_gn_02.code-workspace
-  workspace-appdir.json  -> %HANGAR%/clone_02/angular/dvb_gn_02.code-workspace
-  theme.json             -> %HOME%/.claude/themes/wt-clone-02-yellow.json
-  git-info-exclude       -> %HANGAR%/clone_02/.git/info/exclude
-  direnv-snippet         -> %HANGAR%/clone_02/.envrc.private
-  health-check-allows    -> %HANGAR%/clone_02/.claude/settings.local.json
-  playwright-symlink     -> %HANGAR%/clone_02/tests/playwright-regression-tests/.env.local
+  env.local              -> %HANGAR%/wt-002/.env.fixture
+  envrc.private          -> %HANGAR%/wt-002/.envrc.private
+  CLAUDE.local.md        -> %HANGAR%/wt-002/CLAUDE.local.md
+  settings.local.json    -> %HANGAR%/wt-002/.claude/settings.local.json
+  workspace-1.json       -> %HANGAR%/wt-002/wt-002.fixture-workspace
+  theme.json             -> %HOME%/.claude/themes/wt-clone-002-yellow.json
+  git-info-exclude       -> %HANGAR%/wt-002/.git/info/exclude
+  direnv-snippet         -> %HANGAR%/wt-002/.envrc.private
+  health-check-allows    -> %HANGAR%/wt-002/.claude/settings.local.json
+  symlink-sql_local.env  -> %HANGAR%/wt-002/sql/local.env
 
-clone clone_03  index=3  colour=green  theme=wt-clone-03-green
+clone wt-003  index=3  colour=green  theme=wt-clone-003-green
   ports  FIXTURE_API_PORT=3237 FIXTURE_DB_PORT=5669 FIXTURE_SWAGGER_PORT=8317
-  env.local              -> %HANGAR%/clone_03/.env.local
-  envrc.private          -> %HANGAR%/clone_03/.envrc.private
-  CLAUDE.local.md        -> %HANGAR%/clone_03/CLAUDE.local.md
-  settings.local.json    -> %HANGAR%/clone_03/.claude/settings.local.json
-  workspace.json         -> %HANGAR%/clone_03/dvb_gn_03.code-workspace
-  workspace-appdir.json  -> %HANGAR%/clone_03/angular/dvb_gn_03.code-workspace
-  theme.json             -> %HOME%/.claude/themes/wt-clone-03-green.json
-  git-info-exclude       -> %HANGAR%/clone_03/.git/info/exclude
-  direnv-snippet         -> %HANGAR%/clone_03/.envrc.private
-  health-check-allows    -> %HANGAR%/clone_03/.claude/settings.local.json
-  playwright-symlink     -> %HANGAR%/clone_03/tests/playwright-regression-tests/.env.local
+  env.local              -> %HANGAR%/wt-003/.env.fixture
+  envrc.private          -> %HANGAR%/wt-003/.envrc.private
+  CLAUDE.local.md        -> %HANGAR%/wt-003/CLAUDE.local.md
+  settings.local.json    -> %HANGAR%/wt-003/.claude/settings.local.json
+  workspace-1.json       -> %HANGAR%/wt-003/wt-003.fixture-workspace
+  theme.json             -> %HOME%/.claude/themes/wt-clone-003-green.json
+  git-info-exclude       -> %HANGAR%/wt-003/.git/info/exclude
+  direnv-snippet         -> %HANGAR%/wt-003/.envrc.private
+  health-check-allows    -> %HANGAR%/wt-003/.claude/settings.local.json
+  symlink-sql_local.env  -> %HANGAR%/wt-003/sql/local.env
 
 artifact clone-colours.sh       -> %HANGAR%/clone-colours.sh
 artifact clone-terminal.sh      -> %HANGAR%/clone-terminal.sh

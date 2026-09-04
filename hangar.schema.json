@@ -163,7 +163,8 @@
         },
         "cloneEnv": {
           "default": {
-            "file": ".env.local"
+            "file": ".env.local",
+            "vars": {}
           },
           "type": "object",
           "properties": {
@@ -175,6 +176,18 @@
             "rootPathEnvKey": {
               "type": "string",
               "minLength": 1
+            },
+            "vars": {
+              "default": {},
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]*$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1
+              }
             }
           },
           "additionalProperties": false

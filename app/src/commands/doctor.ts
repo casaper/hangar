@@ -31,14 +31,14 @@ import {
   fleetBinPathLine,
   excludePath,
   missingExcludeLines,
-  playwrightEnvLocalPath,
+  cloneSymlinks,
   readEnvLocalPorts,
   readSettings,
   type SettingsJson,
   settingsContentFor,
   settingsPath,
   healthCheckAllows,
-  workspaceAngularPath,
+  workspacePaths,
   workspaceContent,
   workspacePath,
 } from '../clone-config.ts';
@@ -196,29 +196,38 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
     },
   });
 
-  // The link may be written relative or absolute -- what matters is where it lands, so
-  // compare resolved paths rather than the raw target.
-  const pwPath = playwrightEnvLocalPath(clone);
-  const pwTarget = symlinkTarget(pwPath);
-  const pwResolves = pwTarget !== undefined && resolveLink(pwPath) === hangar.paths.envShared;
-  checks.push({
-    name: 'playwright .env.local',
-    ok: pwResolves,
-    detail: pwResolves
-      ? `symlink -> ${tildify(hangar.paths.envShared)}`
-      : `expected a symlink resolving to ${tildify(hangar.paths.envShared)}, found ${pwTarget ?? 'no symlink'} — the tracked .env sets USER_READWRITE_PASSWORD empty and would win without it`,
-    repair: existsSync(dirname(pwPath))
-      ? () => {
-          if (existsSync(pwPath) || pwTarget !== undefined) {
-            throw new CliError(
-              `${tildify(pwPath)} exists and is not the expected symlink`,
-              'Inspect and remove it by hand, then re-run `hangar doctor --fix`.',
-            );
-          }
-          symlinkSync(relative(dirname(pwPath), hangar.paths.envShared), pwPath);
-        }
-      : undefined,
-  });
+  /*
+   * One check per configured symlink, from `repo.symlinks[]`.
+   *
+   * The link may be written relative or absolute -- what matters is where it LANDS, so compare
+   * resolved paths rather than raw targets. Each entry's `why` is what the failure prints: this
+   * fleet's one link exists because the tracked `tests/.env` sets USER_READWRITE_PASSWORD empty
+   * and direnv loads it after `.envrc.private`, and nothing in the filesystem says so.
+   */
+  for (const link of cloneSymlinks(clone)) {
+    const dirMissing = !existsSync(dirname(link.path));
+    if (dirMissing && link.skipIfDirMissing) continue;
+    const target = symlinkTarget(link.path);
+    const resolves = target !== undefined && resolveLink(link.path) === link.target;
+    checks.push({
+      name: link.relPath,
+      ok: resolves,
+      detail: resolves
+        ? `symlink -> ${tildify(link.target)}`
+        : `expected a symlink resolving to ${tildify(link.target)}, found ${target ?? 'no symlink'} — ${link.why}`,
+      repair: dirMissing
+        ? undefined
+        : () => {
+            if (existsSync(link.path) || target !== undefined) {
+              throw new CliError(
+                `${tildify(link.path)} exists and is not the expected symlink`,
+                'Inspect and remove it by hand, then re-run `hangar doctor --fix`.',
+              );
+            }
+            symlinkSync(relative(dirname(link.path), link.target), link.path);
+          },
+    });
+  }
 
   // --- identity ----------------------------------------------------------------------
   // Content, not just existence. This file is generated, says so, and tells its reader not to
@@ -471,7 +480,7 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
   // Both copies: VS Code only offers a `*.code-workspace` from the directory you opened, and
   // this repo is opened at its root and at `angular/`. `workspaceContent` is the fallback for
   // a clone that has neither -- `hangar ide vscode sync` is what keeps existing ones in step.
-  const wsPaths = [workspacePath(clone), workspaceAngularPath(clone)];
+  const wsPaths = workspacePaths(clone);
   const wsMissing = wsPaths.filter((p) => !existsSync(p));
   checks.push({
     name: 'code-workspace',

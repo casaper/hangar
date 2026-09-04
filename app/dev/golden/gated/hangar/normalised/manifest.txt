@@ -18,13 +18,13 @@ clone clone_01  index=1  colour=cyan  theme=dvb_gn-clone-01-cyan
   envrc.private          -> %HANGAR%/clone_01/.envrc.private
   CLAUDE.local.md        -> %HANGAR%/clone_01/CLAUDE.local.md
   settings.local.json    -> %HANGAR%/clone_01/.claude/settings.local.json
-  workspace.json         -> %HANGAR%/clone_01/dvb_gn_01.code-workspace
-  workspace-appdir.json  -> %HANGAR%/clone_01/angular/dvb_gn_01.code-workspace
+  workspace-1.json       -> %HANGAR%/clone_01/dvb_gn_01.code-workspace
+  workspace-2.json       -> %HANGAR%/clone_01/angular/dvb_gn_01.code-workspace
   theme.json             -> %HOME%/.claude/themes/dvb_gn-clone-01-cyan.json
   git-info-exclude       -> %HANGAR%/clone_01/.git/info/exclude
   direnv-snippet         -> %HANGAR%/clone_01/.envrc.private
   health-check-allows    -> %HANGAR%/clone_01/.claude/settings.local.json
-  playwright-symlink     -> %HANGAR%/clone_01/tests/playwright-regression-tests/.env.local
+  symlink-tests_playwright-regression-tests_.env.local -> %HANGAR%/clone_01/tests/playwright-regression-tests/.env.local
 
 clone clone_02  index=2  colour=yellow  theme=dvb_gn-clone-02-yellow
   ports  NG_DEV_SERVER_PORT=4300 STORYBOOK_DEV_SERVER_PORT=6106 PLAYWRIGHT_REPORT_PORT=9423
@@ -32,13 +32,13 @@ clone clone_02  index=2  colour=yellow  theme=dvb_gn-clone-02-yellow
   envrc.private          -> %HANGAR%/clone_02/.envrc.private
   CLAUDE.local.md        -> %HANGAR%/clone_02/CLAUDE.local.md
   settings.local.json    -> %HANGAR%/clone_02/.claude/settings.local.json
-  workspace.json         -> %HANGAR%/clone_02/dvb_gn_02.code-workspace
-  workspace-appdir.json  -> %HANGAR%/clone_02/angular/dvb_gn_02.code-workspace
+  workspace-1.json       -> %HANGAR%/clone_02/dvb_gn_02.code-workspace
+  workspace-2.json       -> %HANGAR%/clone_02/angular/dvb_gn_02.code-workspace
   theme.json             -> %HOME%/.claude/themes/dvb_gn-clone-02-yellow.json
   git-info-exclude       -> %HANGAR%/clone_02/.git/info/exclude
   direnv-snippet         -> %HANGAR%/clone_02/.envrc.private
   health-check-allows    -> %HANGAR%/clone_02/.claude/settings.local.json
-  playwright-symlink     -> %HANGAR%/clone_02/tests/playwright-regression-tests/.env.local
+  symlink-tests_playwright-regression-tests_.env.local -> %HANGAR%/clone_02/tests/playwright-regression-tests/.env.local
 
 clone clone_03  index=3  colour=green  theme=dvb_gn-clone-03-green
   ports  NG_DEV_SERVER_PORT=4400 STORYBOOK_DEV_SERVER_PORT=6206 PLAYWRIGHT_REPORT_PORT=9523
@@ -46,13 +46,13 @@ clone clone_03  index=3  colour=green  theme=dvb_gn-clone-03-green
   envrc.private          -> %HANGAR%/clone_03/.envrc.private
   CLAUDE.local.md        -> %HANGAR%/clone_03/CLAUDE.local.md
   settings.local.json    -> %HANGAR%/clone_03/.claude/settings.local.json
-  workspace.json         -> %HANGAR%/clone_03/dvb_gn_03.code-workspace
-  workspace-appdir.json  -> %HANGAR%/clone_03/angular/dvb_gn_03.code-workspace
+  workspace-1.json       -> %HANGAR%/clone_03/dvb_gn_03.code-workspace
+  workspace-2.json       -> %HANGAR%/clone_03/angular/dvb_gn_03.code-workspace
   theme.json             -> %HOME%/.claude/themes/dvb_gn-clone-03-green.json
   git-info-exclude       -> %HANGAR%/clone_03/.git/info/exclude
   direnv-snippet         -> %HANGAR%/clone_03/.envrc.private
   health-check-allows    -> %HANGAR%/clone_03/.claude/settings.local.json
-  playwright-symlink     -> %HANGAR%/clone_03/tests/playwright-regression-tests/.env.local
+  symlink-tests_playwright-regression-tests_.env.local -> %HANGAR%/clone_03/tests/playwright-regression-tests/.env.local
 
 clone clone_04  index=4  colour=red  theme=dvb_gn-clone-04-red
   ports  NG_DEV_SERVER_PORT=4500 STORYBOOK_DEV_SERVER_PORT=6306 PLAYWRIGHT_REPORT_PORT=9623
@@ -60,13 +60,13 @@ clone clone_04  index=4  colour=red  theme=dvb_gn-clone-04-red
   envrc.private          -> %HANGAR%/clone_04/.envrc.private
   CLAUDE.local.md        -> %HANGAR%/clone_04/CLAUDE.local.md
   settings.local.json    -> %HANGAR%/clone_04/.claude/settings.local.json
-  workspace.json         -> %HANGAR%/clone_04/dvb_gn_04.code-workspace
-  workspace-appdir.json  -> %HANGAR%/clone_04/angular/dvb_gn_04.code-workspace
+  workspace-1.json       -> %HANGAR%/clone_04/dvb_gn_04.code-workspace
+  workspace-2.json       -> %HANGAR%/clone_04/angular/dvb_gn_04.code-workspace
   theme.json             -> %HOME%/.claude/themes/dvb_gn-clone-04-red.json
   git-info-exclude       -> %HANGAR%/clone_04/.git/info/exclude
   direnv-snippet         -> %HANGAR%/clone_04/.envrc.private
   health-check-allows    -> %HANGAR%/clone_04/.claude/settings.local.json
-  playwright-symlink     -> %HANGAR%/clone_04/tests/playwright-regression-tests/.env.local
+  symlink-tests_playwright-regression-tests_.env.local -> %HANGAR%/clone_04/tests/playwright-regression-tests/.env.local
 
 artifact clone-colours.sh       -> %HANGAR%/clone-colours.sh
 artifact clone-terminal.sh      -> %HANGAR%/clone-terminal.sh

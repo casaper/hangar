@@ -35,7 +35,7 @@ export const statuslineArtifact = (hangar: Hangar, clones: readonly Clone[]): Ar
     '#!/usr/bin/env bash',
     artifactHeader(
       hangar,
-      `Status line for the ${hangar.id} hangar's clones (${tildify(hangar.root)}/${cloneGlobPattern()}).`,
+      `Status line for the ${hangar.id} hangar's clones (${tildify(hangar.root)}/${cloneGlobPattern(hangar)}).`,
     ),
     '#',
     '# ONE script for all clones: the colour is derived from the clone directory in the stdin',
@@ -57,7 +57,7 @@ export const statuslineArtifact = (hangar: Hangar, clones: readonly Clone[]): Ar
     '# a session started in clone_01/angular/ must still report clone_01. Two or more',
     '# digits, so this keeps working past clone_09.',
     `FLEET='${hangar.root}'`,
-    `clone="$(printf '%s' "$dir" | sed -n "s|^\${FLEET}/\\(${cloneGlobPattern()}\\).*|\\1|p")"`,
+    `clone="$(printf '%s' "$dir" | sed -n "s|^\${FLEET}/\\(${cloneGlobPattern(hangar)}\\).*|\\1|p")"`,
     '[ -n "$clone" ] || clone="$(basename "$dir")"',
     '',
     '# Same triples as the theme files: main / dim.',

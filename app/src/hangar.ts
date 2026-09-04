@@ -36,7 +36,11 @@ export type HangarPaths = {
    * entries: no skill owns this path, and a symlink in a clone would invite writing into it.
    */
   readonly jiraTickets: string;
-  /** Fleet-wide secrets, outside every clone so no clone can commit them. */
+  /**
+   * Hangar-wide secrets, outside every clone so no clone can commit them.
+   *
+   * Named by `secrets.file`; `.env.shared` is only the default.
+   */
   readonly envShared: string;
   readonly cloneColoursScript: string;
   readonly terminalHookScript: string;
@@ -86,7 +90,12 @@ export type Hangar = {
  * F2 split out the half that needs no hangar, and this is the half that needs no `homedir()`
  * either. Two hangars can therefore be rendered side by side in one process.
  */
-export const pathsFor = (root: string, id: string, claudeDir: string): HangarPaths => {
+export const pathsFor = (
+  root: string,
+  id: string,
+  secretsFile: string,
+  claudeDir: string,
+): HangarPaths => {
   const tmp = join(root, 'tmp');
   return Object.freeze({
     root,
@@ -95,7 +104,7 @@ export const pathsFor = (root: string, id: string, claudeDir: string): HangarPat
     plans: join(root, 'plans'),
     tmp,
     jiraTickets: join(tmp, 'jira-tickets'),
-    envShared: join(root, '.env.shared'),
+    envShared: join(root, secretsFile),
     cloneColoursScript: join(root, 'clone-colours.sh'),
     terminalHookScript: join(root, 'clone-terminal.sh'),
     colourAssignmentsFile: join(root, 'colour-assignments.json'),

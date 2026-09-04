@@ -22,22 +22,21 @@ import { portsFor, type ClonePorts } from './ports.ts';
  * Two or more digits, so the fleet does not break at clone_10 the way the old
  * `clone_0[0-9]` globs did.
  */
-export const CLONE_PREFIX = 'clone_';
-export const CLONE_PAD = 2;
-
 /**
  * ONE derivation, and everything that spells a clone directory goes through it: this regexp,
  * `cloneNameFor`, the sibling remote names, `status`'s `dir` row and the generated statusline's
  * own pattern. A second regexp written by hand somewhere else is how a hangar ends up with two
- * ideas of what its clones are called, and only one of them being configurable.
+ * ideas of what its clones are called, and only one of them configurable.
  *
- * `clones.prefix` and `clones.pad` are already declared in the schema and are not read yet;
- * F5 replaces these two constants with those, and there is exactly one place to do it.
+ * At least `pad` digits, never exactly `pad`: the old pattern was `\\d{2,}` for a reason -- a
+ * fleet padded to two must keep matching at clone_10.
  */
-export const CLONE_DIR_RE = new RegExp(`^${CLONE_PREFIX}(\\d{${String(CLONE_PAD)},})$`);
+export const cloneDirRe = (hangar: Hangar): RegExp =>
+  new RegExp(`^${hangar.config.clones.prefix}(\\d{${String(hangar.config.clones.pad)},})$`);
 
-/** The shell-glob equivalent, for the generated artifacts that match on a name rather than parse it. */
-export const cloneGlobPattern = (): string => `${CLONE_PREFIX}[0-9][0-9]*`;
+/** The shell-glob equivalent, for generated artifacts that match on a name rather than parse it. */
+export const cloneGlobPattern = (hangar: Hangar): string =>
+  `${hangar.config.clones.prefix}${'[0-9]'.repeat(hangar.config.clones.pad)}*`;
 
 export type Clone = {
   readonly name: string;
@@ -57,13 +56,13 @@ export type Clone = {
   readonly hangar: Hangar;
 };
 
-export const cloneNameFor = (index: number): string =>
-  `${CLONE_PREFIX}${String(index).padStart(CLONE_PAD, '0')}`;
+export const cloneNameFor = (hangar: Hangar, index: number): string =>
+  `${hangar.config.clones.prefix}${String(index).padStart(hangar.config.clones.pad, '0')}`;
 
 const makeClone = (hangar: Hangar, index: number): Clone => ({
-  name: cloneNameFor(index),
+  name: cloneNameFor(hangar, index),
   index,
-  path: join(hangar.root, cloneNameFor(index)),
+  path: join(hangar.root, cloneNameFor(hangar, index)),
   colour: colourFor(index, colourAssignmentFor(hangar, index)),
   ports: portsFor(hangar, index),
   hangar,
@@ -75,7 +74,7 @@ export const discoverClones = (hangar: Hangar): Clone[] => {
   for (const entry of readdirSync(hangar.root, { withFileTypes: true })) {
     // A clone may legitimately be a symlink to a directory, so stat rather than isDirectory().
     if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
-    const match = CLONE_DIR_RE.exec(entry.name);
+    const match = cloneDirRe(hangar).exec(entry.name);
     if (!match?.[1]) continue;
     try {
       if (!statSync(join(hangar.root, entry.name)).isDirectory()) continue;
@@ -96,7 +95,10 @@ export const findClone = (hangar: Hangar, ref: string): Clone | undefined => {
   const clones = discoverClones(hangar);
   const direct = clones.find((c) => c.name === ref);
   if (direct) return direct;
-  const asNumber = Number.parseInt(ref.replace(/^clone_?/, ''), 10);
+  const asNumber = Number.parseInt(
+    ref.replace(new RegExp(`^${hangar.config.clones.prefix}?`), ''),
+    10,
+  );
   if (Number.isNaN(asNumber)) return undefined;
   return clones.find((c) => c.index === asNumber);
 };
@@ -112,7 +114,7 @@ export const cloneForCwd = (hangar: Hangar, cwd: string = process.cwd()): Clone 
   const here = resolve(cwd);
   if (here !== hangar.root && !here.startsWith(`${hangar.root}/`)) return undefined;
   const segment = here.slice(hangar.root.length + 1).split('/')[0];
-  if (segment === undefined || !CLONE_DIR_RE.test(segment)) return undefined;
+  if (segment === undefined || !cloneDirRe(hangar).test(segment)) return undefined;
   return findClone(hangar, segment);
 };
 

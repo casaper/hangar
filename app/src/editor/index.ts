@@ -119,7 +119,7 @@ const editorConfig = (hangar: Hangar): { editor: EditorConfig; fellBack: boolean
 
 const driverFor = (kind: EditorKind, editor: EditorConfig): EditorDriver => {
   // The whole VS Code family shares one driver, differing only in launcher and state directory.
-  if (isVscodeFork(kind)) return vscodeDriver(kind);
+  if (isVscodeFork(kind)) return vscodeDriver(kind, editor.rootPathKeys);
   switch (kind) {
     case 'jetbrains':
       return jetbrainsDriver(editor.jetbrains.product, editor.jetbrains.launcher);

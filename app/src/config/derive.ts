@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
-import { CLONE_DIR_RE } from '../fleet.ts';
+import { clonesSchema } from './schema.ts';
 import { run } from '../exec.ts';
 import { defaultBranchFromGit } from '../git.ts';
 import { atlassianUrl } from '../paths.ts';
@@ -126,10 +126,22 @@ export const detectKeyPrefix = (clonePath: string): string | undefined => {
  * to end. All it needs is somewhere to ask git about an origin and a default branch, and a
  * directory name is enough for that.
  */
+/**
+ * The clone-directory pattern from the SCHEMA DEFAULTS, not from a config.
+ *
+ * `setup` runs where there is no config to read -- that is what it is for -- so a hangar's own
+ * `clones.prefix`/`pad` are not available. The defaults are the right guess precisely because
+ * they are what `setup` is about to write.
+ */
+const defaultCloneDirRe = (): RegExp => {
+  const { prefix, pad } = clonesSchema.parse({});
+  return new RegExp(`^${prefix}(\\d{${String(pad)},})$`);
+};
+
 const cloneDirsIn = (root: string): string[] => {
   try {
     return readdirSync(root, { withFileTypes: true })
-      .filter((e) => (e.isDirectory() || e.isSymbolicLink()) && CLONE_DIR_RE.test(e.name))
+      .filter((e) => (e.isDirectory() || e.isSymbolicLink()) && defaultCloneDirRe().test(e.name))
       .map((e) => join(root, e.name))
       .sort();
   } catch {

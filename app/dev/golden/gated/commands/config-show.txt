@@ -35,6 +35,7 @@ repo:
   cloneEnv:
     file: .env.local
     rootPathEnvKey: PROJECT_GIT_ROOT_PATH
+    vars: {}
   symlinks:
     - path: tests/playwright-regression-tests/.env.local
       target: "{secretsFile}"

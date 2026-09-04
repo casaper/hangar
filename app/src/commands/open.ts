@@ -3,13 +3,7 @@ import { join } from 'node:path';
 import { landOnBranch } from './checkout-default.ts';
 import { editors, type EditorDriver } from '../editor/index.ts';
 import { CliError } from '../exec.ts';
-import {
-  CLONE_DIR_RE,
-  discoverClones,
-  knownClonesHint,
-  requireClone,
-  type Clone,
-} from '../fleet.ts';
+import { cloneDirRe, discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import { currentBranch } from '../git.ts';
 import { tintedHex } from '../palette.ts';
 import { tildify } from '../user-paths.ts';
@@ -312,7 +306,7 @@ const reportTabOrder = (hangar: Hangar, driver: TerminalDriver): void => {
   // By INDEX, not by name: `clone_100` sorts before `clone_99` as a string, and the fleet
   // supports three-digit clones.
   const indices = groups
-    .map((name) => Number.parseInt(CLONE_DIR_RE.exec(name)?.[1] ?? '', 10))
+    .map((name) => Number.parseInt(cloneDirRe(hangar).exec(name)?.[1] ?? '', 10))
     .filter((index) => Number.isFinite(index));
   const sorted = indices.every((index, i) => i === 0 || (indices[i - 1] ?? -1) < index);
   if (sorted) return;

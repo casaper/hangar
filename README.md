@@ -229,28 +229,36 @@ hangar doctor --all --fix
 
 ### How far the genericisation goes today
 
-The config surface above describes the whole tool, but **not all of it is wired up yet.** If you are
-evaluating this for your own repository, these are the gaps, in the order they will bite:
+The config surface above describes the whole tool, and most of it is now wired. If you are
+evaluating this for your own repository, these are the gaps that remain, in the order they will
+bite:
 
-1. **Some values are still hardcoded to the repo this was built for.** `ports.roles`,
-   `clones.prefix`/`pad` and `repo.appDir` are in the schema, but the three port bases and the step
-   (4200 / 6006 / 9323 at 100), the `clone_NN` directory pattern and the `angular/` app subdirectory
-   are still literals in `app/src/ports.ts`, `app/src/fleet.ts` and `app/src/clone-config.ts`. The modules
-   that genuinely read the config today are the editor and terminal drivers, `doctor`, default-branch
-   detection, `setup`, and `config show`/`validate`.
-2. **`profile:` names a `profiles/` directory that does not exist yet.** `generic` and
-   `storefront-ui` are accepted values, not code, so the project-specific behaviour config cannot
-   express is currently whatever the CLI does by default.
-3. **The `{token}` placeholders** (`{id}`, `{index}`, `{index2}`, `{port}`, `{secretsFile}`, …) are
-   declared in the schema; the hardcoded equivalents are what run.
-4. **`add-clone` cannot bootstrap the first clone**, as above.
-5. **Which hangar a command acts on** is, for most commands, the checkout that the `hangar` on your
-   PATH belongs to — resolved from the CLI's own file location. `HANGAR_ROOT` overrides it. The
-   `--hangar <path>` flag and the "nearest hangar above the working directory" walk are implemented
-   in the config loader but currently reach only `config show` and `config validate`.
+1. **`hangar setup` cannot yet ask about your ports.** It writes a valid config, but with an empty
+   `ports.roles: []` — because a role is a decision about your repo (what it runs, on which port,
+   under which environment variable) and nothing in a checkout answers it. Add the roles by hand
+   after setup, or wait for `setup` to learn the question.
+2. **`add-clone` cannot bootstrap the *first* clone.** It copies an existing sibling's
+   `.claude/settings.local.json` as its template and refuses when there is none, so clone #1 is
+   still made by hand.
+3. **The install step is hardcoded to `npm ci`.** `repo.install[]` declares any of fourteen package
+   managers, or an explicit command, and `add-clone` still runs `npm ci` in the app directory. A
+   repo with no `package.json` gets a failing step it never asked for.
+4. **`profile:` names a `profiles/` directory that does not exist**, and now never will: the two
+   hangars this tool is built for need no profile code, which was the evidence the config boundary
+   was drawn in the right place. Treat the key as a label; it changes no behaviour.
+5. **The forge and tracker identity is still four literals** in `app/src/paths.ts`, so
+   `forge.originUrl` and `tracker.baseUrl` are read for some purposes and ignored for others.
+   Notably `add-clone` falls back to this repo's origin URL when none is given.
+6. **Linux is unexercised.** The VS Code window-state path is macOS-only, two generated scripts
+   fall back to a Homebrew `jq`, every install hint says `brew install`, and the Konsole and GNOME
+   Terminal drivers have never run against a live terminal. GNOME Terminal structurally cannot
+   deliver a `SYNC PAUSE`.
 
-None of this stops you running a hangar over a second repository whose shape is close to the first.
-It does mean you should read `app/CLAUDE.md` before assuming a config key is live.
+What *is* wired, and worth knowing because the list above used to be longer: ports, port roles and
+their env keys, the per-hangar port offset, clone directory naming, the per-clone dotenv and its
+extra variables, symlinks, secrets file, workspace naming and directories, VS Code's per-clone path
+keys, theme and statusline naming, and which hangar a command acts on (`--hangar`, then the walk up
+from your working directory, then `HANGAR_ROOT`).
 
 ## Starting Claude Code in operator mode
 

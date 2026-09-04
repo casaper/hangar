@@ -42,10 +42,15 @@ $schema: ./hangar.schema.json
 #
 #  ## `{token}` placeholders
 #
-#  Several values below are templates. The token set is what the schema declares and what
-#  `hangar setup` writes: `{id}` `{index}` `{index2}` (zero-padded to `clones.pad`) `{port}`
-#  `{secretsFile}` `{baseUrl}` `{key}`. Expansion is still being threaded through the CLI
-#  (the hardcoded equivalents are what run today), so treat these as declared, not yet live.
+#  Several values below are templates, rendered by one renderer with one token table:
+#  `{id}` `{displayName}` `{index}` `{index2}` (zero-padded to `clones.pad`) `{clone}` `{root}`
+#  `{port}` `{secretsFile}` `{baseUrl}` `{key}`.
+#
+#  Not every token has a value everywhere -- `{port}` needs a port role, `{index}` needs a clone
+#  -- and using one where it does not is an error rather than an empty string. A token that is
+#  not in the table at all is refused when the config LOADS, naming the field: several of these
+#  values are written into a live clone, and `PGDATABASE=warehouse_{indx2}` would otherwise reach
+#  a dotenv verbatim and aim a running server at a database nobody meant.
 # ============================================================================================
 
 # A free-text note. YAML comments do not survive `hangar config show`, so anything that must
@@ -182,6 +187,18 @@ repo:
     file: .env.local
     # Written as `<key>=<clone path>`. Omit to write no root-path line at all.
     rootPathEnvKey: PROJECT_GIT_ROOT_PATH
+    # Anything else a clone needs to ITSELF, beyond its ports. Templated, so it derives from
+    # the index like everything else and adding a clone needs no bookkeeping. This hangar
+    # needs none; a repo whose clones each want their own database would write:
+    #
+    #   vars:
+    #     PGDATABASE: warehouse_{index2}
+    #     COMPOSE_PROJECT_NAME: '{id}-{index2}'
+    #
+    # It goes through the same builder the ports do, so `doctor` byte-compares it. A value
+    # landing in a LIVE dotenv means a running server and a new shell disagree until that
+    # server restarts -- the same caveat the ports have always had.
+    vars: {}
 
   # Symlinks every clone needs. Empty by default; most repos need none.
   symlinks:

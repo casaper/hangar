@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TOKENS, unknownTokens } from '../template.ts';
 
 import {
   DEFAULT_EDITOR_KIND,
@@ -45,7 +46,7 @@ const hangarId = z
   .string()
   .regex(/^[a-z][a-z0-9_]{1,23}$/, 'must be 2-24 chars, lowercase, start with a letter, [a-z0-9_]');
 
-const clonesSchema = z.strictObject({
+export const clonesSchema = z.strictObject({
   /** Directory prefix. Must not end in a digit, or the generated index regex is ambiguous. */
   prefix: z
     .string()
@@ -188,8 +189,27 @@ const repoSchema = z.strictObject({
       file: z.string().min(1).default('.env.local'),
       /** Omit to write no root-path line at all. */
       rootPathEnvKey: z.string().min(1).optional(),
+      /**
+       * Per-clone values beyond the ports, as templated `KEY: value` pairs.
+       *
+       * Ports are not the only thing a clone needs to itself. A repo whose clones each want
+       * their own database or container set expresses that here --
+       * `PGDATABASE: myrepo_{index2}`, `COMPOSE_PROJECT_NAME: myrepo_{index2}` -- and every
+       * clone gets its own, derived from the index like everything else, with no bookkeeping.
+       *
+       * It goes through the same builder the ports do, so `doctor` byte-compares it and `--fix`
+       * repairs it without a new check. A value landing in a LIVE dotenv means a running server
+       * and a new shell disagree until the server restarts, which is the same caveat the ports
+       * have always had.
+       */
+      vars: z
+        .record(
+          z.string().regex(/^[A-Z][A-Z0-9_]*$/, 'must be an UPPER_SNAKE env var name'),
+          z.string().min(1),
+        )
+        .default({}),
     })
-    .default({ file: '.env.local' }),
+    .default({ file: '.env.local', vars: {} }),
   symlinks: z.array(symlinkSchema).default([]),
   install: z.array(installStepSchema).default([]),
   /**
@@ -384,6 +404,45 @@ export const hangarConfigSchema = z
   })
   .superRefine((cfg, ctx) => {
     const { ports, tracker, editor } = cfg;
+
+    /*
+     * Every templated value, checked for tokens the renderer does not know.
+     *
+     * At LOAD time rather than at render time, and that is the point: most of these are written
+     * into a live clone, so `PGDATABASE=myrepo_{indx2}` would otherwise reach a dotenv verbatim
+     * and aim a running server at a database nobody meant. One list, so a new templated field is
+     * one line here and cannot be forgotten.
+     */
+    const templated: (readonly [(string | number)[], string])[] = [
+      [['tracker', 'issueUrlTemplate'], tracker.issueUrlTemplate],
+      [['editor', 'workspaceFileName'], editor.workspaceFileName],
+      [['editor', 'workspaceFolderLabel'], editor.workspaceFolderLabel],
+      ...ports.roles.flatMap((role, i) =>
+        role.url === null
+          ? []
+          : [[['ports', 'roles', i, 'url'], role.url] as readonly [(string | number)[], string]],
+      ),
+      ...cfg.repo.symlinks.map(
+        (link, i) =>
+          [['repo', 'symlinks', i, 'target'], link.target] as readonly [
+            (string | number)[],
+            string,
+          ],
+      ),
+      ...Object.entries(cfg.repo.cloneEnv.vars).map(
+        ([key, value]) =>
+          [['repo', 'cloneEnv', 'vars', key], value] as readonly [(string | number)[], string],
+      ),
+    ];
+    for (const [path, value] of templated) {
+      const unknown = unknownTokens(value);
+      if (unknown.length === 0) continue;
+      ctx.addIssue({
+        code: 'custom',
+        path: [...path],
+        message: `unknown template token(s) ${unknown.map((t) => `{${t}}`).join(', ')} — known: ${TOKENS.map((t) => `{${t}}`).join(' ')}`,
+      });
+    }
 
     // Two hangars can only be guaranteed apart if the offset is inside one step.
     if (ports.offset >= ports.step) {

@@ -13,7 +13,7 @@ import {
   fleetBinPathLine,
   jiraHookCommand,
   plansHookCommand,
-  playwrightEnvLocalPath,
+  cloneSymlinks,
   settingsContentFor,
   settingsPath,
   healthCheckAllows,
@@ -21,9 +21,8 @@ import {
   withJiraHook,
   withPlansHook,
   withTmpHook,
-  workspaceAngularPath,
+  workspacePaths,
   workspaceContent,
-  workspacePath,
   type SettingsJson,
 } from '../clone-config.ts';
 import { CONFIG_FILENAME, findHangar, ROOT_ENV_KEY } from '../config/load.ts';
@@ -130,13 +129,22 @@ const cloneCaptures = (
       settingsPath(clone),
       settingsContentFor(clone, settingsTemplate(hangar)),
     ],
-    ['workspace.json', workspacePath(clone), workspaceContent(clone)],
-    ['workspace-appdir.json', workspaceAngularPath(clone), workspaceContent(clone)],
+
+    // Every configured workspace copy, so a change to `editor.workspaceDirs` shows up here.
+    ...workspacePaths(clone).map((path, i): [string, string, string] => [
+      `workspace-${String(i + 1)}.json`,
+      path,
+      workspaceContent(clone),
+    ]),
     ['theme.json', themePath(clone), theme.content],
     ['git-info-exclude', excludePath(clone), excludeBlock(hangar)],
     ['direnv-snippet', envrcPrivatePath(clone), direnvSnippet(clone)],
     ['health-check-allows', settingsPath(clone), `${healthCheckAllows(clone).join('\n')}\n`],
-    ['playwright-symlink', playwrightEnvLocalPath(clone), '(symlink; target in the manifest)\n'],
+    ...cloneSymlinks(clone).map((link): [string, string, string] => [
+      `symlink-${link.relPath.replaceAll('/', '_')}`,
+      link.path,
+      `-> ${link.target}\n${link.why}\n`,
+    ]),
   ];
 };
 

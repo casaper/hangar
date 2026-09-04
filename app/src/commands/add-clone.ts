@@ -12,13 +12,12 @@ import {
   excludeBlock,
   missingExcludeLines,
   excludePath,
-  playwrightEnvLocalPath,
+  cloneSymlinks,
   readSettings,
   settingsContentFor,
   settingsPath,
-  workspaceAngularPath,
+  workspacePaths,
   workspaceContent,
-  workspacePath,
   type SettingsJson,
 } from '../clone-config.ts';
 import { clearColourAssignment } from '../colour-assignments.ts';
@@ -113,16 +112,20 @@ export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
     `.envrc.private -> ${tildify(hangar.paths.envShared)} + the fleet bin/ on PATH (both absolute on purpose)`,
   );
 
-  const pwPath = playwrightEnvLocalPath(clone);
-  if (existsSync(dirname(pwPath))) {
-    if (!existsSync(pwPath)) {
-      // Not redundant with .envrc.private: the tracked tests/.env sets USER_READWRITE_PASSWORD
-      // empty and direnv loads it AFTER .envrc.private, so this reload is what wins.
-      symlinkSync(relative(dirname(pwPath), hangar.paths.envShared), pwPath);
-      ok('tests/playwright-regression-tests/.env.local symlink');
+  for (const link of cloneSymlinks(clone)) {
+    if (!existsSync(dirname(link.path))) {
+      if (link.skipIfDirMissing) {
+        warn(`no ${dirname(link.relPath)}/ in this branch — ${link.relPath} skipped`);
+        continue;
+      }
+      throw new CliError(
+        `${dirname(link.relPath)}/ does not exist, so ${link.relPath} cannot be linked`,
+        'Set `skipIfDirMissing: true` on that symlink if a branch may legitimately lack it.',
+      );
     }
-  } else {
-    warn('no tests/playwright-regression-tests/ in this branch — playwright symlink skipped');
+    if (existsSync(link.path)) continue;
+    symlinkSync(relative(dirname(link.path), link.target), link.path);
+    ok(`${link.relPath} symlink — ${link.why}`);
   }
 
   // 6. identity file AND its exclude line, created as a pair.
@@ -154,7 +157,7 @@ export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
   //       root and at `angular/`. One of the two is the same silent gap as a missing
   //       `.envrc` -- `doctor` reports it, but only if someone runs `doctor`.
   const workspace = workspaceContent(clone);
-  for (const path of [workspacePath(clone), workspaceAngularPath(clone)]) {
+  for (const path of workspacePaths(clone)) {
     if (!existsSync(dirname(path))) {
       warn(`${relative(clone.path, path)} skipped — no ${relative(clone.path, dirname(path))}/`);
       continue;
@@ -203,7 +206,11 @@ const addRemote = (repo: Clone, name: string, url: string): void => {
  * reloads `.env.shared` after the tracked `.env` blanks `USER_READWRITE_PASSWORD` -- so
  * Playwright's login fails with an empty password and nothing says why.
  */
-const KNOWN_ENVRC_DIRS = ['.', 'angular', 'tests/playwright-regression-tests'] as const;
+// From `repo.envrcDirs`, not a hardcoded list. It was `['.', 'angular',
+// 'tests/playwright-regression-tests']`, which is this one repo's layout: a hangar for another
+// would silently write no `.envrc.private` where its own `.envrc` files live, and direnv would
+// load nothing there.
+const knownEnvrcDirs = (hangar: Hangar): readonly string[] => hangar.config.repo.envrcDirs;
 
 /**
  * Every directory in the clone that has an `.envrc`, root first.
@@ -220,7 +227,7 @@ const direnvDirs = (clone: Clone): string[] => {
       .filter((file) => file.endsWith('.envrc'))
       .map((file) => dirname(file)),
   );
-  for (const dir of KNOWN_ENVRC_DIRS) dirs.add(dir);
+  for (const dir of knownEnvrcDirs(clone.hangar)) dirs.add(dir);
   return [...dirs]
     .filter((dir) => existsSync(join(clone.path, dir, '.envrc')))
     .sort((a, b) => (a === '.' ? -1 : b === '.' ? 1 : a.localeCompare(b)));

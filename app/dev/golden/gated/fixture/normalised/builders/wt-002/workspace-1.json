@@ -1,0 +1,11 @@
+{
+  "settings": {
+    "yaml.maxItemsComputed": 25000
+  },
+  "folders": [
+    {
+      "name": "fixture 2",
+      "path": "%HANGAR%/wt-002"
+    }
+  ]
+}
