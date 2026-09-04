@@ -1,6 +1,7 @@
 import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 
-import { colourAssignmentsFile, tildify } from './paths.ts';
+import { colourAssignmentsFile } from './paths.ts';
+import { tildify } from './user-paths.ts';
 
 /**
  * Explicit clone -> colour assignments: the one exception to "everything per-clone is a pure

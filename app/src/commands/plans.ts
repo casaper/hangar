@@ -5,7 +5,8 @@ import pc from 'picocolors';
 
 import { CliError, run } from '../exec.ts';
 import { discoverClones } from '../fleet.ts';
-import { fleetPlans, fleetRoot, tildify, userPlans } from '../paths.ts';
+import { fleetPlans, fleetRoot } from '../paths.ts';
+import { tildify, userPlans } from '../user-paths.ts';
 import {
   archiveNames,
   bulkCopySeconds,

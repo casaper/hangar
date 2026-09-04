@@ -22,7 +22,7 @@ import { statuslineArtifact } from '../generate/statusline-sh.ts';
 import { terminalHookArtifact } from '../generate/terminal-sh.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
 import { colourFor, paint, paletteEntry, PALETTE, PALETTE_NAMES } from '../palette.ts';
-import { tildify } from '../paths.ts';
+import { tildify } from '../user-paths.ts';
 import { CliError } from '../exec.ts';
 import { currentHangarId, terminalColourSettings } from '../terminal/index.ts';
 import { cloneLabel, heading, note, ok, warn } from '../ui.ts';

@@ -6,7 +6,8 @@ import { isMap, isScalar, parse as parseYaml, parseDocument, type Document } fro
 import { CliError, run } from '../exec.ts';
 import { discoverClones } from '../fleet.ts';
 import { defaultBranchFromGit, setRemoteHeadAuto } from '../git.ts';
-import { fleetRoot, tildify } from '../paths.ts';
+import { fleetRoot } from '../paths.ts';
+import { tildify } from '../user-paths.ts';
 import { note, step, warn } from '../ui.ts';
 import { CONFIG_FILENAME, loadConfigFile } from './load.ts';
 import { hangarConfigSchema } from './schema.ts';

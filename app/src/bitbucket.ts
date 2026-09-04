@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 
 import { gitTry } from './git.ts';
-import { bitbucketWorkspaceUrl, bitbucketRepo, envShared, tildify } from './paths.ts';
+import { bitbucketWorkspaceUrl, bitbucketRepo, envShared } from './paths.ts';
+import { tildify } from './user-paths.ts';
 
 /**
  * Bitbucket: links that need no auth, and the one lookup that does.

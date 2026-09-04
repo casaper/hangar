@@ -12,7 +12,7 @@ import {
 } from '../fleet.ts';
 import { currentBranch } from '../git.ts';
 import { tintedHex } from '../palette.ts';
-import { tildify } from '../paths.ts';
+import { tildify } from '../user-paths.ts';
 import {
   pickFleetWindow,
   terminal,

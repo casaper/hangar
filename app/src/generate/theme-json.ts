@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 
 import type { Clone } from '../fleet.ts';
-import { themesDir } from '../paths.ts';
+import { themesDir } from '../user-paths.ts';
 import type { Artifact } from './index.ts';
 
 /**

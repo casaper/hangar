@@ -5,7 +5,7 @@ import { parse as parseYaml } from 'yaml';
 import type { z } from 'zod';
 
 import { CliError } from '../exec.ts';
-import { tildify } from '../paths.ts';
+import { tildify } from '../user-paths.ts';
 import { hangarConfigSchema, type HangarConfig } from './schema.ts';
 
 /** The marker file. Its presence is what makes a directory a hangar. */

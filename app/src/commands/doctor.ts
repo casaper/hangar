@@ -67,15 +67,8 @@ import {
   setFleetGitConfig,
   wrongFleetGitConfig,
 } from '../git.ts';
-import {
-  envShared,
-  fleetPlans,
-  fleetRoot,
-  fleetTmp,
-  home,
-  terminalHookScript,
-  tildify,
-} from '../paths.ts';
+import { envShared, fleetPlans, fleetRoot, fleetTmp, terminalHookScript } from '../paths.ts';
+import { home, tildify } from '../user-paths.ts';
 import { planDirsIn } from '../plans.ts';
 import {
   isLinkedIntoStore,

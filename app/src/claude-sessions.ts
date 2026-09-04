@@ -2,7 +2,7 @@ import { closeSync, openSync, readdirSync, readSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
 import type { Clone } from './fleet.ts';
-import { projectsDir } from './paths.ts';
+import { projectsDir } from './user-paths.ts';
 import { allClaudeSessions } from './procs.ts';
 import { transcriptDirFor } from './sessions.ts';
 

@@ -31,7 +31,8 @@ import {
 } from '../jira-records.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, type Clone } from '../fleet.ts';
-import { fleetTmp, jiraTicketsDir, tildify } from '../paths.ts';
+import { fleetTmp, jiraTicketsDir } from '../paths.ts';
+import { tildify } from '../user-paths.ts';
 import {
   cloneTmpPath,
   isPrivateTmpEntry,

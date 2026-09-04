@@ -4,7 +4,8 @@ import { join, resolve } from 'node:path';
 import { CliError } from './exec.ts';
 import type { Clone } from './fleet.ts';
 import { themeName } from './generate/theme-json.ts';
-import { envShared, fleetRoot, tildify } from './paths.ts';
+import { envShared, fleetRoot } from './paths.ts';
+import { tildify } from './user-paths.ts';
 import { PORT_ROLES } from './ports.ts';
 
 /**

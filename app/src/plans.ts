@@ -4,7 +4,8 @@ import { basename, join } from 'node:path';
 
 import { run } from './exec.ts';
 import { discoverClones, type Clone } from './fleet.ts';
-import { fleetPlans, tildify, userPlans } from './paths.ts';
+import { fleetPlans } from './paths.ts';
+import { tildify, userPlans } from './user-paths.ts';
 import { firstMentionOf, planFilesEverMentioned } from './sessions.ts';
 
 /**

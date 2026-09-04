@@ -6,7 +6,8 @@ import { stringify as stringifyYaml } from 'yaml';
 import { configJsonSchemaText } from '../config/json-schema.ts';
 import { CONFIG_FILENAME, jsonSchemaFileName, loadHangarConfig } from '../config/load.ts';
 import { CliError } from '../exec.ts';
-import { fleetRoot, tildify } from '../paths.ts';
+import { fleetRoot } from '../paths.ts';
+import { tildify } from '../user-paths.ts';
 import { heading, note, ok, warn } from '../ui.ts';
 
 /**

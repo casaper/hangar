@@ -2,7 +2,8 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
 import { run } from './exec.ts';
-import { fleetRoot, projectsDir } from './paths.ts';
+import { fleetRoot } from './paths.ts';
+import { projectsDir } from './user-paths.ts';
 import { allClaudeSessions, type ClaudeSession } from './procs.ts';
 
 /**

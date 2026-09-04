@@ -13,7 +13,8 @@ import {
 import { MANAGER_COMMANDS } from '../config/schema.ts';
 import { inspectEnvironment, type EnvironmentReport } from '../environment.ts';
 import { CliError } from '../exec.ts';
-import { fleetRoot, tildify } from '../paths.ts';
+import { fleetRoot } from '../paths.ts';
+import { tildify } from '../user-paths.ts';
 import { blank, fail, heading, note, ok, step, warn } from '../ui.ts';
 
 /**

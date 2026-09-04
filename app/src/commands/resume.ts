@@ -6,7 +6,7 @@ import { claudeTranscripts, type ClaudeTranscript } from '../claude-sessions.ts'
 import { CliError, run } from '../exec.ts';
 import { cloneForCwd, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import { paint } from '../palette.ts';
-import { tildify } from '../paths.ts';
+import { tildify } from '../user-paths.ts';
 import { canPick, pickOne, type PickChoice } from '../tui.ts';
 import { cloneLabel, confirm, heading, note, table, truncate, visibleWidth, warn } from '../ui.ts';
 

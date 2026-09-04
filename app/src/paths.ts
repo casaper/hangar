@@ -1,8 +1,14 @@
-import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+import { claudeDir } from './user-paths.ts';
+
 /**
- * Every path the fleet CLI touches, resolved once.
+ * Every path derived from THIS HANGAR's root.
+ *
+ * The user-scoped half -- `~/.claude`, the transcripts directory, `tildify` -- lives in
+ * `user-paths.ts`, because it is a pure function of `homedir()` and stays correct for any number
+ * of hangars. Everything here is a function of `fleetRoot` and so cannot remain a module
+ * constant once that root comes from a config file rather than from this file's own location.
  *
  * The fleet root is derived from this file's location rather than `process.cwd()`, so
  * `hangar` behaves identically when invoked from a clone, from a subdirectory, or through
@@ -16,23 +22,6 @@ export const fleetRoot = resolve(
   process.env['HANGAR_ROOT'] ?? resolve(import.meta.dirname, '..', '..'),
 );
 
-export const home = homedir();
-export const claudeDir = join(home, '.claude');
-export const themesDir = join(claudeDir, 'themes');
-
-/**
- * A VS Code-family editor's window state -- which workspace each window has open. Written by the
- * editor as windows come and go, so it is LAST KNOWN rather than live; see `openWorkspaceFile`.
- *
- * Takes the directory name because every fork has its own: `Code`, `Cursor`, `Windsurf`,
- * `Code - Insiders`. Reading the wrong one answers about a different application's windows.
- */
-export const vscodeWindowState = (stateDir = 'Code'): string =>
-  join(home, 'Library', 'Application Support', stateDir, 'User', 'globalStorage', 'storage.json');
-
-/** Claude Code's session transcripts, one directory per working directory a session started in. */
-export const projectsDir = join(claudeDir, 'projects');
-
 /**
  * The shared plan archive. A fleet-root session writes here directly (`plansDirectory: "plans"`);
  * the clones write to their own `.claude/plans` and `hangar plans collect` moves them in.
@@ -44,9 +33,6 @@ export const fleetPlans = join(fleetRoot, 'plans');
  * one clone is there for all of them. PID files stay per clone in `tmp/_<clone>/`.
  */
 export const fleetTmp = join(fleetRoot, 'tmp');
-
-/** Where plans land when `plansDirectory` is absent or rejected -- shared with other projects. */
-export const userPlans = join(claudeDir, 'plans');
 
 /** The one shared statusline script -- all clones run it; it derives its hue from the cwd. */
 export const statuslineScript = join(claudeDir, 'dvb-clone-statusline.sh');
@@ -82,9 +68,6 @@ export const originUrl = 'git@bitbucket.org:acme/storefront_ui.git';
 export const bitbucketWorkspaceUrl = 'https://bitbucket.org/acme';
 export const bitbucketRepo = 'storefront_ui';
 export const atlassianUrl = 'https://acme.atlassian.net';
-
-/** Render an absolute path under $HOME as `~/...` for output. */
-export const tildify = (p: string): string => (p.startsWith(home) ? `~${p.slice(home.length)}` : p);
 
 /**
  * Explicit clone -> colour assignments, written by `hangar colours change`.

@@ -7,7 +7,7 @@ import { CONFIG_FILENAME } from '../config/load.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import { currentBranch } from '../git.ts';
-import { tildify } from '../paths.ts';
+import { tildify } from '../user-paths.ts';
 import { cloneLabel, heading, note, ok, table, warn } from '../ui.ts';
 import {
   editorFor,

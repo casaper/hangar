@@ -6,7 +6,8 @@ import { workspaceAngularPath, workspacePath } from '../clone-config.ts';
 import { CliError, run } from '../exec.ts';
 import type { Clone } from '../fleet.ts';
 import { git } from '../git.ts';
-import { fleetRoot, vscodeWindowState } from '../paths.ts';
+import { fleetRoot } from '../paths.ts';
+import { vscodeWindowState } from '../user-paths.ts';
 import { VSCODE_FAMILY, type VscodeFork } from './kinds.ts';
 import type { EditorArtifact, EditorDriver, LaunchResult } from './types.ts';
 

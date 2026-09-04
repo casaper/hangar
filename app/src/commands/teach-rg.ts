@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { requireClone } from '../fleet.ts';
 import { CliError } from '../exec.ts';
 import { claudeSessionsIn } from '../procs.ts';
-import { tildify } from '../paths.ts';
+import { tildify } from '../user-paths.ts';
 import { blank, heading, note, ok, step, warn } from '../ui.ts';
 import { confirm } from '../ui.ts';
 

@@ -5,7 +5,7 @@ import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import { clearColourAssignment, colourAssignmentsLabel } from '../colour-assignments.ts';
 import { themePath } from '../generate/theme-json.ts';
 import { git, gitTry, syncState } from '../git.ts';
-import { tildify } from '../paths.ts';
+import { tildify } from '../user-paths.ts';
 import { claudeSessionsIn, runningServersIn } from '../procs.ts';
 import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
 import { coloursSync } from './colours.ts';
