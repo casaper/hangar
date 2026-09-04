@@ -4,8 +4,9 @@ import { fileURLToPath } from 'node:url';
 
 import { workspacePath, workspacePaths } from '../clone-config.ts';
 import { CliError, run } from '../exec.ts';
-import type { Clone } from '../fleet.ts';
+import { cloneDirPattern, type Clone } from '../fleet.ts';
 import { git } from '../git.ts';
+import { render as renderTemplate } from '../template.ts';
 import { vscodeWindowState } from '../user-paths.ts';
 import { VSCODE_FAMILY, type VscodeFork } from './kinds.ts';
 import type { EditorArtifact, EditorDriver, LaunchResult } from './types.ts';
@@ -121,7 +122,38 @@ const readStringValue = (text: string, key: string): string | undefined => {
   return match?.[1];
 };
 
-const INDEX_LABEL_RE = /("name"\s*:\s*")(\d+)(: dvb_gn")/;
+/*
+ * The workspace folder label, read BACKWARDS.
+ *
+ * This is the one direction the token renderer cannot serve: `templatize` has a rendered label
+ * in hand (`"name": "1: dvb_gn"`) and has to find the index inside it. It was the literal
+ * `/("name"\s*:\s*")(\d+)(: dvb_gn")/` -- so in any other hangar it matched nothing, the label
+ * was copied verbatim, and every clone's workspace claimed to be clone 1 while `ide vscode sync`
+ * reported success.
+ *
+ * Derived from `editor.workspaceFolderLabel` rather than merely replaced, so the two directions
+ * cannot disagree: the template is rendered with a sentinel where the index goes, escaped whole,
+ * and the sentinel becomes the capture group. A label that does not mention the index at all is
+ * not per-clone, so there is nothing to find and nothing to rewrite.
+ */
+const INDEX_SENTINEL = '\u0001HANGARINDEX\u0001';
+
+const indexLabelRe = (hangar: Hangar): RegExp | undefined => {
+  const template = hangar.config.editor.workspaceFolderLabel;
+  if (!template.includes('{index}') && !template.includes('{index2}')) return undefined;
+  const rendered = renderTemplate(
+    template,
+    {
+      id: hangar.id,
+      displayName: hangar.config.displayName ?? hangar.id,
+      index: INDEX_SENTINEL,
+      index2: INDEX_SENTINEL,
+    },
+    'editor.workspaceFolderLabel',
+  );
+  const [before = '', after = ''] = escapeRegExp(rendered).split(INDEX_SENTINEL);
+  return new RegExp(`("name"\\s*:\\s*"${before})(\\d+)(${after}")`);
+};
 
 export type Templatized = {
   readonly template: string;
@@ -178,7 +210,8 @@ export const templatize = (artifact: EditorArtifact, text: string, clone: Clone)
     template = template.replace(new RegExp(`${escapeRegExp(root)}(?=[/"])`, 'g'), ROOT_TOKEN);
   }
   if (artifact.indexLabel) {
-    template = template.replace(INDEX_LABEL_RE, `$1${INDEX_TOKEN}$3`);
+    const labelRe = indexLabelRe(clone.hangar);
+    if (labelRe !== undefined) template = template.replace(labelRe, `$1${INDEX_TOKEN}$3`);
   }
   return { template, root, nonconforming };
 };
@@ -187,9 +220,15 @@ export const templatize = (artifact: EditorArtifact, text: string, clone: Clone)
 export const render = (template: string, clone: Clone): string =>
   template.replaceAll(ROOT_TOKEN, clone.path).replaceAll(INDEX_TOKEN, String(clone.index));
 
-/** Fresh each call: a global regex carries `lastIndex`, so a shared one would skip matches. */
+/**
+ * Fresh each call: a global regex carries `lastIndex`, so a shared one would skip matches.
+ *
+ * The directory pattern comes from `fleet.ts`'s one derivation, not from a second `clone_(\d{2,})`
+ * written here -- a hangar whose clones are `wt-001` would otherwise have this guard find no
+ * sibling paths at all, which is the guard silently switching itself off.
+ */
 const cloneRootRe = (hangar: Hangar): RegExp =>
-  new RegExp(`${escapeRegExp(hangar.root)}/clone_(\\d{2,})`, 'g');
+  new RegExp(`${escapeRegExp(hangar.root)}/${cloneDirPattern(hangar)}`, 'g');
 
 /**
  * Any absolute path into a SIBLING clone that survived rendering.

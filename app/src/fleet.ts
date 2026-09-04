@@ -24,15 +24,18 @@ import { portsFor, type ClonePorts } from './ports.ts';
  */
 /**
  * ONE derivation, and everything that spells a clone directory goes through it: this regexp,
- * `cloneNameFor`, the sibling remote names, `status`'s `dir` row and the generated statusline's
- * own pattern. A second regexp written by hand somewhere else is how a hangar ends up with two
+ * `cloneNameFor`, the sibling remote names, `status`'s `dir` row, the generated statusline's own
+ * pattern and `ide vscode sync`'s sibling-path guard -- which is why the unanchored PATTERN is
+ * exported too, rather than being rewritten by hand wherever the anchors differ. A second regexp written by hand somewhere else is how a hangar ends up with two
  * ideas of what its clones are called, and only one of them configurable.
  *
  * At least `pad` digits, never exactly `pad`: the old pattern was `\\d{2,}` for a reason -- a
  * fleet padded to two must keep matching at clone_10.
  */
-export const cloneDirRe = (hangar: Hangar): RegExp =>
-  new RegExp(`^${hangar.config.clones.prefix}(\\d{${String(hangar.config.clones.pad)},})$`);
+export const cloneDirPattern = (hangar: Hangar): string =>
+  `${hangar.config.clones.prefix}(\\d{${String(hangar.config.clones.pad)},})`;
+
+export const cloneDirRe = (hangar: Hangar): RegExp => new RegExp(`^${cloneDirPattern(hangar)}$`);
 
 /** The shell-glob equivalent, for generated artifacts that match on a name rather than parse it. */
 export const cloneGlobPattern = (hangar: Hangar): string =>
