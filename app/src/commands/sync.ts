@@ -54,7 +54,11 @@ import { cloneLabel, confirm, fail, heading, note, ok, step, warn } from '../ui.
  *
  * Rebase vs merge follows the user's rule: rebase only when this is your own branch with a
  * linear history since it forked; merge when someone else started it or it already contains
- * merge commits, because rebasing those rewrites other people's commits.
+ * merge commits, because rebasing those rewrites other people's commits. The two ALIASES
+ * override that rule -- `hangar rebase-default` and `hangar merge-default` are this command
+ * under another name, each forcing one strategy (see `decideStrategy`). What they do not change
+ * is the TARGET: all three names integrate onto whatever the pull request points at, so the
+ * `-default` in them is the common case rather than a promise.
  */
 export type SyncOptions = {
   all?: boolean | undefined;
@@ -62,7 +66,19 @@ export type SyncOptions = {
   sessionNotify?: boolean | undefined;
   includeBusy?: boolean | undefined;
   onto?: string | undefined;
+  strategy?: ForcedStrategy | undefined;
 };
+
+/**
+ * A strategy the developer asked for, rather than one the rule below worked out.
+ *
+ * It arrives either as `--strategy` or as the NAME the command was invoked under:
+ * `hangar rebase-default` and `hangar merge-default` are aliases of `sync` that force one each.
+ * Only these two can be forced -- `up-to-date` and `ff-only` are facts about the clone rather
+ * than choices, and there is nothing to force when the branch IS the target or already contains
+ * it.
+ */
+export type ForcedStrategy = 'rebase' | 'merge';
 
 type Strategy =
   | { kind: 'up-to-date'; target: Target }
@@ -238,6 +254,74 @@ const chooseStrategy = (clone: Clone, target: Target): Strategy => {
   }
 
   return { kind: 'rebase', target, reason: 'your branch, linear since the fork' };
+};
+
+/**
+ * Which of `sync`'s three names was typed, and so which strategy it forces.
+ *
+ * Commander records the alias a subcommand was reached by NOWHERE -- `actionCommand.name()` is
+ * always the canonical `sync` -- so the invocation itself has to be read. A WHITELIST scan
+ * rather than a parser that skips global options: the parser version would be correct only
+ * until the second value-taking global option is added, at which point it would silently take
+ * that option's value for the subcommand. The only way to fool this one is a directory
+ * literally called `rebase-default` passed to `--hangar`.
+ *
+ * `--strategy` outranks it, so `hangar merge-default --strategy rebase` rebases: the flag was
+ * typed for this run, the name is just how the command was reached.
+ */
+const FORCED_BY_NAME: Readonly<Record<string, ForcedStrategy>> = {
+  'rebase-default': 'rebase',
+  'merge-default': 'merge',
+};
+
+export const forcedStrategy = (argv: readonly string[]): ForcedStrategy | undefined => {
+  for (const token of argv) {
+    const forced = FORCED_BY_NAME[token];
+    if (forced !== undefined) return forced;
+    if (token === 'sync') return undefined;
+  }
+  return undefined;
+};
+
+/**
+ * The strategy actually used: the automatic choice, unless one was asked for.
+ *
+ * Pure, and taking the automatic RESULT rather than the clone, so every combination of the four
+ * automatic kinds and the three forced values can be printed side by side without a git
+ * repository to produce them -- the technique this CLI uses in place of tests.
+ *
+ * Two of the four automatic kinds are never overridden, because they are not opinions:
+ * `ff-only` means this branch IS the target, and `up-to-date` means it already contains it.
+ * Forcing a rebase or a merge there would be a no-op at best and a rebase of a branch onto
+ * itself at worst.
+ */
+export const decideStrategy = (auto: Strategy, forced: ForcedStrategy | undefined): Strategy => {
+  // Unchanged when nothing was forced AND when the force agrees -- the dry run's output is this
+  // command's regression record, so it stays byte-identical whenever nothing was overridden.
+  if (forced === undefined || auto.kind === forced) return auto;
+  if (auto.kind !== 'rebase' && auto.kind !== 'merge') return auto;
+  return {
+    kind: forced,
+    target: auto.target,
+    reason: `asked for with ${forced === 'rebase' ? '`rebase-default`' : '`merge-default`'} (--strategy ${forced}), overriding: ${auto.reason}`,
+  };
+};
+
+/**
+ * The warning for the one override that makes this command do what it otherwise refuses.
+ *
+ * Forcing a MERGE is always safe -- it is the conservative half of the rule, and choosing it
+ * over a rebase costs nothing but a merge commit. Forcing a REBASE over a merge is the opposite:
+ * the automatic rule merges precisely when rebasing would rewrite commits that are not ours (a
+ * branch someone else started) or that git cannot replay cleanly (merge commits since the fork).
+ * That is a legitimate thing to ask for and it is not refused, but it is never done quietly.
+ */
+export const overrideWarning = (
+  auto: Strategy,
+  forced: ForcedStrategy | undefined,
+): string | undefined => {
+  if (forced !== 'rebase' || auto.kind !== 'merge') return undefined;
+  return `rebasing as asked, against the rule that would have merged: ${auto.reason}`;
 };
 
 /**
@@ -557,7 +641,10 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
   // below: a stacked PR can target a branch this clone has never fetched.
   const target = await resolveTarget(clone, branch, opts);
   describeTarget(clone, target);
-  const strategyBefore = chooseStrategy(clone, target);
+  const autoBefore = chooseStrategy(clone, target);
+  const strategyBefore = decideStrategy(autoBefore, opts.strategy);
+  const overridden = overrideWarning(autoBefore, opts.strategy);
+  if (overridden !== undefined) warn(overridden);
 
   if (opts.dryRun === true) {
     note(`branch:   ${branch}`);
@@ -660,7 +747,10 @@ const integrate = async (
   }
 
   // 5. strategy (recomputed: the fetch may have moved the target)
-  const strategy = chooseStrategy(clone, target);
+  const auto = chooseStrategy(clone, target);
+  const strategy = decideStrategy(auto, opts.strategy);
+  const overridden = overrideWarning(auto, opts.strategy);
+  if (overridden !== undefined) warn(overridden);
   run.strategy = strategy;
   if (strategy.kind === 'up-to-date') {
     ok(`already up to date with ${target.ref}`);

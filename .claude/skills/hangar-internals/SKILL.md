@@ -41,6 +41,7 @@ Two conventions for changing it, both of which exist because they caught somethi
 | `hangar ports [--json]`        | the whole port map, and any `.env.local` that disagrees with it       |
 | `hangar status <clone>\|--all` | branch, sync vs origin, Jira link, PR link, ports, servers, sessions  |
 | `hangar sync <clone>\|--all`   | stash, fetch, rebase-or-merge onto its PR's target branch, restore    |
+| `hangar {rebase,merge}-default` | strategy forced rather than chosen — otherwise the same command      |
 | `hangar open <clone>\|--all`   | each clone's tabs in one terminal window + every configured editor    |
 | `hangar resume [clone]`        | pick one of a clone's past Claude Code sessions and resume it         |
 | `hangar add-clone`             | create the next clone and wire it in completely                       |
@@ -55,7 +56,7 @@ Two conventions for changing it, both of which exist because they caught somethi
 | `hangar colours change`        | give one clone another hue, and rebuild everything that names it      |
 | `hangar colours list`          | the palette, painted, and which clone holds each hue                  |
 
-Six behaviours are worth knowing before you run them:
+Seven behaviours are worth knowing before you run them:
 
 - **`hangar sync` types into a live Claude session.** There is no CLI mechanism to message a
   running interactive session, so it finds the session's tty, maps it to an iTerm2 tab and writes
@@ -86,6 +87,22 @@ Six behaviours are worth knowing before you run them:
   always `origin/<branch>` — a bare name is ambiguous the moment a sibling clone has the same
   branch, which in a stacked PR it does by definition, and `checkout.defaultRemote` does not
   reach `rev-parse` or `rebase`.
+- **`merge-default` and `rebase-default` are `sync` under another name, and the name is read out
+  of `process.argv`.** Commander records nowhere which alias a subcommand was reached by —
+  `actionCommand.name()` always answers `sync` — so `forcedStrategy` scans the invocation for one
+  of the three names. A WHITELIST scan and not a parser that skips global options: the parser
+  version stays correct only until a second value-taking global option is added, at which point
+  it would silently take that option's value for the subcommand name. `--strategy` outranks the
+  name, because a flag was typed for this run while the name is only how the command was reached.
+  The force itself is `decideStrategy`, which is pure and takes the AUTOMATIC RESULT rather than
+  the clone, so all twelve combinations print side by side with no git state; it leaves the
+  automatic answer untouched whenever the force agrees with it, which keeps the dry run's output —
+  this command's regression record — byte-identical unless something was really overridden. Two of
+  the four kinds are never forced: `ff-only` means the branch IS the target and `up-to-date` means
+  it already contains it, and neither is an opinion to override. Forcing a MERGE is silent (it is
+  the conservative half of the rule); forcing a REBASE over an automatic merge `warn`s on both the
+  real and the dry-run path, because that is the one case where the tool does what it otherwise
+  refuses — rewriting merge commits, or commits somebody else authored.
 - **`hangar plans collect` and `tmp merge` move files between the clones and the fleet root.**
   Both are idempotent and neither ever overwrites: byte-identical copies collapse to one, anything
   that differs is kept beside the winner as `<name>.from-clone_NN`, and anything a live session may

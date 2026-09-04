@@ -216,6 +216,7 @@ directly, and the CLI's own `npm run lint`, `npm run typecheck` and `npm run for
 | `hangar ports [--json]`             | the whole port map, and any `.env.local` that disagrees with it       |
 | `hangar status <clone>\|--all`      | branch, sync vs origin, Jira link, PR link, ports, servers, sessions  |
 | `hangar sync <clone>\|--all`        | stash, fetch, rebase-or-merge onto its PR's target branch, restore    |
+| `hangar {rebase,merge}-default`     | the same command, with the strategy forced rather than chosen         |
 | `hangar open <clone>\|--all`        | each clone's tabs in one terminal window + every configured editor    |
 | `hangar resume [clone]`             | pick one of a clone's past Claude Code sessions and resume it         |
 | `hangar add-clone`                  | create the next clone and wire it in completely                       |
@@ -234,11 +235,18 @@ directly, and the CLI's own `npm run lint`, `npm run typecheck` and `npm run for
 The editor commands live under **`ide`**, aliased **`editor`**, so the top level carries one
 entry for the editors rather than one per editor. `colours` is aliased **`colors`**.
 
+**`sync`, `merge-default` and `rebase-default` are one command under three names.** All three
+resolve the same target — whatever the branch's pull request points at, which is often not the
+default branch at all — and only the strategy differs: `sync` applies the rule (rebase only your
+own linear branch), the other two force one each. `--strategy` does the same thing explicitly and
+outranks the name.
+
 **Read freely; do not integrate.** `list`, `ports`, `status`, `colours list` and a bare `doctor`
 only report, and every `-n` is a dry run — a clone session is welcome to all of them, and
 `plans collect` and `tmp merge --quiet` already run there from `SessionEnd` hooks. The ones that
 move git state, files between clones or terminal windows are the **user's, from the fleet root**:
-`sync`, `open`, `add-clone`, `remove-clone`, `colours change` and `doctor --fix`.
+`sync` (under any of its three names), `open`, `add-clone`, `remove-clone`, `colours change` and
+`doctor --fix`.
 
 **`hangar sync <clone>` starts with a `git stash push --include-untracked`**, and the
 busy-clone skip applies only to `--all` — so naming a clone explicitly does not protect it, and a

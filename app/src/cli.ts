@@ -18,7 +18,7 @@ import { resume } from './commands/resume.ts';
 import { setup } from './commands/setup.ts';
 import { status } from './commands/status.ts';
 import { teachRg } from './commands/teach-rg.ts';
-import { sync } from './commands/sync.ts';
+import { forcedStrategy, sync } from './commands/sync.ts';
 import { tmpMerge } from './commands/tmp.ts';
 import { syncEditor } from './commands/vscode.ts';
 import type { EditorKind } from './editor/index.ts';
@@ -51,7 +51,39 @@ const program = new Command()
   .option('--hangar <path>', 'the hangar root to operate on (default: nearest above cwd)')
   .hook('preAction', (_thisCommand, actionCommand) => {
     requireHangarConfig(commandPath(actionCommand));
+  })
+  /*
+   * Commander prints only the FIRST alias, in both the command listing and the usage line
+   * (`sync|merge-default`), which would leave `rebase-default` -- one of the two names that
+   * select a strategy -- documented nowhere a reader looks, including in the help for the very
+   * command they typed. Both are rebuilt here with every alias in them. The argument suffix in
+   * the term is reproduced by hand because commander's `humanReadableArgName` is internal.
+   */
+  .configureHelp({
+    subcommandTerm: (cmd) => {
+      const args = cmd.registeredArguments
+        .map((arg) => {
+          const name = arg.variadic ? `${arg.name()}...` : arg.name();
+          return arg.required ? `<${name}>` : `[${name}]`;
+        })
+        .join(' ');
+      return [
+        allNames(cmd),
+        ...(cmd.options.length > 0 ? ['[options]'] : []),
+        ...(args === '' ? [] : [args]),
+      ].join(' ');
+    },
+    commandUsage: (cmd) => {
+      const ancestors: string[] = [];
+      for (let parent = cmd.parent; parent !== null; parent = parent.parent) {
+        ancestors.unshift(parent.name());
+      }
+      return [...ancestors, allNames(cmd), cmd.usage()].join(' ');
+    },
   });
+
+/** `sync|merge-default|rebase-default` -- every name a command answers to, in declared order. */
+const allNames = (cmd: CommandUnknownOpts): string => [cmd.name(), ...cmd.aliases()].join('|');
 
 /**
  * A command's full path, e.g. `ide vscode sync`. Commander gives the leaf; the parents carry
@@ -128,8 +160,16 @@ program
 
 program
   .command('sync')
+  .aliases(['merge-default', 'rebase-default'])
+  .summary(
+    'Bring a clone up to date with what its pull request targets — the name picks the strategy',
+  )
   .description(
-    'Rebase or merge a clone onto whatever its pull request targets, stashing and restoring your work',
+    [
+      'Bring a clone up to date with whatever its pull request targets, stashing and restoring your work around the integration.',
+      'The name you type picks the strategy. `sync` decides for itself: it rebases only your own branch with a linear history since it forked, and merges anything else, because rebasing a branch someone else started rewrites their commits. `rebase-default` and `merge-default` are the same command with that choice forced, and forcing a rebase over that rule says so in the output.',
+      "All three resolve the same TARGET: whatever the branch's open pull request points at, which is not always the default branch — so the `-default` in those two names is the common case rather than a promise. `--onto <ref>` overrides it.",
+    ].join('\n\n'),
   )
   .argument('[clone]', 'clone name, e.g. clone_02 (or just 2)')
   .option('-a, --all', 'sync every clone (skips clones with a live Claude session)')
@@ -137,8 +177,14 @@ program
   .option('--no-session-notify', 'do not type pause/closing messages into live Claude sessions')
   .option('--include-busy', 'with --all, also sync clones that have a live Claude session')
   .option('--onto <ref>', 'integrate onto this ref instead, skipping the pull-request lookup')
+  .addOption(
+    new Option(
+      '--strategy <how>',
+      'force the integration strategy (the default is whichever name you typed)',
+    ).choices(['rebase', 'merge']),
+  )
   .action(async (clone, options) => {
-    await sync(clone, options);
+    await sync(clone, { ...options, strategy: options.strategy ?? forcedStrategy(process.argv) });
   });
 
 program
