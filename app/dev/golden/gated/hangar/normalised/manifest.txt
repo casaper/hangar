@@ -1,7 +1,6 @@
-hangar-root        %HANGAR%   (threaded: what every command acts on)
+hangar-root        %HANGAR%
 hangar-id          dvb_gn
 discovery-source   walk
-discovery-root     %HANGAR%   (findHangar: must agree)
 config-file        %HANGAR%/hangar.config.yaml
 editor-fell-back   false
 editor-kinds       vscode

@@ -25,7 +25,7 @@ import {
   workspaceContent,
   type SettingsJson,
 } from '../clone-config.ts';
-import { CONFIG_FILENAME, findHangar, ROOT_ENV_KEY } from '../config/load.ts';
+import { CONFIG_FILENAME } from '../config/load.ts';
 import { direnvSnippet } from './add-clone.ts';
 import { editors } from '../editor/index.ts';
 import { cloneAt, discoverClones, type Clone } from '../fleet.ts';
@@ -157,23 +157,21 @@ export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
 
   heading(`Capturing ${String(clones.length)} clone(s) into ${out}`);
 
-  // The two facts a content diff cannot see. `findHangar` is asked with no flag, so this
-  // records which mechanism actually answered for this invocation.
-  //
-  // `hangar-root` and `discovery-root` below are TWO INDEPENDENT MECHANISMS, and their
-  // agreement today is a coincidence rather than evidence: `hangar.root` is
-  // `HANGAR_ROOT ?? import.meta.dirname/../..`, while this is the real upward walk that only
-  // `config show` and `config validate` currently reach. They match because the tool happens
-  // to live inside the hangar it manages. Do not read two identical lines as "discovery is
-  // wired" -- the proof of that is `hangar.root` DISAPPEARING from the manifest, not the two
-  // lines continuing to agree.
-  const found = findHangar({ cwd: process.cwd(), env: process.env[ROOT_ENV_KEY] });
+  /*
+   * The two facts a content diff cannot see: which discovery mechanism answered, and whether the
+   * editor config is the developer's or the schema's.
+   *
+   * `hangar.source` is read off the threaded hangar rather than by re-running `findHangar` here.
+   * Re-running it was wrong in a way this capture itself exposed: the second call did not carry
+   * `--hangar`, so with the flag in play it reported the walk's answer while the rest of the
+   * manifest described the flag's hangar -- two lines disagreeing about which hangar this was,
+   * produced by the very code meant to prove they agree.
+   */
   const selection = editors(hangar);
   const manifest: string[] = [
-    `hangar-root        ${hangar.root}   (threaded: what every command acts on)`,
+    `hangar-root        ${hangar.root}`,
     `hangar-id          ${hangar.id}`,
-    `discovery-source   ${found?.source ?? '(none: no config found)'}`,
-    `discovery-root     ${found?.root ?? '(none)'}   (findHangar: must agree)`,
+    `discovery-source   ${hangar.source}`,
     `config-file        ${join(hangar.root, CONFIG_FILENAME)}`,
     `editor-fell-back   ${String(selection.fellBack)}`,
     `editor-kinds       ${selection.drivers.map((d) => d.kind).join(', ') || '(none)'}`,

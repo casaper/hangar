@@ -1,7 +1,6 @@
-hangar-root        /Users/someone/code/dvb_gn   (threaded: what every command acts on)
+hangar-root        /Users/someone/code/dvb_gn
 hangar-id          dvb_gn
 discovery-source   walk
-discovery-root     /Users/someone/code/dvb_gn   (findHangar: must agree)
 config-file        /Users/someone/code/dvb_gn/hangar.config.yaml
 editor-fell-back   false
 editor-kinds       vscode
