@@ -1,6 +1,7 @@
 import type { Hangar } from '../hangar.ts';
 import type { Clone } from '../fleet.ts';
 import { type Artifact, artifactHeader } from './index.ts';
+import { tildify } from '../user-paths.ts';
 
 /**
  * `clone-colours.sh` -- the hue table for shell consumers (the terminal hook next to it).
@@ -55,8 +56,8 @@ export const cloneColoursArtifact = (hangar: Hangar, clones: readonly Clone[]): 
     `#     set -- $(${fn} "$clone") ; rgb=$1 x256=$2 name=$3`,
     '#',
     '# One other place cannot source this file and carries its own copy of the table:',
-    '#   ~/.claude/dvb-clone-statusline.sh   (self-contained on purpose: it runs on every',
-    '#                                        status-line render and must never fail)',
+    `#   ${tildify(hangar.paths.statuslineScript)}`,
+    '#     (self-contained on purpose: it runs on every status-line render and must never fail)',
     '# It is generated from the same data, so the two cannot drift.',
     '#',
     '# Formula, so the set reads as one family: shimmer = main + 40% toward white,',

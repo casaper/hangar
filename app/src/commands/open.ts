@@ -97,16 +97,29 @@ export const tabsFor = (
   const colour = driver.capabilities.paintOnCreate
     ? tintedHex(clone.colour, hangar.config.terminal.colour.tint)
     : undefined;
+  /*
+   * From `terminal.tabs[]`, not a hardcoded three.
+   *
+   * It was `claude` at the clone root, `shell` at the clone root, and a third at
+   * `<clone>/angular` -- one repo's layout, in a list the schema had described as configurable
+   * since Track B and that nothing read. A hangar for a repo with no `angular/` got a third tab
+   * `cd`-ing into a directory that does not exist, on every `hangar open`.
+   *
+   * `--no-claude` still means "no tab runs a command", and it is expressed that way rather than
+   * as "drop the tab whose role is claude": the role names are the config's now, so matching on
+   * one would be matching on a string the developer chose. A tab with no command is a shell, and
+   * a shell in the right directory is the useful degradation.
+   */
+  const configured = hangar.config.terminal.tabs.map((tab): TerminalTabSpec => ({
+    cwd: tab.dir === '.' ? clone.path : join(clone.path, tab.dir),
+    ...(opts.claude === false || tab.command === undefined ? {} : { command: tab.command }),
+    clone: clone.name,
+    role: tab.role,
+    colour,
+  }));
+
   return [
-    {
-      cwd: clone.path,
-      command: opts.claude === false ? undefined : 'claude',
-      clone: clone.name,
-      role: 'claude',
-      colour,
-    },
-    { cwd: clone.path, clone: clone.name, role: 'shell', colour },
-    { cwd: join(clone.path, 'angular'), clone: clone.name, role: 'angular', colour },
+    ...configured,
     // An editor that lives INSIDE a terminal gets a tab rather than a window: terminal vim has
     // no window to hand a path to. The tab is built here, with the others, so it lands in the
     // fleet window in clone order -- the editor driver could not manage that, since it knows

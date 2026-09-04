@@ -217,6 +217,14 @@ export const konsoleDriver = (hangarId: string): TerminalDriver => {
         call(qdbus, win.service, `/Sessions/${String(session)}`, 'title', '0'),
       );
       if (tag.clone !== clone) continue;
+      /*
+       * Prefer the agent's tab, and DEGRADE rather than fail when there is none.
+       *
+       * `claude` is the schema's default role name, not a guarantee: `terminal.tabs[].role` is
+       * free text and a hangar may call it anything. So this is a preference with a fallback to
+       * the clone's first tab, never a match the selection depends on -- the only literal role
+       * name anywhere, and it is worth keeping that way.
+       */
       if (tag.role === 'claude') {
         call(qdbus, win.service, win.object, 'setCurrentSession', String(session));
         return true;

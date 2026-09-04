@@ -51,7 +51,7 @@ half: a repaired `.env.local` does nothing until direnv reloads it.
 a `SessionStart` hook (`.claude/hooks/direnv-load.sh` — it appends a `direnv export` plus a `cd`
 wrapper to `CLAUDE_ENV_FILE`, so every Bash call in a clone session, and every `cd` inside one,
 re-evaluates the environment). **A parent session has no such hook**, so `.env.local` is never
-loaded and `(cd clone_NN && node dev/ports.mjs)` reports the fallbacks `4200 / 6006 / 9323` for
+loaded, so running the repo's own port script from here reports its fallback defaults for
 **every clone** — it does not error, it just answers wrong (the tell is the `(default)` marker
 it prints beside each number). Never read a clone's ports from a parent session; read the clone's
 `CLAUDE.local.md`, or `grep` its `.env.local`.

@@ -25,7 +25,7 @@ Three things follow that are worth knowing:
   happens if you forget to. A clone-specific setting that is missing from it gets copied
   verbatim and leaves one clone's tool path aimed at another clone's `node_modules` — silent,
   exactly like a Storybook health check on a sibling's port. A rendered file that still contains
-  `clone_NN` for another `NN` is therefore a **hard error** naming the file; the fix is to add the
+  another clone's directory name is therefore a **hard error** naming the file; the fix is to add the
   key to the config, not to force the write. Absolute paths _outside_ the fleet root are left
   alone — the `~/.vscode/extensions/…` YAML schema URL in the workspace file is genuinely shared.
 - **`launch.json` and `tasks.json` are tracked by git**, unlike `settings.json`, `mcp.json` and the
@@ -39,11 +39,13 @@ Three things follow that are worth knowing:
   modified copy of _that_ file (they drift separately), which is printed; `--from <clone>`
   overrides it and `-n` shows the changed keys per clone without writing.
 
-The workspace file exists **twice** per clone, byte-identical — `clone_NN/dvb_gn_NN.code-workspace`
-and `clone_NN/angular/dvb_gn_NN.code-workspace` — because VS Code only offers a
-`*.code-workspace` from the directory you opened, and this repo is opened at both. `doctor` checks
-for both and fills a missing one from its twin; `workspaceContent()` in `clone-config.ts` is only
-the fallback for a clone that has neither.
+The workspace file exists **once per entry in `editor.workspaceDirs`**, byte-identical, because
+VS Code only offers a `*.code-workspace` from the directory you opened. `['.']` is the common case
+— a repo only ever opened at its root — and this hangar's repo is opened at its root AND at its
+app directory, so it declares both and every clone carries two copies. The name comes from
+`editor.workspaceFileName`, rendered per clone. `doctor` checks for each and fills a missing one
+from a twin; `workspaceContent()` in `clone-config.ts` is only the fallback for a clone that has
+none.
 
 ## VS Code is ranked above the other editors, and the code says so
 

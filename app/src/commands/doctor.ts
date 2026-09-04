@@ -24,6 +24,7 @@ import {
   claudeLocalMdPath,
   envLocalContent,
   envLocalPath,
+  envrcDotenvLine,
   envrcPrivateContent,
   envrcPrivatePath,
   excludeBlock,
@@ -206,8 +207,24 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
   const envrc = existsSync(envrcPrivatePath(clone))
     ? readFileSync(envrcPrivatePath(clone), 'utf8')
     : '';
-  const loadsShared = envrc.includes('.env.shared') && !envrc.includes('"../.env.shared"');
-  // The clone never inherits the fleet root's PATH_add -- direnv loads the nearest .envrc
+  /*
+   * Two PREDICATES rather than a byte-compare, and the exception is deliberate: this file is
+   * hand-editable in a way the other generated ones are not -- a developer may legitimately add
+   * a `PATH_add` or a `use flake` line of their own, and a byte-compare would call that drift and
+   * `--fix` would delete it. What must be true is that it loads the secrets and puts the hangar's
+   * `bin/` on PATH; everything else is theirs.
+   *
+   * The load is checked against the CONFIGURED secrets path, not the literal `.env.shared`. That
+   * literal made this check permanently red in any hangar whose `secrets.file` is named anything
+   * else -- and red for a file that was in fact correct, which is worse than no check. It is
+   * matched as the exact line the generator writes, which is also what rules out the relative
+   * form the old `!envrc.includes('"../.env.shared"')` clause was there to catch: a relative
+   * target resolves against a subdirectory, where `dotenv_if_exists` finds nothing and says
+   * nothing.
+   */
+  const wantDotenv = envrcDotenvLine(hangar);
+  const loadsShared = envrc.split('\n').some((l) => l.trim() === wantDotenv);
+  // The clone never inherits the hangar root's PATH_add -- direnv loads the nearest .envrc
   // only -- so without this line `hangar` is not callable from inside the clone.
   const hasFleetBin = envrc.split('\n').some((l) => l.trim() === fleetBinPathLine(hangar));
   checks.push({
@@ -217,7 +234,9 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
       loadsShared && hasFleetBin
         ? `loads ${tildify(hangar.paths.envShared)}, puts the fleet bin/ on PATH`
         : [
-            loadsShared ? undefined : 'missing, or does not load .env.shared by absolute path',
+            loadsShared
+              ? undefined
+              : `missing, or does not load ${tildify(hangar.paths.envShared)} by absolute path`,
             hasFleetBin ? undefined : 'does not put the fleet bin/ on PATH (no hangar here)',
           ]
             .filter((x) => x !== undefined)
@@ -536,7 +555,9 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
     ok: wsMissing.length === 0,
     detail:
       wsMissing.length === 0
-        ? `${workspacePath(clone).split('/').pop() ?? ''} (root and angular/)`
+        ? `${workspacePath(clone).split('/').pop() ?? ''} (${workspacePaths(clone)
+            .map((path) => relative(clone.path, dirname(path)) || 'root')
+            .join(' and ')})`
         : `missing: ${wsMissing.map((p) => relative(clone.path, p)).join(', ')}`,
     repair: () => {
       const template = wsPaths.find((p) => existsSync(p));

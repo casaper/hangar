@@ -12,7 +12,7 @@ every clone (verify with `jq -S 'del(.theme)|del(.permissions.allow)' … | shas
   allows, the `Read(~/.ssh/**)` deny. Do **not** move fleet-scoped keys up here: this machine has
   other projects, and `autoMemoryDirectory`, `plansDirectory`, `statusLine` and
   `enabledMcpjsonServers` would leak the fleet onto them.
-- `clone_NN/.claude/settings.local.json` (untracked) holds the fleet-scoped keys, identical in
+- `<clone>/.claude/settings.local.json` (untracked) holds the fleet-scoped keys, identical in
   every clone: the shared memory directory, the two `SessionEnd` hooks (one runs `plans collect`;
   the other runs `tmp merge --quiet` so this clone's new Jira cache entries reach the store),
   the `PreToolUse` hook that serves a cached Jira ticket from the record store (additive — Claude

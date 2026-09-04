@@ -6,7 +6,7 @@
 #
 # ONE script for all clones: the colour is derived from the clone directory in the stdin
 # payload, never from an argument, so every clone runs identical code and only the hue
-# differs. Hues match ~/.claude/themes/dvb-clone-*.json exactly, because both are
+# differs. Hues match ~/.claude/themes/dvb_gn-clone-*.json exactly, because both are
 # generated from src/palette.ts.
 set -uo pipefail
 
@@ -19,9 +19,9 @@ field() { printf '%s' "$input" | "$JQ" -r "$1 // empty" 2>/dev/null; }
 dir="$(field '.workspace.current_dir')"
 [ -n "$dir" ] || dir="$PWD"
 
-# The clone is the path segment under the fleet root, not basename($dir) --
-# a session started in clone_01/angular/ must still report clone_01. Two or more
-# digits, so this keeps working past clone_09.
+# The clone is the path segment under the hangar root, not basename($dir) -- a session
+# started in a SUBDIRECTORY of a clone must still report the clone. The digit count is
+# open at the top, so this keeps working past the first index that needs another digit.
 FLEET='/Users/someone/code/dvb_gn'
 clone="$(printf '%s' "$dir" | sed -n "s|^${FLEET}/\(clone_[0-9][0-9]*\).*|\1|p")"
 [ -n "$clone" ] || clone="$(basename "$dir")"

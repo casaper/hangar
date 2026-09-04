@@ -9,8 +9,8 @@
 #     set -- $(hangar_dvb_gn_colour "$clone") ; rgb=$1 x256=$2 name=$3
 #
 # One other place cannot source this file and carries its own copy of the table:
-#   ~/.claude/dvb-clone-statusline.sh   (self-contained on purpose: it runs on every
-#                                        status-line render and must never fail)
+#   ~/.claude/dvb_gn-clone-statusline.sh
+#     (self-contained on purpose: it runs on every status-line render and must never fail)
 # It is generated from the same data, so the two cannot drift.
 #
 # Formula, so the set reads as one family: shimmer = main + 40% toward white,

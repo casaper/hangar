@@ -272,7 +272,7 @@ program
   .summary('Open clones in one shared terminal window, on a current default branch')
   .description(
     [
-      'Open clones in one shared terminal window: three tabs each (Claude, shell, angular/) plus every configured editor.',
+      'Open clones in one shared terminal window: the tabs `terminal.tabs[]` declares, plus every configured editor.',
       "Each clone is first fetched and put on its repo's default branch, up to date — a clone you are opening is one you are starting work in, and starting on last week's branch is never what was wanted. `--branch <name>` names another branch, `--no-checkout` leaves each clone as it is, and a clone whose tree cannot be moved (uncommitted work, a half-applied rebase, a live Claude session) is opened as it is with a warning.",
     ].join('\n\n'),
   )

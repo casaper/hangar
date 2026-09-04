@@ -19,11 +19,15 @@ Two rules for anything `hangar` GENERATES into a clone, both learned from the id
 restored by a pull — ports, the `CLAUDE.local.md` + `.git/info/exclude` pair (the identity file by
 CONTENT, since it is generated, so a stale or hand-edited one is rewritten — existence alone was
 the check for a while, and three clones spent it telling their sessions the fleet had three
-clones), `.envrc.private`, the playwright symlink, the theme, the Storybook health-check port,
-that `tmp/` is the clone's own directory, the three hooks in
-`settings.local.json` (plan collection, the cache merge and the Jira record hook — each repair
-re-reads the file, so a clone missing two of them gets both in one `--fix` pass), the sibling
-remotes in both directions, and the `checkout.defaultRemote=origin` those remotes make necessary.
+clones), `.envrc.private`, **one row per `repo.symlinks[]` entry** (printing that entry's `why`
+when it is missing), the theme and whether the file it names resolves, **one health-check allow per
+port role that declares one**, one declaration-only row per `repo.install[]` step, that `tmp/` is
+the clone's own directory, the three hooks in `settings.local.json` (plan collection, the cache
+merge and the ticket record hook — each repair re-reads the file, so a clone missing two of them
+gets both in one `--fix` pass), the sibling remotes in both directions, and the
+`checkout.defaultRemote=origin` those remotes make necessary. Above the clones it also holds the
+hangar's own generated `CLAUDE.local.md` and `.claude/settings.json` to their renders, reports the
+two mode settings files without repairing them, and migrates a legacy `colour-assignments.json`.
 Run it after any re-clone. **How much of the shared cache a clone links is deliberately not a
 check** — a ticket fetched here reaches the others at the next `tmp merge`, which is what linking
 per entry means, and a check that is red in normal operation is a check nobody reads.
@@ -64,7 +68,7 @@ root and then requires the result to be **inside** that root — a string-prefix
 path, with symlinks followed. Anything outside is rejected with `plansDirectory must be within
 project root` and the CLI **silently falls back to `~/.claude/plans`**, mixed in with this machine's
 other projects. That is not a check to work around: `../plans`, an absolute
-`~/code/dvb_gn/plans`, and a `.claude/plans` symlink pointing at the fleet root all fail it the same
+the hangar's own `plans/`, and a `.claude/plans` symlink pointing at the hangar root all fail it the same
 way. An absolute `~/.claude/dvb-gn-plans` was configured in all three clones and did exactly that,
 unnoticed, for a day.
 

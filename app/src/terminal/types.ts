@@ -64,16 +64,18 @@ export type TerminalTabSpec = {
   readonly cwd: string;
   /** Command to run after cd-ing, e.g. `claude`. Omit for a plain shell. */
   readonly command?: string | undefined;
-  /** `clone_NN`, the clone this tab belongs to. */
+  /** The clone directory this tab belongs to. */
   readonly clone: string;
-  /** `claude` | `shell` | `angular` -- which of the clone's tabs this is. */
+  /** Which of the clone's tabs this is -- a `terminal.tabs[].role` from the config, or an
+   * editor kind for an editor that lives in a terminal. Free text, because the config chooses
+   * it: nothing may match on a particular value. */
   readonly role: string;
   /** The clone's hue as `#rrggbb`, for drivers with `paintOnCreate`. */
   readonly colour?: string | undefined;
 };
 
 export type TerminalTab = {
-  /** `clone_NN`, or undefined for a tab the CLI did not open (or cannot recognise). */
+  /** The clone directory, or undefined for a tab the CLI did not open (or cannot recognise). */
   readonly clone: string | undefined;
   readonly role: string | undefined;
   /**

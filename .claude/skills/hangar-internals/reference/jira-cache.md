@@ -5,7 +5,7 @@
 
 - **`hangar plans collect` and `tmp merge` move files between the clones and the fleet root.**
   Both are idempotent and neither ever overwrites: byte-identical copies collapse to one, anything
-  that differs is kept beside the winner as `<name>.from-clone_NN`, and anything a live session may
+  that differs is kept beside the winner as `<name>.from-<clone>`, and anything a live session may
   still be writing is left where it is and reported. Run them again rather than forcing them.
   It also makes **one record per ticket** in `tmp/jira-tickets/`, with every cached name a hard
   link to it — see **Shared `tmp/`** below, and note that a relation copy loses its
@@ -36,7 +36,7 @@
 
 Every clone **keeps its own `tmp/` directory**. What is shared is the content in it that belongs
 to no clone in particular — the per-ticket Jira cache, the PR descriptions, whatever else the
-skills leave there — which lives in `~/code/dvb_gn/tmp/<name>` with `clone_NN/tmp/<name>` a
+skills leave there — which lives in the hangar's own `tmp/<name>` with `<clone>/tmp/<name>` a
 **symlink per entry** in every clone. A ticket fetched in one clone reaches the others at the next
 `hangar tmp merge`.
 
@@ -52,7 +52,7 @@ produced: `tmp merge` turns it back into the clone's own directory of links, and
 it.
 
 `hangar tmp merge` is idempotent and never overwrites: byte-identical copies collapse to one,
-anything that differs is kept beside the winner as `<name>.from-clone_NN` (and is then linked
+anything that differs is kept beside the winner as `<name>.from-<clone>` (and is then linked
 everywhere like any other entry — review the pair and delete the loser), and a link that already
 points where it belongs is left alone rather than rebuilt. It shares everything except PID files
 and dotfiles — a **blocklist**, so a file a skill starts caching tomorrow is shared without
@@ -71,7 +71,7 @@ attachment). Three things follow:
   ticket is a **hard link** to it — its own `tmp/ABC-1234/ticket_ABC-1234.md` and every
   `tmp/<TRUNK>/ticket_<TRUNK>_<relation>_ABC-1234.md`. One ticket is one inode however many
   investigations reached it. This directory is deliberately **not** linked into the clones like
-  every other store entry: no skill owns that path, and a symlink in `clone_NN/tmp/` would
+  every other store entry: no skill owns that path, and a symlink in `<clone>/tmp/` would
   invite an agent to write into it.
 
   **The record cannot carry `relation:`/`relatedTo:`, and that is a proof rather than a taste.**
@@ -150,9 +150,9 @@ None of this needs anything from the clones. Their `.claude/` is shared with eve
 contributor and must work without this fleet, so the record store appears in no tracked file: the
 skill writes exactly what it always wrote, and `tmp merge` and the hook do the rest.
 
-The old per-key mechanism — `tmp/<KEY>` linked into `~/.claude/dvb-gn-jira` by
+The old per-key mechanism — `tmp/<KEY>` linked into `~/.claude/<id>-jira` by
 `hangar jira link` — is **gone**, and so are that command and the pass that drained the old store
-into this one. The store is `~/code/dvb_gn/tmp`, and `tmp merge` links every entry rather than
+into this one. The store is the hangar's own `tmp/`, and `tmp merge` links every entry rather than
 only the `DN-####` directories (which left `pr-*.md` and `author-aliases.md` unshared in whichever
 clone made them).
 

@@ -160,24 +160,22 @@ export const envrcPrivateContent = (hangar: Hangar): string =>
   [
     '## Private direnv config for this clone -- gitignored, never committed.',
     '#',
-    '# It sets no project variables of its own. Everything it used to set',
-    '# (ATLASSIAN_USER_EMAIL, ATLASSIAN_API_TOKEN, JIRA_API_TOKEN, CONTEXT7_API_KEY,',
-    '# PROJECT_GIT_ROOT_PATH) is set by dotenv files instead:',
+    '# It sets no variables of its own. Two dotenv files do that:',
     '#',
     `#   ${tildify(hangar.paths.envShared)}  -- secrets identical in every clone (loaded below)`,
-    "#   ./.env.local               -- this clone's own ports and PROJECT_GIT_ROOT_PATH",
+    `#   ./${hangar.config.repo.cloneEnv.file}  -- this clone's own ports and per-clone values`,
     '#',
     '# The file is kept because it is the only gitignored, per-clone shell hook that direnv',
     '# already sources (`.envrc` is tracked and shared, so this load cannot live there).',
     '#',
-    '# ABSOLUTE paths on purpose: `angular/.envrc` sources this file via',
-    '# `load_and_watch_envrc_private ../`, so a relative `../.env.shared` would resolve',
-    '# against `angular/` and silently miss. Do not "simplify" them to relative paths.',
+    '# ABSOLUTE paths on purpose. A repo whose `.envrc` sources this file from a SUBDIRECTORY',
+    '# resolves a relative path against that subdirectory, where `dotenv_if_exists` finds',
+    '# nothing and says nothing. Do not "simplify" them to relative paths.',
     '#',
-    "# Loaded here, which is BEFORE this clone's own `.env.local` -- so `.env.local`",
-    '# still wins for anything set in both.',
+    `# Loaded here, which is BEFORE this clone's own \`${hangar.config.repo.cloneEnv.file}\` -- so`,
+    '# that file still wins for anything set in both.',
     '',
-    `dotenv_if_exists "${envSharedShellRef(hangar)}"`,
+    envrcDotenvLine(hangar),
     `watch_file "${envSharedShellRef(hangar)}"`,
     '',
     '# The fleet orchestration CLI. direnv loads the nearest .envrc only, so this clone never',
@@ -191,6 +189,16 @@ export const envrcPrivateContent = (hangar: Hangar): string =>
 /** The fleet's `bin/`, as `$HOME/...` so the file reads the same on any machine. */
 const fleetBinShellRef = (hangar: Hangar): string =>
   join(hangar.root, 'bin').replace(process.env['HOME'] ?? '~', '$HOME');
+
+/**
+ * The literal dotenv line, so `doctor` can assert on exactly what the generator writes.
+ *
+ * Its counterpart below exists for the same reason, and both are here rather than reconstructed
+ * in `doctor`: a second spelling of a line one of them writes is how a check ends up green
+ * against a file that says something else.
+ */
+export const envrcDotenvLine = (hangar: Hangar): string =>
+  `dotenv_if_exists "${envSharedShellRef(hangar)}"`;
 
 /** The literal PATH line, so `doctor` can assert on exactly what the generator writes. */
 export const fleetBinPathLine = (hangar: Hangar): string =>
