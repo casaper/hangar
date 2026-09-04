@@ -14,8 +14,11 @@ What `hangar colours sync` writes, and how the hues are derived from `src/palett
 To change what a hue LOOKS LIKE, edit `src/palette.ts` and run `hangar colours sync`. To give
 one clone a different hue, `hangar colours change 4 red` — that is the only per-clone value in
 the fleet that is not a pure function of the index, so it is remembered in
-`colour-assignments.json` at the fleet root (tracked, sparse: a clone that was never re-coloured
-is not in it, which is why `add-clone` and `remove-clone` still need no bookkeeping). The command
+`.hangar/colour-assignments.json` (sparse: a clone that was never re-coloured is not in it,
+which is why `add-clone` and `remove-clone` still need no bookkeeping). It is **not tracked, and
+nothing regenerates it** — the one file in the fleet that is both. `hangar colours change` is its
+only writer, and a hangar from before the move keeps its root-level copy read (permanently) until
+`hangar doctor --fix` moves it forward. The command
 rebuilds everything that names the colour, which is the reason it exists rather than being three
 manual edits: the four generated artifacts, the clone's `.claude/settings.local.json` (it selects
 the theme by NAME, and a theme that no longer exists makes Claude Code fall back to the default

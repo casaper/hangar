@@ -8,6 +8,8 @@ plans-hook         /Users/someone/code/dvb_gn/bin/hangar --hangar /Users/someone
 jira-hook          /Users/someone/code/dvb_gn/bin/hangar --hangar /Users/someone/code/dvb_gn jira hook
 tmp-hook           /Users/someone/code/dvb_gn/bin/hangar --hangar /Users/someone/code/dvb_gn tmp merge --quiet
 fleet-bin-path     PATH_add "$HOME/code/dvb_gn/bin"
+colour-assignments /Users/someone/code/dvb_gn/.hangar/colour-assignments.json
+memory-dir         /Users/someone/.claude/dvb_gn-memory
 port-roles         ng(NG_DEV_SERVER_PORT)=4200 storybook(STORYBOOK_DEV_SERVER_PORT)=6006 playwrightReport(PLAYWRIGHT_REPORT_PORT)=9323
 port-step/offset   100 / 0
 

@@ -210,6 +210,16 @@ export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
     `jira-hook          ${jiraHookCommand(hangar)}`,
     `tmp-hook           ${tmpHookCommand(hangar)}`,
     `fleet-bin-path     ${fleetBinPathLine(hangar)}`,
+    /*
+     * Two hangar-level DESTINATIONS with no content of their own, captured because they moved.
+     *
+     * `colour-assignments.json` went from the tracked hangar root to `.hangar/`, and the shared
+     * memory directory is named per hangar -- both are paths nothing else in this manifest
+     * mentions, and a path in this CLI is a bare `string`. A capture that records only the files
+     * with content cannot see either one move.
+     */
+    `colour-assignments ${hangar.paths.colourAssignmentsFile}`,
+    `memory-dir         ${hangar.paths.memory}`,
     `port-roles         ${hangar.config.ports.roles.map((r) => `${r.id}(${r.envKey})=${String(r.base)}`).join(' ')}`,
     `port-step/offset   ${String(hangar.config.ports.step)} / ${String(hangar.config.ports.offset)}`,
     '',

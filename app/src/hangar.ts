@@ -44,7 +44,25 @@ export type HangarPaths = {
   readonly envShared: string;
   readonly cloneColoursScript: string;
   readonly terminalHookScript: string;
+  /**
+   * The explicit clone -> colour assignments. INPUT, and the only per-clone value not derived
+   * from the index.
+   *
+   * Under `.hangar/` rather than at the root, because at the root it was TRACKED -- and a
+   * tracked file that a hangar command rewrites (`hangar colours change`) is a merge conflict on
+   * every `git pull` from a published upstream. Untracking it in place was the wrong move for
+   * the opposite reason: nothing regenerates this file, so an untracked one at the root is one
+   * `git clean -fdx` from unrecoverable.
+   */
   readonly colourAssignmentsFile: string;
+  /**
+   * Where the file USED to live, read as a fallback and never written.
+   *
+   * Permanent, not a migration window: a `git pull` into a checkout from before the move
+   * restores the tracked root-level file, and the reader still has to find it. `doctor --fix`
+   * migrates it forward when both exist.
+   */
+  readonly legacyColourAssignmentsFile: string;
   /**
    * One statusline script for every clone; it derives the hue from its stdin payload.
    *
@@ -123,7 +141,8 @@ export const pathsFor = (
     envShared: join(root, secretsFile),
     cloneColoursScript: join(root, 'clone-colours.sh'),
     terminalHookScript: join(root, 'clone-terminal.sh'),
-    colourAssignmentsFile: join(root, 'colour-assignments.json'),
+    colourAssignmentsFile: join(root, '.hangar', 'colour-assignments.json'),
+    legacyColourAssignmentsFile: join(root, 'colour-assignments.json'),
     statuslineScript: join(claudeDir, `${id}-clone-statusline.sh`),
     memory: join(claudeDir, `${id}-memory`),
   });

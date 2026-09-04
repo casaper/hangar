@@ -53,6 +53,8 @@ import {
   colourAssignmentFor,
   colourAssignments,
   colourAssignmentsLabel,
+  colourAssignmentsSource,
+  migrateColourAssignments,
 } from '../colour-assignments.ts';
 import { editors, type EditorDriver } from '../editor/index.ts';
 import { CliError } from '../exec.ts';
@@ -728,6 +730,31 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
     );
     note('Harmless now; `hangar add-clone` reuses free indices, so it would inherit the hue.');
   }
+  /*
+   * The colour assignments, if they are still at the old tracked root-level path.
+   *
+   * Not a silent auto-migration: the file is operator INPUT that nothing regenerates, so the
+   * move gets reported and, with `--fix`, done byte for byte -- never reserialised, because a
+   * hand-edited `_` note or an assignment this version does not understand would be dropped on
+   * the way. Reading it from either place is permanent, so an un-migrated hangar is correct,
+   * just still conflicting on every pull.
+   */
+  const assignments = colourAssignmentsSource(hangar);
+  if (assignments?.legacy === true) {
+    if (opts.fix === true) {
+      const moved = migrateColourAssignments(hangar);
+      if (moved !== undefined) {
+        ok(`moved ${tildify(moved.from)} -> ${tildify(moved.to)}`);
+        note('`git rm --cached colour-assignments.json` finishes it: the old path was tracked.');
+      }
+    } else {
+      warn(`${tildify(assignments.path)} is at the old root-level path`);
+      note(
+        '`hangar doctor --fix` moves it under .hangar/. Tracked there, it conflicts on every pull.',
+      );
+    }
+  }
+
   /*
    * The config and its schema, checked here for the same reason every other generated
    * artifact is: `hangar.schema.json` is rendered from the zod schema, so an installed tool
