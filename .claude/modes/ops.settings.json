@@ -1,0 +1,51 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(./app/**)",
+      "Edit(./.claude/skills/**)",
+      "Edit(./.claude/modes/**)"
+    ],
+    "ask": [
+      "Bash(hangar sync)",
+      "Bash(hangar sync:*)",
+      "Bash(hangar merge-default)",
+      "Bash(hangar merge-default:*)",
+      "Bash(hangar rebase-default)",
+      "Bash(hangar rebase-default:*)",
+      "Bash(hangar checkout-default)",
+      "Bash(hangar checkout-default:*)",
+      "Bash(hangar checkout)",
+      "Bash(hangar checkout:*)",
+      "Bash(hangar open)",
+      "Bash(hangar open:*)",
+      "Bash(hangar add-clone)",
+      "Bash(hangar add-clone:*)",
+      "Bash(hangar remove-clone)",
+      "Bash(hangar remove-clone:*)",
+      "Bash(hangar colours change:*)",
+      "Bash(hangar colors change:*)",
+      "Bash(hangar doctor)",
+      "Bash(hangar doctor:*)"
+    ],
+    "allow": [
+      "Bash(hangar list)",
+      "Bash(hangar list:*)",
+      "Bash(hangar ports)",
+      "Bash(hangar ports:*)",
+      "Bash(hangar status)",
+      "Bash(hangar status:*)",
+      "Bash(hangar resume)",
+      "Bash(hangar resume:*)",
+      "Bash(hangar colours list)",
+      "Bash(hangar colors list)",
+      "Bash(hangar config show)",
+      "Bash(hangar config show:*)",
+      "Bash(hangar config validate)",
+      "Bash(hangar config validate:*)"
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "/Users/someone/code/dvb_gn/.claude/modes/statusline.sh ops"
+  }
+}

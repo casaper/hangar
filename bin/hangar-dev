@@ -1,0 +1,4 @@
+#!/bin/sh
+# Start Claude Code in dev mode. See bin/hangar-mode for what a mode is and why it lives in bin/.
+set -eu
+exec "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/hangar-mode" dev "$@"
