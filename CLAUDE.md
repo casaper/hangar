@@ -228,7 +228,8 @@ directly, and the CLI's own `npm run lint`, `npm run typecheck` and `npm run for
 | `hangar status <clone>\|--all`      | branch, sync vs origin, Jira link, PR link, ports, servers, sessions  |
 | `hangar sync <clone>\|--all`        | stash, fetch, rebase-or-merge onto its PR's target branch, restore    |
 | `hangar {rebase,merge}-default`     | the same command, with the strategy forced rather than chosen         |
-| `hangar open <clone>\|--all`        | each clone's tabs in one terminal window + every configured editor    |
+| `hangar checkout-default <clone>`   | fetch, then check out the repo's default branch and fast-forward it   |
+| `hangar open <clone>\|--all`        | default branch, then tabs in one window + every configured editor     |
 | `hangar resume [clone]`             | pick one of a clone's past Claude Code sessions and resume it         |
 | `hangar add-clone`                  | create the next clone and wire it in completely                       |
 | `hangar remove-clone <clone>`       | detach it (`--delete` also removes the directory, guarded)            |
@@ -244,7 +245,8 @@ directly, and the CLI's own `npm run lint`, `npm run typecheck` and `npm run for
 | `hangar colours list`               | the palette, painted, and which clone holds each hue                  |
 
 The editor commands live under **`ide`**, aliased **`editor`**, so the top level carries one
-entry for the editors rather than one per editor. `colours` is aliased **`colors`**.
+entry for the editors rather than one per editor. `colours` is aliased **`colors`**, and
+`checkout-default` is aliased **`checkout`**.
 
 **`sync`, `merge-default` and `rebase-default` are one command under three names.** All three
 resolve the same target — whatever the branch's pull request points at, which is often not the
@@ -256,14 +258,29 @@ outranks the name.
 only report, and every `-n` is a dry run — a clone session is welcome to all of them, and
 `plans collect` and `tmp merge --quiet` already run there from `SessionEnd` hooks. The ones that
 move git state, files between clones or terminal windows are the **user's, from the fleet root**:
-`sync` (under any of its three names), `open`, `add-clone`, `remove-clone`, `colours change` and
-`doctor --fix`.
+`sync` (under any of its three names), `checkout-default`, `open`, `add-clone`, `remove-clone`,
+`colours change` and `doctor --fix`.
 
 **`hangar sync <clone>` starts with a `git stash push --include-untracked`**, and the
 busy-clone skip applies only to `--all` — so naming a clone explicitly does not protect it, and a
 clone session naming its OWN index would stash the tree it is working in. It also **refuses to
 start on a clone that is already mid-rebase or mid-merge**: finish or abort that first, or the
 half-applied state gets buried in a stash nobody thinks to look in.
+
+**`hangar checkout-default <clone>` moves a working tree and sends no message about it.** Which
+branch it lands on is `forge.defaultBranch` from the config, never a guess and never `master`. It
+refuses on a tree with modified files rather than carrying them onto the default branch, and it
+only ever fast-forwards — a default branch that has diverged from origin is reported and left for
+`sync`. What it does NOT do is warn the clone's live session, because there is no protocol for
+that outside `sync`: instead it asks the human, and that question is the only protection, so a
+clone whose branch changed under it was authorised by somebody at a terminal.
+
+**`hangar open` moves a branch too, now.** Every clone it opens is first fetched and put on its
+default branch, up to date — a clone you are opening is one you are starting work in, and last
+week's ticket branch is never what was wanted. `--branch <name>` names another one and
+`--no-checkout` turns it off. It degrades rather than refuses: a clone whose tree it will not
+touch — uncommitted work, a half-applied rebase, a live session — is opened on the branch it has,
+with a warning, because the developer asked for their window.
 
 **A `SYNC PAUSE` line in your input is real, and it is not the user typing.** There is no CLI
 mechanism to message a running interactive session, so `sync` finds the session's tty and writes

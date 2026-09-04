@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 
+import { landOnBranch } from './checkout-default.ts';
 import { editors, type EditorDriver } from '../editor/index.ts';
 import { CliError } from '../exec.ts';
 import {
@@ -9,6 +10,7 @@ import {
   requireClone,
   type Clone,
 } from '../fleet.ts';
+import { currentBranch } from '../git.ts';
 import { tintedHex } from '../palette.ts';
 import { tildify } from '../paths.ts';
 import {
@@ -60,6 +62,23 @@ export type OpenOptions = {
   editor?: boolean | undefined;
   claude?: boolean | undefined;
   all?: boolean | undefined;
+  /**
+   * The branch each clone is put on before its tabs open. Absent means the repo's DEFAULT
+   * branch, which is the default because of what `open` is for: a clone you are opening is a
+   * clone you are starting work in, and starting on last week's ticket branch -- or on a
+   * default branch a week behind origin -- is never what was wanted. `--no-checkout` turns it
+   * off, and `--branch <name>` names another one.
+   */
+  branch?: string | undefined;
+  checkout?: boolean | undefined;
+  /**
+   * Move the branch of a clone that has a live Claude session in it.
+   *
+   * The flag exists because the landing offers it: without it, a clone with a session is asked
+   * about (one clone) or left alone (a sweep), and the warning that says so has to name a real
+   * flag. It governs the CHECKOUT only -- the tabs open either way.
+   */
+  includeBusy?: boolean | undefined;
 };
 
 /**
@@ -303,6 +322,33 @@ const SOURCE_LABEL = {
   probe: 'the one that is running',
 } as const;
 
+/**
+ * Put the clone on its branch before any tab opens -- and never let that stop the open.
+ *
+ * Ordering first: the tabs (one of which runs `claude`) and the editor must come up with the
+ * branch already checked out, or the session reads one tree and the developer sees another.
+ *
+ * Severity second, and this is the difference from `hangar checkout-default`. There, a tree it
+ * will not touch is the answer to the command; here it is one clone's branch not moving, and
+ * refusing to open a window over it would be a worse trade -- the developer asked for their
+ * window. So a `CliError` from the landing is a warning and the open continues, exactly as a
+ * failed editor launch does.
+ */
+const land = (clone: Clone, opts: OpenOptions, sweeping: boolean): void => {
+  try {
+    landOnBranch(clone, opts, sweeping);
+  } catch (error) {
+    // EVERY error, not just CliError. This runs inside the clone loop, before the first tab is
+    // created, so anything that escapes here costs the whole run its windows -- and `open`'s
+    // standing contract is that one clone's failure never does that (see `openEditors`). The
+    // fallback line below is the right answer to a refusal, a git that would not run and a
+    // network that was not there alike.
+    warn(`${clone.name}: ${error instanceof Error ? error.message : String(error)}`);
+    if (error instanceof CliError && error.hint !== undefined) note(error.hint);
+    note(`opening it on ${currentBranch(clone.path)} instead — the tabs are unaffected.`);
+  }
+};
+
 export const open = (refs: readonly string[], opts: OpenOptions): void => {
   const clones = resolveClones(refs, opts);
   const { driver, source } = terminal();
@@ -336,6 +382,7 @@ export const open = (refs: readonly string[], opts: OpenOptions): void => {
 
   let assumed: TerminalWindow | undefined;
   for (const clone of clones) {
+    if (opts.checkout !== false) land(clone, opts, clones.length > 1);
     assumed = openTabs(driver, clone, opts, assumed, drivers) ?? assumed;
     if (opts.editor !== false) openEditors(clone, drivers);
     note(

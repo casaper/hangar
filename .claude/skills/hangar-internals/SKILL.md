@@ -42,7 +42,8 @@ Two conventions for changing it, both of which exist because they caught somethi
 | `hangar status <clone>\|--all` | branch, sync vs origin, Jira link, PR link, ports, servers, sessions  |
 | `hangar sync <clone>\|--all`   | stash, fetch, rebase-or-merge onto its PR's target branch, restore    |
 | `hangar {rebase,merge}-default` | strategy forced rather than chosen — otherwise the same command      |
-| `hangar open <clone>\|--all`   | each clone's tabs in one terminal window + every configured editor    |
+| `hangar checkout-default`      | fetch, check out the repo's default branch, fast-forward it           |
+| `hangar open <clone>\|--all`   | default branch, then tabs in one window + every configured editor     |
 | `hangar resume [clone]`        | pick one of a clone's past Claude Code sessions and resume it         |
 | `hangar add-clone`             | create the next clone and wire it in completely                       |
 | `hangar remove-clone <clone>`  | detach it (`--delete` also removes the directory, guarded)            |
@@ -56,7 +57,7 @@ Two conventions for changing it, both of which exist because they caught somethi
 | `hangar colours change`        | give one clone another hue, and rebuild everything that names it      |
 | `hangar colours list`          | the palette, painted, and which clone holds each hue                  |
 
-Seven behaviours are worth knowing before you run them:
+Nine behaviours are worth knowing before you run them:
 
 - **`hangar sync` types into a live Claude session.** There is no CLI mechanism to message a
   running interactive session, so it finds the session's tty, maps it to an iTerm2 tab and writes
@@ -103,6 +104,20 @@ Seven behaviours are worth knowing before you run them:
   the conservative half of the rule); forcing a REBASE over an automatic merge `warn`s on both the
   real and the dry-run path, because that is the one case where the tool does what it otherwise
   refuses — rewriting merge commits, or commits somebody else authored.
+- **`hangar checkout-default` takes the branch from the config and refuses to guess it.**
+  `forge.defaultBranch` is the one answer the whole hangar uses — see the section below for why it
+  is stored rather than derived — and there is no `master` fallback anywhere behind it. It differs
+  from `sync` in three deliberate
+  ways: it **only ever fast-forwards** (`git merge --ff-only` on the refs the fetch already
+  brought, so one round trip and no possible conflict — a diverged default branch is reported and
+  left for `sync`); it **does not stash**, refusing a tree with modified files only when a branch
+  SWITCH is what would carry them, and not when the clone is already on the default branch and
+  `merge --ff-only` can police itself; and it sends **no `SYNC PAUSE`**, because that protocol
+  buys a paused agent a guaranteed closing message for an operation that takes minutes, and this
+  one is instantaneous. What a live session gets instead is a `confirm()` put to the human — which
+  fails closed with no tty, so an unattended invocation refuses rather than swapping the branch
+  under a working agent. Every guard runs BEFORE the fetch so a refusal is instant, and under `-n`
+  none of them throws: a dry run reports every reason the run would stop, not just the first.
 - **`hangar plans collect` and `tmp merge` move files between the clones and the fleet root.**
   Both are idempotent and neither ever overwrites: byte-identical copies collapse to one, anything
   that differs is kept beside the winner as `<name>.from-clone_NN`, and anything a live session may
@@ -164,6 +179,16 @@ Seven behaviours are worth knowing before you run them:
   tab — `move` is accepted and silently does nothing — so `open` sorts the clones it was given
   and appends them, then says so when the window ends up out of clone order. Sorting one that
   already is means dragging the tabs by hand, or closing the window and running `open --all`.
+- **`hangar open` lands each clone on a branch before it opens a single tab**, through the same
+  `landOnBranch` that `checkout-default` is built on — one implementation, so the two cannot end
+  up with different ideas of which trees are safe to move. Order matters: one of those tabs runs
+  `claude`, and a session that starts before the checkout reads one tree while the developer
+  looks at another. Severity is where they differ: a `CliError` from the landing is the ANSWER to
+  `checkout-default` and only a warning here, after which the clone is opened on whatever branch
+  it already has — refusing a window over a dirty tree would be the worse trade, and it is the
+  same degradation `open` already applies to an editor that will not launch. `--branch <name>`
+  overrides the default-branch resolution and nothing else about the landing; `--no-checkout`
+  skips it entirely.
 - **`hangar resume` is the only picker that sees all of a clone's sessions.** Claude Code's
   own `--resume` list is scoped to the directory it was started in, so a session started in
   `clone_01/angular/` is invisible from `clone_01/` — this one reads every transcript directory

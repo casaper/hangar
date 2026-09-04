@@ -5,6 +5,7 @@ import { Argument, Command, Option, type CommandUnknownOpts } from '@commander-j
 import pc from 'picocolors';
 
 import { addClone } from './commands/add-clone.ts';
+import { checkoutDefault } from './commands/checkout-default.ts';
 import { coloursChange, coloursList, coloursSync } from './commands/colours.ts';
 import { configSchema, configShow, configValidate } from './commands/config.ts';
 import { doctor } from './commands/doctor.ts';
@@ -188,14 +189,40 @@ program
   });
 
 program
-  .command('open')
+  .command('checkout-default')
+  .alias('checkout')
+  .summary("Fetch, check out the repo's default branch and fast-forward it")
   .description(
-    'Open clones in one shared terminal window: three tabs each (Claude, shell, angular/) plus every configured editor',
+    [
+      "Fetch everything, then check out the repo's default branch and bring it up to date.",
+      'Which branch that is comes from `forge.defaultBranch` in `hangar.config.yaml` — detected from git the first time anything needs it and recorded there, so the question is asked once per hangar and no command falls back to `master`.',
+      'It refuses rather than carry uncommitted changes onto the default branch, and it only ever fast-forwards: a default branch that has diverged from origin is reported and left alone, because reconciling that is `hangar sync`.',
+    ].join('\n\n'),
+  )
+  .argument('[clone]', 'clone name, e.g. clone_02 (or just 2)')
+  .option('-a, --all', 'every clone (skips clones with a live Claude session)')
+  .option('-n, --dry-run', 'show what would happen, and fetch and change nothing')
+  .option('--include-busy', 'do not ask about, or skip, clones with a live Claude session')
+  .action((clone, options) => {
+    checkoutDefault(clone, options);
+  });
+
+program
+  .command('open')
+  .summary('Open clones in one shared terminal window, on a current default branch')
+  .description(
+    [
+      'Open clones in one shared terminal window: three tabs each (Claude, shell, angular/) plus every configured editor.',
+      "Each clone is first fetched and put on its repo's default branch, up to date — a clone you are opening is one you are starting work in, and starting on last week's branch is never what was wanted. `--branch <name>` names another branch, `--no-checkout` leaves each clone as it is, and a clone whose tree cannot be moved (uncommitted work, a half-applied rebase, a live Claude session) is opened as it is with a warning.",
+    ].join('\n\n'),
   )
   .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2) — opened in ascending order')
   .option('--all', 'open every clone in the fleet')
   .option('--no-claude', 'do not start Claude Code in the first tab')
   .option('--no-editor', 'do not open the clone in any configured editor')
+  .option('-b, --branch <name>', "check this branch out instead of the repo's default branch")
+  .option('--no-checkout', 'open each clone on whatever branch it already has')
+  .option('--include-busy', 'check the branch out even in a clone with a live Claude session')
   .action((clones: string[], options) => {
     open(clones, options);
   });
