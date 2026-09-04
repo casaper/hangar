@@ -29,6 +29,12 @@ import {
 import { CONFIG_FILENAME } from '../config/load.ts';
 import { direnvSnippet } from './add-clone.ts';
 import { editors } from '../editor/index.ts';
+import {
+  hangarClaudeLocalMdContent,
+  hangarClaudeLocalMdPath,
+  hangarSettingsContent,
+  hangarSettingsPath,
+} from '../hangar-files.ts';
 import { installPlanLines } from '../install.ts';
 import { cloneAt, discoverClones, type Clone } from '../fleet.ts';
 import { cloneColoursArtifact } from '../generate/colours-sh.ts';
@@ -235,6 +241,27 @@ export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
       manifest.push(`  ${rel.padEnd(22)} -> ${destination}`);
     }
     manifest.push('');
+  }
+
+  /*
+   * The two hangar-ROOT generated files, captured like the shell artifacts.
+   *
+   * Both were tracked with `/Users/someone` in them, and both reach a reader who cannot see where
+   * they came from: `.claude/settings.json` is read once at session start (Claude Code failing
+   * silently on all three of its values), and `CLAUDE.local.md` is prepended to every clone
+   * session through the ancestor walk. A wrong value in either is invisible until somebody
+   * notices a badge missing or a session naming the wrong ports.
+   */
+  for (const [name, path, content] of [
+    [
+      'settings.json',
+      hangarSettingsPath(hangar.root),
+      hangarSettingsContent(hangar.root, hangar.paths.memory),
+    ],
+    ['CLAUDE.local.md', hangarClaudeLocalMdPath(hangar.root), hangarClaudeLocalMdContent(hangar)],
+  ] as const) {
+    write(hangar, out, join('hangar-root', name), content);
+    manifest.push(`hangar-root ${name.padEnd(19)} -> ${path}`);
   }
 
   const shared: readonly Artifact[] = [

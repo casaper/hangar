@@ -9,6 +9,7 @@ import {
   EXAMPLE_CONFIG_FILENAME,
   jsonSchemaFileName,
   loadConfigFile,
+  loadHangar,
   parseConfigText,
 } from '../config/load.ts';
 import {
@@ -22,7 +23,12 @@ import { MANAGER_COMMANDS } from '../config/schema.ts';
 import { inspectEnvironment, type EnvironmentReport } from '../environment.ts';
 import { CliError } from '../exec.ts';
 
-import { hangarSettingsContent, hangarSettingsPath } from '../hangar-files.ts';
+import {
+  hangarClaudeLocalMdContent,
+  hangarClaudeLocalMdPath,
+  hangarSettingsContent,
+  hangarSettingsPath,
+} from '../hangar-files.ts';
 import { pathsFor } from '../hangar.ts';
 import { claudeDir, tildify } from '../user-paths.ts';
 import { blank, fail, heading, note, ok, step, warn } from '../ui.ts';
@@ -603,6 +609,7 @@ export const setup = async (root: string, opts: SetupOptions): Promise<void> => 
     step(`would write ${tildify(configPath)}`);
     step(`would write ${tildify(schemaPath)}`);
     step(`would write ${tildify(settingsFile)}`);
+    step(`would write ${tildify(hangarClaudeLocalMdPath(root))}`);
     if (!existsSync(secretsPath)) step(`would create ${tildify(secretsPath)} (mode 600)`);
     ok('the rendered config validates against the schema');
     process.stdout.write(`\n${yaml}`);
@@ -627,6 +634,17 @@ export const setup = async (root: string, opts: SetupOptions): Promise<void> => 
    */
   writeFileSync(settingsFile, settingsBody);
   ok(`written  ${tildify(settingsFile)}`);
+
+  /*
+   * This hangar's `CLAUDE.local.md`, the half of the fleet map that is not generic.
+   *
+   * Written from the config that was just validated, through the same builder `doctor` holds it
+   * to. It reaches every clone session through Claude Code's ancestor walk, which is what lets
+   * the tracked `CLAUDE.md` beside it carry no paths, no ports and no repo name at all.
+   */
+  const hangar = loadHangar({ cwd: root, flag: root, env: undefined });
+  writeFileSync(hangarClaudeLocalMdPath(root), hangarClaudeLocalMdContent(hangar));
+  ok(`written  ${tildify(hangarClaudeLocalMdPath(root))}`);
 
   /*
    * The secrets file, created empty-but-named. Never overwritten: it holds live credentials.

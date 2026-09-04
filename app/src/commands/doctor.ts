@@ -81,7 +81,12 @@ import {
 import { paletteEntry } from '../palette.ts';
 import { portSummary } from '../ports.ts';
 import { terminal, type TerminalCapabilities } from '../terminal/index.ts';
-import { hangarSettingsContent, hangarSettingsPath } from '../hangar-files.ts';
+import {
+  hangarClaudeLocalMdContent,
+  hangarClaudeLocalMdPath,
+  hangarSettingsContent,
+  hangarSettingsPath,
+} from '../hangar-files.ts';
 import { installChecks } from '../install.ts';
 import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
@@ -752,6 +757,31 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
    * Claude Code fails both SILENTLY. No error, no log; the mode badge simply never appears. That
    * is the failure this hangar could never observe, because here the paths happen to be right.
    */
+  /*
+   * The hangar's own `CLAUDE.local.md`, by CONTENT -- the ninth byte-compared builder.
+   *
+   * Same convention as the per-clone identity file, and for the same reason: it reaches every
+   * clone session through the ancestor walk, so a stale one tells four sessions the wrong ports
+   * or the wrong repo, and there is no other check on it. Improving the text is one edit plus
+   * `doctor --fix`.
+   */
+  const identityFile = hangarClaudeLocalMdPath(hangar.root);
+  const wantIdentity = hangarClaudeLocalMdContent(hangar);
+  const haveIdentity = existsSync(identityFile) ? readFileSync(identityFile, 'utf8') : undefined;
+  if (haveIdentity !== wantIdentity) {
+    if (opts.fix === true) {
+      writeFile(identityFile, wantIdentity);
+      ok(`wrote ${tildify(identityFile)}`);
+    } else {
+      warn(
+        haveIdentity === undefined
+          ? `${tildify(identityFile)} is missing — every clone session loses this hangar's identity`
+          : `${tildify(identityFile)} differs from what the generator produces`,
+      );
+      note('`hangar doctor --fix` writes it. It reaches every clone session at its next start.');
+    }
+  }
+
   const settingsFile = hangarSettingsPath(hangar.root);
   const wantHangarSettings = hangarSettingsContent(hangar.root, hangar.paths.memory);
   const haveHangarSettings = existsSync(settingsFile)

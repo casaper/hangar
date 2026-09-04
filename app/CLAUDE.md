@@ -258,6 +258,43 @@ Two consumers cannot source
 script (self-contained so it can never fail) — but both are generated from the same data, so
 they cannot drift. A theme change needs a Claude Code restart in that clone to show up.
 
+## What is tracked at the hangar root, and what is generated
+
+**This inventory used to be in the root `CLAUDE.md`, which every clone session pays for and no
+clone session can act on.** It moved here because a session editing `app/src/**` is the only one
+that needs it — the same reason the rest of this file is here.
+
+One rule decides every row: _a tracked file that a `hangar` command rewrites is a merge conflict
+on every `git pull` from a published upstream._
+
+| Not tracked                                   | Written by                             |
+| --------------------------------------------- | -------------------------------------- |
+| `hangar.config.yaml` — **the marker file**    | `hangar setup`                         |
+| `CLAUDE.local.md` — this hangar's identity    | `setup`, `doctor --fix`                |
+| `.claude/settings.json`                       | `setup`, `doctor --fix`                |
+| `clone-colours.sh`, `clone-terminal.sh`       | `hangar colours sync`                  |
+| `.hangar/colour-assignments.json` — **INPUT** | `hangar colours change` — nothing else |
+
+Tracked: this file, the root `CLAUDE.md`, `bin/**`, `app/**`, `.envrc`, `.envrc.hangar`, `.nvmrc`,
+`.editorconfig`, `hangar.config.example.yaml`, `hangar.schema.json`, `.gitignore`, `.claude/**`
+except the generated `settings.json`, and the two `.gitkeep` files under `plans/` and `tmp/`.
+Never the application.
+
+Three of those rows are worth a sentence each:
+
+- **`.hangar/colour-assignments.json` is the only file here that is both untracked and
+  irreplaceable** — operator input that nothing regenerates. It has its own gitignore entry rather
+  than sitting under the `.hangar/` line, because that line is documented as safe-to-delete
+  generated state and clearing a corepack cache must not take the colours with it. The old
+  root-level path is read as a permanent fallback, and `doctor --fix` migrates it byte for byte.
+- **`.claude/modes/{ops,dev}.settings.json` stay tracked despite naming an absolute path**, and
+  that is a security property: their permission arrays are operator mode's boundary, and operator
+  mode may run `hangar doctor`. `hangar-internals/reference/modes.md` has the reasoning and the
+  three alternatives that were rejected.
+- **The gated golden baseline's `hangar/` half is this hangar's**, so a fresh clone of a published
+  hangar repo diffs against it on the first `pnpm golden`. `gated/fixture/` is the portable half;
+  see `dev/golden/README.md`.
+
 ## The hangar root files this package owns
 
 The code is in `app/`, but files one level up are generated out of it — so changing their source

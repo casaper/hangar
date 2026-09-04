@@ -77,6 +77,8 @@ clone clone_04  index=4  colour=red  theme=dvb_gn-clone-04-red
   install-plan           -> (printed by add-clone and hangar install)
   symlink-tests_playwright-regression-tests_.env.local -> /Users/someone/code/dvb_gn/clone_04/tests/playwright-regression-tests/.env.local
 
+hangar-root settings.json       -> /Users/someone/code/dvb_gn/.claude/settings.json
+hangar-root CLAUDE.local.md     -> /Users/someone/code/dvb_gn/CLAUDE.local.md
 artifact clone-colours.sh       -> /Users/someone/code/dvb_gn/clone-colours.sh
 artifact clone-terminal.sh      -> /Users/someone/code/dvb_gn/clone-terminal.sh
 artifact dvb_gn-clone-statusline.sh -> /Users/someone/.claude/dvb_gn-clone-statusline.sh

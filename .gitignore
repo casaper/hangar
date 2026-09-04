@@ -67,6 +67,13 @@ hangar.config.yaml
 # command it can run. `doctor` reports their statusline path and offers no repair.
 /.claude/settings.json
 
+# This hangar's own identity, generated beside the tracked CLAUDE.md. Claude Code loads
+# `CLAUDE.md` then `CLAUDE.local.md` from every ancestor directory, so both halves reach every
+# clone session -- which is what lets the tracked one carry no root path, no repo URL, no ports
+# and no clone naming at all. A tracked copy of this half would be a merge conflict on every pull
+# AND would tell four of somebody else's clone sessions the wrong ports.
+/CLAUDE.local.md
+
 # The advisory half of the golden capture (`pnpm golden` in app/). Its gated sibling IS tracked
 # and is the regression baseline; this half moves with whatever the clones are doing -- a
 # branch, a last commit, how many entries the shared tmp/ holds -- so tracking it would dirty

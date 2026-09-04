@@ -1,5 +1,7 @@
 import { join } from 'node:path';
 
+import type { Hangar } from './hangar.ts';
+
 /**
  * The files a hangar generates into its OWN root, as pure builders.
  *
@@ -63,3 +65,140 @@ export const hangarSettingsContent = (root: string, memoryDir: string): string =
     null,
     2,
   )}\n`;
+
+/**
+ * The hangar root's own `CLAUDE.local.md` -- what is true of THIS hangar.
+ *
+ * The counterpart to the tracked `CLAUDE.md` beside it, and the split is what makes that file
+ * publishable. Claude Code loads `CLAUDE.md` then `CLAUDE.local.md` from every ancestor
+ * directory, so both halves reach every clone session exactly as the one file used to -- which
+ * means **the split has to SHRINK the total, not move it.** Every line here is paid for once per
+ * clone session, and so is every line over there.
+ *
+ * The division is therefore not "generic prose here, specific prose there". It is:
+ *
+ * - `CLAUDE.md` says **how a hangar works** -- the prohibitions, the `SYNC PAUSE` protocol, why
+ *   `tmp/` is shared per entry, which commands belong to the user. Every word of it is true of
+ *   every hangar, so it is tracked and published.
+ * - This file says **which hangar this is** -- the root, the repo, the ports, the naming. All of
+ *   it derived from `hangar.config.yaml`, none of it prose.
+ *
+ * A third category got DROPPED rather than relocated, and that is where the shrink came from:
+ * migration history (`angular/.envrc.private no longer exists`, `clone_03 now has them too`), the
+ * nine secret variable names (they are in the secrets file, which `setup` now writes), and the
+ * worked Jira cache filenames. None of it was generic, and none of it was derivable.
+ *
+ * Takes the hangar and NOTHING ELSE -- deliberately, and for the reason `claudeLocalMdContent`
+ * records about its own scope: an earlier per-clone version listed the siblings by name, which
+ * would have made `doctor` red on every surviving clone after each `add-clone` until someone ran
+ * `--fix`. Which clones exist stays underived from any file, this one included. That is also why
+ * the ports appear as a FORMULA and a role table rather than a per-clone grid: `hangar ports` is
+ * the answer to "what is clone 3 serving on", and a table here would be a second one that goes
+ * stale.
+ */
+export const hangarClaudeLocalMdPath = (root: string): string => join(root, 'CLAUDE.local.md');
+
+const row = (label: string, value: string): string => `| ${label.padEnd(20)} | ${value} |`;
+
+export const hangarClaudeLocalMdContent = (hangar: Hangar): string => {
+  const cfg = hangar.config;
+  const { prefix, pad } = cfg.clones;
+  const example = `${prefix}${'1'.padStart(pad, '0')}`;
+
+  const rows = [
+    row('hangar root', hangar.root),
+    row('hangar id', hangar.id),
+    row('repo', cfg.forge.originUrl),
+    row(
+      'default branch',
+      cfg.forge.defaultBranch ?? '_not recorded yet — the first command that needs it detects it_',
+    ),
+    row(
+      'clone directories',
+      `\`${prefix}<NN>\`, at least ${String(pad)} digits — e.g. \`${example}\``,
+    ),
+    row(
+      'app subdirectory',
+      cfg.repo.appDir === '' ? '_none — the repo builds at its root_' : `\`${cfg.repo.appDir}/\``,
+    ),
+    row('secrets', `\`${hangar.paths.envShared}\` (mode ${cfg.secrets.mode})`),
+    row('shared plans', `\`${hangar.paths.plans}\``),
+    row('shared tmp', `\`${hangar.paths.tmp}\``),
+    row(
+      'issue keys',
+      cfg.tracker.kind === 'none'
+        ? '_no tracker configured_'
+        : (cfg.tracker.keyPrefixes ?? []).length === 0
+          ? 'any key-shaped token, minus a denylist'
+          : (cfg.tracker.keyPrefixes ?? []).map((p) => `\`${p}-…\``).join(', '),
+    ),
+  ];
+
+  /*
+   * The port formula and the role table, not a per-clone grid.
+   *
+   * `offset` is in the formula even when it is 0, because a reader comparing two hangars needs to
+   * see WHY their ports cannot collide -- the residue class is the whole guarantee, and a formula
+   * that omitted the zero would read as if there were nothing to it.
+   */
+  const ports =
+    cfg.ports.roles.length === 0
+      ? 'This hangar assigns no ports. Nothing per-clone depends on one.\n'
+      : `Every clone's ports are a pure function of its index:
+
+    port = base + ${String(cfg.ports.offset)} + (index - 1) * ${String(cfg.ports.step)}
+
+| role | env var | base | URL |
+| ---- | ------- | ---- | --- |
+${cfg.ports.roles
+  .map(
+    (r) =>
+      `| ${r.label} | \`${r.envKey}\` | ${String(r.base)} | ${r.url === null ? '_none_' : `\`${r.url}\``} |`,
+  )
+  .join('\n')}
+
+The offset is this hangar's residue class mod ${String(cfg.ports.step)}, and that is the whole
+guarantee: two hangars with different offsets can never collide for any clone counts, unlike a
+reserved block, which fails silently once a hangar outgrows it. **Never hard-code a port and never
+assume a server on a default port is yours** — \`hangar ports\` is the answer for the fleet, and
+each clone's own \`CLAUDE.local.md\` names its own.
+`;
+
+  const extras: string[] = [];
+  if (cfg.repo.symlinks.length > 0) {
+    extras.push(
+      `## Symlinks every clone carries\n\nTargets are shown AS DECLARED: \`{secretsFile}\`, \`{index2}\` and the rest are rendered per clone.\n\n${cfg.repo.symlinks
+        .map((link) => `- \`${link.path}\` → \`${link.target}\` — ${link.why}`)
+        .join('\n')}\n`,
+    );
+  }
+  if (Object.keys(cfg.repo.cloneEnv.vars).length > 0) {
+    extras.push(
+      `## Per-clone variables beyond the ports\n\nIn every clone's \`${cfg.repo.cloneEnv.file}\`, rendered from its index:\n\n${Object.entries(
+        cfg.repo.cloneEnv.vars,
+      )
+        .map(([key, value]) => `- \`${key}=${value}\``)
+        .join('\n')}\n`,
+    );
+  }
+
+  return `<!-- GENERATED by \`hangar setup\` and \`hangar doctor --fix\` — do not edit by hand. -->
+
+# This hangar
+
+\`CLAUDE.md\` beside this file says how a hangar works and is the same in every one. This file says
+which hangar this is, and every value in it comes from \`hangar.config.yaml\`.
+
+| | |
+| -------------------- | --- |
+${rows.join('\n')}
+
+**Which clones exist is in no file, this one included.** They are whatever \`${prefix}<NN>\`
+directories are there; index gaps are normal, because \`hangar remove-clone\` never renumbers —
+renumbering would move another clone's ports out from under a running server. \`hangar list\` is
+the only answer, and \`git -C ${example} branch --show-current\` the only answer about a branch.
+
+## Ports
+
+${ports}${extras.length === 0 ? '' : `\n${extras.join('\n')}`}`;
+};

@@ -116,6 +116,10 @@ Derived from the config and the clone index alone, so it is byte-stable across d
   `manifest.txt` recording each one's **destination**, the discovery source that answered, and
   `EditorSelection.fellBack`. Paths matter as much as content: every path in this CLI is a bare
   `string`, so a builder rendering perfect text into the wrong file passes a content-only diff.
+  It also holds the two hangar-ROOT generated files under `hangar-root/`: `.claude/settings.json`
+  and `CLAUDE.local.md`. Both were tracked with an absolute home directory in them, and both reach
+  a reader who cannot tell where the value came from — Claude Code fails silently on all three of
+  the settings values, and the identity file is prepended to every clone session.
 - `gated/fixture/normalised/` — the same capture against `dev/fixture.config.yaml`, a config
   whose every value differs from this hangar's *and* from the schema defaults. Normalised only:
   the verbatim copy names a temp directory. **This is the half that certifies anything.** While
@@ -129,6 +133,15 @@ Derived from the config and the clone index alone, so it is byte-stable across d
   regression away from being destroyed by the net meant to protect it.
 
 The gate is `pnpm golden && git diff --exit-code dev/golden/gated`.
+
+**In a hangar that is not this one, only the fixture half is portable.** `gated/fixture/` derives
+from a checked-in config with synthesised clone indices and `%HANGAR%`/`%HOME%` normalised away, so
+it renders identically anywhere. `gated/hangar/` is a capture of THIS hangar's real config and real
+clones, so a fresh clone of a published hangar repo diffs against it on the very first run — even
+in the normalised half, because the content describes this config. That is not a reason to drop it
+(it is the half that caught the unanchored `clone_*/` gitignore rule, which had silently swallowed
+121 of this baseline's 136 files); it means a new hangar regenerates that half once and commits it
+as its own baseline, and the fixture half is what a change to the CLI is gated on.
 
 **An expected diff is not a failure, but it must be enumerated in advance.** Most of Track F
 makes a key live for the first time, and the fixture half is *supposed* to change when it does
