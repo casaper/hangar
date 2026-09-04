@@ -14,5 +14,46 @@
 # for every clone file outside the app directory. Its `"type": "module"` once flipped the
 # clones' .claude/hooks/*.js to ESM and broke them all. Keep this directory free of it.
 set -eu
-hangar="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)"
+
+# Resolved with parameter expansion and two builtins rather than `dirname`, so this works
+# even when PATH is degraded -- which is exactly the situation the bootstrap check below
+# reports on. With `dirname` unavailable the substitution came back empty, $hangar resolved
+# to `/`, and the advice printed a path to somewhere nobody asked about.
+case "$0" in
+  */*) hangar_self_dir="${0%/*}" ;;
+  *) hangar_self_dir=. ;;
+esac
+hangar="$(CDPATH= cd -- "$hangar_self_dir/.." && pwd -P)"
+
+# The CLI has real dependencies (commander, zod, yaml, dotenv, picocolors) and
+# app/node_modules is gitignored, so a fresh clone of this repository arrives here with
+# nothing installed and no `node` on PATH until direnv has run. Node's own answer to that is
+# ERR_MODULE_NOT_FOUND with a stack trace, which reads as a broken tool rather than as a
+# missing step -- and it is the FIRST thing a new hangar hits, before `setup` has had any
+# chance to check the machine. So the check lives here, in the one place that runs before Node
+# does.
+#
+# `jira hook` is exempt and must stay SILENT. It is a Claude Code PreToolUse hook, where a
+# non-zero exit blocks the tool call outright; an unbootstrapped hangar has to fail open,
+# exactly as cli.ts's config gate does for the same command and for the same reason.
+if ! command -v node >/dev/null 2>&1 || [ ! -d "$hangar/app/node_modules" ]; then
+  if [ "${1-}" = jira ] && [ "${2-}" = hook ]; then exit 0; fi
+
+  echo "hangar: this hangar is not bootstrapped yet." >&2
+  echo >&2
+  if ! command -v node >/dev/null 2>&1; then
+    echo "  There is no \`node\` on PATH, so direnv has not loaded this hangar's toolchain." >&2
+    echo "  It is what provides Node (from .nvmrc), pnpm, and \`hangar\` itself." >&2
+    echo >&2
+    echo "    cd $hangar && direnv allow" >&2
+  else
+    echo "  The CLI's own dependencies are not installed." >&2
+    echo >&2
+    echo "    cd $hangar/app && pnpm install --frozen-lockfile" >&2
+  fi
+  echo >&2
+  echo "Then \`hangar setup\` writes this hangar's config. See $hangar/README.md." >&2
+  exit 1
+fi
+
 exec node "$hangar/app/src/cli.ts" "$@"

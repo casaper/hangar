@@ -1,0 +1,72 @@
+hangar-root        /Users/someone/code/dvb_gn   (fleetRoot: what commands use)
+hangar-id          dvb_gn
+discovery-source   walk
+discovery-root     /Users/someone/code/dvb_gn   (findHangar: the real walk)
+config-file        /Users/someone/code/dvb_gn/hangar.config.yaml
+editor-fell-back   false
+editor-kinds       vscode
+plans-hook         /Users/someone/code/dvb_gn/bin/hangar plans collect --quiet
+jira-hook          /Users/someone/code/dvb_gn/bin/hangar jira hook
+tmp-hook           /Users/someone/code/dvb_gn/bin/hangar tmp merge --quiet
+fleet-bin-path     PATH_add "$HOME/code/dvb_gn/bin"
+port-roles         ng=4200 storybook=6006 playwrightReport=9323
+
+clone clone_01  index=1  colour=cyan  theme=dvb-clone-01-cyan
+  ports  ng=4200 storybook=6006 playwrightReport=9323
+  env.local              -> /Users/someone/code/dvb_gn/clone_01/.env.local
+  envrc.private          -> /Users/someone/code/dvb_gn/clone_01/.envrc.private
+  CLAUDE.local.md        -> /Users/someone/code/dvb_gn/clone_01/CLAUDE.local.md
+  settings.local.json    -> /Users/someone/code/dvb_gn/clone_01/.claude/settings.local.json
+  workspace.json         -> /Users/someone/code/dvb_gn/clone_01/dvb_gn_01.code-workspace
+  workspace-appdir.json  -> /Users/someone/code/dvb_gn/clone_01/angular/dvb_gn_01.code-workspace
+  theme.json             -> /Users/someone/.claude/themes/dvb-clone-01-cyan.json
+  git-info-exclude       -> /Users/someone/code/dvb_gn/clone_01/.git/info/exclude
+  direnv-snippet         -> /Users/someone/code/dvb_gn/clone_01/.envrc.private
+  health-check-allow     -> /Users/someone/code/dvb_gn/clone_01/.claude/settings.local.json
+  playwright-symlink     -> /Users/someone/code/dvb_gn/clone_01/tests/playwright-regression-tests/.env.local
+
+clone clone_02  index=2  colour=yellow  theme=dvb-clone-02-yellow
+  ports  ng=4300 storybook=6106 playwrightReport=9423
+  env.local              -> /Users/someone/code/dvb_gn/clone_02/.env.local
+  envrc.private          -> /Users/someone/code/dvb_gn/clone_02/.envrc.private
+  CLAUDE.local.md        -> /Users/someone/code/dvb_gn/clone_02/CLAUDE.local.md
+  settings.local.json    -> /Users/someone/code/dvb_gn/clone_02/.claude/settings.local.json
+  workspace.json         -> /Users/someone/code/dvb_gn/clone_02/dvb_gn_02.code-workspace
+  workspace-appdir.json  -> /Users/someone/code/dvb_gn/clone_02/angular/dvb_gn_02.code-workspace
+  theme.json             -> /Users/someone/.claude/themes/dvb-clone-02-yellow.json
+  git-info-exclude       -> /Users/someone/code/dvb_gn/clone_02/.git/info/exclude
+  direnv-snippet         -> /Users/someone/code/dvb_gn/clone_02/.envrc.private
+  health-check-allow     -> /Users/someone/code/dvb_gn/clone_02/.claude/settings.local.json
+  playwright-symlink     -> /Users/someone/code/dvb_gn/clone_02/tests/playwright-regression-tests/.env.local
+
+clone clone_03  index=3  colour=green  theme=dvb-clone-03-green
+  ports  ng=4400 storybook=6206 playwrightReport=9523
+  env.local              -> /Users/someone/code/dvb_gn/clone_03/.env.local
+  envrc.private          -> /Users/someone/code/dvb_gn/clone_03/.envrc.private
+  CLAUDE.local.md        -> /Users/someone/code/dvb_gn/clone_03/CLAUDE.local.md
+  settings.local.json    -> /Users/someone/code/dvb_gn/clone_03/.claude/settings.local.json
+  workspace.json         -> /Users/someone/code/dvb_gn/clone_03/dvb_gn_03.code-workspace
+  workspace-appdir.json  -> /Users/someone/code/dvb_gn/clone_03/angular/dvb_gn_03.code-workspace
+  theme.json             -> /Users/someone/.claude/themes/dvb-clone-03-green.json
+  git-info-exclude       -> /Users/someone/code/dvb_gn/clone_03/.git/info/exclude
+  direnv-snippet         -> /Users/someone/code/dvb_gn/clone_03/.envrc.private
+  health-check-allow     -> /Users/someone/code/dvb_gn/clone_03/.claude/settings.local.json
+  playwright-symlink     -> /Users/someone/code/dvb_gn/clone_03/tests/playwright-regression-tests/.env.local
+
+clone clone_04  index=4  colour=red  theme=dvb-clone-04-red
+  ports  ng=4500 storybook=6306 playwrightReport=9623
+  env.local              -> /Users/someone/code/dvb_gn/clone_04/.env.local
+  envrc.private          -> /Users/someone/code/dvb_gn/clone_04/.envrc.private
+  CLAUDE.local.md        -> /Users/someone/code/dvb_gn/clone_04/CLAUDE.local.md
+  settings.local.json    -> /Users/someone/code/dvb_gn/clone_04/.claude/settings.local.json
+  workspace.json         -> /Users/someone/code/dvb_gn/clone_04/dvb_gn_04.code-workspace
+  workspace-appdir.json  -> /Users/someone/code/dvb_gn/clone_04/angular/dvb_gn_04.code-workspace
+  theme.json             -> /Users/someone/.claude/themes/dvb-clone-04-red.json
+  git-info-exclude       -> /Users/someone/code/dvb_gn/clone_04/.git/info/exclude
+  direnv-snippet         -> /Users/someone/code/dvb_gn/clone_04/.envrc.private
+  health-check-allow     -> /Users/someone/code/dvb_gn/clone_04/.claude/settings.local.json
+  playwright-symlink     -> /Users/someone/code/dvb_gn/clone_04/tests/playwright-regression-tests/.env.local
+
+artifact clone-colours.sh       -> /Users/someone/code/dvb_gn/clone-colours.sh
+artifact clone-terminal.sh      -> /Users/someone/code/dvb_gn/clone-terminal.sh
+artifact dvb-clone-statusline.sh -> /Users/someone/.claude/dvb-clone-statusline.sh

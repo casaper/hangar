@@ -1,0 +1,46 @@
+[
+  {
+    "clone": "clone_01",
+    "index": 1,
+    "colour": "cyan",
+    "ng": 4200,
+    "storybook": 6006,
+    "playwrightReport": 9323,
+    "devServerUrl": "http://localhost:4200",
+    "storybookUrl": "http://localhost:6006",
+    "drift": []
+  },
+  {
+    "clone": "clone_02",
+    "index": 2,
+    "colour": "yellow",
+    "ng": 4300,
+    "storybook": 6106,
+    "playwrightReport": 9423,
+    "devServerUrl": "http://localhost:4300",
+    "storybookUrl": "http://localhost:6106",
+    "drift": []
+  },
+  {
+    "clone": "clone_03",
+    "index": 3,
+    "colour": "green",
+    "ng": 4400,
+    "storybook": 6206,
+    "playwrightReport": 9523,
+    "devServerUrl": "http://localhost:4400",
+    "storybookUrl": "http://localhost:6206",
+    "drift": []
+  },
+  {
+    "clone": "clone_04",
+    "index": 4,
+    "colour": "red",
+    "ng": 4500,
+    "storybook": 6306,
+    "playwrightReport": 9623,
+    "devServerUrl": "http://localhost:4500",
+    "storybookUrl": "http://localhost:6306",
+    "drift": []
+  }
+]

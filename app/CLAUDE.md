@@ -39,6 +39,7 @@ which is the single source of truth for both the shell and CI. Run the CLI's own
 ```bash
 cd app && pnpm typecheck && pnpm lint && pnpm format:check
 # pnpm lint:fix and pnpm format write; format:check is what a commit gate wants
+pnpm golden && git diff --exit-code dev/golden/gated   # the regression net; see below
 ```
 
 `pnpm` is not assumed to be on PATH: it lives inside an fnm multishell and so moves when the Node
@@ -57,6 +58,24 @@ Both exist because they caught something, and both apply to every edit under `ap
   without constructing the state that produces it, which is how `sync`'s eight closing messages
   were checked — and it found two bugs reading the code had not: one froze an agent after a
   SUCCESSFUL sync, the other told it a branch had moved when nothing was integrated.
+- **`pnpm golden` is the first convention, mechanised.** It captures every artifact this hangar
+  would write — through the same pure builders `doctor` compares against and `add-clone` writes —
+  and records each one's **destination** alongside its content, because every path in this CLI is
+  a bare `string` and a builder rendering perfect text into the wrong file passes a content-only
+  diff. `dev/golden/README.md` has the detail; three things about it are worth knowing before
+  relying on it:
+  - **`gated/` is a gate and `advisory/` is not.** Advisory output moves with what the clones are
+    doing, and that includes `doctor --all`, `status --all` and the `tmp`/`plans` dry runs, so a
+    green command diff proves less than it looks like it does. The builder trees are the net.
+  - **`gated/fixture/` is the half that certifies anything.** `dev/fixture.config.yaml` disagrees
+    with this hangar's config _and_ with every schema default on purpose. While a config agrees
+    with the defaults, "read the config file" and "fell into a catch and used the defaults"
+    produce identical output — so a capture of this hangar alone cannot tell a wired reader from
+    a swallowed error. The manifest also records the discovery `source` and
+    `EditorSelection.fellBack` for exactly that reason.
+  - **An expected diff is fine; an unenumerated one is the finding.** Making a config key live for
+    the first time is _supposed_ to change the fixture half, and that change is the proof. Write
+    the expected delta down before making the change.
 - **Derive state at the moment you report it; carry a flag only for what git cannot know.** A
   `restored` boolean set beside a `git stash pop` lies whenever the pop fails, which it can — it
   only warns. Ask `inProgressOperation`, `conflictedFiles`, `syncStashes` instead. Whether an
@@ -70,18 +89,19 @@ worth reading in full before changing either** — they are also the two whose m
 working tree. The rest of the table names files without sizing them on purpose: a count here goes
 stale on the next commit and nothing checks it, so run `wc -l` when you want one.
 
-| Role                  | Files                                                                                                                                                                                                                        |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| entry point           | `cli.ts` — every command, option and alias is registered here, plus the `preAction` config gate and the `configureHelp` that prints all of a command's aliases                                                               |
-| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list` |
-| config                | `config/schema.ts` (the zod authority), `default-branch.ts`, `load.ts` (discovery + precedence), `derive.ts`, `json-schema.ts`                                                                                               |
-| per-clone artifacts   | `clone-config.ts` — the byte-compared builders `doctor` holds every clone to; `colour-assignments.ts`; `ports.ts`                                                                                                            |
-| generators            | `generate/` — `terminal-sh.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                  |
-| editor drivers        | `editor/` — `vscode.ts`, `jetbrains.ts`, `index.ts`, `kinds.ts`, `types.ts`, `launch-only.ts`, `emacs.ts`, `vim.ts`, `zed.ts`                                                                                                |
-| terminal drivers      | `terminal/` — `apple-terminal.ts`, `konsole.ts`, `iterm2.ts`, `index.ts`, `types.ts`, `gnome-terminal.ts`, `applescript.ts`, `none.ts`                                                                                       |
-| git / forge / tracker | `git.ts`, `bitbucket.ts`, `jira-records.ts`, `jira.ts`                                                                                                                                                                       |
-| fleet                 | `fleet.ts` — clone discovery, and everything per-clone derived from the index                                                                                                                                                |
-| shared                | `dedupe.ts`, `claude-sessions.ts`, `resolve-conflicts.ts`, `procs.ts`, `plans.ts`, `environment.ts`, `tui.ts`, `palette.ts`, `tmp.ts`, `sessions.ts`, `adopt.ts`, `ui.ts`, `paths.ts`, `exec.ts`                             |
+| Role                  | Files                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| entry point           | `cli.ts` — every command, option and alias is registered here, plus the `preAction` config gate and the `configureHelp` that prints all of a command's aliases                                                                                                                                                                                                                                                                       |
+| maintainer            | `commands/dev.ts` — `hangar dev golden`, the capture behind `pnpm golden`. **Hidden in `cli.ts`, and that is its interface contract**: nothing about it is promised to an operator, so it gets no row in `hangar-ops/reference/commands.md`. It is deliberately NOT in `NEEDS_NO_CONFIG` — a capture of a hangar with no config would be a capture of the schema defaults, the one output this net must never mistake for a real one |
+| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`                                                                                                                                                                                                         |
+| config                | `config/schema.ts` (the zod authority), `default-branch.ts`, `load.ts` (discovery + precedence), `derive.ts`, `json-schema.ts`                                                                                                                                                                                                                                                                                                       |
+| per-clone artifacts   | `clone-config.ts` — the byte-compared builders `doctor` holds every clone to; `colour-assignments.ts`; `ports.ts`                                                                                                                                                                                                                                                                                                                    |
+| generators            | `generate/` — `terminal-sh.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                                                                                                                                                                                                                          |
+| editor drivers        | `editor/` — `vscode.ts`, `jetbrains.ts`, `index.ts`, `kinds.ts`, `types.ts`, `launch-only.ts`, `emacs.ts`, `vim.ts`, `zed.ts`                                                                                                                                                                                                                                                                                                        |
+| terminal drivers      | `terminal/` — `apple-terminal.ts`, `konsole.ts`, `iterm2.ts`, `index.ts`, `types.ts`, `gnome-terminal.ts`, `applescript.ts`, `none.ts`                                                                                                                                                                                                                                                                                               |
+| git / forge / tracker | `git.ts`, `bitbucket.ts`, `jira-records.ts`, `jira.ts`                                                                                                                                                                                                                                                                                                                                                                               |
+| fleet                 | `fleet.ts` — clone discovery, and everything per-clone derived from the index                                                                                                                                                                                                                                                                                                                                                        |
+| shared                | `dedupe.ts`, `claude-sessions.ts`, `resolve-conflicts.ts`, `procs.ts`, `plans.ts`, `environment.ts`, `tui.ts`, `palette.ts`, `tmp.ts`, `sessions.ts`, `adopt.ts`, `ui.ts`, `paths.ts`, `exec.ts`                                                                                                                                                                                                                                     |
 
 **Four seams**, each a capability record plus a driver interface rather than a pretence that the
 implementations are equivalent. Adding a kind means implementing the interface and registering it;
@@ -257,9 +277,18 @@ catches that: there is no hook in `.git/hooks`.
 
 Five more root files are hand-maintained and belong to this package rather than to the fleet:
 
-- **`bin/hangar`** — eighteen lines of `sh`. It resolves the hangar root from **its own location**
-  and never from `$PWD`, then `exec`s `node "$hangar/app/src/cli.ts"`. A Node flag, or a move of
-  the entry point, is edited here rather than in `app/`.
+- **`bin/hangar`** — a short `sh` entry point. It resolves the hangar root from **its own
+  location** and never from `$PWD`, then `exec`s `node "$hangar/app/src/cli.ts"`. A Node flag, or a
+  move of the entry point, is edited here rather than in `app/`. It uses **`${0%/*}` and two
+  builtins rather than `dirname`**, because it also has to work when PATH is degraded — with
+  `dirname` unavailable the substitution came back empty, the root resolved to `/`, and the advice
+  below printed a path to somewhere nobody asked about.
+  It carries **the one check that has to run before Node does**: no `node` on PATH, or no
+  `app/node_modules`, and it names which of the two and the command that fixes it. That check
+  cannot live in `app/`, because the failure it reports is the CLI being unable to load at all —
+  Node's own `ERR_MODULE_NOT_FOUND` stack trace is the first thing a fresh clone of this repo
+  would otherwise see. **`jira hook` is exempt and exits 0 silently**, for the same reason
+  `cli.ts`'s config gate exempts it: a non-zero exit from a `PreToolUse` hook blocks the tool call.
 - **`.envrc.hangar`** — `hangar_use_node`, `hangar_use_pnpm`, `hangar_use_gnu`. **Functions only,
   no side effects**: direnv's `source_env` does a `pushd` into this file's own directory, so a
   relative path written here would resolve against the hangar root instead of the caller, and

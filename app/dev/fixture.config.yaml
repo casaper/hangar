@@ -1,0 +1,99 @@
+# The hostile fixture for `hangar dev golden --indices 1,2,3`.
+#
+# NOT named `hangar.config.yaml` on purpose: a file by that name anywhere under the hangar root
+# is a nested hangar marker, and `hangar` run from this directory would act on the fixture
+# instead of the real fleet. `dev/golden.sh` copies it into a temporary directory under that
+# name and points `HANGAR_ROOT` and the working directory at the copy.
+#
+# EVERY value here differs from both this hangar's value and the schema default, and that is the
+# entire point. While a fixture agrees with the defaults, "read the config file" and "fell into
+# a catch and used the defaults" produce identical output, so a capture cannot tell a wired
+# reader from a swallowed error. Disagreeing on every key is what makes the diff informative.
+#
+# The committed golden for this fixture records what the code does TODAY, which for most keys is
+# to ignore what is written here. So a fixture diff is EXPECTED to change as Track F lands, and
+# each change is the proof that one key became live. It is not a statement of correct output.
+id: wt
+displayName: hostile fixture
+profile: generic
+
+clones:
+  prefix: wt-
+  pad: 3
+
+forge:
+  kind: bitbucketCloud
+  originUrl: git@bitbucket.org:example/warehouse_sql.git
+  # Set explicitly so no capture ever asks git or the network for it.
+  defaultBranch: trunk
+  tokenEnvKey: FIXTURE_FORGE_TOKEN
+
+tracker:
+  kind: jira
+  baseUrl: https://example.invalid
+  keyPrefixes: [BE]
+  cache:
+    ttlMinutes: 5
+    bypassEnvKey: FIXTURE_NO_CACHE
+
+repo:
+  # The repo root, which is what a repo with no package.json gets.
+  appDir: ''
+  envrcDirs: ['.']
+  cloneEnv:
+    file: .env.fixture
+    rootPathEnvKey: FIXTURE_REPO_ROOT
+  symlinks: []
+  install:
+    - dir: '.'
+      command: [make, deps]
+
+ports:
+  step: 100
+  # A residue class no other hangar uses, and non-zero so a formula that drops it is visible.
+  offset: 37
+  roles:
+    - id: api
+      envKey: FIXTURE_API_PORT
+      base: 3000
+      label: PostgREST
+      healthCheck:
+        kind: httpCurl
+        timeoutSeconds: 7
+        path: /ready
+    - id: db
+      envKey: FIXTURE_DB_PORT
+      base: 5432
+      label: PostgreSQL
+    - id: swagger
+      envKey: FIXTURE_SWAGGER_PORT
+      base: 8080
+      label: Swagger UI
+
+terminal:
+  kind: none
+  colour:
+    chrome: false
+    title: false
+    env: false
+    tint: 0.42
+  tabs:
+    - role: claude
+      dir: '.'
+      command: claude
+    - role: psql
+      dir: '.'
+      command: psql
+
+editor:
+  kinds: [zed]
+  workspaceFileName: '{id}-{index2}.fixture-workspace'
+  workspaceFolderLabel: 'fixture {index}'
+  workspaceDirs: ['.']
+
+secrets:
+  file: .env.fixture-shared
+  mode: '640'
+
+palette:
+  rotate: 5

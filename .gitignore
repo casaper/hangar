@@ -26,3 +26,10 @@ tmp/
 
 # Generated per-machine state (corepack pnpm shims). Never committed.
 .hangar/
+
+# The advisory half of the golden capture (`pnpm golden` in app/). Its gated sibling IS tracked
+# and is the regression baseline; this half moves with whatever the clones are doing -- a
+# branch, a last commit, how many entries the shared tmp/ holds -- so tracking it would dirty
+# every `git status` and make the one diff that matters harder to see. A dirty
+# app/dev/golden/ therefore always means the GATE moved.
+app/dev/golden/advisory/

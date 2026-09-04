@@ -48,6 +48,30 @@ command's own `loadConfigFile` — `currentHangarId`, `terminalColourSettings`, 
 `colours sync` that regenerates with default colouring is better than one that will not run).
 `EditorSelection.fellBack` therefore means exactly one thing now: the config would not parse.
 
+## One gate sits below that one, in `bin/hangar`
+
+The config gate can only refuse once the CLI has loaded, and there is a failure that happens
+first: the CLI has real dependencies (`commander`, `zod`, `yaml`, `dotenv`, `picocolors`) while
+`app/node_modules` is gitignored, and `node` itself reaches PATH only through direnv. So a fresh
+clone of this repository runs `hangar` and gets Node's `ERR_MODULE_NOT_FOUND` with a stack trace —
+which reads as a broken tool rather than as a missing step, and it is the very first thing a new
+hangar hits, before `setup` has had any chance to check the machine.
+
+`bin/hangar` therefore checks for `node` and for `app/node_modules` before it `exec`s anything,
+and names which of the two is missing along with the command that fixes it. **It cannot live in
+`app/`**: the condition it reports is the CLI being unable to load.
+
+It repeats the config gate's exemption for the same reason and no other: **`jira hook` exits 0
+silently even on an unbootstrapped hangar**, because a non-zero exit from a `PreToolUse` hook
+blocks the tool call. Two gates, one exemption, one rationale — if a third gate is ever added
+above these, it inherits the exemption too.
+
+The same file resolves its own directory with `${0%/*}` and two shell builtins rather than
+`dirname`. That is not style: with a degraded PATH `dirname` is not found, the command
+substitution came back empty, the hangar root resolved to `/`, and the bootstrap advice printed a
+path to somewhere nobody asked about — a wrong answer produced by the very check meant to explain
+a degraded environment.
+
 ## `forge.defaultBranch` — asked once per hangar, not once per command
 
 Every clone in a hangar is a clone of ONE repo, so which branch that repo treats as its default

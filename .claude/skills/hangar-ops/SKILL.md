@@ -71,9 +71,15 @@ pre-approve one without the other.
 - **`hangar: command not found` means direnv has not loaded**, not that the tool is missing. It is
   on PATH only inside the hangar root or a clone, via direnv. Ask the user to run `direnv allow` at
   the hangar root.
+- **`this hangar is not bootstrapped yet` is a different failure**, and it names which of the two
+  causes applies: no `node` on PATH (direnv has not loaded) or no `app/node_modules` (the CLI's own
+  dependencies were never installed). The message carries the exact command; run it rather than
+  guessing. `hangar jira hook` is exempt and stays silent, so a hook never blocks a tool call over
+  this.
 - **`--hangar <path>` is a global option, but only `config show` and `config validate` honour it
-  today.** Every other command uses the upward walk from the working directory. Do not reach for it
-  to act on another hangar.
+  today.** Every other command resolves the hangar from the CLI's own location (or `HANGAR_ROOT`),
+  **not** from the working directory — so `--hangar` cannot be used to act on another hangar, and
+  neither can `cd`. To act on a second hangar, run that hangar's own `bin/hangar`.
 
 ## `sync` will be killed by the default Bash timeout
 

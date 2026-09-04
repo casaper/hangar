@@ -1,7 +1,8 @@
-import { accessSync, constants, existsSync } from 'node:fs';
+import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 
-import { home } from './paths.ts';
+import { fleetRoot } from './paths.ts';
+import { home } from './user-paths.ts';
 
 /**
  * The external programs Hangar depends on, and the ones it merely wants.
@@ -62,6 +63,31 @@ const onPath = (name: string): boolean => {
   return false;
 };
 
+/**
+ * Is the running Node the version this hangar pins in `.nvmrc`?
+ *
+ * A PRESENCE check would be worthless: this code is running under Node, so `node` is on PATH
+ * by construction and the row could never go red. What actually goes wrong is the version --
+ * a shell where direnv has not loaded, or an fnm that never installed the pinned release,
+ * runs the CLI under whatever Node happens to come first on PATH. `.nvmrc` and `app/.nvmrc`
+ * are a pair, so the hangar root's copy is the authority.
+ *
+ * A missing or unparseable `.nvmrc` reports OK rather than inventing a failure: whether the
+ * hangar pins a version at all is its own business, and its absence is not this check's
+ * finding.
+ */
+const nodeMatchesNvmrc = (): boolean => {
+  let pinned: string;
+  try {
+    pinned = readFileSync(join(fleetRoot, '.nvmrc'), 'utf8');
+  } catch {
+    return true;
+  }
+  const want = /^\s*v?(\d+)/.exec(pinned)?.[1];
+  if (want === undefined) return true;
+  return process.versions.node.split('.')[0] === want;
+};
+
 export const TOOLS: readonly Tool[] = Object.freeze([
   {
     name: 'git',
@@ -75,6 +101,24 @@ export const TOOLS: readonly Tool[] = Object.freeze([
     why: 'the only thing that puts this hangar’s own `hangar` on PATH, and loads each clone’s ports',
     install:
       'brew install direnv   # then hook it into your shell: https://direnv.net/docs/hook.html',
+  },
+  {
+    // The name carries the CONDITION because the renderer's verb is fixed at `MISSING`: a
+    // bare `node` row reading MISSING on a machine where node plainly works would send
+    // someone off installing what they already have. What is missing is the pinned version.
+    name: 'node (.nvmrc)',
+    kind: 'required',
+    why: 'the CLI is a Node program with no build step, and a shell without direnv runs it under whatever Node came first on PATH',
+    install:
+      'installed per directory by fnm or nvm from .nvmrc — run `direnv allow` at the hangar root',
+    detect: nodeMatchesNvmrc,
+  },
+  {
+    name: 'pnpm',
+    kind: 'required',
+    why: 'installs and pins the CLI’s own dependencies, and runs its typecheck/lint/format gates',
+    install:
+      '`direnv allow` at the hangar root activates it through corepack, at the version app/package.json pins — no separate install',
   },
   {
     name: 'jq',

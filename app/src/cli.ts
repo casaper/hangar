@@ -10,6 +10,7 @@ import { coloursChange, coloursList, coloursSync } from './commands/colours.ts';
 import { configSchema, configShow, configValidate } from './commands/config.ts';
 import { doctor } from './commands/doctor.ts';
 import { jiraHook } from './commands/jira.ts';
+import { golden } from './commands/dev.ts';
 import { list } from './commands/list.ts';
 import { open } from './commands/open.ts';
 import { plansCollect, plansStamp } from './commands/plans.ts';
@@ -25,7 +26,8 @@ import { syncEditor } from './commands/vscode.ts';
 import type { EditorKind } from './editor/index.ts';
 import { CONFIG_FILENAME, EXAMPLE_CONFIG_FILENAME } from './config/load.ts';
 import { CliError } from './exec.ts';
-import { fleetRoot, tildify } from './paths.ts';
+import { fleetRoot } from './paths.ts';
+import { tildify } from './user-paths.ts';
 import { PALETTE_NAMES } from './palette.ts';
 
 /**
@@ -475,6 +477,29 @@ colours
   .description('Show the palette, painted, and which clone holds each hue')
   .action(() => {
     coloursList();
+  });
+
+/**
+ * `dev` is HIDDEN, and that is the whole of its interface contract: it exists for this
+ * repository's own regression net and nothing about it is promised to an operator. It is not
+ * in `NEEDS_NO_CONFIG` -- a capture of a hangar with no config would be a capture of the
+ * schema defaults, which is the one output this net must never be able to mistake for a real
+ * one.
+ */
+const dev = program
+  .command('dev', { hidden: true })
+  .description("Maintainer tools for this repository's own regression net");
+
+dev
+  .command('golden')
+  .description('Capture every artifact this hangar would write, with its destination')
+  .requiredOption('-o, --out <dir>', 'directory to write the capture into')
+  .option(
+    '-i, --indices <list>',
+    'synthesize these clone indices (e.g. 1,2,3) instead of discovering directories',
+  )
+  .action((options: { out: string; indices?: string }) => {
+    golden(options);
   });
 
 /**
