@@ -1,7 +1,8 @@
 import type { Clone } from './fleet.ts';
 import { tryDefaultBranch } from './config/default-branch.ts';
 import { currentBranch, gitTry } from './git.ts';
-import { atlassianUrl } from './paths.ts';
+import type { Hangar } from './hangar.ts';
+import { render } from './template.ts';
 
 /**
  * Issue keys: recognising one, and inferring which ticket a clone is on.
@@ -67,7 +68,26 @@ export const issueKeysIn = (text: string): { key: string; start: number; end: nu
 
 const firstIssueKey = (text: string): string | undefined => issueKeysIn(text)[0]?.key;
 
-export const jiraUrl = (key: string): string => `${atlassianUrl}/browse/${key}`;
+/**
+ * The web URL for an issue key, or `undefined` when this hangar has no tracker.
+ *
+ * `undefined` rather than a URL missing its host, and that is the whole reason it is optional:
+ * `tracker.baseUrl` is optional in the schema (with `kind: none` there is nothing to link to),
+ * and rendering `{baseUrl}` away would produce `/browse/ABC-1337` -- a link that looks like a
+ * link. The caller says "no tracker configured" instead.
+ *
+ * It was `${atlassianUrl}/browse/${key}`, one organisation's Jira as a module constant. The
+ * template is `tracker.issueUrlTemplate`, which every other tracker can spell.
+ */
+export const issueUrl = (hangar: Hangar, key: string): string | undefined => {
+  const tracker = hangar.config.tracker;
+  if (tracker.kind === 'none' || tracker.baseUrl === undefined) return undefined;
+  return render(
+    tracker.issueUrlTemplate,
+    { baseUrl: tracker.baseUrl.replace(/\/$/, ''), key },
+    'tracker.issueUrlTemplate',
+  );
+};
 
 export type TicketGuess = {
   readonly key: string;

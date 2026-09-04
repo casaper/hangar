@@ -98,3 +98,35 @@ file naming a missing artifact is a different problem from the artifact being ab
 This is also why renaming anything under `~/.claude` is a three-phase operation and not an edit:
 write the new names BESIDE the old, repair the settings that point at them, and only then delete
 the old ones -- each phase reversible on its own, and `settings targets` green throughout.
+
+
+## `defaultSettings`, and the line between derived and personal
+
+`add-clone` used to copy a sibling's `.claude/settings.local.json` wholesale and THROW when there
+was no sibling, which is the only reason the README told a stranger to create clone #1 by hand —
+the one step nobody can be talked through, in the command whose entire job is to spare them it.
+
+A sibling is still preferred, and that is not a fallback ordering. The split is:
+
+- **Derived, in `defaultSettings`**: `Read(<hangar root>/**)`, `Read(<secretsFile>)` in `deny` (an
+  ABSOLUTE path, because the secrets file sits outside every clone so no clone can commit it —
+  which also means no clone-relative rule can reach it), one health-check allow per role that
+  declares one, the three hooks through the same `with*Hook` writers a `doctor --fix` repair uses,
+  `statusLine.command`, `autoMemoryDirectory` and `theme`. Every one is a function of the hangar
+  and the clone index, and every one lives outside git.
+- **Personal, and so sibling-copy-only**: `enabledMcpjsonServers`, `enabledPlugins` and the
+  `terminal.*` keys. Emitting those as defaults would ship one machine's seven MCP servers into a
+  stranger's fresh hangar, where none of them resolve — a config that looks configured and is not,
+  which is the failure this whole track is about.
+
+`settingsContentFor` regenerates the derived half on top of either template, so the two paths
+cannot disagree about a theme or a port. Both renders are in the golden capture
+(`settings.local.json` from the fixed template, `settings-default.json` from nothing) because they
+answer different questions: what `settingsContentFor` does to a file it was handed, versus what a
+hangar can derive from nothing at all.
+
+**`HangarPaths.memory` is `~/.claude/<id>-memory` by the naming rule, and this hangar's four live
+clones still name `dvb-gn-memory`.** That predates the rule and is where the fleet's actual memory
+is. Nothing renames it: moving live memory needs the tracked `.claude/settings.json` and four
+per-clone files moved with it plus a session restart each, and only `defaultSettings` — a hangar
+with no sibling — reads the path today, so leaving it splits nothing.

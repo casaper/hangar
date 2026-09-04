@@ -343,6 +343,7 @@ program
   .description('Guided first-run: check the machine, then write hangar.config.yaml')
   .option('-y, --yes', 'accept every derived default without asking')
   .option('--origin <url>', 'the git origin URL — the one answer nothing can derive')
+  .option('--id <name>', 'the hangar id, instead of deriving it from the directory name')
   .option('--preset <name>', 'port roles and per-clone variables: generic, node-web, sql-postgrest')
   .option('--force', 'rewrite an existing config')
   .option('-n, --dry-run', 'print what would be written and stop')

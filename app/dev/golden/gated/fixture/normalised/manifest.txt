@@ -17,6 +17,7 @@ clone wt-001  index=1  colour=cyan  theme=wt-clone-001-cyan
   envrc.private          -> %HANGAR%/wt-001/.envrc.private
   CLAUDE.local.md        -> %HANGAR%/wt-001/CLAUDE.local.md
   settings.local.json    -> %HANGAR%/wt-001/.claude/settings.local.json
+  settings-default.json  -> %HANGAR%/wt-001/.claude/settings.local.json
   workspace-1.json       -> %HANGAR%/wt-001/wt-001.fixture-workspace
   theme.json             -> %HOME%/.claude/themes/wt-clone-001-cyan.json
   git-info-exclude       -> %HANGAR%/wt-001/.git/info/exclude
@@ -31,6 +32,7 @@ clone wt-002  index=2  colour=yellow  theme=wt-clone-002-yellow
   envrc.private          -> %HANGAR%/wt-002/.envrc.private
   CLAUDE.local.md        -> %HANGAR%/wt-002/CLAUDE.local.md
   settings.local.json    -> %HANGAR%/wt-002/.claude/settings.local.json
+  settings-default.json  -> %HANGAR%/wt-002/.claude/settings.local.json
   workspace-1.json       -> %HANGAR%/wt-002/wt-002.fixture-workspace
   theme.json             -> %HOME%/.claude/themes/wt-clone-002-yellow.json
   git-info-exclude       -> %HANGAR%/wt-002/.git/info/exclude
@@ -45,6 +47,7 @@ clone wt-003  index=3  colour=green  theme=wt-clone-003-green
   envrc.private          -> %HANGAR%/wt-003/.envrc.private
   CLAUDE.local.md        -> %HANGAR%/wt-003/CLAUDE.local.md
   settings.local.json    -> %HANGAR%/wt-003/.claude/settings.local.json
+  settings-default.json  -> %HANGAR%/wt-003/.claude/settings.local.json
   workspace-1.json       -> %HANGAR%/wt-003/wt-003.fixture-workspace
   theme.json             -> %HOME%/.claude/themes/wt-clone-003-green.json
   git-info-exclude       -> %HANGAR%/wt-003/.git/info/exclude

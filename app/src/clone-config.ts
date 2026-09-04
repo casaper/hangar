@@ -520,6 +520,51 @@ export const withPlansHook = (hangar: Hangar, settings: SettingsJson): SettingsJ
 };
 
 /**
+ * The per-clone Claude Code settings a hangar can DERIVE, with no sibling to copy from.
+ *
+ * This is what unblocked clone #1. `add-clone` used to copy an existing sibling's
+ * `settings.local.json` wholesale and throw when there was none -- so the very first clone of a
+ * fresh hangar had to be made by hand, which is the one step a stranger cannot be talked through.
+ *
+ * The split between this and the sibling copy is the interesting part, and it is deliberate:
+ *
+ * - **DERIVED, here**: the shared secrets deny rule, the read allow for the hangar root, one
+ *   health-check allow per role that declares one, the three `SessionEnd`/`PreToolUse` hooks, the
+ *   statusline, the shared memory directory and the theme. Every one of them is a function of the
+ *   hangar and the clone index, and every one lives outside git -- which is exactly what
+ *   `doctor` exists to hold in place.
+ * - **PERSONAL, and so sibling-copy-only**: `enabledMcpjsonServers`, `enabledPlugins` and the
+ *   `terminal.*` keys. Those are one developer's setup on one machine. Emitting them as defaults
+ *   would ship this machine's seven MCP servers to a stranger's fresh hangar, where none of them
+ *   resolve -- a config that looks configured and is not, which is the failure this whole track
+ *   is about.
+ *
+ * So `add-clone` still prefers a sibling when there is one (the personal half carries forward,
+ * which is what a developer expects of a new clone), and falls back to this. `settingsContentFor`
+ * then regenerates the derived half on top either way, so the two paths cannot disagree about a
+ * theme or a port.
+ */
+export const defaultSettings = (clone: Clone): SettingsJson => {
+  const hangar = clone.hangar;
+  const base: SettingsJson = {
+    permissions: {
+      /*
+       * The hangar root is readable, its secrets file is not.
+       *
+       * The deny rule has to be an ABSOLUTE path: the secrets file sits outside every clone (so
+       * that no clone can commit it), which also means no `Read(./**)`-relative rule can reach
+       * it. A clone session that could read it would put credentials in a transcript.
+       */
+      allow: [`Read(${hangar.root}/**)`, ...healthCheckAllows(clone)],
+      deny: [`Read(${hangar.paths.envShared})`],
+    },
+    statusLine: { type: 'command', command: hangar.paths.statuslineScript },
+    autoMemoryDirectory: hangar.paths.memory,
+  };
+  return withTmpHook(hangar, withPlansHook(hangar, withJiraHook(hangar, base)));
+};
+
+/**
  * The clone's `.claude/settings.local.json`, built from a template clone.
  *
  * Everything except two values is byte-identical across the fleet, so the template is copied

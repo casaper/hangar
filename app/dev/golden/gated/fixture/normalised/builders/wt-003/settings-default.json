@@ -1,0 +1,51 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(%HANGAR%/**)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" --max-time 7 http://localhost:3237/ready)"
+    ],
+    "deny": [
+      "Read(%HANGAR%/.env.fixture-shared)"
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "%HOME%/.claude/wt-clone-statusline.sh"
+  },
+  "autoMemoryDirectory": "%HOME%/.claude/wt-memory",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%HANGAR%/bin/hangar --hangar %HANGAR% jira hook",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%HANGAR%/bin/hangar --hangar %HANGAR% plans collect --quiet",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%HANGAR%/bin/hangar --hangar %HANGAR% tmp merge --quiet",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  },
+  "theme": "custom:wt-clone-003-green"
+}

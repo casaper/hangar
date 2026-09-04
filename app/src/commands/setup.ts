@@ -49,6 +49,15 @@ export type SetupOptions = {
    */
   readonly origin?: string | undefined;
   readonly preset?: string | undefined;
+  /**
+   * The hangar id, for an unattended run in a directory whose name is not a good one.
+   *
+   * `--yes` derives it from the directory basename, which is right for `~/code/backend_hangar`
+   * and wrong for anything generated: the golden capture renders `setup -n` in a `mktemp -d`
+   * directory, so the id came out `tmp_lvj1i0wliy` and changed on every regeneration -- turning
+   * a gate into a file that is dirty in normal operation, which is a gate nobody reads.
+   */
+  readonly id?: string | undefined;
 };
 
 /**
@@ -488,7 +497,7 @@ export const setup = async (root: string, opts: SetupOptions): Promise<void> => 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   let answers: Answers;
   try {
-    const id = await ask(rl, 'hangar id', derived.id, { yes });
+    const id = opts.id ?? (await ask(rl, 'hangar id', derived.id, { yes }));
     /*
      * Asked even under `--yes`, unlike every other question.
      *

@@ -167,7 +167,7 @@ const resolveTarget = async (
   if (branch === defaultBranch) return onDefault(`on the default branch (${defaultBranch})`);
   if (branch === DETACHED) return onDefault('detached HEAD — no branch to look a PR up by');
 
-  const lookup = await openPullRequests(hangar, repoRef(clone.path), branch);
+  const lookup = await openPullRequests(hangar, repoRef(hangar, clone.path), branch);
   if (!lookup.ok) {
     warn(`could not ask Bitbucket which branch this one's PR targets: ${lookup.reason}`);
     return onDefault(`assuming the default branch (${defaultBranch}) — PR target unknown`, true);

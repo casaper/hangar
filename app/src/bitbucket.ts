@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 
 import { gitTry } from './git.ts';
-import { bitbucketWorkspaceUrl, bitbucketRepo } from './paths.ts';
 import { tildify } from './user-paths.ts';
 import type { Hangar } from './hangar.ts';
 
@@ -29,13 +28,18 @@ const parseRemote = (url: string): RepoRef | undefined => {
   return undefined;
 };
 
-export const repoRef = (clonePath: string): RepoRef => {
+/**
+ * The workspace and repo this clone's origin names, or the hangar's configured origin.
+ *
+ * `undefined` when neither is a Bitbucket URL, which is the honest answer for a hangar on any
+ * other forge: no PR link rather than a link into somebody else's workspace. The fallback used
+ * to be two module constants naming THIS repo, so a foreign hangar whose clone had no origin
+ * remote got a `status` row linking to storefront_ui's pull requests.
+ */
+export const repoRef = (hangar: Hangar, clonePath: string): RepoRef | undefined => {
   const url = gitTry(clonePath, ['remote', 'get-url', 'origin']);
   return (
-    (url === undefined ? undefined : parseRemote(url)) ?? {
-      workspace: bitbucketWorkspaceUrl.split('/').pop() ?? 'acme',
-      repo: bitbucketRepo,
-    }
+    (url === undefined ? undefined : parseRemote(url)) ?? parseRemote(hangar.config.forge.originUrl)
   );
 };
 
@@ -46,8 +50,10 @@ export const repoUrl = (ref: RepoRef): string =>
  * A pull-request search scoped to the branch. Bitbucket's PR list accepts `query`, so this
  * shows the open PR for the branch if there is one.
  */
-export const prSearchUrl = (ref: RepoRef, branch: string): string =>
-  `${repoUrl(ref)}/pull-requests/?query=${encodeURIComponent(branch)}`;
+export const prSearchUrl = (ref: RepoRef | undefined, branch: string): string | undefined =>
+  ref === undefined
+    ? undefined
+    : `${repoUrl(ref)}/pull-requests/?query=${encodeURIComponent(branch)}`;
 
 export type PullRequest = {
   readonly id: number;
@@ -128,9 +134,20 @@ const TIMEOUT_MS = 8000;
  */
 export const openPullRequests = async (
   hangar: Hangar,
-  ref: RepoRef,
+  ref: RepoRef | undefined,
   branch: string,
 ): Promise<PullRequestLookup> => {
+  /*
+   * No recognisable Bitbucket repo is a SOFT failure, like every other one here.
+   *
+   * `repoRef` returns undefined when neither the clone's origin nor `forge.originUrl` parses as
+   * a Bitbucket URL -- a hangar on any other forge. `sync` then falls back to the default branch
+   * and says the target is a guess, which is what it already does without a token. Throwing
+   * would make a foreign hangar unable to sync at all.
+   */
+  if (ref === undefined) {
+    return { ok: false, reason: 'forge.originUrl is not a Bitbucket repository' };
+  }
   const token = bitbucketToken(hangar);
   if (token === undefined) {
     return {

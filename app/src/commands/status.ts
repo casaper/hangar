@@ -12,7 +12,7 @@ import {
   syncState,
   type StashEntry,
 } from '../git.ts';
-import { inferTicket, jiraUrl } from '../jira.ts';
+import { inferTicket, issueUrl, type TicketGuess } from '../jira.ts';
 import { claudeSessionsIn, runningServersIn } from '../procs.ts';
 import { cloneLabel, fail, heading, note, ok, table, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
@@ -99,10 +99,34 @@ export const strandedStashRow = (entries: readonly StashEntry[]): string[][] =>
         ],
       ];
 
+/**
+ * The tracker row: a link, why there is no link, or that no key was inferred.
+ *
+ * Its own PURE builder for the reason the other two rows are, and because there are now three
+ * outcomes rather than two. `issueUrl` returns undefined for a hangar with `tracker.kind: none`,
+ * and the row has to say WHICH of the two silences it is -- "no key in this branch" and "this
+ * hangar has no tracker" call for completely different actions, and printing the same dim line
+ * for both is how a missing config reads as a branch naming convention.
+ */
+export const issueRow = (clone: Clone, ticket: TicketGuess | undefined): string => {
+  if (ticket === undefined) {
+    return pc.dim("none inferred (no issue key in the branch name or in this branch's commits)");
+  }
+  const url = issueUrl(clone.hangar, ticket.key);
+  if (url === undefined) {
+    return `${ticket.key} ${pc.dim('(no link — this hangar has no tracker.baseUrl)')}`;
+  }
+  const from =
+    ticket.source === 'commit'
+      ? pc.dim('  (from a commit on this branch, not from the branch name)')
+      : '';
+  return `${url}${from}`;
+};
+
 export const statusOf = (clone: Clone, fetched: boolean): void => {
   const branch = currentBranch(clone.path);
   const ticket = inferTicket(clone, branch);
-  const ref = repoRef(clone.path);
+  const ref = repoRef(clone.hangar, clone.path);
   const sessions = claudeSessionsIn(clone.path);
   const servers = runningServersIn(clone.path);
   const pending = inProgressOperation(clone.path);
@@ -118,13 +142,11 @@ export const statusOf = (clone: Clone, fetched: boolean): void => {
     ['worktree', dirtyLine(clone)],
     ...pendingRow(pending),
     ...strandedStashRow(strandedStashes),
+    ['issue', issueRow(clone, ticket)],
     [
-      'jira',
-      ticket === undefined
-        ? pc.dim("none inferred (no issue key in the branch name or in this branch's commits)")
-        : `${jiraUrl(ticket.key)}${ticket.source === 'commit' ? pc.dim('  (from a commit on this branch, not from the branch name)') : ''}`,
+      'pull request',
+      prSearchUrl(ref, branch) ?? pc.dim('no link — forge.originUrl is not a Bitbucket repository'),
     ],
-    ['pull request', prSearchUrl(ref, branch)],
     ['ports', portSummary(clone.ports)],
     [
       'servers',

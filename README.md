@@ -252,10 +252,12 @@ and names `hangar install` when something is missing. A manager that installs in
 the clone — maven, go, cargo, pip, poetry — gets a dim *cannot verify* row rather than a red one,
 because there is genuinely nothing per-clone to look at.
 
-**It cannot create the *first* clone**, though: it copies `.claude/settings.local.json` from an
-existing sibling as its template, and a hangar with no clones has none. Clone the repo into
-`clone_01/` by hand (or drop a settings file into place), then let `add-clone` do every one after
-that, and finish with:
+**The first clone is no different from the rest.** `add-clone` prefers an existing sibling's
+`.claude/settings.local.json` as its template — a new clone should inherit the MCP servers and
+editor keys a developer has enabled, and no generator can invent those — but with no sibling it
+derives what a hangar can: the read allow for the hangar root, the deny for the secrets file, one
+health-check permission per port role that declares one, the three hooks, the statusline, the
+shared memory directory and the theme. Then finish with:
 
 ```bash
 hangar doctor --all --fix
@@ -263,27 +265,24 @@ hangar doctor --all --fix
 
 ### How far the genericisation goes today
 
-The config surface above describes the whole tool, and most of it is now wired. If you are
-evaluating this for your own repository, these are the gaps that remain, in the order they will
-bite:
+The config surface above describes the whole tool, and it is now wired. One gap remains:
 
-1. **`add-clone` cannot bootstrap the *first* clone.** It copies an existing sibling's
-   `.claude/settings.local.json` as its template and refuses when there is none, so clone #1 is
-   still made by hand.
-2. **The forge and tracker identity is still four literals** in `app/src/paths.ts`, so
-   `forge.originUrl` and `tracker.baseUrl` are read for some purposes and ignored for others.
-   Notably `add-clone` falls back to this repo's origin URL when none is given.
-3. **Linux is unexercised.** The VS Code window-state path is macOS-only, two generated scripts
+1. **Linux is unexercised.** The VS Code window-state path is macOS-only, two generated scripts
    fall back to a Homebrew `jq`, every install hint says `brew install`, and the Konsole and GNOME
    Terminal drivers have never run against a live terminal. GNOME Terminal structurally cannot
    deliver a `SYNC PAUSE`.
 
-What *is* wired, and worth knowing because the list above used to be longer: ports, port roles and
-their env keys, the per-hangar port offset, clone directory naming, the per-clone dotenv and its
-extra variables, symlinks, secrets file, the install steps (any of fourteen package managers or an
-explicit command, in any directory, Node or not), workspace naming and directories, VS Code's
-per-clone path keys, theme and statusline naming, and which hangar a command acts on (`--hangar`,
-then the walk up from your working directory, then `HANGAR_ROOT`).
+What *is* wired, and worth knowing because that list used to have six entries: ports, port roles
+and their env keys, the per-hangar port offset, clone directory naming, the per-clone dotenv and
+its extra variables, symlinks, the secrets file, the install steps (any of fourteen package
+managers or an explicit command, in any directory, Node or not), workspace naming and directories,
+VS Code's per-clone path keys in both directions, theme and statusline naming, the forge and
+tracker identity, the first clone of a fresh hangar, and which hangar a command acts on
+(`--hangar`, then the walk up from your working directory, then `HANGAR_ROOT`).
+
+The one thing that is still this hangar's rather than yours is the **published repository itself**:
+`CLAUDE.md`, `.claude/settings.json` and the two mode settings files name paths under
+`/Users/someone`, and `colour-assignments.json` is tracked. Those are the last items on the list.
 
 ## Starting Claude Code in operator mode
 

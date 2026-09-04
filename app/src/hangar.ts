@@ -53,6 +53,22 @@ export type HangarPaths = {
    * hangar writes outside its own root carries its id; what it writes inside does not.
    */
   readonly statuslineScript: string;
+  /**
+   * The shared memory directory every clone of this hangar points `autoMemoryDirectory` at.
+   *
+   * File-based memory is keyed to the git repository root, and the clones are separate repos, so
+   * without this each clone would keep its own -- and a fact learned in one would be invisible in
+   * the other three. It is in `~/.claude`, so it carries the id by the same rule the theme files
+   * and the statusline do: two hangars on one machine sharing a memory directory would each be
+   * reading the other's notes about a different repo.
+   *
+   * **This hangar's four live clones still name `dvb-gn-memory`**, which predates the rule and is
+   * where the fleet's actual memory is. Nothing renames it here: moving live memory is a migration
+   * that needs the tracked `.claude/settings.json` and four per-clone files moved with it, plus a
+   * session restart each -- and only `defaultSettings` (a hangar with no sibling to copy from)
+   * reads this path today, so nothing is split by leaving it.
+   */
+  readonly memory: string;
 };
 
 export type Hangar = {
@@ -109,5 +125,6 @@ export const pathsFor = (
     terminalHookScript: join(root, 'clone-terminal.sh'),
     colourAssignmentsFile: join(root, 'colour-assignments.json'),
     statuslineScript: join(claudeDir, `${id}-clone-statusline.sh`),
+    memory: join(claudeDir, `${id}-memory`),
   });
 };

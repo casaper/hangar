@@ -3,6 +3,7 @@ import { dirname, join, relative } from 'node:path';
 
 import {
   claudeLocalMdContent,
+  defaultSettings,
   healthCheckAllows,
   claudeLocalMdPath,
   envLocalContent,
@@ -25,7 +26,6 @@ import { CliError, run } from '../exec.ts';
 import { cloneAt, discoverClones, nextFreeIndex, type Clone } from '../fleet.ts';
 import { installPlanLines, runInstall } from '../install.ts';
 import { FLEET_GIT_CONFIG, git, gitTry, setFleetGitConfig } from '../git.ts';
-import { originUrl } from '../paths.ts';
 import { tildify } from '../user-paths.ts';
 import { cloneTmpPath, linkStoreEntriesInto } from '../tmp.ts';
 import { cloneLabel, heading, note, ok, step, warn } from '../ui.ts';
@@ -53,23 +53,41 @@ const writeFile = (path: string, content: string): void => {
   writeFileSync(path, content, 'utf8');
 };
 
-/** Base settings to copy from: any existing clone. Only theme + health-check port differ. */
-const settingsTemplate = (siblings: readonly Clone[]): SettingsJson => {
+/**
+ * Base settings: a sibling's if there is one, this hangar's derivable defaults if there is not.
+ *
+ * It used to THROW when there was no sibling, which is the only reason the README told a stranger
+ * to make clone #1 by hand -- the one step nobody can be talked through, in the command whose
+ * whole job is to spare them it.
+ *
+ * A sibling is still preferred, and that is not a fallback ordering: the personal half of that
+ * file (the MCP servers a developer has enabled, their editor keys) is exactly what a new clone
+ * should inherit and exactly what a generated default must never invent. `defaultSettings` covers
+ * only what the hangar can derive; `settingsContentFor` regenerates the derived half on top of
+ * either, so the two paths cannot disagree about a theme or a port.
+ */
+const settingsTemplate = (clone: Clone, siblings: readonly Clone[]): SettingsJson => {
   for (const sibling of siblings) {
     const settings = readSettings(sibling);
     if (settings) return settings;
   }
-  throw new CliError(
-    'no existing clone has a .claude/settings.local.json to use as a template',
-    'Create the first clone by hand, or copy a settings file into any clone and retry.',
-  );
+  note('No sibling to copy Claude Code settings from — deriving them for this hangar.');
+  return defaultSettings(clone);
 };
 
 export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
   const existing = discoverClones(hangar);
   const index = nextFreeIndex(hangar);
   const clone = cloneAt(hangar, index);
-  const remoteUrl = opts.remote ?? originUrl;
+  /*
+   * `forge.originUrl`, with NO literal fallback.
+   *
+   * It fell back to a module constant naming this fleet's own Bitbucket repo, which in another
+   * hangar means `add-clone` cheerfully clones storefront_ui into somebody else's fleet and wires
+   * it in completely -- ports, identity file, hooks and all. The config field is required by the
+   * schema, so there is nothing to fall back FROM.
+   */
+  const remoteUrl = opts.remote ?? hangar.config.forge.originUrl;
 
   if (existsSync(clone.path)) {
     throw new CliError(`${clone.path} already exists`);
@@ -148,7 +166,7 @@ export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
   if (taken.length > 0) warn(`tmp/ already had ${taken.join(', ')} — not linked`);
 
   // 7. Claude Code settings: copied, except the two values that must not be.
-  writeFile(settingsPath(clone), settingsContentFor(clone, settingsTemplate(existing)));
+  writeFile(settingsPath(clone), settingsContentFor(clone, settingsTemplate(clone, existing)));
   ok(
     `.claude/settings.local.json (theme + ${String(healthCheckAllows(clone).length)} health check(s))`,
   );

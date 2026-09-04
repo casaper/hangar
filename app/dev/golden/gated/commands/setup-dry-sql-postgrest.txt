@@ -41,10 +41,10 @@ _: >-
 
 # Namespaces everything this hangar writes OUTSIDE its own root: the theme filenames, the
 # statusline script and the shell function in the generated colour table. No dashes -- it has
-# to be a legal shell identifier. Never derived from the directory name, because ~/work/tmp_lvj1i0wliy
-# and ~/code/tmp_lvj1i0wliy would collide in that shared state.
-id: tmp_lvj1i0wliy
-displayName: 'tmp_lvj1i0wliy'
+# to be a legal shell identifier. Never derived from the directory name, because ~/work/goldensetup
+# and ~/code/goldensetup would collide in that shared state.
+id: goldensetup
+displayName: 'goldensetup'
 # The setup preset this config was written from. A LABEL: no code reads it, and changing it
 # changes nothing. Everything the preset chose is spelled out below, where you can edit it.
 profile: sql-postgrest
@@ -141,8 +141,8 @@ editor:
   # editor.vim, editor.eclipse), which are left out here because they configure nothing until
   # their kind is listed below.
   kinds: ['vscode']
-  workspaceFileName: 'tmp_lvj1i0wliy_{index2}.code-workspace'
-  workspaceFolderLabel: '{index}: tmp_lvj1i0wliy'
+  workspaceFileName: 'goldensetup_{index2}.code-workspace'
+  workspaceFolderLabel: '{index}: goldensetup'
   workspaceDirs: ['.']
   # Settings whose value is an absolute path into the checkout, and so must be rewritten per
   # clone by `hangar ide vscode sync`. None were found in this repo's .vscode/settings.json,

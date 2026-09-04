@@ -101,7 +101,7 @@ stale on the next commit and nothing checks it, so run `wc -l` when you want one
 | terminal drivers      | `terminal/` — `apple-terminal.ts`, `konsole.ts`, `iterm2.ts`, `index.ts`, `types.ts`, `gnome-terminal.ts`, `applescript.ts`, `none.ts`                                                                                                                                                                                                                                                                                               |
 | git / forge / tracker | `git.ts`, `bitbucket.ts`, `jira-records.ts`, `jira.ts`                                                                                                                                                                                                                                                                                                                                                                               |
 | fleet                 | `fleet.ts` — clone discovery, and everything per-clone derived from the index                                                                                                                                                                                                                                                                                                                                                        |
-| shared                | `dedupe.ts`, `claude-sessions.ts`, `resolve-conflicts.ts`, `procs.ts`, `plans.ts`, `environment.ts`, `install.ts`, `tui.ts`, `palette.ts`, `tmp.ts`, `sessions.ts`, `adopt.ts`, `ui.ts`, `paths.ts`, `exec.ts`                                                                                                                                                                                                                       |
+| shared                | `dedupe.ts`, `claude-sessions.ts`, `resolve-conflicts.ts`, `procs.ts`, `plans.ts`, `environment.ts`, `install.ts`, `tui.ts`, `palette.ts`, `tmp.ts`, `sessions.ts`, `adopt.ts`, `ui.ts`, `hangar.ts`, `user-paths.ts`, `template.ts`, `exec.ts`                                                                                                                                                                                      |
 
 **Four seams**, each a capability record plus a driver interface rather than a pretence that the
 implementations are equivalent. Adding a kind means implementing the interface and registering it;
@@ -112,10 +112,13 @@ callers degrade one capability at a time instead of branching on a product name:
 - `generate/index.ts` — every generated artifact is a pure function of the clone plus a path
 - `fleet.ts` — clone discovery is filesystem-only; there is no list of clones in any file
 
-Two things in here are known and deliberate rather than waiting to be found: `paths.ts` still falls
-back to `import.meta.dirname` for the hangar root, which is the discovery bug the genericisation
-plan's Track B fixes; and `resolve-conflicts.ts` reads `ORCH_UTIL_RESOLVE_TIMEOUT_MS`, the last
-`ORCH_UTIL_` name left in the CLI.
+One thing in here is known and deliberate rather than waiting to be found:
+`resolve-conflicts.ts` reads `ORCH_UTIL_RESOLVE_TIMEOUT_MS`, the last `ORCH_UTIL_` name left in
+the CLI. **`paths.ts` is gone** — its hangar-derived half became `HangarPaths` (threaded from
+`cli.ts`, never a module constant, because a value derived from a root that comes from a file
+cannot be evaluated at import time), its `homedir()` half became `user-paths.ts`, and its last
+four literals — this fleet's Bitbucket repo, workspace, Jira host and origin URL — became
+`forge.originUrl` and `tracker.{baseUrl,issueUrlTemplate}`.
 
 ## Which editors it opens
 

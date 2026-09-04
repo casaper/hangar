@@ -14,6 +14,7 @@ import {
   jiraHookCommand,
   plansHookCommand,
   cloneSymlinks,
+  defaultSettings,
   settingsContentFor,
   settingsPath,
   healthCheckAllows,
@@ -129,6 +130,21 @@ const cloneCaptures = (
       'settings.local.json',
       settingsPath(clone),
       settingsContentFor(clone, settingsTemplate(hangar)),
+    ],
+
+    /*
+     * The same file built with NO sibling to copy from -- the path `add-clone` takes for clone
+     * #1, which used to throw.
+     *
+     * Captured beside the template render rather than instead of it, because the two answer
+     * different questions. The template render says what `settingsContentFor` DOES to a file it
+     * was handed; this says what a hangar can derive from nothing, which is the half `doctor`
+     * holds in place and the half a stranger's first clone depends on entirely.
+     */
+    [
+      'settings-default.json',
+      settingsPath(clone),
+      settingsContentFor(clone, defaultSettings(clone)),
     ],
 
     // Every configured workspace copy, so a change to `editor.workspaceDirs` shows up here.

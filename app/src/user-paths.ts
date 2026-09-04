@@ -6,9 +6,9 @@ import { join } from 'node:path';
  *
  * Split out of `paths.ts` for one reason, and it is the reason a lazy config singleton is not
  * needed anywhere in this CLI: everything here is a pure function of `homedir()`, so it is
- * correct at import time and stays correct however many hangars a process handles. What
- * remains in `paths.ts` is derived from a hangar root and therefore cannot be a module
- * constant once that root comes from a file.
+ * correct at import time and stays correct however many hangars a process handles. Everything
+ * that was derived from a hangar root moved to `HangarPaths`, and `paths.ts` -- by then four
+ * literals naming this fleet's own Bitbucket repo and Jira -- is gone.
  *
  * The test for whether a path belongs here: would two hangars on one machine disagree about
  * it? `~/.claude` is the same directory for both, so it belongs here. A statusline script

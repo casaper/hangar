@@ -25,7 +25,7 @@ Global: `--hangar <path>` (the hangar root to operate on; **only `config show` a
 | `install` | `[clone]` | `--all` · `-n, --dry-run` | **act [user]** |
 | `remove-clone` | `<clone>` | `--delete` · `--force` | **act [user]**, no `-n` |
 | `doctor` | `[clone]` (defaults to every clone) | `-a, --all` · `--fix` | report bare; **act [user]** with `--fix` |
-| `setup` | — | `-y, --yes` · `--origin <url>` · `--preset <name>` · `--force` · `-n, --dry-run` | act |
+| `setup` | — | `-y, --yes` · `--origin <url>` · `--id <name>` · `--preset <name>` · `--force` · `-n, --dry-run` | act |
 | `teach-rg` | `<clone>` | `-n, --dry-run` · `-y, --yes` | act |
 
 ## Groups
@@ -93,6 +93,8 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
 - **`setup -y` needs `--origin <url>` in a fresh checkout.** The origin URL is the one field with
   no derivable default. With neither the flag nor a terminal to ask on, setup refuses and names the
   flag rather than exiting quietly.
+- **`--id <name>` overrides deriving the id from the directory basename**, which is what `-y`
+  does. Only needed when the directory is not named what the hangar should be called.
 - **`setup --preset <name>` supplies the two answers no checkout can:** the port roles and the
   per-clone environment variables. `generic`, `node-web`, `sql-postgrest`. A preset writes plain
   config and is never read again; `profile:` in the result is a label no code consults.

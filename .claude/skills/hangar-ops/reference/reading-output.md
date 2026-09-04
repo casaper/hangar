@@ -2,10 +2,10 @@
 
 ## `hangar status <n>`
 
-Ten rows always, in this order: `dir`, `colour`, `branch`, `sync`, `worktree`, `jira`,
+Ten rows always, in this order: `dir`, `colour`, `branch`, `sync`, `worktree`, `issue`,
 `pull request`, `ports`, `servers`, `claude`.
 
-**Two more appear only when there is something to say**, between `worktree` and `jira`, and a clone
+**Two more appear only when there is something to say**, between `worktree` and `issue`, and a clone
 showing neither is the healthy case, not a missing feature:
 
 - **`pending`** — a rebase or merge is half-applied. Its detail says
@@ -21,10 +21,14 @@ Rows that need care when you relay them:
   report `in sync` as authoritative unless you passed `--fetch`; the command prints
   `Remote state was not refreshed. Add --fetch for an authoritative sync answer.` for the same
   reason. `no upstream` means the branch has never been pushed — not that it is behind.
-- **`jira`** may say `none inferred`, or carry `(from a commit on this branch, not from the branch
-  name)`. That parenthesis matters: the key came from a commit message, so it is a weaker signal
-  than a branch name.
+- **`issue`** has three outcomes, and they are not the same answer. A URL; or the bare key with
+  `(no link — this hangar has no tracker.baseUrl)`, meaning the branch names a ticket and the
+  hangar has nowhere to link it; or `none inferred`, meaning no key was found in the branch name or
+  in this branch's commits. Telling the middle one from the last matters: a missing config would
+  otherwise read as a branch naming convention. A URL may carry `(from a commit on this branch, not
+  from the branch name)` — that parenthesis is a weaker signal than a branch name.
 - **`pull request`** is a **search URL**, not a link to a specific PR. It does not mean a PR exists.
+  It says `no link — forge.originUrl is not a Bitbucket repository` on a hangar hosted elsewhere.
 - **`claude`** distinguishes `on <tty>` from `(no tty — IDE session)`. A session with no tty cannot
   be sent a `SYNC PAUSE`, which is what makes `sync` ask.
 - **`ports`** here are the values the index formula says the clone should have. Whether the clone's
