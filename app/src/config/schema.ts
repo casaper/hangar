@@ -144,6 +144,16 @@ const installStepSchema = z
     nodeVersionFile: containedPath('repo.install[].nodeVersionFile').optional(),
     /** A failure is reported and the run continues. */
     optional: z.boolean().default(false),
+    /**
+     * REQUIRED, for the same reason `repo.symlinks[].why` is.
+     *
+     * An install step is the one thing Hangar runs inside a clone that can delete work --
+     * `npm ci` removes `node_modules` outright -- and a bare `manager: npm` says nothing about
+     * why a clone needs it. This string is what `add-clone`, `hangar install` and `doctor`
+     * print beside the step, and it is the only place a reader learns whether a step is
+     * load-bearing or a leftover.
+     */
+    why: z.string().min(1),
   })
   .refine((s) => (s.manager === undefined) !== (s.command === undefined), {
     message: 'give exactly one of `manager` or `command`',
@@ -165,6 +175,29 @@ export const MANAGER_COMMANDS: Readonly<Record<string, readonly string[]>> = Obj
   cargo: ['cargo', 'fetch', '--locked'],
   go: ['go', 'mod', 'download'],
   composer: ['composer', 'install'],
+});
+
+/**
+ * The clone-relative path whose existence means a manager's install has actually run.
+ *
+ * Deliberately PARTIAL, and the gaps are the honest part. Only some managers leave their
+ * result inside the checkout: the four JavaScript ones write `node_modules`, `uv` writes
+ * `.venv`, `composer` writes `vendor`. Maven puts it in `~/.m2`, Go in the module cache,
+ * cargo in `~/.cargo`, pip and poetry wherever the active environment is -- all outside the
+ * clone, and all of them shared between clones, so no per-clone path could answer for them.
+ *
+ * A manager with no marker makes `doctor` report **cannot verify** rather than a red row. A
+ * red row nobody can clear is a row nobody reads, and inventing a marker for maven would make
+ * `doctor` red on a correctly installed clone forever. It lives here so the fourteen managers
+ * and their markers cannot drift into two files.
+ */
+export const INSTALL_MARKERS: Readonly<Record<string, string>> = Object.freeze({
+  npm: 'node_modules',
+  pnpm: 'node_modules',
+  yarn: 'node_modules',
+  bun: 'node_modules',
+  uv: '.venv',
+  composer: 'vendor',
 });
 
 const symlinkSchema = z.strictObject({

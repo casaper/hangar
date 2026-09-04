@@ -23,6 +23,7 @@ import {
 import { clearColourAssignment } from '../colour-assignments.ts';
 import { CliError, run } from '../exec.ts';
 import { cloneAt, discoverClones, nextFreeIndex, type Clone } from '../fleet.ts';
+import { installPlanLines, runInstall } from '../install.ts';
 import { FLEET_GIT_CONFIG, git, gitTry, setFleetGitConfig } from '../git.ts';
 import { originUrl } from '../paths.ts';
 import { tildify } from '../user-paths.ts';
@@ -175,15 +176,16 @@ export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
   heading('Regenerating colour artifacts');
   coloursSync(hangar, {});
 
-  // 11. dependencies -- a clone without its own node_modules is the one thing the fleet
-  //     exists to provide, so this is the default.
+  // 11. dependencies -- a clone with its own installed dependencies is the one thing the fleet
+  //     exists to provide, so this is the default. The steps come from `repo.install[]`, so a
+  //     repo that fetches nothing declares nothing and this prints one line saying so.
   if (opts.install === false) {
-    note(
-      'Skipped `npm ci` (--no-install). The clone cannot serve, test or build until you run it.',
-    );
+    note('Skipped the install steps (--no-install). The clone is not usable until you run them:');
+    for (const line of installPlanLines(clone)) note(`  ${line}`);
+    note(`Run them with \`hangar install ${clone.name}\`.`);
   } else {
     heading('Installing dependencies');
-    npmCi(clone);
+    runInstall(clone);
   }
 
   // 12. direnv
@@ -239,23 +241,3 @@ export const direnvSnippet = (clone: Clone): string =>
     .map((dir) => (dir === '.' ? clone.path : join(clone.path, dir)))
     .map((path) => `(cd ${JSON.stringify(path)} && direnv allow .)`)
     .join('\n');
-
-/**
- * `npm ci` under the Node version the clone pins. The machine uses fnm, and shell state does
- * not survive between our spawns, so the version is applied per command rather than by
- * sourcing anything.
- */
-const npmCi = (clone: Clone): void => {
-  const angular = join(clone.path, 'angular');
-  const cwd = existsSync(join(angular, 'package.json')) ? angular : clone.path;
-  const nvmrc = join(cwd, '.nvmrc');
-  const version = existsSync(nvmrc) ? readFileSync(nvmrc, 'utf8').trim() : undefined;
-
-  const useFnm = version !== undefined && run('fnm', ['--version']).ok;
-  const res = useFnm
-    ? run('fnm', ['exec', `--using=${version}`, '--', 'npm', 'ci'], { cwd, inherit: true })
-    : run('npm', ['ci'], { cwd, inherit: true });
-
-  if (res.ok) ok(`npm ci in ${tildify(cwd)}${version === undefined ? '' : ` (node ${version})`}`);
-  else warn(`npm ci failed (exit ${res.code}) — run it by hand in ${tildify(cwd)}`);
-};

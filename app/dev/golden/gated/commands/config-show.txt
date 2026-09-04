@@ -48,6 +48,8 @@ repo:
       manager: npm
       nodeVersionFile: .nvmrc
       optional: false
+      why: each clone needs its OWN node_modules -- its own dev server, Storybook and Playwright run,
+        which is the whole reason the fleet is full clones and not git worktrees
   portCheckCommand:
     - node
     - dev/ports.mjs

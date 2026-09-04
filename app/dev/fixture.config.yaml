@@ -58,6 +58,9 @@ repo:
   install:
     - dir: '.'
       command: [make, deps]
+      # No `manager`, so INSTALL_MARKERS has nothing for it and `doctor` must say "cannot
+      # verify" rather than print a red row nobody can clear.
+      why: fetches the SQL fixtures this repo builds against
 
 ports:
   step: 100

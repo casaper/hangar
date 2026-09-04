@@ -134,8 +134,12 @@ place in this CLI where `-n` does not mean "change nothing". A clone session is 
 them, and `plans collect` and `tmp merge --quiet` already run there from `SessionEnd` hooks.
 The ones that move git state, files between clones or terminal windows are the **user's, from
 the fleet root**:
-`sync` (under any of its three names), `checkout-default`, `open`, `add-clone`, `remove-clone`,
-`colours change` and `doctor --fix`.
+`sync` (under any of its three names), `checkout-default`, `open`, `add-clone`, `install`,
+`remove-clone`, `colours change` and `doctor --fix`.
+
+**`hangar install <clone>` runs this repo's `npm ci`, which DELETES `node_modules` first.** A
+clone with a dev server running loses it mid-request, so it is the user's command even though it
+touches no git state. `doctor` reports a missing install and names it; it never runs one itself.
 
 **`hangar sync <clone>` starts with a `git stash push --include-untracked`**, and the
 busy-clone skip applies only to `--all` — so naming a clone explicitly does not protect it, and a

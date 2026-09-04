@@ -28,6 +28,7 @@ import {
 import { CONFIG_FILENAME } from '../config/load.ts';
 import { direnvSnippet } from './add-clone.ts';
 import { editors } from '../editor/index.ts';
+import { installPlanLines } from '../install.ts';
 import { cloneAt, discoverClones, type Clone } from '../fleet.ts';
 import { cloneColoursArtifact } from '../generate/colours-sh.ts';
 import { type Artifact } from '../generate/index.ts';
@@ -140,6 +141,20 @@ const cloneCaptures = (
     ['git-info-exclude', excludePath(clone), excludeBlock(hangar)],
     ['direnv-snippet', envrcPrivatePath(clone), direnvSnippet(clone)],
     ['health-check-allows', settingsPath(clone), `${healthCheckAllows(clone).join('\n')}\n`],
+
+    /*
+     * The install plan, which writes no file at all -- its destination is a terminal.
+     *
+     * It is captured anyway because it is the answer to "what will this command run inside a
+     * clone", and that is the one string in this CLI whose being wrong destroys work rather
+     * than just reading badly. A `command:` that drifted from the config would show up here
+     * and nowhere else, since `doctor` deliberately never executes a step.
+     */
+    [
+      'install-plan',
+      '(printed by add-clone and hangar install)',
+      `${installPlanLines(clone).join('\n')}\n`,
+    ],
     ...cloneSymlinks(clone).map((link): [string, string, string] => [
       `symlink-${link.relPath.replaceAll('/', '_')}`,
       link.path,

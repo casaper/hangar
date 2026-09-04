@@ -2,6 +2,7 @@ import { Argument, Command, Option, type CommandUnknownOpts } from '@commander-j
 import pc from 'picocolors';
 
 import { addClone } from './commands/add-clone.ts';
+import { install } from './commands/install.ts';
 import { checkoutDefault } from './commands/checkout-default.ts';
 import { coloursChange, coloursList, coloursSync } from './commands/colours.ts';
 import { configSchema, configShow, configValidate } from './commands/config.ts';
@@ -298,10 +299,23 @@ program
 program
   .command('add-clone')
   .description('Create the next clone and wire it into the fleet completely')
-  .option('--no-install', 'skip `npm ci` (the clone cannot serve, test or build until you run it)')
+  .option(
+    '--no-install',
+    'skip repo.install[] (the clone is not usable until you run `hangar install`)',
+  )
   .addOption(new Option('--remote <url>', 'clone from a different URL').hideHelp())
   .action((options) => {
     addClone(requireHangar(), options);
+  });
+
+program
+  .command('install')
+  .description("Run the repo's declared install steps in a clone (repo.install[])")
+  .argument('[clone]', 'clone name, e.g. clone_02 (or just 2)')
+  .option('--all', 'every clone')
+  .option('-n, --dry-run', 'print the steps without running any of them')
+  .action((clone, options) => {
+    install(requireHangar(), clone, options);
   });
 
 program

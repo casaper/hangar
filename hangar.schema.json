@@ -267,8 +267,15 @@
               "optional": {
                 "default": false,
                 "type": "boolean"
+              },
+              "why": {
+                "type": "string",
+                "minLength": 1
               }
             },
+            "required": [
+              "why"
+            ],
             "additionalProperties": false
           }
         },

@@ -22,6 +22,7 @@ clone wt-001  index=1  colour=cyan  theme=wt-clone-001-cyan
   git-info-exclude       -> %HANGAR%/wt-001/.git/info/exclude
   direnv-snippet         -> %HANGAR%/wt-001/.envrc.private
   health-check-allows    -> %HANGAR%/wt-001/.claude/settings.local.json
+  install-plan           -> (printed by add-clone and hangar install)
   symlink-sql_local.env  -> %HANGAR%/wt-001/sql/local.env
 
 clone wt-002  index=2  colour=yellow  theme=wt-clone-002-yellow
@@ -35,6 +36,7 @@ clone wt-002  index=2  colour=yellow  theme=wt-clone-002-yellow
   git-info-exclude       -> %HANGAR%/wt-002/.git/info/exclude
   direnv-snippet         -> %HANGAR%/wt-002/.envrc.private
   health-check-allows    -> %HANGAR%/wt-002/.claude/settings.local.json
+  install-plan           -> (printed by add-clone and hangar install)
   symlink-sql_local.env  -> %HANGAR%/wt-002/sql/local.env
 
 clone wt-003  index=3  colour=green  theme=wt-clone-003-green
@@ -48,6 +50,7 @@ clone wt-003  index=3  colour=green  theme=wt-clone-003-green
   git-info-exclude       -> %HANGAR%/wt-003/.git/info/exclude
   direnv-snippet         -> %HANGAR%/wt-003/.envrc.private
   health-check-allows    -> %HANGAR%/wt-003/.claude/settings.local.json
+  install-plan           -> (printed by add-clone and hangar install)
   symlink-sql_local.env  -> %HANGAR%/wt-003/sql/local.env
 
 artifact clone-colours.sh       -> %HANGAR%/clone-colours.sh

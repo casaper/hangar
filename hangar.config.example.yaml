@@ -228,18 +228,31 @@ repo:
   #   deno     -> deno install --frozen           poetry   -> poetry install
   #   cargo    -> cargo fetch --locked            uv       -> uv sync --frozen
   #   go       -> go mod download                 composer -> composer install
+  #
+  # Only some managers leave their result INSIDE the checkout -- the four JavaScript ones write
+  # node_modules, uv writes .venv, composer writes vendor. Maven, Go, cargo, pip and poetry put
+  # it in a shared cache outside every clone, so `doctor` reports "cannot verify" for those
+  # rather than a red row nobody can clear. Nothing here is ever run by `doctor`: an install is
+  # `hangar install <clone>`, because `npm ci` deletes node_modules under a live dev server.
   install:
     - # Clone-relative; defaults to `repo.appDir`.
       dir: angular
       manager: npm
-      # Run the step under the Node version this file names (fnm, else nvm).
+      # Run the step under the Node version this file names (fnm, else nvm). Omit it and the
+      # step is not treated as a Node step at all.
       nodeVersionFile: .nvmrc
       # Default false. True reports a failure and lets the run continue.
       # optional: false
+      # REQUIRED. Printed by add-clone, `hangar install` and doctor beside the step -- the only
+      # place a reader learns whether a step is load-bearing or a leftover.
+      why: >-
+        each clone needs its OWN node_modules -- its own dev server, Storybook and Playwright
+        run, which is the whole reason the fleet is full clones and not git worktrees
     # An explicit command instead of a manager -- the escape hatch for anything not listed:
     # - dir: .
     #   command: [make, bootstrap]
     #   optional: true
+    #   why: builds the C extension the test suite links against
 
   # The repo's OWN port resolver, run INSIDE a clone (where direnv has loaded its dotenv) and
   # compared against `ports` below. This turns the by-convention agreement between Hangar and a

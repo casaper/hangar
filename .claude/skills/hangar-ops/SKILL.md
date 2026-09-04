@@ -38,10 +38,10 @@ Everything in the left column only reports. Run these freely, and prefer them as
 
 | Reports only | Acts |
 | --- | --- |
-| `list`, `ports`, `status` (`--fetch` reaches the network but touches no tree), `doctor` **bare**, `colours list`, `config show`, `config validate`, `resume` (see below) | `sync` / `merge-default` / `rebase-default`, `checkout-default`, `open`, `add-clone`, `remove-clone`, `colours change`, `doctor --fix`, `setup`, `teach-rg`, `config schema`, `ide <kind> sync`, `colours sync`, `tmp merge`, `plans collect`, `plans stamp` |
+| `list`, `ports`, `status` (`--fetch` reaches the network but touches no tree), `doctor` **bare**, `colours list`, `config show`, `config validate`, `resume` (see below) | `sync` / `merge-default` / `rebase-default`, `checkout-default`, `open`, `add-clone`, `install`, `remove-clone`, `colours change`, `doctor --fix`, `setup`, `teach-rg`, `config schema`, `ide <kind> sync`, `colours sync`, `tmp merge`, `plans collect`, `plans stamp` |
 
 **The hangar's own `CLAUDE.md` reserves seven of those for the user, from the hangar root:** `sync`
-under any of its three names, `checkout-default`, `open`, `add-clone`, `remove-clone`,
+under any of its three names, `checkout-default`, `open`, `add-clone`, `install`, `remove-clone`,
 `colours change` and `doctor --fix`. They move git state, move files between live working trees, or
 open terminal windows.
 
@@ -91,7 +91,7 @@ leaves the half-applied rebase that `sync` itself refuses to start on — so the
 and the user's work is in a stash nobody thinks to look in.
 
 Run it with `run_in_background: true`, or `timeout: 600000`. **Never bare.** The same goes for
-`add-clone`, which clones a repo and installs its dependencies.
+`add-clone`, which clones a repo and runs its install steps.
 
 While the resolver runs it streams a dim line per tool call. That is progress, not a hang.
 

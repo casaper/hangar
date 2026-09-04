@@ -22,6 +22,7 @@ Global: `--hangar <path>` (the hangar root to operate on; **only `config show` a
 | `open` | `[clones...]` | `--all` · `--no-claude` · `--no-editor` · `-b, --branch <name>` · `--no-checkout` · `--include-busy` | **act [user]**, no `-n` |
 | `resume` | `[clone]` (defaults to the clone you are in) | `-n, --limit <count>` (default `20`, `0` = all) | report **for you** — with no tty it prints the list instead of the picker; at a terminal it launches `claude --resume` |
 | `add-clone` | — | `--no-install` (+ a hidden `--remote <url>`) | **act [user]**, no `-n` |
+| `install` | `[clone]` | `--all` · `-n, --dry-run` | **act [user]** |
 | `remove-clone` | `<clone>` | `--delete` · `--force` | **act [user]**, no `-n` |
 | `doctor` | `[clone]` (defaults to every clone) | `-a, --all` · `--fix` | report bare; **act [user]** with `--fix` |
 | `setup` | — | `-y, --yes` · `--force` · `-n, --dry-run` | act |
@@ -76,8 +77,16 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   there is no way to preview it.
 - **`remove-clone --force` is the one genuinely unrecoverable flag in this CLI** — its own help says
   uncommitted work is NOT recoverable. Never pass it without the user asking for it in those terms.
-- **`add-clone --no-install` leaves the clone unable to serve, test or build** until someone runs
-  the install by hand.
+- **`add-clone --no-install` leaves the clone unusable** until someone runs `hangar install
+  <clone>`. It prints the exact steps it skipped, from `repo.install[]`, each with its `why`.
+- **`hangar install` is the user's command, and `-n` first is not optional courtesy.** What it
+  runs comes from `repo.install[]`, and this repo's step is `npm ci` — which DELETES
+  `node_modules` before refetching it, so a clone with a dev server running loses it mid-request.
+  `hangar install <clone> -n` prints every step without spawning anything.
+- **`doctor` never runs an install step; it only checks the declaration.** A green install row
+  means the directory exists and the manager's marker is there. A **dim** row (rather than green)
+  means the manager leaves nothing inside the clone to look at — maven, go, cargo, pip, poetry,
+  gradle, deno, bundler — so there is genuinely no answer, which it says rather than guessing.
 - **`doctor` with no clone argument already checks every clone**, so `-a` is only needed to be
   explicit.
 - **`resume -n` is `--limit`.** Everywhere else `-n` is `--dry-run`.

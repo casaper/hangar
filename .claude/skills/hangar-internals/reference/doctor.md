@@ -30,6 +30,33 @@ per entry means, and a check that is red in normal operation is a check nobody r
 (`hangar-ops/reference/reading-output.md` says the same to whoever reads the report — change one
 and change both.)
 
+## The install checks report a declaration and never execute it
+
+`repo.install[]` is the one thing Hangar runs INSIDE a clone that can destroy work: this repo's
+step is `npm ci`, which deletes `node_modules` before refetching it. So "doctor replays the same
+step list as checks" — a sentence a plan could easily leave in — would have `hangar doctor` wipe
+four clones' installs while their dev servers were serving, every time somebody asked whether the
+fleet was healthy.
+
+`installChecks` in `app/src/install.ts` therefore asks only what the filesystem can answer:
+
+- does the step's `dir` exist in this checkout (a missing one is red unless the step is `optional`)
+- if the manager leaves a marker INSIDE the clone, is it there
+
+`INSTALL_MARKERS` (beside `MANAGER_COMMANDS`, so the fourteen managers and their markers cannot
+drift into two files) is **deliberately partial**, and the gaps are the honest part. The four
+JavaScript managers write `node_modules`, `uv` writes `.venv`, `composer` writes `vendor`. Maven,
+Go, cargo, pip, poetry, gradle, deno and bundler put the result in a cache outside every clone and
+shared between them, so no per-clone path could answer for those. A step with no marker gets a
+`Check` with `ok: true` and `unverified: true`, which renders **dim rather than green** — because a
+row that reads like a verified pass while verifying nothing is worse than one that says it cannot
+tell, and inventing a marker for maven would make `doctor` permanently red on a correctly
+installed clone.
+
+Executing a step is `hangar install <clone>`, which a human types, and deliberately NOT a
+`doctor --fix` repair: one entry point to a package manager in a live clone is safer than two, and
+`--fix` is the pass people run without reading. `doctor` names the command instead.
+
 ## The plan archive, and why sharing it is a command rather than a setting
 
 **Plans cannot be shared by a setting.** Claude Code resolves `plansDirectory` against the project

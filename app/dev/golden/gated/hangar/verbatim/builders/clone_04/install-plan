@@ -1,0 +1,1 @@
+angular: npm ci (node 24.20) — each clone needs its OWN node_modules -- its own dev server, Storybook and Playwright run, which is the whole reason the fleet is full clones and not git worktrees

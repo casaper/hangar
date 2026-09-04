@@ -210,13 +210,22 @@ not move them. Delete anything that only configures a feature you do not use.
 
 ```bash
 hangar add-clone              # creates the next free index and wires it in completely
-hangar add-clone --no-install # skip the dependency install
+hangar add-clone --no-install # skip repo.install[]; it prints the steps it skipped
+hangar install 2 -n           # what the install steps would run, without running them
+hangar install 2              # run them
 ```
 
 `add-clone` clones the repo, writes the ports, the identity file and its git exclusion, the direnv
 files, the symlinks, the Claude Code settings and hooks, the theme, the sibling remotes in both
 directions, and the local git config the sibling remotes make necessary — the list is exhaustive on
 purpose, because every item on it lives outside git and nothing else would recreate it.
+
+Then it runs `repo.install[]`. Those steps are the only thing Hangar runs inside a clone that can
+destroy work — `npm ci` deletes `node_modules` before refetching it — so `hangar doctor` never runs
+one. It checks the declaration instead (does the directory exist, is the manager's marker there)
+and names `hangar install` when something is missing. A manager that installs into a cache outside
+the clone — maven, go, cargo, pip, poetry — gets a dim *cannot verify* row rather than a red one,
+because there is genuinely nothing per-clone to look at.
 
 **It cannot create the *first* clone**, though: it copies `.claude/settings.local.json` from an
 existing sibling as its template, and a hangar with no clones has none. Clone the repo into
@@ -240,25 +249,23 @@ bite:
 2. **`add-clone` cannot bootstrap the *first* clone.** It copies an existing sibling's
    `.claude/settings.local.json` as its template and refuses when there is none, so clone #1 is
    still made by hand.
-3. **The install step is hardcoded to `npm ci`.** `repo.install[]` declares any of fourteen package
-   managers, or an explicit command, and `add-clone` still runs `npm ci` in the app directory. A
-   repo with no `package.json` gets a failing step it never asked for.
-4. **`profile:` names a `profiles/` directory that does not exist**, and now never will: the two
+3. **`profile:` names a `profiles/` directory that does not exist**, and now never will: the two
    hangars this tool is built for need no profile code, which was the evidence the config boundary
    was drawn in the right place. Treat the key as a label; it changes no behaviour.
-5. **The forge and tracker identity is still four literals** in `app/src/paths.ts`, so
+4. **The forge and tracker identity is still four literals** in `app/src/paths.ts`, so
    `forge.originUrl` and `tracker.baseUrl` are read for some purposes and ignored for others.
    Notably `add-clone` falls back to this repo's origin URL when none is given.
-6. **Linux is unexercised.** The VS Code window-state path is macOS-only, two generated scripts
+5. **Linux is unexercised.** The VS Code window-state path is macOS-only, two generated scripts
    fall back to a Homebrew `jq`, every install hint says `brew install`, and the Konsole and GNOME
    Terminal drivers have never run against a live terminal. GNOME Terminal structurally cannot
    deliver a `SYNC PAUSE`.
 
 What *is* wired, and worth knowing because the list above used to be longer: ports, port roles and
 their env keys, the per-hangar port offset, clone directory naming, the per-clone dotenv and its
-extra variables, symlinks, secrets file, workspace naming and directories, VS Code's per-clone path
-keys, theme and statusline naming, and which hangar a command acts on (`--hangar`, then the walk up
-from your working directory, then `HANGAR_ROOT`).
+extra variables, symlinks, secrets file, the install steps (any of fourteen package managers or an
+explicit command, in any directory, Node or not), workspace naming and directories, VS Code's
+per-clone path keys, theme and statusline naming, and which hangar a command acts on (`--hangar`,
+then the walk up from your working directory, then `HANGAR_ROOT`).
 
 ## Starting Claude Code in operator mode
 

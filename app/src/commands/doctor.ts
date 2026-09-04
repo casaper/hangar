@@ -79,6 +79,7 @@ import {
 import { paletteEntry } from '../palette.ts';
 import { portSummary } from '../ports.ts';
 import { terminal, type TerminalCapabilities } from '../terminal/index.ts';
+import { installChecks } from '../install.ts';
 import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
 
@@ -103,6 +104,15 @@ type Check = {
   readonly detail: string;
   /** Present when `--fix` can repair this check. */
   readonly repair?: (() => void) | undefined;
+  /**
+   * Not a pass and not a failure: there is no way to tell from here.
+   *
+   * `ok` stays true, so it never counts as a problem, but it is rendered dim rather than green
+   * -- a row that reads like a verified pass while verifying nothing is worse than saying so.
+   * The install steps are the only source of these today: a Maven or Go install leaves nothing
+   * inside the clone to look at.
+   */
+  readonly unverified?: boolean | undefined;
 };
 
 /** Where a symlink actually lands, or undefined if it is not a link or is dangling. */
@@ -226,6 +236,24 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
             }
             symlinkSync(relative(dirname(link.path), link.target), link.path);
           },
+    });
+  }
+
+  /*
+   * --- install steps ------------------------------------------------------------------
+   *
+   * DECLARATION ONLY. Nothing here spawns a package manager, and the reason is worth stating
+   * where someone might be tempted to "make doctor actually check it": `npm ci` deletes
+   * `node_modules` outright, so a doctor that ran the step list would wipe every clone's
+   * install -- with their dev servers running -- every time somebody asked whether the fleet
+   * was healthy. Running an install is `hangar install <clone>`, which a human types.
+   */
+  for (const item of installChecks(clone)) {
+    checks.push({
+      name: item.name,
+      ok: item.ok,
+      detail: item.detail,
+      unverified: item.unverifiable,
     });
   }
 
@@ -799,7 +827,8 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
     heading(cloneLabel(clone));
     for (const check of checksFor(hangar, clone, all)) {
       if (check.ok) {
-        ok(`${check.name.padEnd(22)} ${pc.dim(check.detail)}`);
+        if (check.unverified === true) note(`${check.name.padEnd(22)} ${check.detail}`);
+        else ok(`${check.name.padEnd(22)} ${pc.dim(check.detail)}`);
         continue;
       }
       problems += 1;
