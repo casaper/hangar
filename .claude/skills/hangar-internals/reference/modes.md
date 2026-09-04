@@ -107,7 +107,7 @@ Three implementation rules, each the opposite of the obvious version:
   colour per terminal — the exact ambiguity it is there to remove. The WORD survives a terminal
   that drops the colour entirely.
 - **The hangar root is resolved from `$0`, not baked in.** The nearest precedent is the wrong
-  model to copy: `~/.claude/dvb-clone-statusline.sh` may hardcode the fleet root because
+  model to copy: `~/.claude/<id>-clone-statusline.sh` may hardcode the hangar root because
   `hangar colours sync` GENERATES it, and it derives a *clone* from the payload's directory. This
   one is hand-maintained and derives a *mode*. It does keep that script's never-fail contract —
   no sourcing of anything that may be missing, and jq optional, because the badge is the half that

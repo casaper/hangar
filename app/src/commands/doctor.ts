@@ -68,7 +68,7 @@ import {
   wrongFleetGitConfig,
 } from '../git.ts';
 
-import { home, tildify } from '../user-paths.ts';
+import { home, themesDir, tildify } from '../user-paths.ts';
 import { planDirsIn } from '../plans.ts';
 import {
   isLinkedIntoStore,
@@ -263,6 +263,45 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
   // --- Claude Code settings ----------------------------------------------------------
   const settings = readSettings(clone);
   const wantTheme = `custom:${themeName(clone)}`;
+
+  /*
+   * Does the theme this clone NAMES actually resolve, and does its statusline command exist?
+   *
+   * The check below this one compares `theme` against the name the generator would produce,
+   * which correctly goes red after a rename. Neither of them used to assert that the target is
+   * on disk -- and that is the failure Claude Code SWALLOWS: an unresolvable theme silently
+   * falls back to the default, so the whole fleet goes identically coloured, which is the exact
+   * thing the colours exist to prevent, and it surfaces at the next session start rather than
+   * now. Same for a `statusLine.command` pointing at a path that is not there: the status line
+   * just stops.
+   *
+   * Read off the settings file rather than from the generator, so a hand-edited value is caught
+   * too. There is no repair: the file naming a missing artifact is a different problem from the
+   * artifact being absent, and `colours sync` is what writes artifacts.
+   */
+  const namedTheme = typeof settings?.theme === 'string' ? settings.theme : undefined;
+  const namedThemeFile =
+    namedTheme?.startsWith('custom:') === true
+      ? join(themesDir, `${namedTheme.slice('custom:'.length)}.json`)
+      : undefined;
+  const statusCommand = (settings?.['statusLine'] as { command?: unknown } | undefined)?.command;
+  const statusPath = typeof statusCommand === 'string' ? statusCommand.split(' ')[0] : undefined;
+  const unresolved = [
+    namedThemeFile !== undefined && !existsSync(namedThemeFile)
+      ? `theme ${namedTheme ?? ''} → ${tildify(namedThemeFile)}`
+      : undefined,
+    statusPath !== undefined && !existsSync(statusPath)
+      ? `statusLine → ${tildify(statusPath)}`
+      : undefined,
+  ].filter((x) => x !== undefined);
+  checks.push({
+    name: 'settings targets',
+    ok: unresolved.length === 0,
+    detail:
+      unresolved.length === 0
+        ? 'the theme and statusline it names are both on disk'
+        : `${unresolved.join('; ')} — Claude Code fails both SILENTLY; run \`hangar colours sync\``,
+  });
   const wantAllow = storybookHealthCheckAllow(clone);
   const themeOk = settings?.theme === wantTheme;
   const allowOk = settings?.permissions?.allow?.includes(wantAllow) === true;
@@ -526,7 +565,11 @@ const reportShellHook = (hangar: Hangar): void => {
       continue;
     }
     if (content.includes(hookName)) sourcing.push(rc);
-    for (const match of content.matchAll(/[^\s"'`]*dvb_gn[^\s"'`)]*/g)) {
+    // Any path-shaped token; the `startsWith(hangar.root)` filter below is what makes it this
+    // hangar's business. It used to match the literal `dvb_gn`, which made the comment above --
+    // that this catches a stale path "generically rather than by knowing any particular old
+    // name" -- false for every hangar but one.
+    for (const match of content.matchAll(/[^\s"'`]*\/[^\s"'`)]*/g)) {
       const named = match[0].replace(/^\$HOME/, home).replace(/^~/, home);
       if (!named.startsWith(hangar.root)) continue;
       if (named === hangar.root || existsSync(named)) continue;

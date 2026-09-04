@@ -51,3 +51,23 @@ back as the file's mtime so it survives.
 One consequence to expect: `/resume` on an older session will not find its plan file where it left
 it. Claude Code logs `Plan file missing during resume` and reconstructs the plan from the message
 history, so it degrades rather than breaks.
+
+## Two checks exist because Claude Code fails these silently
+
+`doctor` compares each clone's `theme` against the name the generator would produce, which goes
+red correctly after a rename. What it did NOT do until F6 is assert the target is on disk -- and
+that is the difference between a red row and no row at all. **Claude Code falls back to the
+default theme for a name it cannot resolve, and says nothing**, so a rename without a repair
+leaves the whole fleet identically coloured -- the exact failure the colours exist to prevent --
+and it surfaces at the next session start rather than when the rename happened. A
+`statusLine.command` pointing at a path that is not there behaves the same way: the status line
+just stops.
+
+So `settings targets` reads the `theme` and `statusLine.command` **out of the settings file**
+rather than from the generator, so a hand-edited value is caught too. It has **no repair**: a
+file naming a missing artifact is a different problem from the artifact being absent, and
+`colours sync` is what writes artifacts.
+
+This is also why renaming anything under `~/.claude` is a three-phase operation and not an edit:
+write the new names BESIDE the old, repair the settings that point at them, and only then delete
+the old ones -- each phase reversible on its own, and `settings targets` green throughout.

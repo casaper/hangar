@@ -44,11 +44,9 @@ export type HangarPaths = {
   /**
    * One statusline script for every clone; it derives the hue from its stdin payload.
    *
-   * Still named `dvb-clone-statusline.sh`, which is a hangar-specific name in a user-scoped
-   * directory and therefore wrong -- two hangars collide on it. F6 renames it, and it cannot be
-   * done here: every clone's `settings.local.json` points `statusLine.command` at the old name,
-   * Claude Code fails an unresolvable statusline silently, and the repair has to write the new
-   * name beside the old one before anything is rewritten to use it.
+   * Named with the hangar id, because it lives in `~/.claude` -- outside the hangar root, where
+   * a second hangar would otherwise overwrite it. That is the rule for everything here: what a
+   * hangar writes outside its own root carries its id; what it writes inside does not.
    */
   readonly statuslineScript: string;
 };
@@ -88,7 +86,7 @@ export type Hangar = {
  * F2 split out the half that needs no hangar, and this is the half that needs no `homedir()`
  * either. Two hangars can therefore be rendered side by side in one process.
  */
-export const pathsFor = (root: string, claudeDir: string): HangarPaths => {
+export const pathsFor = (root: string, id: string, claudeDir: string): HangarPaths => {
   const tmp = join(root, 'tmp');
   return Object.freeze({
     root,
@@ -101,6 +99,6 @@ export const pathsFor = (root: string, claudeDir: string): HangarPaths => {
     cloneColoursScript: join(root, 'clone-colours.sh'),
     terminalHookScript: join(root, 'clone-terminal.sh'),
     colourAssignmentsFile: join(root, 'colour-assignments.json'),
-    statuslineScript: join(claudeDir, 'dvb-clone-statusline.sh'),
+    statuslineScript: join(claudeDir, `${id}-clone-statusline.sh`),
   });
 };

@@ -183,7 +183,7 @@ export const claudeLocalMdContent = (clone: Clone): string => {
     'the others.',
     '',
     'Your colour is wired the same way as every other clone: the shared statusline script',
-    '`~/.claude/dvb-clone-statusline.sh` (it derives the hue from this directory) plus the theme',
+    `\`${tildify(clone.hangar.paths.statuslineScript)}\` (it derives the hue from this directory) plus the theme`,
     `\`~/.claude/themes/${themeName(clone)}.json\`, both selected in this clone's untracked`,
     '`.claude/settings.local.json`. The status line shows the colour in every permission mode; the',
     'input-box border only does in Manual mode, which is expected — see the shared memory',

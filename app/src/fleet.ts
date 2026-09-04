@@ -22,7 +22,22 @@ import { portsFor, type ClonePorts } from './ports.ts';
  * Two or more digits, so the fleet does not break at clone_10 the way the old
  * `clone_0[0-9]` globs did.
  */
-export const CLONE_DIR_RE = /^clone_(\d{2,})$/;
+export const CLONE_PREFIX = 'clone_';
+export const CLONE_PAD = 2;
+
+/**
+ * ONE derivation, and everything that spells a clone directory goes through it: this regexp,
+ * `cloneNameFor`, the sibling remote names, `status`'s `dir` row and the generated statusline's
+ * own pattern. A second regexp written by hand somewhere else is how a hangar ends up with two
+ * ideas of what its clones are called, and only one of them being configurable.
+ *
+ * `clones.prefix` and `clones.pad` are already declared in the schema and are not read yet;
+ * F5 replaces these two constants with those, and there is exactly one place to do it.
+ */
+export const CLONE_DIR_RE = new RegExp(`^${CLONE_PREFIX}(\\d{${String(CLONE_PAD)},})$`);
+
+/** The shell-glob equivalent, for the generated artifacts that match on a name rather than parse it. */
+export const cloneGlobPattern = (): string => `${CLONE_PREFIX}[0-9][0-9]*`;
 
 export type Clone = {
   readonly name: string;
@@ -42,7 +57,8 @@ export type Clone = {
   readonly hangar: Hangar;
 };
 
-export const cloneNameFor = (index: number): string => `clone_${String(index).padStart(2, '0')}`;
+export const cloneNameFor = (index: number): string =>
+  `${CLONE_PREFIX}${String(index).padStart(CLONE_PAD, '0')}`;
 
 const makeClone = (hangar: Hangar, index: number): Clone => ({
   name: cloneNameFor(index),

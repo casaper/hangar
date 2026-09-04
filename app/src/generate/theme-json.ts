@@ -5,7 +5,7 @@ import { themesDir } from '../user-paths.ts';
 import type { Artifact } from './index.ts';
 
 /**
- * `~/.claude/themes/dvb-clone-NN-<colour>.json` -- one per clone.
+ * `~/.claude/themes/<id>-clone-NN-<colour>.json` -- one per clone.
  *
  * JSON has no comment syntax and the theme file is parsed by Claude Code against its own
  * schema, so this is the one generated artifact WITHOUT a "do not edit" header: an unknown
@@ -13,10 +13,10 @@ import type { Artifact } from './index.ts';
  * like every other clone. `hangar doctor` is what catches a hand-edited theme instead.
  *
  * Only `theme` differs per clone in a clone's settings; the file name encodes the hue name
- * so the value in settings.local.json reads as `custom:dvb-clone-01-cyan`.
+ * so the value in settings.local.json reads as `custom:<id>-clone-01-cyan`.
  */
 export const themeName = (clone: Clone): string =>
-  `dvb-clone-${String(clone.index).padStart(2, '0')}-${clone.colour.name}`;
+  `${clone.hangar.id}-clone-${String(clone.index).padStart(2, '0')}-${clone.colour.name}`;
 
 export const themePath = (clone: Clone): string => join(themesDir, `${themeName(clone)}.json`);
 

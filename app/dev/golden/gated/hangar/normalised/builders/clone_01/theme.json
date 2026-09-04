@@ -1,0 +1,11 @@
+{
+  "name": "clone_01 (cyan)",
+  "base": "dark",
+  "overrides": {
+    "claude": "#00ccff",
+    "claudeShimmer": "#66e0ff",
+    "briefLabelClaude": "#00ccff",
+    "promptBorder": "#00a3cc",
+    "promptBorderShimmer": "#00ccff"
+  }
+}

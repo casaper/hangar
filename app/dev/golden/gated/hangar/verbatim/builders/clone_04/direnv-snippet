@@ -1,0 +1,3 @@
+(cd "/Users/someone/code/dvb_gn/clone_04" && direnv allow .)
+(cd "/Users/someone/code/dvb_gn/clone_04/angular" && direnv allow .)
+(cd "/Users/someone/code/dvb_gn/clone_04/tests/playwright-regression-tests" && direnv allow .)

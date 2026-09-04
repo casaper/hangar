@@ -1,0 +1,47 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(curl -s -o /dev/null --max-time 3 http://localhost:9999)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" --max-time 3 http://localhost:6106)"
+    ],
+    "deny": [
+      "Read(./.env)"
+    ]
+  },
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/someone/code/dvb_gn/bin/hangar --hangar /Users/someone/code/dvb_gn plans collect --quiet",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/someone/code/dvb_gn/bin/hangar --hangar /Users/someone/code/dvb_gn tmp merge --quiet",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/someone/code/dvb_gn/bin/hangar --hangar /Users/someone/code/dvb_gn jira hook",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  },
+  "theme": "custom:dvb_gn-clone-02-yellow"
+}

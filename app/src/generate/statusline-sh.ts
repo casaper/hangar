@@ -1,9 +1,10 @@
 import type { Hangar } from '../hangar.ts';
-import type { Clone } from '../fleet.ts';
+import { cloneGlobPattern, type Clone } from '../fleet.ts';
+import { tildify } from '../user-paths.ts';
 import { type Artifact, artifactHeader } from './index.ts';
 
 /**
- * `~/.claude/dvb-clone-statusline.sh` -- ONE script for every clone.
+ * `~/.claude/<id>-clone-statusline.sh` -- ONE script for every clone in one hangar.
  *
  * It stays self-contained bash on purpose. It runs on every status-line render, so a node
  * process here would be felt, and its own contract is that it must never fail: no sourcing
@@ -34,7 +35,7 @@ export const statuslineArtifact = (hangar: Hangar, clones: readonly Clone[]): Ar
     '#!/usr/bin/env bash',
     artifactHeader(
       hangar,
-      'Status line for the storefront_ui clone fleet (~/code/dvb_gn/clone_NN).',
+      `Status line for the ${hangar.id} hangar's clones (${tildify(hangar.root)}/${cloneGlobPattern()}).`,
     ),
     '#',
     '# ONE script for all clones: the colour is derived from the clone directory in the stdin',
@@ -56,7 +57,7 @@ export const statuslineArtifact = (hangar: Hangar, clones: readonly Clone[]): Ar
     '# a session started in clone_01/angular/ must still report clone_01. Two or more',
     '# digits, so this keeps working past clone_09.',
     `FLEET='${hangar.root}'`,
-    `clone="$(printf '%s' "$dir" | sed -n "s|^\${FLEET}/\\(clone_[0-9][0-9]*\\).*|\\1|p")"`,
+    `clone="$(printf '%s' "$dir" | sed -n "s|^\${FLEET}/\\(${cloneGlobPattern()}\\).*|\\1|p")"`,
     '[ -n "$clone" ] || clone="$(basename "$dir")"',
     '',
     '# Same triples as the theme files: main / dim.',

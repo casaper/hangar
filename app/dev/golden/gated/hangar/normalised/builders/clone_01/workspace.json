@@ -1,0 +1,11 @@
+{
+  "settings": {
+    "yaml.maxItemsComputed": 25000
+  },
+  "folders": [
+    {
+      "name": "1: dvb_gn",
+      "path": "%HANGAR%/clone_01"
+    }
+  ]
+}
