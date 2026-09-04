@@ -1,5 +1,5 @@
+import type { Hangar } from '../hangar.ts';
 import type { Clone } from '../fleet.ts';
-import { fleetRoot, statuslineScript } from '../paths.ts';
 import { type Artifact, artifactHeader } from './index.ts';
 
 /**
@@ -14,7 +14,7 @@ import { type Artifact, artifactHeader } from './index.ts';
  * derives it from the directory it is invoked in, and the table below is generated from the
  * same `src/palette.ts` as the themes and `clone-colours.sh`, so the three cannot drift.
  */
-export const statuslineArtifact = (clones: readonly Clone[]): Artifact => {
+export const statuslineArtifact = (hangar: Hangar, clones: readonly Clone[]): Artifact => {
   const labelWidth = Math.max(3, ...clones.map((c) => c.name.length + 2));
   // Pad AFTER the semicolon, not before it, so the assignments line up the way a human
   // would have typed them.
@@ -32,7 +32,10 @@ export const statuslineArtifact = (clones: readonly Clone[]): Artifact => {
 
   const content = [
     '#!/usr/bin/env bash',
-    artifactHeader('Status line for the storefront_ui clone fleet (~/code/dvb_gn/clone_NN).'),
+    artifactHeader(
+      hangar,
+      'Status line for the storefront_ui clone fleet (~/code/dvb_gn/clone_NN).',
+    ),
     '#',
     '# ONE script for all clones: the colour is derived from the clone directory in the stdin',
     '# payload, never from an argument, so every clone runs identical code and only the hue',
@@ -52,7 +55,7 @@ export const statuslineArtifact = (clones: readonly Clone[]): Artifact => {
     '# The clone is the path segment under the fleet root, not basename($dir) --',
     '# a session started in clone_01/angular/ must still report clone_01. Two or more',
     '# digits, so this keeps working past clone_09.',
-    `FLEET='${fleetRoot}'`,
+    `FLEET='${hangar.root}'`,
     `clone="$(printf '%s' "$dir" | sed -n "s|^\${FLEET}/\\(clone_[0-9][0-9]*\\).*|\\1|p")"`,
     '[ -n "$clone" ] || clone="$(basename "$dir")"',
     '',
@@ -77,7 +80,7 @@ export const statuslineArtifact = (clones: readonly Clone[]): Artifact => {
   ].join('\n');
 
   return {
-    path: statuslineScript,
+    path: hangar.paths.statuslineScript,
     content,
     mode: 0o755,
     what: 'shared Claude Code status line (derives its hue from the clone directory)',

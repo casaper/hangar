@@ -6,6 +6,7 @@ import { claudeSessionsIn } from '../procs.ts';
 import { tildify } from '../user-paths.ts';
 import { blank, heading, note, ok, step, warn } from '../ui.ts';
 import { confirm } from '../ui.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar teach-rg <clone>` -- have Claude Code teach itself to reach for `rg` over `grep`
@@ -54,8 +55,8 @@ export type TeachRgOptions = {
   readonly yes?: boolean | undefined;
 };
 
-export const teachRg = (ref: string, opts: TeachRgOptions): void => {
-  const clone = requireClone(ref);
+export const teachRg = (hangar: Hangar, ref: string, opts: TeachRgOptions): void => {
+  const clone = requireClone(hangar, ref);
 
   heading(`teach-rg — ${clone.name}`);
   note(`working directory ${tildify(clone.path)}`);

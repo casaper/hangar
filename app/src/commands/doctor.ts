@@ -26,9 +26,9 @@ import {
   envLocalPath,
   envrcPrivateContent,
   envrcPrivatePath,
-  EXCLUDE_BLOCK,
+  excludeBlock,
   EXCLUDE_LINES,
-  FLEET_BIN_PATH_LINE,
+  fleetBinPathLine,
   excludePath,
   missingExcludeLines,
   playwrightEnvLocalPath,
@@ -67,7 +67,7 @@ import {
   setFleetGitConfig,
   wrongFleetGitConfig,
 } from '../git.ts';
-import { envShared, fleetPlans, fleetRoot, fleetTmp, terminalHookScript } from '../paths.ts';
+
 import { home, tildify } from '../user-paths.ts';
 import { planDirsIn } from '../plans.ts';
 import {
@@ -80,6 +80,7 @@ import { paletteEntry } from '../palette.ts';
 import { PORT_ROLES, PORT_ROLE_ORDER } from '../ports.ts';
 import { terminal, type TerminalCapabilities } from '../terminal/index.ts';
 import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar doctor` -- the regression net for everything `add-clone` sets up.
@@ -135,14 +136,14 @@ const writeFile = (path: string, content: string): void => {
  * normal case for a fresh clone, which is exactly when it would go unnoticed.
  */
 const addHook =
-  (clone: Clone, add: (settings: SettingsJson) => SettingsJson): (() => void) =>
+  (hangar: Hangar, clone: Clone, add: (settings: SettingsJson) => SettingsJson): (() => void) =>
   () => {
     const current = readSettings(clone);
     if (current === undefined) return;
     writeFile(settingsPath(clone), `${JSON.stringify(add(current), null, 2)}\n`);
   };
 
-const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
+const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Check[] => {
   const checks: Check[] = [];
 
   checks.push({
@@ -180,13 +181,13 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
   const loadsShared = envrc.includes('.env.shared') && !envrc.includes('"../.env.shared"');
   // The clone never inherits the fleet root's PATH_add -- direnv loads the nearest .envrc
   // only -- so without this line `hangar` is not callable from inside the clone.
-  const hasFleetBin = envrc.split('\n').some((l) => l.trim() === FLEET_BIN_PATH_LINE());
+  const hasFleetBin = envrc.split('\n').some((l) => l.trim() === fleetBinPathLine(hangar));
   checks.push({
     name: '.envrc.private',
     ok: loadsShared && hasFleetBin,
     detail:
       loadsShared && hasFleetBin
-        ? `loads ${tildify(envShared)}, puts the fleet bin/ on PATH`
+        ? `loads ${tildify(hangar.paths.envShared)}, puts the fleet bin/ on PATH`
         : [
             loadsShared ? undefined : 'missing, or does not load .env.shared by absolute path',
             hasFleetBin ? undefined : 'does not put the fleet bin/ on PATH (no hangar here)',
@@ -194,7 +195,7 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
             .filter((x) => x !== undefined)
             .join('; '),
     repair: () => {
-      writeFile(envrcPrivatePath(clone), envrcPrivateContent());
+      writeFile(envrcPrivatePath(clone), envrcPrivateContent(hangar));
     },
   });
 
@@ -202,13 +203,13 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
   // compare resolved paths rather than the raw target.
   const pwPath = playwrightEnvLocalPath(clone);
   const pwTarget = symlinkTarget(pwPath);
-  const pwResolves = pwTarget !== undefined && resolveLink(pwPath) === envShared;
+  const pwResolves = pwTarget !== undefined && resolveLink(pwPath) === hangar.paths.envShared;
   checks.push({
     name: 'playwright .env.local',
     ok: pwResolves,
     detail: pwResolves
-      ? `symlink -> ${tildify(envShared)}`
-      : `expected a symlink resolving to ${tildify(envShared)}, found ${pwTarget ?? 'no symlink'} — the tracked .env sets USER_READWRITE_PASSWORD empty and would win without it`,
+      ? `symlink -> ${tildify(hangar.paths.envShared)}`
+      : `expected a symlink resolving to ${tildify(hangar.paths.envShared)}, found ${pwTarget ?? 'no symlink'} — the tracked .env sets USER_READWRITE_PASSWORD empty and would win without it`,
     repair: existsSync(dirname(pwPath))
       ? () => {
           if (existsSync(pwPath) || pwTarget !== undefined) {
@@ -217,7 +218,7 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
               'Inspect and remove it by hand, then re-run `hangar doctor --fix`.',
             );
           }
-          symlinkSync(relative(dirname(pwPath), envShared), pwPath);
+          symlinkSync(relative(dirname(pwPath), hangar.paths.envShared), pwPath);
         }
       : undefined,
   });
@@ -255,7 +256,7 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
       ? `hides ${EXCLUDE_LINES.join(', ')}`
       : `missing ${missingExcludes.join(', ')} — untracked noise that eventually gets committed`,
     repair: () => {
-      writeFile(excludePath(clone), exclude + EXCLUDE_BLOCK);
+      writeFile(excludePath(clone), exclude + excludeBlock(hangar));
     },
   });
 
@@ -313,34 +314,37 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
         : undefined,
   });
 
-  const hookOk = hasPlansHook(settings);
+  const hookOk = hasPlansHook(hangar, settings);
   checks.push({
     name: 'plans SessionEnd hook',
     ok: hookOk,
     detail: hookOk
       ? "collects this clone's finished plans into the shared archive"
       : 'missing — a finished plan stays in this clone until `hangar plans collect` is run by hand',
-    repair: settings === undefined ? undefined : addHook(clone, withPlansHook),
+    repair:
+      settings === undefined ? undefined : addHook(hangar, clone, (s) => withPlansHook(hangar, s)),
   });
 
-  const jiraOk = hasJiraHook(settings);
+  const jiraOk = hasJiraHook(hangar, settings);
   checks.push({
     name: 'jira record hook',
     ok: jiraOk,
     detail: jiraOk
       ? 'a ticket fetched in the last hour is served from the shared record store, not re-fetched'
       : 'missing — every `jira-ticket-sync` run re-fetches the ticket and its whole neighbourhood',
-    repair: settings === undefined ? undefined : addHook(clone, withJiraHook),
+    repair:
+      settings === undefined ? undefined : addHook(hangar, clone, (s) => withJiraHook(hangar, s)),
   });
 
-  const tmpHookOk = hasTmpHook(settings);
+  const tmpHookOk = hasTmpHook(hangar, settings);
   checks.push({
     name: 'tmp SessionEnd hook',
     ok: tmpHookOk,
     detail: tmpHookOk
       ? "folds this clone's new Jira cache entries into the shared record store at session end"
       : 'missing — a ticket first fetched here reaches the siblings only when `hangar tmp merge` is run by hand',
-    repair: settings === undefined ? undefined : addHook(clone, withTmpHook),
+    repair:
+      settings === undefined ? undefined : addHook(hangar, clone, (s) => withTmpHook(hangar, s)),
   });
 
   const strayPlanDirs = planDirsIn(clone).filter(
@@ -417,13 +421,13 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
   // ticket fetched here reaches the others at the next `tmp merge`, which is inherent to
   // linking per entry, and a check that is red in normal operation is a check nobody reads.
   const ownTmp = tmpIsOwnDirectory(clone);
-  const linked = storeEntries().filter((name) => isLinkedIntoStore(clone, name)).length;
+  const linked = storeEntries(hangar).filter((name) => isLinkedIntoStore(clone, name)).length;
   checks.push({
     name: 'tmp/ is its own',
     ok: ownTmp,
     detail: ownTmp
-      ? `a real directory; ${String(linked)} of ${String(storeEntries().length)} shared entries linked into it`
-      : `a symlink to ${tildify(fleetTmp)} — its PID files are the whole fleet's; run \`hangar tmp merge\``,
+      ? `a real directory; ${String(linked)} of ${String(storeEntries(hangar).length)} shared entries linked into it`
+      : `a symlink to ${tildify(hangar.paths.tmp)} — its PID files are the whole fleet's; run \`hangar tmp merge\``,
   });
 
   // Both copies: VS Code only offers a `*.code-workspace` from the directory you opened, and
@@ -464,12 +468,12 @@ const checksFor = (clone: Clone, siblings: readonly Clone[]): Check[] => {
 
   // An assignment naming a hue that is not in the palette: `colourFor` falls back to the
   // formula, so the file looks edited and changes nothing. A hand-edit typo, always.
-  const assigned = colourAssignmentFor(clone.index);
+  const assigned = colourAssignmentFor(hangar, clone.index);
   if (assigned !== undefined && paletteEntry(assigned) === undefined) {
     checks.push({
       name: 'colour assignment',
       ok: false,
-      detail: `${colourAssignmentsLabel()} assigns "${assigned}" to index ${String(clone.index)}, which is not a palette colour — it is being ignored, ${clone.colour.name} comes from the index formula`,
+      detail: `${colourAssignmentsLabel(hangar)} assigns "${assigned}" to index ${String(clone.index)}, which is not a palette colour — it is being ignored, ${clone.colour.name} comes from the index formula`,
     });
   }
 
@@ -506,8 +510,8 @@ const SHELL_RC_FILES = ['.zshrc', '.zprofile', '.bashrc', '.bash_profile', '.pro
  * anywhere to say why. So every path under this hangar's root that an rc mentions is checked for
  * existence, which catches that case generically rather than by knowing any particular old name.
  */
-const reportShellHook = (): void => {
-  const hookName = basename(terminalHookScript);
+const reportShellHook = (hangar: Hangar): void => {
+  const hookName = basename(hangar.paths.terminalHookScript);
   const sourcing: string[] = [];
   // A set: the idiomatic guard names the same path twice on one line (`[ -r X ] && . X`), and
   // reporting it twice would read as two separate problems.
@@ -524,8 +528,8 @@ const reportShellHook = (): void => {
     if (content.includes(hookName)) sourcing.push(rc);
     for (const match of content.matchAll(/[^\s"'`]*dvb_gn[^\s"'`)]*/g)) {
       const named = match[0].replace(/^\$HOME/, home).replace(/^~/, home);
-      if (!named.startsWith(fleetRoot)) continue;
-      if (named === fleetRoot || existsSync(named)) continue;
+      if (!named.startsWith(hangar.root)) continue;
+      if (named === hangar.root || existsSync(named)) continue;
       stale.add(`${rc} → ${tildify(named)}`);
     }
   }
@@ -538,9 +542,9 @@ const reportShellHook = (): void => {
     warn(`no shell rc sources ${hookName}, so no shell colours itself per clone`);
     // `$HOME`, not `~`: a tilde inside double quotes is not expanded, so the `~/…` form
     // `tildify` produces would be a line that silently never matches.
-    const quotable = terminalHookScript.startsWith(home)
-      ? `$HOME${terminalHookScript.slice(home.length)}`
-      : terminalHookScript;
+    const quotable = hangar.paths.terminalHookScript.startsWith(home)
+      ? `$HOME${hangar.paths.terminalHookScript.slice(home.length)}`
+      : hangar.paths.terminalHookScript;
     note(`Add to ~/.zshrc (or ~/.bashrc):  [ -r "${quotable}" ] && . "${quotable}"`);
   } else {
     ok(`${'terminal hook'.padEnd(22)} ${pc.dim(`sourced from ${sourcing.join(', ')}`)}`);
@@ -624,22 +628,22 @@ const reportDefaultBranch = (recorded: string | undefined, clones: readonly Clon
   );
 };
 
-export const doctor = (ref: string | undefined, opts: DoctorOptions): void => {
-  const all = discoverClones();
-  if (!existsSync(fleetPlans)) {
-    warn(`the shared plan archive ${tildify(fleetPlans)} does not exist yet`);
+export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOptions): void => {
+  const all = discoverClones(hangar);
+  if (!existsSync(hangar.paths.plans)) {
+    warn(`the shared plan archive ${tildify(hangar.paths.plans)} does not exist yet`);
     note("`hangar plans collect` creates it and gathers the clones' plans into it.");
   }
   // Assignments left behind by a clone that no longer exists. Harmless until `add-clone`
-  // reuses the index -- `nextFreeIndex()` fills gaps -- and then it silently hands a brand-new
+  // reuses the index -- `nextFreeIndex(hangar)` fills gaps -- and then it silently hands a brand-new
   // clone the old one's hue. `add-clone` and `remove-clone` both drop it; this catches a
   // directory removed by hand.
-  const orphans = [...colourAssignments().keys()].filter(
+  const orphans = [...colourAssignments(hangar).keys()].filter(
     (index) => !all.some((clone) => clone.index === index),
   );
   if (orphans.length > 0) {
     warn(
-      `${colourAssignmentsLabel()} assigns a colour to ${orphans
+      `${colourAssignmentsLabel(hangar)} assigns a colour to ${orphans
         .map((index) => `index ${String(index)}`)
         .join(', ')}, which no clone has`,
     );
@@ -651,12 +655,12 @@ export const doctor = (ref: string | undefined, opts: DoctorOptions): void => {
    * newer than the file on disk means the editor is validating against yesterday's rules --
    * and unlike a stale theme, nothing about that is visible while you type.
    */
-  const configPath = join(fleetRoot, CONFIG_FILENAME);
+  const configPath = join(hangar.root, CONFIG_FILENAME);
   if (!existsSync(configPath)) {
-    warn(`no ${CONFIG_FILENAME} in ${tildify(fleetRoot)}`);
+    warn(`no ${CONFIG_FILENAME} in ${tildify(hangar.root)}`);
     note('`hangar setup` writes one, deriving what it can from the clones that already exist.');
   } else {
-    const schemaPath = join(fleetRoot, jsonSchemaFileName);
+    const schemaPath = join(hangar.root, jsonSchemaFileName);
     const rendered = configJsonSchemaText();
     if (!existsSync(schemaPath)) {
       warn(`${tildify(schemaPath)} is missing, so editors cannot validate the config`);
@@ -673,7 +677,7 @@ export const doctor = (ref: string | undefined, opts: DoctorOptions): void => {
     }
   }
 
-  const nested = containingHangars(fleetRoot);
+  const nested = containingHangars(hangar.root);
   if (nested.length > 0) {
     // Nearest-wins makes this WORK, but it is never intentional: every path below the inner
     // root has two defensible answers to "which hangar am I in".
@@ -689,7 +693,7 @@ export const doctor = (ref: string | undefined, opts: DoctorOptions): void => {
    * a detected driver with no `type` capability silently changes what `sync` can do, and a hook
    * nobody sources is a colour scheme that quietly does not exist.
    */
-  const { driver, source } = terminal();
+  const { driver, source } = terminal(hangar);
   const can = CAPABILITY_LABELS.filter(([key]) => driver.capabilities[key]).map(
     ([, label]) => label,
   );
@@ -702,7 +706,7 @@ export const doctor = (ref: string | undefined, opts: DoctorOptions): void => {
       note(`${driver.label} cannot be typed into, so \`hangar sync\` cannot pause a live session.`);
     }
   }
-  reportShellHook();
+  reportShellHook(hangar);
 
   /*
    * The editors, and whether each one can actually be launched.
@@ -712,7 +716,7 @@ export const doctor = (ref: string | undefined, opts: DoctorOptions): void => {
    * was never installed into PATH, and a JetBrains Toolbox that generated no shell scripts, both
    * mean `hangar open` silently opens no editor at all.
    */
-  const editorChoice = editors();
+  const editorChoice = editors(hangar);
   for (const bad of editorChoice.broken) {
     warn(`the ${bad.kind} editor driver would not build: ${bad.reason}`);
     note('`hangar open` skips it and still opens the others.');
@@ -729,20 +733,20 @@ export const doctor = (ref: string | undefined, opts: DoctorOptions): void => {
     }
   }
 
-  const strays = strayPidFilesInStore();
+  const strays = strayPidFilesInStore(hangar);
   if (strays.length > 0) {
-    warn(`PID files in ${tildify(fleetTmp)}: ${strays.join(', ')}`);
+    warn(`PID files in ${tildify(hangar.paths.tmp)}: ${strays.join(', ')}`);
     note(
       'The store holds shared cache only; PID files are never moved into it. These were written ' +
         'by a clone whose whole tmp/ was the store, and they belong to no clone in particular.',
     );
   }
-  const targets = opts.all === true || ref === undefined ? all : [requireClone(ref)];
+  const targets = opts.all === true || ref === undefined ? all : [requireClone(hangar, ref)];
   let problems = 0;
 
   for (const clone of targets) {
     heading(cloneLabel(clone));
-    for (const check of checksFor(clone, all)) {
+    for (const check of checksFor(hangar, clone, all)) {
       if (check.ok) {
         ok(`${check.name.padEnd(22)} ${pc.dim(check.detail)}`);
         continue;

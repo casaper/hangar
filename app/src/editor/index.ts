@@ -1,8 +1,4 @@
-import { join } from 'node:path';
-
-import { CONFIG_FILENAME, loadConfigFile } from '../config/load.ts';
-import { editorSchema } from '../config/schema.ts';
-import { fleetRoot } from '../paths.ts';
+import type { editorSchema } from '../config/schema.ts';
 import { emacsDriver } from './emacs.ts';
 import { jetbrainsDriver } from './jetbrains.ts';
 import { isVscodeFork, type EditorKind } from './kinds.ts';
@@ -11,6 +7,7 @@ import type { EditorDriver } from './types.ts';
 import { vimDriver } from './vim.ts';
 import { vscodeDriver } from './vscode.ts';
 import { zedDriver } from './zed.ts';
+import type { Hangar } from '../hangar.ts';
 
 export * from './kinds.ts';
 export * from './types.ts';
@@ -61,8 +58,8 @@ export type EditorSelection = {
  * because only the default editor has to work, and it must not be a bystander to another one's
  * failure. `doctor` is what reports both.
  */
-export const editors = (): EditorSelection => {
-  const { editor, fellBack } = editorConfig();
+export const editors = (hangar: Hangar): EditorSelection => {
+  const { editor, fellBack } = editorConfig(hangar);
   const drivers: EditorDriver[] = [];
   const broken: BrokenEditor[] = [];
   for (const kind of editor.kinds) {
@@ -94,25 +91,31 @@ export const editors = (): EditorSelection => {
  * would otherwise be told to add zed to `editor.kinds` -- which it is already in, in a file
  * nothing here managed to read.
  */
-export const editorFor = (kind: EditorKind): { driver?: EditorDriver; fellBack: boolean } => {
-  const { editor, fellBack } = editorConfig();
+export const editorFor = (
+  hangar: Hangar,
+  kind: EditorKind,
+): { driver?: EditorDriver; fellBack: boolean } => {
+  const { editor, fellBack } = editorConfig(hangar);
   if (!editor.kinds.includes(kind)) return { fellBack };
   return { driver: driverFor(kind, editor), fellBack };
 };
 
 type EditorConfig = ReturnType<typeof editorSchema.parse>;
 
-const editorConfig = (): { editor: EditorConfig; fellBack: boolean } => {
-  try {
-    return { editor: loadConfigFile(join(fleetRoot, CONFIG_FILENAME)).editor, fellBack: false };
-  } catch {
-    // Only an UNPARSEABLE config reaches here: an absent one is refused by the gate in `cli.ts`,
-    // because a hangar is its marker file. A YAML typo elsewhere in the file must still not stop
-    // `open` from opening an editor -- but the caller is told, because the default it gets
-    // instead is not inert.
-    return { editor: editorSchema.parse({}), fellBack: true };
-  }
-};
+/**
+ * This hangar's editor configuration, and whether it is the developer's or the schema's.
+ *
+ * `fellBack` is no longer decided here. It used to be one of four independent `catch` blocks
+ * that each swallowed an unparseable config and continued on its own subtree's defaults; now the
+ * resolver in `config/load.ts` decides once and `Hangar.configFellBack` carries it. The meaning
+ * is unchanged and still worth telling the caller about, because the default here is NOT inert:
+ * `kinds: ['vscode']` means a hangar that configured `kinds: ['zed']` and then broke an
+ * unrelated line of YAML gets VS Code opened at it with no hint as to why.
+ */
+const editorConfig = (hangar: Hangar): { editor: EditorConfig; fellBack: boolean } => ({
+  editor: hangar.config.editor,
+  fellBack: hangar.configFellBack,
+});
 
 const driverFor = (kind: EditorKind, editor: EditorConfig): EditorDriver => {
   // The whole VS Code family shares one driver, differing only in launcher and state directory.

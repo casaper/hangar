@@ -98,7 +98,7 @@ export const inferTicket = (
 
   // The non-throwing, non-networking form on purpose: this function's contract is that "no
   // ticket" is a normal answer, and it is reachable from paths that must not fail.
-  const defaultBranch = tryDefaultBranch();
+  const defaultBranch = tryDefaultBranch(clone.hangar);
   if (defaultBranch === undefined) return undefined;
   const base = gitTry(clone.path, ['merge-base', `origin/${defaultBranch}`, 'HEAD']);
   if (base === undefined) return undefined;

@@ -13,7 +13,7 @@ import { basename, join } from 'node:path';
 import pc from 'picocolors';
 
 import { adoptInto, type AdoptAction } from '../adopt.ts';
-import { excludePath, EXCLUDE_BLOCK, missingExcludeLines } from '../clone-config.ts';
+import { excludePath, excludeBlock, missingExcludeLines } from '../clone-config.ts';
 import {
   duplicateSets,
   hardLinkDuplicates,
@@ -31,7 +31,7 @@ import {
 } from '../jira-records.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, type Clone } from '../fleet.ts';
-import { fleetTmp, jiraTicketsDir } from '../paths.ts';
+
 import { tildify } from '../user-paths.ts';
 import {
   cloneTmpPath,
@@ -54,6 +54,7 @@ import {
   warn,
   warnTransient,
 } from '../ui.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar tmp merge` -- put every clone's shareable `tmp/` content in one place.
@@ -89,11 +90,12 @@ const bump = (counts: Counts, kind: string): void => {
   counts.set(kind, (counts.get(kind) ?? 0) + 1);
 };
 
-const isInside = (child: string, parent: string): boolean =>
+const isInside = (hangar: Hangar, child: string, parent: string): boolean =>
   child === parent || child.startsWith(`${parent}/`);
 
 /** A link this fleet maintains: one that points into the shared store. */
-const isOurLink = (target: string): boolean => isInside(target, fleetTmp);
+const isOurLink = (hangar: Hangar, target: string): boolean =>
+  isInside(hangar, target, hangar.paths.tmp);
 
 /**
  * Pass 1: undo the whole-directory symlink an earlier version of this command created.
@@ -127,7 +129,12 @@ const report = (actions: readonly AdoptAction[], counts: Counts): void => {
  * Returns the entry names it contributed, so a DRY RUN can still say what would be linked
  * back -- on a real run the store is simply read again.
  */
-const adoptCloneEntries = (clone: Clone, dryRun: boolean, counts: Counts): string[] => {
+const adoptCloneEntries = (
+  hangar: Hangar,
+  clone: Clone,
+  dryRun: boolean,
+  counts: Counts,
+): string[] => {
   const tmp = cloneTmpPath(clone);
   const contributed: string[] = [];
   for (const entry of readdirSync(tmp)) {
@@ -148,7 +155,7 @@ const adoptCloneEntries = (clone: Clone, dryRun: boolean, counts: Counts): strin
       // Already exactly the link pass 2b would make: left alone, so a re-run does not delete
       // and recreate every link in the fleet -- which churns them for nothing and leaves a
       // window where a session looking for its ticket cache finds none.
-      if (target === join(fleetTmp, entry)) {
+      if (target === join(hangar.paths.tmp, entry)) {
         // Unless what it points at is gone. Deleting a store entry -- reviewing a
         // `.from-clone_NN` conflict copy, throwing away a note that has served its purpose --
         // otherwise leaves this link dangling in every clone for ever, since pass 2b only ever
@@ -158,12 +165,12 @@ const adoptCloneEntries = (clone: Clone, dryRun: boolean, counts: Counts): strin
         if (!dryRun) rmSync(path);
         continue;
       }
-      if (!isOurLink(target)) warn(`${entry}: symlink to ${tildify(target)} — left alone`);
+      if (!isOurLink(hangar, target)) warn(`${entry}: symlink to ${tildify(target)} — left alone`);
       else if (!dryRun) rmSync(path);
       continue;
     }
 
-    report(adoptInto(path, fleetTmp, { label: clone.name, dryRun }), counts);
+    report(adoptInto(path, hangar.paths.tmp, { label: clone.name, dryRun }), counts);
     contributed.push(entry);
   }
   return contributed;
@@ -185,6 +192,7 @@ type LinkOptions = {
 };
 
 const linkStoreEntries = (
+  hangar: Hangar,
   clone: Clone,
   entries: readonly string[],
   { movedAway, tmpWillBeEmpty, dryRun }: LinkOptions,
@@ -194,7 +202,7 @@ const linkStoreEntries = (
   let already = 0;
   for (const name of entries) {
     const path = join(tmp, name);
-    const wanted = join(fleetTmp, name);
+    const wanted = join(hangar.paths.tmp, name);
     const target = linkTargetOf(path);
     if (target === wanted) {
       already += 1;
@@ -231,15 +239,15 @@ const linkStoreEntries = (
  * A throw prints what was held regardless -- a swallowed narration is exactly the context
  * needed to read the error.
  */
-export const tmpMerge = (opts: TmpMergeOptions): void => {
+export const tmpMerge = (hangar: Hangar, opts: TmpMergeOptions): void => {
   const dryRun = opts.dryRun === true;
   if (opts.quiet !== true) {
-    runMerge(dryRun);
+    runMerge(hangar, dryRun);
     return;
   }
   captureOutput();
   try {
-    runMerge(dryRun);
+    runMerge(hangar, dryRun);
   } catch (error) {
     releaseCapture(true);
     throw error;
@@ -247,21 +255,23 @@ export const tmpMerge = (opts: TmpMergeOptions): void => {
   releaseCapture(capturedProblems() > 0);
 };
 
-const runMerge = (dryRun: boolean): void => {
-  const clones = discoverClones();
+const runMerge = (hangar: Hangar, dryRun: boolean): void => {
+  const clones = discoverClones(hangar);
   if (clones.length === 0) throw new CliError('no clones found');
 
   heading(
-    `Sharing every clone's tmp/ cache through ${tildify(fleetTmp)}${dryRun ? pc.dim(' (dry run)') : ''}`,
+    `Sharing every clone's tmp/ cache through ${tildify(hangar.paths.tmp)}${dryRun ? pc.dim(' (dry run)') : ''}`,
   );
   note('PID files stay in the clone that wrote them — they are never moved, linked or read.');
-  if (!dryRun) mkdirSync(fleetTmp, { recursive: true });
+  if (!dryRun) mkdirSync(hangar.paths.tmp, { recursive: true });
 
   const counts: Counts = new Map();
   // What the store will hold: what it holds now, plus everything the passes below move into
   // it. Tracked as a set so a dry run -- which moves nothing -- can still say what would be
   // linked back into each clone.
-  const projected = new Set<string>(existsSync(fleetTmp) ? readdirSync(fleetTmp) : []);
+  const projected = new Set<string>(
+    existsSync(hangar.paths.tmp) ? readdirSync(hangar.paths.tmp) : [],
+  );
 
   // Every clone contributes BEFORE any clone is linked. One pass per clone would link the
   // first clone before the second had contributed, so a `<name>.from-clone_02` conflict copy
@@ -283,7 +293,7 @@ const runMerge = (dryRun: boolean): void => {
     if (!existsSync(tmp) && !dryRun) mkdirSync(tmp, { recursive: true });
     const mine = new Set<string>();
     if (!restored && existsSync(tmp)) {
-      for (const entry of adoptCloneEntries(clone, dryRun, counts)) {
+      for (const entry of adoptCloneEntries(hangar, clone, dryRun, counts)) {
         mine.add(entry);
         projected.add(entry);
         contributors.set(entry, [...(contributors.get(entry) ?? []), clone.name]);
@@ -305,12 +315,15 @@ const runMerge = (dryRun: boolean): void => {
     }
   }
 
-  const entries = shareableStoreEntries(dryRun ? [...projected] : readdirSync(fleetTmp));
+  const entries = shareableStoreEntries(
+    hangar,
+    dryRun ? [...projected] : readdirSync(hangar.paths.tmp),
+  );
   heading(
     `${String(entries.length)} shared ${entries.length === 1 ? 'entry' : 'entries'} → a symlink in every clone's own tmp/`,
   );
   for (const clone of clones) {
-    const { linked, already } = linkStoreEntries(clone, entries, {
+    const { linked, already } = linkStoreEntries(hangar, clone, entries, {
       movedAway: contributed.get(clone.name) ?? new Set<string>(),
       tmpWillBeEmpty: restoredTmp.has(clone.name),
       dryRun,
@@ -322,11 +335,11 @@ const runMerge = (dryRun: boolean): void => {
       .filter((part) => part !== undefined)
       .join(', ');
     ok(`${cloneLabel(clone)} ${detail === '' ? pc.dim('nothing to link') : detail}`);
-    excludeCloneLocalMd(clone, dryRun);
+    excludeCloneLocalMd(hangar, clone, dryRun);
   }
 
-  syncJiraStore(dryRun);
-  dedupeStore(dryRun);
+  syncJiraStore(hangar, dryRun);
+  dedupeStore(hangar, dryRun);
 
   // --- report ------------------------------------------------------------------------
   blank();
@@ -342,16 +355,16 @@ const runMerge = (dryRun: boolean): void => {
     );
   }
 
-  const strays = strayPidFilesInStore();
+  const strays = strayPidFilesInStore(hangar);
   if (strays.length > 0) {
-    warn(`pid files in ${tildify(fleetTmp)}: ${strays.join(', ')}`);
+    warn(`pid files in ${tildify(hangar.paths.tmp)}: ${strays.join(', ')}`);
     note('Never put there by this command — a clone whose whole tmp/ was the store wrote them.');
   }
 };
 
 const MAX_LISTED = 8;
 
-const kb = (bytes: number): string =>
+const kb = (hangar: Hangar, bytes: number): string =>
   bytes >= 1024 * 1024
     ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
     : `${String(Math.max(1, Math.round(bytes / 1024)))} KB`;
@@ -365,13 +378,13 @@ const kb = (bytes: number): string =>
  * first kind can be hard-linked; `dedupe.ts` has why the second kind must not be, and why
  * `jdupes` does the content matching.
  */
-const dedupeStore = (dryRun: boolean): void => {
+const dedupeStore = (hangar: Hangar, dryRun: boolean): void => {
   heading('Duplicate content in the store');
   if (!hasJdupes()) {
     warn('jdupes is not installed — identical files were left as separate copies');
     note('`brew install jdupes`. fdupes is not an alternative: it has no hard-link action.');
   } else {
-    const { sets, files, bytes } = duplicateSets(fleetTmp);
+    const { sets, files, bytes } = duplicateSets(hangar.paths.tmp);
     if (files === 0) {
       ok('no byte-identical files to link');
     } else {
@@ -382,16 +395,16 @@ const dedupeStore = (dryRun: boolean): void => {
       if (sets.length > MAX_LISTED) note(pc.dim(`… and ${String(sets.length - MAX_LISTED)} more`));
       const what = `${String(files)} file(s) in ${String(sets.length)} set(s)`;
       if (dryRun) {
-        ok(`${what} would be hard-linked, freeing ${kb(bytes)}`);
+        ok(`${what} would be hard-linked, freeing ${kb(hangar, bytes)}`);
       } else {
-        const res = hardLinkDuplicates(fleetTmp);
-        if (res.ok) ok(`hard-linked ${what}, freeing ${kb(bytes)}`);
+        const res = hardLinkDuplicates(hangar.paths.tmp);
+        if (res.ok) ok(`hard-linked ${what}, freeing ${kb(hangar, bytes)}`);
         else warn(`jdupes could not link them: ${res.error || 'unknown error'}`);
       }
     }
   }
 
-  resolveSameTicketCopies(dryRun);
+  resolveSameTicketCopies(hangar, dryRun);
 };
 
 const pad = (n: number): string => String(n).padStart(2, '0');
@@ -419,12 +432,12 @@ const stamp = (ms: number): string => {
  * read as though it hung off another ticket. ABC-1259 and ABC-1323 are both in that state on disk
  * right now. Here a ticket's own record wins regardless of age, so the state is unreachable.
  */
-const syncJiraStore = (dryRun: boolean): void => {
-  const groups = groupTicketRecords(ticketRecordPaths());
+const syncJiraStore = (hangar: Hangar, dryRun: boolean): void => {
+  const groups = groupTicketRecords(hangar, ticketRecordPaths(hangar));
   if (groups.length === 0) return;
 
-  heading(`One record per ticket in ${tildify(jiraTicketsDir)}`);
-  if (!dryRun) mkdirSync(jiraTicketsDir, { recursive: true });
+  heading(`One record per ticket in ${tildify(hangar.paths.jiraTickets)}`);
+  if (!dryRun) mkdirSync(hangar.paths.jiraTickets, { recursive: true });
 
   let records = 0;
   let links = 0;
@@ -447,7 +460,7 @@ const syncJiraStore = (dryRun: boolean): void => {
     const { stripped } = action;
     if (action.write) {
       records += 1;
-      const from = action.from.path.startsWith(jiraTicketsDir)
+      const from = action.from.path.startsWith(hangar.paths.jiraTickets)
         ? 'the store record'
         : action.from.rel;
       const when = action.from.source === 'fetched' ? '' : pc.dim(` (${action.from.source})`);
@@ -460,7 +473,8 @@ const syncJiraStore = (dryRun: boolean): void => {
           ),
         );
       }
-      if (!dryRun) writeStoreRecord(group.key, storeContentFrom(action.from.content).content);
+      if (!dryRun)
+        writeStoreRecord(hangar, group.key, storeContentFrom(action.from.content).content);
     }
 
     for (const copy of action.link) {
@@ -468,7 +482,7 @@ const syncJiraStore = (dryRun: boolean): void => {
       note(pc.dim(`${copy.rel} → link${dryRun ? ' would be made' : 'ed'}`));
       if (dryRun) continue;
       try {
-        linkToStore(group.key, copy.path);
+        linkToStore(hangar, group.key, copy.path);
       } catch (error) {
         warn(`${copy.rel}: could not link — ${(error as Error).message}`);
       }
@@ -491,7 +505,7 @@ const syncJiraStore = (dryRun: boolean): void => {
 };
 
 /** Every ticket record in the store, the record store itself excluded -- it is not a copy. */
-const ticketRecordPaths = (): string[] => {
+const ticketRecordPaths = (hangar: Hangar): string[] => {
   const found: string[] = [];
   const walk = (dir: string): void => {
     let entries: string[];
@@ -503,7 +517,7 @@ const ticketRecordPaths = (): string[] => {
     for (const entry of entries) {
       if (entry.startsWith('.')) continue;
       const path = join(dir, entry);
-      if (path === jiraTicketsDir) continue;
+      if (path === hangar.paths.jiraTickets) continue;
       let isDir: boolean;
       try {
         isDir = statSync(path).isDirectory();
@@ -514,7 +528,7 @@ const ticketRecordPaths = (): string[] => {
       else if (isTicketRecordName(basename(path))) found.push(path);
     }
   };
-  walk(fleetTmp);
+  walk(hangar.paths.tmp);
   return found;
 };
 
@@ -536,8 +550,8 @@ const ticketRecordPaths = (): string[] => {
  * Markdown only. A differing pair of ASSETS under one name is a re-download that went wrong,
  * not a fresher rendering, and picking a winner there could keep a truncated file.
  */
-const resolveSameTicketCopies = (dryRun: boolean): void => {
-  const groups = sameTicketGroups(fleetTmp).filter(
+const resolveSameTicketCopies = (hangar: Hangar, dryRun: boolean): void => {
+  const groups = sameTicketGroups(hangar.paths.tmp).filter(
     // Ticket RECORDS belong to `syncJiraStore` above, which picks a winner by a stronger rule
     // (a ticket's own record beats a relation copy regardless of age) and links every name to
     // one store file. What is left here is the rest of the per-ticket cache -- `plan_<KEY>.md`,
@@ -592,7 +606,7 @@ const resolveSameTicketCopies = (dryRun: boolean): void => {
 };
 
 /** The exclude file still has to hide `CLAUDE.local.md`; `tmp/` is covered by `.gitignore`. */
-const excludeCloneLocalMd = (clone: Clone, dryRun: boolean): void => {
+const excludeCloneLocalMd = (hangar: Hangar, clone: Clone, dryRun: boolean): void => {
   const path = excludePath(clone);
   const current = existsSync(path) ? readFileSync(path, 'utf8') : '';
   const missing = missingExcludeLines(current);
@@ -601,6 +615,6 @@ const excludeCloneLocalMd = (clone: Clone, dryRun: boolean): void => {
     note(`.git/info/exclude would gain ${missing.join(', ')}`);
     return;
   }
-  writeFileSync(path, current + EXCLUDE_BLOCK, 'utf8');
+  writeFileSync(path, current + excludeBlock(hangar), 'utf8');
   ok(`.git/info/exclude hides ${missing.join(', ')}`);
 };

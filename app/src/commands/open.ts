@@ -16,12 +16,12 @@ import { tildify } from '../user-paths.ts';
 import {
   pickFleetWindow,
   terminal,
-  terminalColourSettings,
   type TerminalDriver,
   type TerminalTabSpec,
   type TerminalWindow,
 } from '../terminal/index.ts';
 import { confirm, note, ok, warn } from '../ui.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar open <clone>…` -- the clones' whole working set in one command.
@@ -87,6 +87,7 @@ export type OpenOptions = {
  * printed side by side without opening a terminal to find out.
  */
 export const tabsFor = (
+  hangar: Hangar,
   clone: Clone,
   opts: OpenOptions,
   driver: TerminalDriver,
@@ -99,7 +100,7 @@ export const tabsFor = (
   // -- the same one the hook's OSC 11 covers elsewhere -- so the full hue would put `#00ccff`
   // behind the text. Same `terminal.colour.tint` factor the hook uses.
   const colour = driver.capabilities.paintOnCreate
-    ? tintedHex(clone.colour, terminalColourSettings().tint)
+    ? tintedHex(clone.colour, hangar.config.terminal.colour.tint)
     : undefined;
   return [
     {
@@ -128,19 +129,20 @@ export const tabsFor = (
 };
 
 /** Ascending by index, each clone once -- the order the tabs will end up in. */
-const resolveClones = (refs: readonly string[], opts: OpenOptions): Clone[] => {
-  if (opts.all === true) return discoverClones();
-  if (refs.length === 0) throw new CliError('open needs a clone name, or --all', knownClonesHint());
+const resolveClones = (hangar: Hangar, refs: readonly string[], opts: OpenOptions): Clone[] => {
+  if (opts.all === true) return discoverClones(hangar);
+  if (refs.length === 0)
+    throw new CliError('open needs a clone name, or --all', knownClonesHint(hangar));
   const byIndex = new Map<number, Clone>();
   for (const ref of refs) {
-    const clone = requireClone(ref);
+    const clone = requireClone(hangar, ref);
     byIndex.set(clone.index, clone);
   }
   return [...byIndex.values()].sort((a, b) => a.index - b.index);
 };
 
 /** A shell standing in the clone, or anywhere below it -- `clone_01` and `clone_01/angular`. */
-const isInside = (path: string | undefined, root: string): boolean =>
+const isInside = (hangar: Hangar, path: string | undefined, root: string): boolean =>
   path !== undefined && (path === root || path.startsWith(`${root}/`));
 
 /**
@@ -153,6 +155,7 @@ const isInside = (path: string | undefined, root: string): boolean =>
  * this question and never decides which clone a tab belongs to.
  */
 const foreignWindowFor = (
+  hangar: Hangar,
   clone: Clone,
   windows: readonly TerminalWindow[],
   fleet: TerminalWindow | undefined,
@@ -160,7 +163,7 @@ const foreignWindowFor = (
   windows.find(
     (win) =>
       win.id !== fleet?.id &&
-      win.tabs.some((tab) => tab.clone === undefined && isInside(tab.path, clone.path)),
+      win.tabs.some((tab) => tab.clone === undefined && isInside(hangar, tab.path, clone.path)),
   );
 
 /**
@@ -172,9 +175,10 @@ const foreignWindowFor = (
  * `open --all` still produces one window. It is deliberately not remembered between runs: a
  * window from a previous invocation may since have been closed, and there is no way to check.
  */
-const assumedWindow = (id: number): TerminalWindow => ({ id, tabs: [] });
+const assumedWindow = (hangar: Hangar, id: number): TerminalWindow => ({ id, tabs: [] });
 
 const openTabs = (
+  hangar: Hangar,
   driver: TerminalDriver,
   clone: Clone,
   opts: OpenOptions,
@@ -182,14 +186,14 @@ const openTabs = (
   editorDrivers: readonly EditorDriver[],
 ): TerminalWindow | undefined => {
   if (!driver.capabilities.inspect) {
-    const res = driver.openTabs(tabsFor(clone, opts, driver, editorDrivers), assumed);
+    const res = driver.openTabs(tabsFor(hangar, clone, opts, driver, editorDrivers), assumed);
     if (res === undefined) {
       warn(`${driver.label} refused to open tabs for ${clone.name}`);
       return assumed;
     }
     if (res.createdWindow) ok(`opened a window with three tabs for ${clone.name}`);
     else ok(`added three tabs for ${clone.name}`);
-    return assumedWindow(res.windowId);
+    return assumedWindow(hangar, res.windowId);
   }
 
   // One read, three questions: which window is the fleet's, is this clone already in it, and is
@@ -206,7 +210,7 @@ const openTabs = (
     return undefined;
   }
 
-  if (foreignWindowFor(clone, windows, fleet) !== undefined) {
+  if (foreignWindowFor(hangar, clone, windows, fleet) !== undefined) {
     warn(
       `${clone.name} already has tabs in an existing ${driver.label} window this CLI did not open`,
     );
@@ -217,7 +221,7 @@ const openTabs = (
     }
   }
 
-  const res = driver.openTabs(tabsFor(clone, opts, driver, editorDrivers), fleet);
+  const res = driver.openTabs(tabsFor(hangar, clone, opts, driver, editorDrivers), fleet);
   if (res === undefined) {
     warn(`${driver.label} refused the request — no tabs opened for ${clone.name}`);
     return undefined;
@@ -239,7 +243,7 @@ const openTabs = (
  * content. JetBrains is handed the clone DIRECTORY and dedupes itself, which is why it reports
  * `reused: false` and there is nothing to say about it either way.
  */
-const openEditors = (clone: Clone, drivers: readonly EditorDriver[]): void => {
+const openEditors = (hangar: Hangar, clone: Clone, drivers: readonly EditorDriver[]): void => {
   for (const driver of drivers) {
     // Already opened as one of the clone's terminal tabs, above -- not a window to launch.
     if (driver.capabilities.inTerminalTab === true) continue;
@@ -296,7 +300,7 @@ const openEditor = (clone: Clone, driver: EditorDriver): void => {
  * THE GROUPS -- which is the thing the developer scans the tab bar for -- and flags a clone whose
  * tabs are split into two groups just the same, since that is equally unsorted.
  */
-const reportTabOrder = (driver: TerminalDriver): void => {
+const reportTabOrder = (hangar: Hangar, driver: TerminalDriver): void => {
   const window = pickFleetWindow(driver.windows());
   if (window === undefined) return;
   const groups: string[] = [];
@@ -336,7 +340,7 @@ const SOURCE_LABEL = {
  */
 const land = (clone: Clone, opts: OpenOptions, sweeping: boolean): void => {
   try {
-    landOnBranch(clone, opts, sweeping);
+    landOnBranch(clone.hangar, clone, opts, sweeping);
   } catch (error) {
     // EVERY error, not just CliError. This runs inside the clone loop, before the first tab is
     // created, so anything that escapes here costs the whole run its windows -- and `open`'s
@@ -349,10 +353,10 @@ const land = (clone: Clone, opts: OpenOptions, sweeping: boolean): void => {
   }
 };
 
-export const open = (refs: readonly string[], opts: OpenOptions): void => {
-  const clones = resolveClones(refs, opts);
-  const { driver, source } = terminal();
-  const editorChoice = editors();
+export const open = (hangar: Hangar, refs: readonly string[], opts: OpenOptions): void => {
+  const clones = resolveClones(hangar, refs, opts);
+  const { driver, source } = terminal(hangar);
+  const editorChoice = editors(hangar);
   const drivers = opts.editor === false ? [] : editorChoice.drivers;
   for (const bad of editorChoice.broken) {
     warn(`the ${bad.kind} editor driver would not build: ${bad.reason}`);
@@ -383,12 +387,12 @@ export const open = (refs: readonly string[], opts: OpenOptions): void => {
   let assumed: TerminalWindow | undefined;
   for (const clone of clones) {
     if (opts.checkout !== false) land(clone, opts, clones.length > 1);
-    assumed = openTabs(driver, clone, opts, assumed, drivers) ?? assumed;
-    if (opts.editor !== false) openEditors(clone, drivers);
+    assumed = openTabs(hangar, driver, clone, opts, assumed, drivers) ?? assumed;
+    if (opts.editor !== false) openEditors(hangar, clone, drivers);
     note(
       `ports: ng ${clone.ports.ng} · storybook ${clone.ports.storybook} · playwright ${clone.ports.playwrightReport}`,
     );
   }
 
-  if (driver.capabilities.inspect) reportTabOrder(driver);
+  if (driver.capabilities.inspect) reportTabOrder(hangar, driver);
 };

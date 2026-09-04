@@ -1,4 +1,4 @@
-import { cloneColoursScript, fleetRoot, terminalHookScript } from '../paths.ts';
+import type { Hangar } from '../hangar.ts';
 import { type Artifact, artifactHeader } from './index.ts';
 
 export type TerminalColourSettings = {
@@ -56,16 +56,15 @@ export type TerminalColourSettings = {
  * -- otherwise leaving hangar A's clone for hangar B's would have A's hook wipe the colour B had
  * just painted, in whichever order the two hooks happen to be registered.
  */
-export const terminalHookArtifact = (
-  hangarId: string,
-  colour: TerminalColourSettings,
-): Artifact => {
+export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSettings): Artifact => {
+  const hangarId = hangar.id;
   const p = `_hangar_${hangarId}`;
   const tint = Math.round(colour.tint * 100);
   const table = `hangar_${hangarId}_colour`;
 
   const content = [
     artifactHeader(
+      hangar,
       `Per-clone terminal colour for the ${hangarId} hangar. Source from ~/.zshrc or ~/.bashrc.`,
     ),
     '#',
@@ -76,7 +75,7 @@ export const terminalHookArtifact = (
     '# HANGAR_CLONE* variables -- which need no terminal support at all, so a prompt or a tmux',
     '# status line can colour itself even where the chrome cannot be touched.',
     '',
-    `${p}_root='${fleetRoot}'`,
+    `${p}_root='${hangar.root}'`,
     `${p}_id='${hangarId}'`,
     `${p}_tint=${String(tint)}   # per cent of the hue that reaches the background`,
     `${p}_chrome=${colour.chrome ? '1' : '0'}`,
@@ -89,8 +88,8 @@ export const terminalHookArtifact = (
     '    *) return 0 ;;',
     'esac',
     '',
-    `[ -r "\${${p}_root}/${cloneColoursScript.split('/').pop() ?? 'clone-colours.sh'}" ] || return 0`,
-    `. "\${${p}_root}/${cloneColoursScript.split('/').pop() ?? 'clone-colours.sh'}"`,
+    `[ -r "\${${p}_root}/${hangar.paths.cloneColoursScript.split('/').pop() ?? 'clone-colours.sh'}" ] || return 0`,
+    `. "\${${p}_root}/${hangar.paths.cloneColoursScript.split('/').pop() ?? 'clone-colours.sh'}"`,
     '',
     '# ---------------------------------------------------------------------------',
     '# Which family of escape sequences this terminal speaks. Decided ONCE: an emulator',
@@ -271,7 +270,7 @@ export const terminalHookArtifact = (
   ].join('\n');
 
   return {
-    path: terminalHookScript,
+    path: hangar.paths.terminalHookScript,
     content,
     mode: 0o755,
     what: 'per-clone terminal colour hook (zsh/bash)',

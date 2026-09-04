@@ -1,7 +1,6 @@
 import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 
-import { fleetRoot } from './paths.ts';
 import { home } from './user-paths.ts';
 
 /**
@@ -28,7 +27,7 @@ export type Tool = {
   readonly why: string;
   readonly install: string;
   /** Present when the program is not a plain binary on PATH (nvm is a shell function). */
-  readonly detect?: () => boolean;
+  readonly detect?: (root: string) => boolean;
 };
 
 /**
@@ -76,10 +75,10 @@ const onPath = (name: string): boolean => {
  * hangar pins a version at all is its own business, and its absence is not this check's
  * finding.
  */
-const nodeMatchesNvmrc = (): boolean => {
+const nodeMatchesNvmrc = (root: string): boolean => {
   let pinned: string;
   try {
-    pinned = readFileSync(join(fleetRoot, '.nvmrc'), 'utf8');
+    pinned = readFileSync(join(root, '.nvmrc'), 'utf8');
   } catch {
     return true;
   }
@@ -191,8 +190,8 @@ export const NODE_MANAGERS: readonly Tool[] = Object.freeze([
 
 export type ToolStatus = { readonly tool: Tool; readonly present: boolean };
 
-export const toolPresent = (tool: Tool): boolean =>
-  tool.detect === undefined ? onPath(tool.bin ?? tool.name) : tool.detect();
+export const toolPresent = (root: string, tool: Tool): boolean =>
+  tool.detect === undefined ? onPath(tool.bin ?? tool.name) : tool.detect(root);
 
 export type EnvironmentReport = {
   readonly statuses: readonly ToolStatus[];
@@ -211,11 +210,17 @@ export type EnvironmentReport = {
   readonly missingPreferred: readonly string[];
 };
 
-/** Inspect the machine. Pure with respect to Hangar's own state -- it only reads the system. */
-export const inspectEnvironment = (): EnvironmentReport => {
-  const statuses = TOOLS.map((tool) => ({ tool, present: toolPresent(tool) }));
+/**
+ * Inspect the machine.
+ *
+ * Takes the hangar ROOT rather than reading a module constant, because the one check that is not
+ * purely about the machine -- whether the running Node matches the pinned version -- reads that
+ * hangar's `.nvmrc`, and two hangars may pin different versions.
+ */
+export const inspectEnvironment = (root: string): EnvironmentReport => {
+  const statuses = TOOLS.map((tool) => ({ tool, present: toolPresent(root, tool) }));
 
-  const found = NODE_MANAGERS.find((m) => toolPresent(m));
+  const found = NODE_MANAGERS.find((m) => toolPresent(root, m));
   const nodeManager = {
     found: found?.name,
     candidates: NODE_MANAGERS.map((m) => m.name),

@@ -3,6 +3,7 @@ import pc from 'picocolors';
 import { discoverClones } from '../fleet.ts';
 import { currentBranch, lastCommit } from '../git.ts';
 import { cloneLabel, note, table, truncate } from '../ui.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar list` -- what clones exist, where each one is, and how fresh it is.
@@ -11,8 +12,8 @@ import { cloneLabel, note, table, truncate } from '../ui.ts';
  * number or from any table in CLAUDE.md: clones are interchangeable and equal in rank, and
  * whatever a clone has checked out right now is the only answer.
  */
-export const list = (): void => {
-  const clones = discoverClones();
+export const list = (hangar: Hangar): void => {
+  const clones = discoverClones(hangar);
   if (clones.length === 0) {
     note('No clones found. Create one with `hangar add-clone`.');
     return;

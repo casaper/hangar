@@ -6,10 +6,10 @@ import { workspaceAngularPath, workspacePath } from '../clone-config.ts';
 import { CliError, run } from '../exec.ts';
 import type { Clone } from '../fleet.ts';
 import { git } from '../git.ts';
-import { fleetRoot } from '../paths.ts';
 import { vscodeWindowState } from '../user-paths.ts';
 import { VSCODE_FAMILY, type VscodeFork } from './kinds.ts';
 import type { EditorArtifact, EditorDriver, LaunchResult } from './types.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * The VS Code side of a clone: `.vscode/*` plus the two `*.code-workspace` copies.
@@ -183,7 +183,8 @@ export const render = (template: string, clone: Clone): string =>
   template.replaceAll(ROOT_TOKEN, clone.path).replaceAll(INDEX_TOKEN, String(clone.index));
 
 /** Fresh each call: a global regex carries `lastIndex`, so a shared one would skip matches. */
-const cloneRootRe = (): RegExp => new RegExp(`${escapeRegExp(fleetRoot)}/clone_(\\d{2,})`, 'g');
+const cloneRootRe = (hangar: Hangar): RegExp =>
+  new RegExp(`${escapeRegExp(hangar.root)}/clone_(\\d{2,})`, 'g');
 
 /**
  * Any absolute path into a SIBLING clone that survived rendering.
@@ -196,7 +197,7 @@ const cloneRootRe = (): RegExp => new RegExp(`${escapeRegExp(fleetRoot)}/clone_(
  */
 export const foreignClonePaths = (text: string, clone: Clone): string[] => {
   const found = new Set<string>();
-  for (const match of text.matchAll(cloneRootRe())) {
+  for (const match of text.matchAll(cloneRootRe(clone.hangar))) {
     const index = Number.parseInt(match[1] ?? '', 10);
     if (index !== clone.index) found.add(match[0]);
   }

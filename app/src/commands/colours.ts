@@ -24,28 +24,28 @@ import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
 import { colourFor, paint, paletteEntry, PALETTE, PALETTE_NAMES } from '../palette.ts';
 import { tildify } from '../user-paths.ts';
 import { CliError } from '../exec.ts';
-import { currentHangarId, terminalColourSettings } from '../terminal/index.ts';
+
 import { cloneLabel, heading, note, ok, warn } from '../ui.ts';
+import type { Hangar } from '../hangar.ts';
 
 /** Every file `hangar colours sync` owns, for the fleet as it exists right now. */
-export const colourArtifacts = (): Artifact[] => {
-  const clones = discoverClones();
-  const hangarId = currentHangarId();
+export const colourArtifacts = (hangar: Hangar): Artifact[] => {
+  const clones = discoverClones(hangar);
   return [
-    cloneColoursArtifact(clones, hangarId),
-    terminalHookArtifact(hangarId, terminalColourSettings()),
-    statuslineArtifact(clones),
+    cloneColoursArtifact(hangar, clones),
+    terminalHookArtifact(hangar, hangar.config.terminal.colour),
+    statuslineArtifact(hangar, clones),
     ...clones.map((clone) => themeArtifact(clone)),
   ];
 };
 
 export type ColoursSyncOptions = { dryRun?: boolean | undefined; check?: boolean | undefined };
 
-export const coloursSync = (opts: ColoursSyncOptions): void => {
+export const coloursSync = (hangar: Hangar, opts: ColoursSyncOptions): void => {
   const dryRun = opts.dryRun === true || opts.check === true;
   const outcomes: { artifact: Artifact; outcome: ArtifactOutcome }[] = [];
 
-  for (const artifact of colourArtifacts()) {
+  for (const artifact of colourArtifacts(hangar)) {
     outcomes.push({ artifact, outcome: applyArtifact(artifact, dryRun) });
   }
 
@@ -71,8 +71,8 @@ export const coloursSync = (opts: ColoursSyncOptions): void => {
 export type ColoursChangeOptions = { force?: boolean | undefined };
 
 /** The palette names no clone is currently using, for the "pick another" hint. */
-const freeColours = (): string[] => {
-  const taken = new Set(discoverClones().map((clone) => clone.colour.name));
+const freeColours = (hangar: Hangar): string[] => {
+  const taken = new Set(discoverClones(hangar).map((clone) => clone.colour.name));
   return PALETTE_NAMES.filter((name) => !taken.has(name));
 };
 
@@ -92,8 +92,13 @@ const freeColours = (): string[] => {
  * Choosing the hue the formula would have given clears the assignment instead of writing one,
  * so the file only ever holds real overrides and going back is the same command.
  */
-export const coloursChange = (ref: string, colour: string, opts: ColoursChangeOptions): void => {
-  const clone = requireClone(ref);
+export const coloursChange = (
+  hangar: Hangar,
+  ref: string,
+  colour: string,
+  opts: ColoursChangeOptions,
+): void => {
+  const clone = requireClone(hangar, ref);
   const entry = paletteEntry(colour);
   if (entry === undefined) {
     throw new CliError(`unknown colour: ${colour}`, `Available: ${PALETTE_NAMES.join(', ')}`);
@@ -105,11 +110,11 @@ export const coloursChange = (ref: string, colour: string, opts: ColoursChangeOp
   }
 
   // Two clones sharing a hue defeats the point of having one, so this stops rather than warns.
-  const clash = discoverClones().filter(
+  const clash = discoverClones(hangar).filter(
     (other) => other.index !== clone.index && other.colour.name === entry.name,
   );
   if (clash.length > 0 && opts.force !== true) {
-    const free = freeColours();
+    const free = freeColours(hangar);
     throw new CliError(
       `${entry.name} is already ${clash.map((c) => c.name).join(', ')}'s colour`,
       `Telling near-identical windows apart is what the hue is for. Free: ${
@@ -138,18 +143,18 @@ export const coloursChange = (ref: string, colour: string, opts: ColoursChangeOp
 
   const formula = colourFor(clone.index).name;
   if (entry.name === formula) {
-    clearColourAssignment(clone.index);
+    clearColourAssignment(hangar, clone.index);
     ok(`back on the palette formula for index ${String(clone.index)} (${formula})`);
   } else {
-    setColourAssignment(clone.index, entry.name);
-    ok(`assigned in ${colourAssignmentsLabel()}`);
+    setColourAssignment(hangar, clone.index, entry.name);
+    ok(`assigned in ${colourAssignmentsLabel(hangar)}`);
   }
 
   // Re-derived, so every artifact below is built from the new hue.
-  const updated = requireClone(ref);
+  const updated = requireClone(hangar, ref);
 
   heading('Regenerating colour artifacts');
-  coloursSync({});
+  coloursSync(hangar, {});
 
   if (staleTheme !== themePath(updated) && existsSync(staleTheme)) {
     unlinkSync(staleTheme);
@@ -183,8 +188,8 @@ export const coloursChange = (ref: string, colour: string, opts: ColoursChangeOp
  * The swatch is the point: the names are only labels and two of them (violet / purple,
  * red / crimson) mean very little until you see them side by side.
  */
-export const coloursList = (): void => {
-  const owners = new Map(discoverClones().map((clone) => [clone.colour.name, clone]));
+export const coloursList = (hangar: Hangar): void => {
+  const owners = new Map(discoverClones(hangar).map((clone) => [clone.colour.name, clone]));
   const width = Math.max(...PALETTE_NAMES.map((name) => name.length));
   const slotWidth = String(PALETTE.length).length;
   for (const [slot, entry] of PALETTE.entries()) {

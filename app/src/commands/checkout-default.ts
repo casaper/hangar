@@ -14,6 +14,7 @@ import {
 } from '../git.ts';
 import { claudeSessionsIn } from '../procs.ts';
 import { cloneLabel, confirm, heading, note, ok, step, warn } from '../ui.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar checkout-default` -- fetch everything, then put a clone on its repo's default branch,
@@ -67,14 +68,18 @@ export type Landing = {
   includeBusy?: boolean | undefined;
 };
 
-export const checkoutDefault = (ref: string | undefined, opts: CheckoutDefaultOptions): void => {
-  const clones = opts.all === true ? discoverClones() : [namedClone(ref)];
+export const checkoutDefault = (
+  hangar: Hangar,
+  ref: string | undefined,
+  opts: CheckoutDefaultOptions,
+): void => {
+  const clones = opts.all === true ? discoverClones(hangar) : [namedClone(hangar, ref)];
   const failed: string[] = [];
   const skipped: string[] = [];
 
   for (const clone of clones) {
     try {
-      const outcome = landOnBranch(clone, opts, clones.length > 1);
+      const outcome = landOnBranch(hangar, clone, opts, clones.length > 1);
       if (outcome === 'skipped') skipped.push(clone.name);
       if (outcome === 'failed') failed.push(clone.name);
     } catch (error) {
@@ -108,7 +113,12 @@ export type Outcome = 'done' | 'skipped' | 'failed';
  * `checkout-default` reports it as the answer to the command, `open` warns and opens the clone
  * anyway on whatever branch it already has.
  */
-export const landOnBranch = (clone: Clone, opts: Landing, sweeping: boolean): Outcome => {
+export const landOnBranch = (
+  hangar: Hangar,
+  clone: Clone,
+  opts: Landing,
+  sweeping: boolean,
+): Outcome => {
   const wanted = opts.branch;
   heading(`${wanted ?? 'Default branch'} in ${cloneLabel(clone)}`);
   const branch = currentBranch(clone.path);
@@ -134,7 +144,7 @@ export const landOnBranch = (clone: Clone, opts: Landing, sweeping: boolean): Ou
   }
 
   const state = syncState(clone.path);
-  const known = wanted ?? tryDefaultBranch();
+  const known = wanted ?? tryDefaultBranch(hangar);
   /*
    * `tryDefaultBranch` and not the resolving form: this is the FAST half, and it must not
    * detect, network or write. Normally the config names the branch and it answers instantly;
@@ -144,7 +154,7 @@ export const landOnBranch = (clone: Clone, opts: Landing, sweeping: boolean): Ou
    * refusal instant.
    */
   const switching = known !== undefined && branch !== known;
-  if (switching && opts.dryRun !== true) requireCleanForSwitch(clone, state);
+  if (switching && opts.dryRun !== true) requireCleanForSwitch(hangar, clone, state);
 
   const sessions = claudeSessionsIn(clone.path);
   if (sessions.length > 0 && opts.includeBusy !== true && opts.dryRun !== true) {
@@ -198,7 +208,7 @@ export const landOnBranch = (clone: Clone, opts: Landing, sweeping: boolean): Ou
   }
 
   // Allowed to persist: this is the real run, past every guard and past the dry-run return.
-  const target = wanted ?? requireDefaultBranch({ persist: true });
+  const target = wanted ?? requireDefaultBranch(hangar, { persist: true });
   note(`${wanted === undefined ? 'default:  ' : 'wanted:   '}${target}`);
 
   if (branch === target) {
@@ -209,11 +219,11 @@ export const landOnBranch = (clone: Clone, opts: Landing, sweeping: boolean): Ou
     // pre-fetch read of the tree, which a live agent could in principle have made stale during
     // the fetch -- harmless, because a checkout that should have been refused is refused by git
     // itself, with its own message.
-    requireCleanForSwitch(clone, state);
+    requireCleanForSwitch(hangar, clone, state);
     if (!checkout(clone, target)) return 'failed';
   }
 
-  return fastForward(clone, target) ? 'done' : 'failed';
+  return fastForward(hangar, clone, target) ? 'done' : 'failed';
 };
 
 /**
@@ -230,7 +240,7 @@ export const landOnBranch = (clone: Clone, opts: Landing, sweeping: boolean): Ou
  * the command useless in the situation people run it in most: on the default branch, with a
  * scratch edit in the tree, wanting today's commits.
  */
-const requireCleanForSwitch = (clone: Clone, state: SyncState): void => {
+const requireCleanForSwitch = (hangar: Hangar, clone: Clone, state: SyncState): void => {
   if (state.dirty === 0) return;
   throw new CliError(
     `${clone.name} has ${state.dirty} modified file(s) — switching branches would carry them onto the default branch`,
@@ -281,7 +291,7 @@ const checkout = (clone: Clone, branch: string): boolean => {
  * Doing it silently under a command whose name says "checkout" is exactly the surprise this
  * fleet is built to avoid.
  */
-const fastForward = (clone: Clone, branch: string): boolean => {
+const fastForward = (hangar: Hangar, clone: Clone, branch: string): boolean => {
   const remote = `origin/${branch}`;
   // A branch that exists only here has nothing to pull, and saying so beats warning that a
   // comparison failed. Reachable through `--branch <name>`: an unpushed local branch.
@@ -320,9 +330,9 @@ const fastForward = (clone: Clone, branch: string): boolean => {
   return true;
 };
 
-const namedClone = (ref: string | undefined): Clone => {
+const namedClone = (hangar: Hangar, ref: string | undefined): Clone => {
   if (ref === undefined) {
-    throw new CliError('checkout-default needs a clone name, or --all', knownClonesHint());
+    throw new CliError('checkout-default needs a clone name, or --all', knownClonesHint(hangar));
   }
-  return requireClone(ref);
+  return requireClone(hangar, ref);
 };

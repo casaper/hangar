@@ -1,6 +1,3 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { Argument, Command, Option, type CommandUnknownOpts } from '@commander-js/extra-typings';
 import pc from 'picocolors';
 
@@ -24,10 +21,17 @@ import { forcedStrategy, sync } from './commands/sync.ts';
 import { tmpMerge } from './commands/tmp.ts';
 import { syncEditor } from './commands/vscode.ts';
 import type { EditorKind } from './editor/index.ts';
-import { CONFIG_FILENAME, EXAMPLE_CONFIG_FILENAME } from './config/load.ts';
+import {
+  CONFIG_FILENAME,
+  EXAMPLE_CONFIG_FILENAME,
+  findHangar,
+  loadHangar,
+  loadHangarTolerant,
+  ROOT_ENV_KEY,
+  tryLoadHangar,
+} from './config/load.ts';
+import type { Hangar } from './hangar.ts';
 import { CliError } from './exec.ts';
-import { fleetRoot } from './paths.ts';
-import { tildify } from './user-paths.ts';
 import { PALETTE_NAMES } from './palette.ts';
 
 /**
@@ -52,8 +56,8 @@ const program = new Command()
    * repo's clones.
    */
   .option('--hangar <path>', 'the hangar root to operate on (default: nearest above cwd)')
-  .hook('preAction', (_thisCommand, actionCommand) => {
-    requireHangarConfig(commandPath(actionCommand));
+  .hook('preAction', (thisCommand, actionCommand) => {
+    resolveForCommand(commandPath(actionCommand), thisCommand.opts().hangar);
   })
   /*
    * Commander prints only the FIRST alias, in both the command listing and the usage line
@@ -125,22 +129,72 @@ const NEEDS_NO_CONFIG: readonly string[] = ['setup', 'jira hook'];
  * EXISTENCE only, deliberately, not validity: `hangar config validate` and `hangar doctor` exist
  * to report an invalid config, and a gate that parsed it would stop them before they could.
  */
-const requireHangarConfig = (path: string): void => {
-  if (NEEDS_NO_CONFIG.includes(path)) return;
-  const configPath = join(fleetRoot, CONFIG_FILENAME);
-  if (existsSync(configPath)) return;
-  throw new CliError(
-    `no ${CONFIG_FILENAME} in ${tildify(fleetRoot)}, so this is not a hangar`,
-    `Run \`hangar setup\` to write one, or start from the committed example:\n` +
-      `         cp ${EXAMPLE_CONFIG_FILENAME} ${CONFIG_FILENAME}`,
-  );
+const TOLERATES_INVALID_CONFIG: readonly string[] = [
+  'doctor',
+  'config show',
+  'config validate',
+  'config schema',
+];
+
+/**
+ * The hangar for this invocation, resolved ONCE in `preAction` and handed to the action.
+ *
+ * This module-level slot is the handoff between commander's hook and its action -- two separate
+ * callbacks, so there is nowhere else to put it. It is deliberately the only one: no library
+ * module reads it, every command takes the value as an argument and passes it down, and `Clone`
+ * carries a back-reference. That is what lets two hangars be rendered in one process, which
+ * `pnpm golden` does on every run.
+ */
+let resolved: Hangar | undefined;
+
+const requireHangar = (): Hangar => {
+  if (resolved === undefined) {
+    // Unreachable through the CLI: `preAction` runs before every action, so this would mean a
+    // command was registered on some other program than the one carrying the hook.
+    throw new CliError('internal: the hangar was never resolved for this command');
+  }
+  return resolved;
+};
+
+/**
+ * Resolve the hangar, or refuse in a directory that is not one.
+ *
+ * The marker file IS the hangar -- ports, colours, the forge, the tracker and the editors all
+ * come from it -- so acting without one would mean acting on schema defaults while looking like
+ * a configured run. `hangar.config.yaml` is also untracked by design (it names one machine's
+ * paths and token variables), so a fresh checkout of a hangar repo has none, and this is the
+ * message that says what to do about it.
+ *
+ * Three commands exist to REPORT on the config and so must survive one that will not parse;
+ * they are resolved tolerantly, with `Hangar.configFellBack` recording that the values are the
+ * schema's rather than the developer's. `hangar-internals/reference/config.md` states the rule
+ * this preserves: absence is a gate, invalidity is a report.
+ */
+const resolveForCommand = (path: string, flag: string | undefined): void => {
+  const opts = { cwd: process.cwd(), flag, env: process.env[ROOT_ENV_KEY] };
+
+  if (NEEDS_NO_CONFIG.includes(path)) {
+    // `setup` writes the file, so requiring it would be circular; `jira hook` must fail open.
+    // Neither may throw on an absent hangar, so both get whatever is actually there.
+    resolved = tryLoadHangar(opts);
+    return;
+  }
+
+  if (findHangar(opts) === undefined) {
+    throw new CliError(
+      `no ${CONFIG_FILENAME} here or in any parent directory, so this is not a hangar`,
+      `Run \`hangar setup\` to write one, or start from the committed example:\n` +
+        `         cp ${EXAMPLE_CONFIG_FILENAME} ${CONFIG_FILENAME}`,
+    );
+  }
+  resolved = TOLERATES_INVALID_CONFIG.includes(path) ? loadHangarTolerant(opts) : loadHangar(opts);
 };
 
 program
   .command('list')
   .description('List every clone with its branch and last commit')
   .action(() => {
-    list();
+    list(requireHangar());
   });
 
 program
@@ -148,7 +202,7 @@ program
   .description('Show the port map of every clone')
   .option('--json', 'machine-readable output')
   .action((options) => {
-    ports(options);
+    ports(requireHangar(), options);
   });
 
 program
@@ -158,7 +212,7 @@ program
   .option('-a, --all', 'show every clone')
   .option('-f, --fetch', 'fetch first, so the sync answer is authoritative')
   .action((clone, options) => {
-    status(clone, options);
+    status(requireHangar(), clone, options);
   });
 
 program
@@ -187,7 +241,10 @@ program
     ).choices(['rebase', 'merge']),
   )
   .action(async (clone, options) => {
-    await sync(clone, { ...options, strategy: options.strategy ?? forcedStrategy(process.argv) });
+    await sync(requireHangar(), clone, {
+      ...options,
+      strategy: options.strategy ?? forcedStrategy(process.argv),
+    });
   });
 
 program
@@ -206,7 +263,7 @@ program
   .option('-n, --dry-run', 'show what would happen, and fetch and change nothing')
   .option('--include-busy', 'do not ask about, or skip, clones with a live Claude session')
   .action((clone, options) => {
-    checkoutDefault(clone, options);
+    checkoutDefault(requireHangar(), clone, options);
   });
 
 program
@@ -226,7 +283,7 @@ program
   .option('--no-checkout', 'open each clone on whatever branch it already has')
   .option('--include-busy', 'check the branch out even in a clone with a live Claude session')
   .action((clones: string[], options) => {
-    open(clones, options);
+    open(requireHangar(), clones, options);
   });
 
 program
@@ -235,7 +292,7 @@ program
   .argument('[clone]', 'clone name, e.g. clone_02 (or just 2); defaults to the clone you are in')
   .option('-n, --limit <count>', 'how many of the most recent sessions to list (0 = all)', '20')
   .action(async (clone, options) => {
-    await resume(clone, options);
+    await resume(requireHangar(), clone, options);
   });
 
 program
@@ -244,7 +301,7 @@ program
   .option('--no-install', 'skip `npm ci` (the clone cannot serve, test or build until you run it)')
   .addOption(new Option('--remote <url>', 'clone from a different URL').hideHelp())
   .action((options) => {
-    addClone(options);
+    addClone(requireHangar(), options);
   });
 
 program
@@ -254,7 +311,7 @@ program
   .option('--delete', 'also delete the directory (guarded: uncommitted work, servers, sessions)')
   .option('--force', 'delete despite the guards — uncommitted work is NOT recoverable')
   .action((clone, options) => {
-    removeClone(clone, options);
+    removeClone(requireHangar(), clone, options);
   });
 
 program
@@ -264,7 +321,7 @@ program
   .option('-a, --all', 'check every clone')
   .option('--fix', 'repair the checks that are derivable from the clone index')
   .action((clone, options) => {
-    doctor(clone, options);
+    doctor(requireHangar(), clone, options);
   });
 
 program
@@ -274,7 +331,7 @@ program
   .option('--force', 'rewrite an existing config')
   .option('-n, --dry-run', 'print what would be written and stop')
   .action(async (options) => {
-    await setup(options);
+    await setup(resolved?.root ?? process.cwd(), options);
   });
 
 const config = program
@@ -301,7 +358,7 @@ config
   .option('--check', 'fail if the committed schema is out of date instead of writing it')
   .option('--out <path>', 'write somewhere other than the hangar root')
   .action((options) => {
-    configSchema(options);
+    configSchema(requireHangar(), options);
   });
 
 program
@@ -311,7 +368,7 @@ program
   .option('-n, --dry-run', 'print the prompt and stop')
   .option('-y, --yes', 'skip the confirmation')
   .action((clone, options) => {
-    teachRg(clone, options);
+    teachRg(requireHangar(), clone, options);
   });
 
 const jira = program
@@ -330,7 +387,7 @@ jira
     'say on stderr why nothing was served — a fail-open hook is otherwise silent',
   )
   .action((options) => {
-    jiraHook(options);
+    jiraHook(resolved, options);
   });
 
 const plans = program
@@ -349,7 +406,7 @@ plans
     '30',
   )
   .action((options) => {
-    plansCollect(options);
+    plansCollect(requireHangar(), options);
   });
 
 plans
@@ -363,7 +420,7 @@ plans
     '30',
   )
   .action((options) => {
-    plansStamp(options);
+    plansStamp(requireHangar(), options);
   });
 
 const tmp = program
@@ -376,7 +433,7 @@ tmp
   .option('-n, --dry-run', 'show what would move, change nothing')
   .option('-q, --quiet', 'say nothing unless something needs a human (for the SessionEnd hook)')
   .action((options) => {
-    tmpMerge(options);
+    tmpMerge(requireHangar(), options);
   });
 
 /*
@@ -439,7 +496,7 @@ for (const editor of SYNCABLE) {
     .option('--from <clone>', 'sync from this clone instead of the most recently edited file')
     .option('-n, --dry-run', 'show what would change, write nothing')
     .action((options) => {
-      syncEditor(editor.kind, options);
+      syncEditor(requireHangar(), editor.kind, options);
     });
 }
 
@@ -456,7 +513,7 @@ colours
   .option('-n, --dry-run', 'show what would change, write nothing')
   .option('--check', 'exit non-zero if any artifact is out of date (writes nothing)')
   .action((options) => {
-    coloursSync(options);
+    coloursSync(requireHangar(), options);
   });
 
 colours
@@ -469,14 +526,14 @@ colours
   .addArgument(new Argument('<colour>', 'palette colour').choices(PALETTE_NAMES))
   .option('--force', 'allow a colour a sibling clone already has')
   .action((clone, colour, options) => {
-    coloursChange(clone, colour, options);
+    coloursChange(requireHangar(), clone, colour, options);
   });
 
 colours
   .command('list')
   .description('Show the palette, painted, and which clone holds each hue')
   .action(() => {
-    coloursList();
+    coloursList(requireHangar());
   });
 
 /**
@@ -499,7 +556,7 @@ dev
     'synthesize these clone indices (e.g. 1,2,3) instead of discovering directories',
   )
   .action((options: { out: string; indices?: string }) => {
-    golden(options);
+    golden(requireHangar(), options);
   });
 
 /**

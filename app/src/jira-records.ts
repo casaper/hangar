@@ -2,7 +2,7 @@ import { linkSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } f
 import { basename, dirname, join } from 'node:path';
 
 import { cacheSubjectOf, freshnessOf, type Copy } from './dedupe.ts';
-import { jiraTicketsDir } from './paths.ts';
+import type { Hangar } from './hangar.ts';
 
 /**
  * The one record per Jira ticket, and the names that are hard links to it.
@@ -38,7 +38,8 @@ import { jiraTicketsDir } from './paths.ts';
  */
 
 /** The store holds ticket RECORDS only: one `ABC-1234.md` per key, no assets, no plans. */
-export const storeRecordPath = (key: string): string => join(jiraTicketsDir, `${key}.md`);
+export const storeRecordPath = (hangar: Hangar, key: string): string =>
+  join(hangar.paths.jiraTickets, `${key}.md`);
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---/;
 
@@ -193,7 +194,7 @@ export type TicketGroup = {
  * directory is not among them -- it is read separately, because it is a candidate for winning
  * rather than a copy to be linked.
  */
-export const groupTicketRecords = (paths: readonly string[]): TicketGroup[] => {
+export const groupTicketRecords = (hangar: Hangar, paths: readonly string[]): TicketGroup[] => {
   const byKey = new Map<string, TicketRecord[]>();
   const mismatched = new Map<string, TicketRecord[]>();
   for (const path of paths) {
@@ -213,7 +214,7 @@ export const groupTicketRecords = (paths: readonly string[]): TicketGroup[] => {
 
   const keys = new Set([...byKey.keys(), ...mismatched.keys()]);
   return [...keys].sort().map((key) => {
-    const stored = readRecord(storeRecordPath(key), key);
+    const stored = readRecord(storeRecordPath(hangar, key), key);
     const copies = (byKey.get(key) ?? []).sort((a, b) => b.at - a.at || a.rel.localeCompare(b.rel));
     return { key, stored, copies, mismatched: mismatched.get(key) ?? [] };
   });
@@ -335,8 +336,8 @@ export const planGroup = (group: TicketGroup): StoreAction | undefined => {
 };
 
 /** Write the store record, replacing rather than editing so no link is ever written through. */
-export const writeStoreRecord = (key: string, content: string): void => {
-  const target = storeRecordPath(key);
+export const writeStoreRecord = (hangar: Hangar, key: string, content: string): void => {
+  const target = storeRecordPath(hangar, key);
   const staging = `${target}.writing-${String(process.pid)}`;
   try {
     writeFileSync(staging, content, 'utf8');
@@ -357,10 +358,10 @@ export const writeStoreRecord = (key: string, content: string): void => {
  * Link-then-rename, so the path is never briefly missing: a session reading the cache sees
  * either the old file or the new link, never nothing.
  */
-export const linkToStore = (key: string, copy: string): void => {
+export const linkToStore = (hangar: Hangar, key: string, copy: string): void => {
   const staging = `${copy}.linking-${String(process.pid)}`;
   try {
-    linkSync(storeRecordPath(key), staging);
+    linkSync(storeRecordPath(hangar, key), staging);
     renameSync(staging, copy);
   } catch (error) {
     try {

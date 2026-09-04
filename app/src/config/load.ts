@@ -5,7 +5,8 @@ import { parse as parseYaml } from 'yaml';
 import type { z } from 'zod';
 
 import { CliError } from '../exec.ts';
-import { tildify } from '../user-paths.ts';
+import { claudeDir, tildify } from '../user-paths.ts';
+import { pathsFor, type Hangar } from '../hangar.ts';
 import { hangarConfigSchema, type HangarConfig } from './schema.ts';
 
 /** The marker file. Its presence is what makes a directory a hangar. */
@@ -49,29 +50,6 @@ const walkUp = (from: string): string | undefined => {
     const parent = dirname(dir);
     if (parent === dir) return undefined;
     dir = parent;
-  }
-};
-
-/**
- * Is this directory the Hangar TOOL's own checkout rather than a hangar?
- *
- * The pre-refactor CLI derived its root from `import.meta.dirname/../..`, which was correct
- * only because the CLI lived two levels inside the hangar. Now that the tool has its own
- * repo, that expression would answer "the tool" -- so the tool's directory must never be a
- * candidate, and an absence needs an assertion or it comes back.
- */
-const isToolCheckout = (dir: string): boolean => {
-  const pkg = join(dir, 'package.json');
-  if (!existsSync(pkg)) return false;
-  try {
-    const parsed: unknown = JSON.parse(readFileSync(pkg, 'utf8'));
-    return (
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      (parsed as { name?: unknown }).name === 'hangar'
-    );
-  } catch {
-    return false;
   }
 };
 
@@ -190,21 +168,101 @@ export type LoadOptions = FindOptions & { readonly requireConfig?: boolean };
 export const loadHangarConfig = (opts: LoadOptions): HangarLocation & { config: HangarConfig } => {
   const found = findHangar(opts);
   if (found === undefined) {
-    const hint = isToolCheckout(walkUp(opts.cwd) ?? opts.cwd)
-      ? `${tildify(opts.cwd)} is inside the Hangar tool's own repo, which is not a hangar.`
-      : `Looked for ${CONFIG_FILENAME} in ${tildify(resolve(opts.cwd))} and every parent.`;
     throw new CliError(
       'not inside a hangar',
-      `${hint}\nPass --hangar <path>, set ${ROOT_ENV_KEY}, or run \`hangar setup\` in a new hangar root.`,
-    );
-  }
-  if (isToolCheckout(found.root)) {
-    throw new CliError(
-      `${tildify(found.root)} is the Hangar tool's own repo, not a hangar`,
-      'Run from inside a hangar, or pass --hangar <path>.',
+      `Looked for ${CONFIG_FILENAME} in ${tildify(resolve(opts.cwd))} and every parent.\n` +
+        `Run \`hangar setup\` here to make this directory a hangar, or pass --hangar <path>\n` +
+        `or set ${ROOT_ENV_KEY} to act on an existing one.`,
     );
   }
   return { ...found, config: loadConfigFile(found.configPath) };
+};
+
+/**
+ * The hangar this invocation acts on: location, config, and every path derived from the root.
+ *
+ * There USED to be a guard here refusing a candidate whose `package.json` named the tool, on the
+ * reasoning that the tool's own checkout must never be mistaken for a hangar. That guard is gone,
+ * and deliberately: Hangar is distributed by publishing this repository, so a clone of it IS the
+ * hangar root -- `app/package.json` is named `hangar`, and the guard's message told anyone
+ * running the CLI from `app/` before setup that they were "inside the Hangar tool's own repo,
+ * which is not a hangar", when `hangar setup` one directory up was exactly the right answer.
+ * The discriminator between a tool checkout and a hangar was always `hangar.config.yaml`, which
+ * is the marker the walk already looks for.
+ */
+export const loadHangar = (opts: LoadOptions): Hangar => {
+  const { root, source, config } = loadHangarConfig(opts);
+  return Object.freeze({
+    root,
+    id: config.id,
+    config,
+    source,
+    paths: pathsFor(root, claudeDir),
+    configFellBack: false,
+  });
+};
+
+/**
+ * A legal id derived from a directory name, or a last resort.
+ *
+ * Only reached when the config will not parse, so there is no configured id to use and the
+ * directory name is the best remaining evidence of which hangar this is.
+ */
+const idFromRoot = (root: string): string => {
+  const cleaned = basename(root)
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '_')
+    .replace(/^[^a-z]+/, '')
+    .slice(0, 24);
+  return cleaned.length >= 2 ? cleaned : 'hangar';
+};
+
+/**
+ * The hangar, with an unparseable config downgraded to schema defaults instead of an error.
+ *
+ * For the three commands whose whole job is to report on the config -- `doctor`, `config show`,
+ * `config validate`. `hangar-internals/reference/config.md` states the rule this preserves:
+ * ABSENCE is a gate, INVALIDITY is a report, and a gate that parsed the file would stop the
+ * only commands able to explain it.
+ *
+ * Every other command gets `loadHangar` and refuses.
+ */
+export const loadHangarTolerant = (opts: LoadOptions): Hangar => {
+  const found = findHangar(opts);
+  if (found === undefined) return loadHangar(opts); // no hangar at all: same error as everyone
+  try {
+    return loadHangar(opts);
+  } catch (error) {
+    const config = hangarConfigSchema.parse({
+      id: idFromRoot(found.root),
+      forge: { originUrl: 'unknown' },
+      ports: { roles: [] },
+    });
+    return Object.freeze({
+      root: found.root,
+      id: config.id,
+      config,
+      source: found.source,
+      paths: pathsFor(found.root, claudeDir),
+      configFellBack: true,
+      configError: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
+/**
+ * The same, but `undefined` instead of a throw.
+ *
+ * Exists for `jira hook` alone, whose `PreToolUse` contract is fail-open: a non-zero exit there
+ * blocks the tool call it was only meant to accelerate, so every failure it can have -- no
+ * hangar, an unparseable config -- has to end in exit 0 and silence.
+ */
+export const tryLoadHangar = (opts: LoadOptions): Hangar | undefined => {
+  try {
+    return loadHangar(opts);
+  } catch {
+    return undefined;
+  }
 };
 
 /** The JSON Schema published for editors. Generated -- never hand-edited. */

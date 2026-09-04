@@ -3,7 +3,6 @@ import { join } from 'node:path';
 
 import { run } from '../exec.ts';
 import type { Clone } from '../fleet.ts';
-import { fleetRoot } from '../paths.ts';
 import type { EditorDriver, LaunchResult } from './types.ts';
 
 /**
@@ -65,7 +64,7 @@ export const xcodeDriver = (): EditorDriver => ({
  * tree is which), and swept away with the rest of `.hangar/`.
  */
 export const eclipseWorkspaceDir = (clone: Clone): string =>
-  join(fleetRoot, '.hangar', 'eclipse', clone.name);
+  join(clone.hangar.root, '.hangar', 'eclipse', clone.name);
 
 const launchEclipse = (binary: string, clone: Clone): LaunchResult | undefined => {
   const data = eclipseWorkspaceDir(clone);

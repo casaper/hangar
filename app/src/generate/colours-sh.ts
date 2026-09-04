@@ -1,5 +1,5 @@
+import type { Hangar } from '../hangar.ts';
 import type { Clone } from '../fleet.ts';
-import { cloneColoursScript } from '../paths.ts';
 import { type Artifact, artifactHeader } from './index.ts';
 
 /**
@@ -21,7 +21,8 @@ import { type Artifact, artifactHeader } from './index.ts';
  * to `[a-z][a-z0-9_]*` by the config schema for exactly this reason: it has to be a legal shell
  * function name.
  */
-export const cloneColoursArtifact = (clones: readonly Clone[], hangarId: string): Artifact => {
+export const cloneColoursArtifact = (hangar: Hangar, clones: readonly Clone[]): Artifact => {
+  const hangarId = hangar.id;
   const fn = `hangar_${hangarId}_colour`;
   const labelWidth = Math.max(3, ...clones.map((c) => c.name.length + 2));
   const fieldsWidth = Math.max(
@@ -44,6 +45,7 @@ export const cloneColoursArtifact = (clones: readonly Clone[], hangarId: string)
 
   const content = [
     artifactHeader(
+      hangar,
       `Canonical per-clone hues for the ${hangarId} hangar. Sourceable by sh/bash/zsh.`,
     ),
     '#',
@@ -70,7 +72,7 @@ export const cloneColoursArtifact = (clones: readonly Clone[], hangarId: string)
   ].join('\n');
 
   return {
-    path: cloneColoursScript,
+    path: hangar.paths.cloneColoursScript,
     content,
     mode: 0o755,
     what: 'hue table for shell consumers',

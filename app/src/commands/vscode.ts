@@ -26,6 +26,7 @@ import {
   writeCopy,
   type CopyState,
 } from '../editor/vscode.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar ide vscode sync` -- one VS Code setup across the fleet, with the per-clone paths
@@ -146,12 +147,13 @@ const compareTracked = (
 
 /** An untracked artifact: templated from one clone's copy and rendered into every clone. */
 const syncUntracked = (
+  hangar: Hangar,
   artifact: EditorArtifact,
   clones: readonly Clone[],
   opts: EditorSyncOptions,
 ): Result => {
   const copies = readCopies(artifact, clones);
-  const from = opts.from === undefined ? undefined : requireClone(opts.from);
+  const from = opts.from === undefined ? undefined : requireClone(hangar, opts.from);
   const source = pickSource(
     from === undefined ? copies : copies.filter((c) => c.clone.index === from.index),
   );
@@ -243,8 +245,8 @@ const syncUntracked = (
  * `templatize`/`render` an identity transform, so "copy it everywhere" is just the degenerate
  * case of "template it and render it per clone".
  */
-export const editorSync = (driver: EditorDriver, opts: EditorSyncOptions): void => {
-  const clones = discoverClones();
+export const editorSync = (hangar: Hangar, driver: EditorDriver, opts: EditorSyncOptions): void => {
+  const clones = discoverClones(hangar);
   if (clones.length === 0) throw new CliError('no clones in the fleet');
 
   let changed = 0;
@@ -255,7 +257,7 @@ export const editorSync = (driver: EditorDriver, opts: EditorSyncOptions): void 
     const { tracked, byGit } = trackedAnywhere(artifact, clones);
     const result = tracked
       ? compareTracked(artifact, clones, byGit)
-      : syncUntracked(artifact, clones, opts);
+      : syncUntracked(hangar, artifact, clones, opts);
     if (clones.some((clone) => artifact.copies(clone).some((path) => existsSync(path)))) {
       present += 1;
     }
@@ -292,8 +294,8 @@ export const editorSync = (driver: EditorDriver, opts: EditorSyncOptions): void 
 };
 
 /** `hangar ide <kind> sync` -- refuses rather than acting on an editor this hangar is not set up for. */
-export const syncEditor = (kind: EditorKind, opts: EditorSyncOptions): void => {
-  const { driver, fellBack } = editorFor(kind);
+export const syncEditor = (hangar: Hangar, kind: EditorKind, opts: EditorSyncOptions): void => {
+  const { driver, fellBack } = editorFor(hangar, kind);
   if (fellBack) {
     // The list this was checked against is the schema default, not the developer's -- so
     // "add it to editor.kinds" would be the wrong advice, and syncing the default editor
@@ -315,5 +317,5 @@ export const syncEditor = (kind: EditorKind, opts: EditorSyncOptions): void => {
       'Its project files are either generated state or tracked by git — see the driver header for which.',
     );
   }
-  editorSync(driver, opts);
+  editorSync(hangar, driver, opts);
 };

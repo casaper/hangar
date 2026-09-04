@@ -6,9 +6,10 @@ import { stringify as stringifyYaml } from 'yaml';
 import { configJsonSchemaText } from '../config/json-schema.ts';
 import { CONFIG_FILENAME, jsonSchemaFileName, loadHangarConfig } from '../config/load.ts';
 import { CliError } from '../exec.ts';
-import { fleetRoot } from '../paths.ts';
+
 import { tildify } from '../user-paths.ts';
 import { heading, note, ok, warn } from '../ui.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * Print the config as the CLI actually sees it -- every default applied.
@@ -58,8 +59,8 @@ export type SchemaOptions = {
  * `--check` is what a pre-commit or CI step runs: the committed schema must match a fresh
  * render of the zod schema, or the editor is validating against yesterday's rules.
  */
-export const configSchema = (opts: SchemaOptions): void => {
-  const target = opts.out ?? join(fleetRoot, jsonSchemaFileName);
+export const configSchema = (hangar: Hangar, opts: SchemaOptions): void => {
+  const target = opts.out ?? join(hangar.root, jsonSchemaFileName);
   const rendered = configJsonSchemaText();
 
   if (opts.check === true) {
@@ -86,7 +87,7 @@ export const configSchema = (opts: SchemaOptions): void => {
   }
   writeFileSync(target, rendered);
   ok(`${existed ? 'updated' : 'written'}    ${tildify(target)}`);
-  if (!existsSync(join(fleetRoot, CONFIG_FILENAME))) {
+  if (!existsSync(join(hangar.root, CONFIG_FILENAME))) {
     warn(`no ${CONFIG_FILENAME} beside it yet — run \`hangar setup\``);
   }
 };

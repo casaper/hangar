@@ -4,6 +4,7 @@ import { readEnvLocalPorts } from '../clone-config.ts';
 import { discoverClones, type Clone } from '../fleet.ts';
 import { devServerUrl, PORT_ROLES, PORT_ROLE_ORDER, storybookUrl } from '../ports.ts';
 import { cloneLabel, note, table, warn } from '../ui.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar ports` -- the fleet's whole port map in one place.
@@ -23,8 +24,8 @@ type Row = {
   drift: string[];
 };
 
-const inspect = (): Row[] =>
-  discoverClones().map((clone) => {
+const inspect = (hangar: Hangar): Row[] =>
+  discoverClones(hangar).map((clone) => {
     const actual = readEnvLocalPorts(clone);
     const drift: string[] = [];
     for (const role of PORT_ROLE_ORDER) {
@@ -37,8 +38,8 @@ const inspect = (): Row[] =>
     return { clone, actual, drift };
   });
 
-export const ports = (opts: PortsOptions): void => {
-  const rows = inspect();
+export const ports = (hangar: Hangar, opts: PortsOptions): void => {
+  const rows = inspect(hangar);
 
   if (opts.json === true) {
     console.log(

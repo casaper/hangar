@@ -9,6 +9,7 @@ import { tildify } from '../user-paths.ts';
 import { claudeSessionsIn, runningServersIn } from '../procs.ts';
 import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
 import { coloursSync } from './colours.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar remove-clone` -- take a clone out of the fleet, and optionally delete it.
@@ -75,9 +76,9 @@ const detachedPathFor = (clone: Clone): string => {
   return `${base}-${new Date().toISOString().replace(/[:.]/g, '-')}`;
 };
 
-export const removeClone = (ref: string, opts: RemoveCloneOptions): void => {
-  const clone = requireClone(ref);
-  const siblings = discoverClones().filter((c) => c.index !== clone.index);
+export const removeClone = (hangar: Hangar, ref: string, opts: RemoveCloneOptions): void => {
+  const clone = requireClone(hangar, ref);
+  const siblings = discoverClones(hangar).filter((c) => c.index !== clone.index);
   const deleting = opts.delete === true;
 
   heading(`${deleting ? 'Deleting' : 'Detaching'} ${cloneLabel(clone)}`);
@@ -126,15 +127,15 @@ export const removeClone = (ref: string, opts: RemoveCloneOptions): void => {
     ok(`deleted ${tildify(theme)}`);
   }
 
-  // 4. its colour assignment, if a human chose one. `nextFreeIndex()` reuses this index, so
+  // 4. its colour assignment, if a human chose one. `nextFreeIndex(hangar)` reuses this index, so
   //    leaving it behind would hand the next clone this one's hue.
-  if (clearColourAssignment(clone.index)) {
-    ok(`dropped its ${clone.colour.name} assignment from ${colourAssignmentsLabel()}`);
+  if (clearColourAssignment(hangar, clone.index)) {
+    ok(`dropped its ${clone.colour.name} assignment from ${colourAssignmentsLabel(hangar)}`);
   }
 
   // 5. the generated artifacts no longer mention it
   heading('Regenerating colour artifacts');
-  coloursSync({});
+  coloursSync(hangar, {});
 
   note(`Index ${clone.index} is now free; the next \`hangar add-clone\` will reuse it.`);
 };

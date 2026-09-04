@@ -13,7 +13,7 @@ import {
 import { MANAGER_COMMANDS } from '../config/schema.ts';
 import { inspectEnvironment, type EnvironmentReport } from '../environment.ts';
 import { CliError } from '../exec.ts';
-import { fleetRoot } from '../paths.ts';
+
 import { tildify } from '../user-paths.ts';
 import { blank, fail, heading, note, ok, step, warn } from '../ui.ts';
 
@@ -294,14 +294,21 @@ const ask = async (
   return answer === '' ? fallback : answer;
 };
 
-export const setup = async (opts: SetupOptions): Promise<void> => {
+/**
+ * Takes the target DIRECTORY, not a `Hangar`.
+ *
+ * This is the one command that runs where a hangar does not exist yet -- that is what it is for
+ * -- so it cannot be handed one. `cli.ts` passes the nearest hangar's root when there is one (a
+ * re-run with `--force`) and the working directory when there is not.
+ */
+export const setup = async (root: string, opts: SetupOptions): Promise<void> => {
   const dryRun = opts.dryRun === true;
   const yes = opts.yes === true;
 
-  heading(`hangar setup — ${tildify(fleetRoot)}`);
-  reportEnvironment(inspectEnvironment());
+  heading(`hangar setup — ${tildify(root)}`);
+  reportEnvironment(inspectEnvironment(root));
 
-  const configPath = join(fleetRoot, CONFIG_FILENAME);
+  const configPath = join(root, CONFIG_FILENAME);
   if (existsSync(configPath) && opts.force !== true) {
     // Re-running setup on a configured hangar should not silently rewrite hand edits.
     loadConfigFile(configPath);
@@ -311,7 +318,7 @@ export const setup = async (opts: SetupOptions): Promise<void> => {
     return;
   }
 
-  const derived = deriveDefaults(fleetRoot);
+  const derived = deriveDefaults(root);
   blank();
   heading('Configuration');
   note(
@@ -366,7 +373,7 @@ export const setup = async (opts: SetupOptions): Promise<void> => {
 
   const yaml = configYamlContent(answers);
   const schema = configJsonSchemaText();
-  const schemaPath = join(fleetRoot, jsonSchemaFileName);
+  const schemaPath = join(root, jsonSchemaFileName);
 
   blank();
   if (dryRun) {

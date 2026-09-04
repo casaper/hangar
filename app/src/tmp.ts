@@ -2,7 +2,7 @@ import { lstatSync, readdirSync, readlinkSync, statSync, symlinkSync } from 'nod
 import { basename, join } from 'node:path';
 
 import type { Clone } from './fleet.ts';
-import { fleetTmp, jiraTicketsDir } from './paths.ts';
+import type { Hangar } from './hangar.ts';
 
 /**
  * The shared `tmp/`: one store at the fleet root, and per-ENTRY symlinks in every clone.
@@ -31,7 +31,7 @@ import { fleetTmp, jiraTicketsDir } from './paths.ts';
 export const cloneTmpPath = (clone: Clone): string => join(clone.path, 'tmp');
 
 /** Named from the path itself, so the two can never say different things. */
-const JIRA_TICKETS_DIRNAME = basename(jiraTicketsDir);
+const jiraTicketsDirname = (hangar: Hangar): string => basename(hangar.paths.jiraTickets);
 
 const lstatOrUndefined = (path: string): ReturnType<typeof lstatSync> | undefined => {
   try {
@@ -90,14 +90,16 @@ export const isPrivateTmpEntry = (clone: Clone, name: string): boolean => {
  * links already CONTAIN that content, as hard links, under the names the skills own. A symlink
  * to the record store on top of that would be a second way in, to a path no skill owns.
  */
-export const shareableStoreEntries = (names: readonly string[]): string[] =>
+export const shareableStoreEntries = (hangar: Hangar, names: readonly string[]): string[] =>
   names
-    .filter((name) => !name.startsWith('.') && !isPidFile(name) && name !== JIRA_TICKETS_DIRNAME)
+    .filter(
+      (name) => !name.startsWith('.') && !isPidFile(name) && name !== jiraTicketsDirname(hangar),
+    )
     .sort();
 
-export const storeEntries = (): string[] => {
+export const storeEntries = (hangar: Hangar): string[] => {
   try {
-    return shareableStoreEntries(readdirSync(fleetTmp));
+    return shareableStoreEntries(hangar, readdirSync(hangar.paths.tmp));
   } catch {
     return [];
   }
@@ -113,16 +115,19 @@ export const storeEntries = (): string[] => {
  * name that is somehow occupied already -- `symlinkSync` would throw EEXIST on it and abort
  * the rest of the clone's setup.
  */
-export const linkStoreEntriesInto = (tmp: string): { linked: string[]; taken: string[] } => {
+export const linkStoreEntriesInto = (
+  hangar: Hangar,
+  tmp: string,
+): { linked: string[]; taken: string[] } => {
   const linked: string[] = [];
   const taken: string[] = [];
-  for (const name of storeEntries()) {
+  for (const name of storeEntries(hangar)) {
     const path = join(tmp, name);
     if (lstatOrUndefined(path) !== undefined) {
       taken.push(name);
       continue;
     }
-    symlinkSync(join(fleetTmp, name), path);
+    symlinkSync(join(hangar.paths.tmp, name), path);
     linked.push(name);
   }
   return { linked, taken };
@@ -139,7 +144,7 @@ export const linkTargetOf = (path: string): string | undefined => {
 
 /** True when `clone_NN/tmp/<name>` is the symlink into the store this fleet maintains. */
 export const isLinkedIntoStore = (clone: Clone, name: string): boolean =>
-  linkTargetOf(join(cloneTmpPath(clone), name)) === join(fleetTmp, name);
+  linkTargetOf(join(cloneTmpPath(clone), name)) === join(clone.hangar.paths.tmp, name);
 
 /**
  * True when a clone's `tmp` is a symlink rather than its own directory.
@@ -163,9 +168,9 @@ export const tmpIsOwnDirectory = (clone: Clone): boolean =>
  * symlink to it -- the shape above -- and it is exactly the file that makes one clone's dev
  * server look like every clone's. Reported, never deleted: it may belong to a live process.
  */
-export const strayPidFilesInStore = (): string[] => {
+export const strayPidFilesInStore = (hangar: Hangar): string[] => {
   try {
-    return readdirSync(fleetTmp).filter(isPidFile);
+    return readdirSync(hangar.paths.tmp).filter(isPidFile);
   } catch {
     return [];
   }

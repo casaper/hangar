@@ -1,9 +1,9 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
-import { discoverClones } from '../fleet.ts';
+import { CLONE_DIR_RE } from '../fleet.ts';
 import { run } from '../exec.ts';
-import { tryDefaultBranch } from './default-branch.ts';
+import { defaultBranchFromGit } from '../git.ts';
 import { atlassianUrl } from '../paths.ts';
 import { PORT_ROLE_ORDER, PORT_ROLES, PORT_STEP } from '../ports.ts';
 
@@ -119,8 +119,27 @@ export const detectKeyPrefix = (clonePath: string): string | undefined => {
   return bestCount >= 3 ? best : undefined;
 };
 
+/**
+ * The clone directories under a root, by path alone.
+ *
+ * Deliberately NOT `discoverClones`: this module runs during `hangar setup`, where there is no
+ * config to read and therefore no `Hangar` to pass -- that is the whole situation setup exists
+ * to end. All it needs is somewhere to ask git about an origin and a default branch, and a
+ * directory name is enough for that.
+ */
+const cloneDirsIn = (root: string): string[] => {
+  try {
+    return readdirSync(root, { withFileTypes: true })
+      .filter((e) => (e.isDirectory() || e.isSymbolicLink()) && CLONE_DIR_RE.test(e.name))
+      .map((e) => join(root, e.name))
+      .sort();
+  } catch {
+    return [];
+  }
+};
+
 export const deriveDefaults = (hangarRoot: string): DerivedDefaults => {
-  const clones = discoverClones();
+  const clones = cloneDirsIn(hangarRoot).map((path) => ({ path }));
   const first = clones[0];
 
   const originUrl =
@@ -138,7 +157,7 @@ export const deriveDefaults = (hangarRoot: string): DerivedDefaults => {
    * `master`, and the first command that needs it detects and records it -- so a blank answer
    * here costs nothing.
    */
-  const defaultBranch = tryDefaultBranch();
+  const defaultBranch = first === undefined ? undefined : defaultBranchFromGit(first.path);
 
   const appDir = first === undefined ? '' : detectAppDir(first.path);
 

@@ -6,11 +6,11 @@ import { isMap, isScalar, parse as parseYaml, parseDocument, type Document } fro
 import { CliError, run } from '../exec.ts';
 import { discoverClones } from '../fleet.ts';
 import { defaultBranchFromGit, setRemoteHeadAuto } from '../git.ts';
-import { fleetRoot } from '../paths.ts';
 import { tildify } from '../user-paths.ts';
 import { note, step, warn } from '../ui.ts';
 import { CONFIG_FILENAME, loadConfigFile } from './load.ts';
 import { hangarConfigSchema } from './schema.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `forge.defaultBranch` -- the one place the hangar's default branch is answered from.
@@ -79,8 +79,8 @@ type Detection = { readonly branch: string; readonly how: string };
  * Clones disagreeing is possible (one made before the repo renamed its default branch), so it
  * is reported rather than silently resolved by whichever clone sorts first.
  */
-const detect = (originUrl: string): Detection | undefined => {
-  const clones = discoverClones();
+const detect = (hangar: Hangar, originUrl: string): Detection | undefined => {
+  const clones = discoverClones(hangar);
 
   const seen = new Map<string, string[]>();
   for (const clone of clones) {
@@ -240,8 +240,8 @@ export type RequireOptions = {
 };
 
 /** The hangar's default branch, detected and recorded if the config does not name it yet. */
-export const requireDefaultBranch = (opts: RequireOptions): string => {
-  const root = fleetRoot;
+export const requireDefaultBranch = (hangar: Hangar, opts: RequireOptions): string => {
+  const root = hangar.root;
   const cached = resolved.get(root);
   if (cached !== undefined) return cached;
 
@@ -252,7 +252,7 @@ export const requireDefaultBranch = (opts: RequireOptions): string => {
     return named;
   }
 
-  const found = detect(config.forge.originUrl);
+  const found = detect(hangar, config.forge.originUrl);
   if (found === undefined) {
     throw new CliError(
       'cannot tell which branch this repo treats as its default',
@@ -278,8 +278,8 @@ export const requireDefaultBranch = (opts: RequireOptions): string => {
  * is safe on the paths where "I do not know" is a legitimate answer, and it is the only form
  * anything reachable from the fail-open Jira hook may use.
  */
-export const tryDefaultBranch = (): string | undefined => {
-  const root = fleetRoot;
+export const tryDefaultBranch = (hangar: Hangar): string | undefined => {
+  const root = hangar.root;
   const cached = resolved.get(root);
   if (cached !== undefined) return cached;
 
@@ -296,7 +296,7 @@ export const tryDefaultBranch = (): string | undefined => {
   // Cached like the config hit: `status --all` asks once per clone through
   // `warnOnDuplicateBranches` and `inferTicket`, and re-walking the clones to shell out to
   // `symbolic-ref` each time would quietly undo the "asked once per hangar" property.
-  for (const clone of discoverClones()) {
+  for (const clone of discoverClones(hangar)) {
     const branch = defaultBranchFromGit(clone.path);
     if (branch !== undefined) {
       resolved.set(root, branch);

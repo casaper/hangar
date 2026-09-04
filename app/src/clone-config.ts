@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { CliError } from './exec.ts';
 import type { Clone } from './fleet.ts';
 import { themeName } from './generate/theme-json.ts';
-import { envShared, fleetRoot } from './paths.ts';
+import type { Hangar } from './hangar.ts';
 import { tildify } from './user-paths.ts';
 import { PORT_ROLES } from './ports.ts';
 
@@ -53,12 +53,20 @@ export const playwrightEnvLocalPath = (clone: Clone): string =>
  */
 export const EXCLUDE_LINES = ['/CLAUDE.local.md'] as const;
 export const EXCLUDE_LINE = EXCLUDE_LINES[0];
-export const EXCLUDE_BLOCK = [
-  '',
-  `# Per-clone Claude Code identity (fleet: ${tildify(fleetRoot)})`,
-  ...EXCLUDE_LINES,
-  '',
-].join('\n');
+/**
+ * A FUNCTION, not a constant, and this is one of the five that had to change when the hangar
+ * root stopped being known at import time. It embeds the root in text written into a live
+ * clone's `.git/info/exclude`; evaluated at import it would have captured whatever the CLI's own
+ * location happened to be -- a wrong absolute path that typechecks, lints, and is invisible
+ * until someone reads the file.
+ */
+export const excludeBlock = (hangar: Hangar): string =>
+  [
+    '',
+    `# Per-clone Claude Code identity (hangar: ${tildify(hangar.root)})`,
+    ...EXCLUDE_LINES,
+    '',
+  ].join('\n');
 
 /** The lines `.git/info/exclude` is missing, so `doctor` can append only what is absent. */
 export const missingExcludeLines = (exclude: string): string[] => {
@@ -69,7 +77,7 @@ export const missingExcludeLines = (exclude: string): string[] => {
 export const envLocalContent = (clone: Clone): string =>
   [
     '# Per-clone values ONLY. Secrets shared by every clone live one level up in',
-    `# ${tildify(envShared)}, loaded by this clone's .envrc.private before this file`,
+    `# ${tildify(clone.hangar.paths.envShared)}, loaded by this clone's .envrc.private before this file`,
     '# (so anything set here still overrides the shared value).',
     '#',
     '# Ports must differ per clone: two clones sharing a dev server means a test run in one',
@@ -86,7 +94,7 @@ export const envLocalContent = (clone: Clone): string =>
     '',
   ].join('\n');
 
-export const envrcPrivateContent = (): string =>
+export const envrcPrivateContent = (hangar: Hangar): string =>
   [
     '## Private direnv config for this clone -- gitignored, never committed.',
     '#',
@@ -94,7 +102,7 @@ export const envrcPrivateContent = (): string =>
     '# (ATLASSIAN_USER_EMAIL, ATLASSIAN_API_TOKEN, JIRA_API_TOKEN, CONTEXT7_API_KEY,',
     '# PROJECT_GIT_ROOT_PATH) is set by dotenv files instead:',
     '#',
-    `#   ${tildify(envShared)}  -- secrets identical in every clone (loaded below)`,
+    `#   ${tildify(hangar.paths.envShared)}  -- secrets identical in every clone (loaded below)`,
     "#   ./.env.local               -- this clone's own ports and PROJECT_GIT_ROOT_PATH",
     '#',
     '# The file is kept because it is the only gitignored, per-clone shell hook that direnv',
@@ -107,26 +115,28 @@ export const envrcPrivateContent = (): string =>
     "# Loaded here, which is BEFORE this clone's own `.env.local` -- so `.env.local`",
     '# still wins for anything set in both.',
     '',
-    `dotenv_if_exists "${envSharedShellRef()}"`,
-    `watch_file "${envSharedShellRef()}"`,
+    `dotenv_if_exists "${envSharedShellRef(hangar)}"`,
+    `watch_file "${envSharedShellRef(hangar)}"`,
     '',
     '# The fleet orchestration CLI. direnv loads the nearest .envrc only, so this clone never',
     "# inherits the fleet root's PATH_add -- it has to be repeated here for `hangar` to be",
     '# callable by name from inside the clone. Managed by `hangar add-clone`; repair it',
     '# with `hangar doctor --fix`.',
-    `PATH_add "${fleetBinShellRef()}"`,
+    `PATH_add "${fleetBinShellRef(hangar)}"`,
     '',
   ].join('\n');
 
 /** The fleet's `bin/`, as `$HOME/...` so the file reads the same on any machine. */
-const fleetBinShellRef = (): string =>
-  join(fleetRoot, 'bin').replace(process.env['HOME'] ?? '~', '$HOME');
+const fleetBinShellRef = (hangar: Hangar): string =>
+  join(hangar.root, 'bin').replace(process.env['HOME'] ?? '~', '$HOME');
 
 /** The literal PATH line, so `doctor` can assert on exactly what the generator writes. */
-export const FLEET_BIN_PATH_LINE = (): string => `PATH_add "${fleetBinShellRef()}"`;
+export const fleetBinPathLine = (hangar: Hangar): string =>
+  `PATH_add "${fleetBinShellRef(hangar)}"`;
 
 /** `$HOME/...` rather than a literal home path, matching the existing clones. */
-const envSharedShellRef = (): string => envShared.replace(process.env['HOME'] ?? '~', '$HOME');
+const envSharedShellRef = (hangar: Hangar): string =>
+  hangar.paths.envShared.replace(process.env['HOME'] ?? '~', '$HOME');
 
 /**
  * A markdown table padded the way Prettier pads one.
@@ -168,7 +178,7 @@ export const claudeLocalMdContent = (clone: Clone): string => {
   return [
     `# This clone: ${clone.name} (${clone.colour.name})`,
     '',
-    `You are working in **\`${clone.name}\`**, one of the sibling clones under \`${tildify(fleetRoot)}/\`.`,
+    `You are working in **\`${clone.name}\`**, one of the sibling clones under \`${tildify(clone.hangar.root)}/\`.`,
     `Announce yourself as **${clone.colour.name}** when the user needs to tell your session apart from`,
     'the others.',
     '',
@@ -215,7 +225,7 @@ export const claudeLocalMdContent = (clone: Clone): string => {
     '',
     '## `tmp/` is shared with the whole fleet',
     '',
-    `Every \`tmp/<name>\` entry is a symlink into \`${tildify(fleetRoot)}/tmp/\`, and each cached Jira`,
+    `Every \`tmp/<name>\` entry is a symlink into \`${tildify(clone.hangar.root)}/tmp/\`, and each cached Jira`,
     'record is normally a **hard link** to one file the whole fleet shares — so editing',
     "`tmp/ABC-1234/ticket_ABC-1234.md` in place may rewrite every clone's copy of it, and you cannot",
     'tell from inside the clone (a re-sync detaches that one file until the next `tmp merge`). Read',
@@ -311,20 +321,21 @@ export type SettingsJson = {
  * The `has*Hook` readers deliberately do NOT use this: they answer "is the hook `doctor` would
  * write already in place", so a stale one has to read as a PROBLEM rather than as fine.
  */
-const HANGAR_BIN_DIR = join(fleetRoot, 'bin');
+const invokesOurCli = (hangar: Hangar, command: string | undefined, subcommand: string): boolean =>
+  command !== undefined &&
+  command.startsWith(`${join(hangar.root, 'bin')}/`) &&
+  command.includes(subcommand);
 
-const invokesOurCli = (command: string | undefined, subcommand: string): boolean =>
-  command !== undefined && command.startsWith(`${HANGAR_BIN_DIR}/`) && command.includes(subcommand);
+export const plansHookCommand = (hangar: Hangar): string =>
+  `${hangar.paths.bin} --hangar ${hangar.root} plans collect --quiet`;
 
-export const PLANS_HOOK_COMMAND = `${join(fleetRoot, 'bin', 'hangar')} plans collect --quiet`;
-
-const plansHook = (): HookMatcher => ({
-  hooks: [{ type: 'command', command: PLANS_HOOK_COMMAND, timeout: 60 }],
+const plansHook = (hangar: Hangar): HookMatcher => ({
+  hooks: [{ type: 'command', command: plansHookCommand(hangar), timeout: 60 }],
 });
 
-export const hasPlansHook = (settings: SettingsJson | undefined): boolean =>
+export const hasPlansHook = (hangar: Hangar, settings: SettingsJson | undefined): boolean =>
   (settings?.hooks?.['SessionEnd'] ?? []).some((matcher) =>
-    matcher.hooks.some((hook) => hook.command === PLANS_HOOK_COMMAND),
+    matcher.hooks.some((hook) => hook.command === plansHookCommand(hangar)),
   );
 
 /**
@@ -339,24 +350,25 @@ export const hasPlansHook = (settings: SettingsJson | undefined): boolean =>
  * Additive, not a replacement: Claude Code merges the tracked settings' hooks with these, so
  * the repo's own `PreToolUse` guard still runs.
  */
-export const JIRA_HOOK_COMMAND = `${join(fleetRoot, 'bin', 'hangar')} jira hook`;
+export const jiraHookCommand = (hangar: Hangar): string =>
+  `${hangar.paths.bin} --hangar ${hangar.root} jira hook`;
 
-const jiraHookMatcher = (): HookMatcher => ({
+const jiraHookMatcher = (hangar: Hangar): HookMatcher => ({
   matcher: 'Bash',
-  hooks: [{ type: 'command', command: JIRA_HOOK_COMMAND, timeout: 30 }],
+  hooks: [{ type: 'command', command: jiraHookCommand(hangar), timeout: 30 }],
 });
 
-export const hasJiraHook = (settings: SettingsJson | undefined): boolean =>
+export const hasJiraHook = (hangar: Hangar, settings: SettingsJson | undefined): boolean =>
   (settings?.hooks?.['PreToolUse'] ?? []).some((matcher) =>
-    matcher.hooks.some((hook) => hook.command === JIRA_HOOK_COMMAND),
+    matcher.hooks.some((hook) => hook.command === jiraHookCommand(hangar)),
   );
 
-export const withJiraHook = (settings: SettingsJson): SettingsJson => {
+export const withJiraHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
   const hooks = { ...settings.hooks };
   const existing = (hooks['PreToolUse'] ?? []).filter(
-    (matcher) => !matcher.hooks.some((hook) => invokesOurCli(hook.command, 'jira hook')),
+    (matcher) => !matcher.hooks.some((hook) => invokesOurCli(hangar, hook.command, 'jira hook')),
   );
-  hooks['PreToolUse'] = [...existing, jiraHookMatcher()];
+  hooks['PreToolUse'] = [...existing, jiraHookMatcher(hangar)];
   return { ...settings, hooks };
 };
 
@@ -378,23 +390,24 @@ export const withJiraHook = (settings: SettingsJson): SettingsJson => {
  * The store is never a wrong answer either way -- `jira hook` reads `fetched_at:` out of the
  * file and refuses to hand back anything older than the copy the clone already holds.
  */
-export const TMP_HOOK_COMMAND = `${join(fleetRoot, 'bin', 'hangar')} tmp merge --quiet`;
+export const tmpHookCommand = (hangar: Hangar): string =>
+  `${hangar.paths.bin} --hangar ${hangar.root} tmp merge --quiet`;
 
-const tmpHook = (): HookMatcher => ({
-  hooks: [{ type: 'command', command: TMP_HOOK_COMMAND, timeout: 120 }],
+const tmpHook = (hangar: Hangar): HookMatcher => ({
+  hooks: [{ type: 'command', command: tmpHookCommand(hangar), timeout: 120 }],
 });
 
-export const hasTmpHook = (settings: SettingsJson | undefined): boolean =>
+export const hasTmpHook = (hangar: Hangar, settings: SettingsJson | undefined): boolean =>
   (settings?.hooks?.['SessionEnd'] ?? []).some((matcher) =>
-    matcher.hooks.some((hook) => hook.command === TMP_HOOK_COMMAND),
+    matcher.hooks.some((hook) => hook.command === tmpHookCommand(hangar)),
   );
 
-export const withTmpHook = (settings: SettingsJson): SettingsJson => {
+export const withTmpHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
   const hooks = { ...settings.hooks };
   const existing = (hooks['SessionEnd'] ?? []).filter(
-    (matcher) => !matcher.hooks.some((hook) => invokesOurCli(hook.command, 'tmp merge')),
+    (matcher) => !matcher.hooks.some((hook) => invokesOurCli(hangar, hook.command, 'tmp merge')),
   );
-  hooks['SessionEnd'] = [...existing, tmpHook()];
+  hooks['SessionEnd'] = [...existing, tmpHook(hangar)];
   return { ...settings, hooks };
 };
 
@@ -405,13 +418,14 @@ export const withTmpHook = (settings: SettingsJson): SettingsJson => {
  * says `.claude/plans`, which is the only value that works, so a per-clone copy of it is one
  * more place to drift.
  */
-export const withPlansHook = (settings: SettingsJson): SettingsJson => {
+export const withPlansHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
   const { plansDirectory: _dropped, ...rest } = settings;
   const hooks = { ...rest.hooks };
   const existing = (hooks['SessionEnd'] ?? []).filter(
-    (matcher) => !matcher.hooks.some((hook) => invokesOurCli(hook.command, 'plans collect')),
+    (matcher) =>
+      !matcher.hooks.some((hook) => invokesOurCli(hangar, hook.command, 'plans collect')),
   );
-  hooks['SessionEnd'] = [...existing, plansHook()];
+  hooks['SessionEnd'] = [...existing, plansHook(hangar)];
   return { ...rest, hooks };
 };
 

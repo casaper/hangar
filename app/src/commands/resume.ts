@@ -9,6 +9,7 @@ import { paint } from '../palette.ts';
 import { tildify } from '../user-paths.ts';
 import { canPick, pickOne, type PickChoice } from '../tui.ts';
 import { cloneLabel, confirm, heading, note, table, truncate, visibleWidth, warn } from '../ui.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar resume [clone]` -- pick one of a clone's past Claude Code sessions and reopen it.
@@ -168,18 +169,22 @@ const limitOf = (opts: ResumeOptions): number => {
   return parsed === 0 ? Number.MAX_SAFE_INTEGER : parsed;
 };
 
-const cloneFor = (ref: string | undefined): Clone => {
-  if (ref !== undefined) return requireClone(ref);
-  const here = cloneForCwd();
+const cloneFor = (hangar: Hangar, ref: string | undefined): Clone => {
+  if (ref !== undefined) return requireClone(hangar, ref);
+  const here = cloneForCwd(hangar);
   if (here !== undefined) return here;
   throw new CliError(
     'resume needs a clone, and this directory is not inside one',
-    knownClonesHint(),
+    knownClonesHint(hangar),
   );
 };
 
-export const resume = async (ref: string | undefined, opts: ResumeOptions): Promise<void> => {
-  const clone = cloneFor(ref);
+export const resume = async (
+  hangar: Hangar,
+  ref: string | undefined,
+  opts: ResumeOptions,
+): Promise<void> => {
+  const clone = cloneFor(hangar, ref);
   const all = claudeTranscripts(clone);
   if (all.length === 0) {
     warn(`no resumable Claude Code sessions found for ${clone.name}`);

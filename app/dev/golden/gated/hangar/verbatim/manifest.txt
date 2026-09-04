@@ -1,13 +1,13 @@
-hangar-root        /Users/someone/code/dvb_gn   (fleetRoot: what commands use)
+hangar-root        /Users/someone/code/dvb_gn   (threaded: what every command acts on)
 hangar-id          dvb_gn
 discovery-source   walk
-discovery-root     /Users/someone/code/dvb_gn   (findHangar: the real walk)
+discovery-root     /Users/someone/code/dvb_gn   (findHangar: must agree)
 config-file        /Users/someone/code/dvb_gn/hangar.config.yaml
 editor-fell-back   false
 editor-kinds       vscode
-plans-hook         /Users/someone/code/dvb_gn/bin/hangar plans collect --quiet
-jira-hook          /Users/someone/code/dvb_gn/bin/hangar jira hook
-tmp-hook           /Users/someone/code/dvb_gn/bin/hangar tmp merge --quiet
+plans-hook         /Users/someone/code/dvb_gn/bin/hangar --hangar /Users/someone/code/dvb_gn plans collect --quiet
+jira-hook          /Users/someone/code/dvb_gn/bin/hangar --hangar /Users/someone/code/dvb_gn jira hook
+tmp-hook           /Users/someone/code/dvb_gn/bin/hangar --hangar /Users/someone/code/dvb_gn tmp merge --quiet
 fleet-bin-path     PATH_add "$HOME/code/dvb_gn/bin"
 port-roles         ng=4200 storybook=6006 playwrightReport=9323
 

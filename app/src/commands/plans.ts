@@ -5,7 +5,7 @@ import pc from 'picocolors';
 
 import { CliError, run } from '../exec.ts';
 import { discoverClones } from '../fleet.ts';
-import { fleetPlans, fleetRoot } from '../paths.ts';
+
 import { tildify, userPlans } from '../user-paths.ts';
 import {
   archiveNames,
@@ -23,6 +23,7 @@ import {
 } from '../plans.ts';
 import { planFilesInUse } from '../sessions.ts';
 import { fail, heading, note, ok, step, warn } from '../ui.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar plans collect` and `hangar plans stamp`.
@@ -56,7 +57,7 @@ const isTracked = (path: string): boolean =>
 
 const relabel = (file: PlanFile): string => `${file.source}/${file.name}`;
 
-export const plansCollect = (opts: CollectOptions): void => {
+export const plansCollect = (hangar: Hangar, opts: CollectOptions): void => {
   const dryRun = opts.dryRun === true;
   const quiet = opts.quiet === true;
   // In quiet mode every line is buffered and printed only if something moved, so the
@@ -68,23 +69,25 @@ export const plansCollect = (opts: CollectOptions): void => {
   };
 
   say(() => {
-    heading(`Collecting plans into ${tildify(fleetPlans)}${dryRun ? pc.dim(' (dry run)') : ''}`);
+    heading(
+      `Collecting plans into ${tildify(hangar.paths.plans)}${dryRun ? pc.dim(' (dry run)') : ''}`,
+    );
   });
 
-  const inUse = planFilesInUse(windowMinutes(opts));
+  const inUse = planFilesInUse(hangar, windowMinutes(opts));
   say(() => {
     note(
       `${inUse.sessions.length} live fleet session(s); ${inUse.names.size} plan file(s) they may still be holding`,
     );
   });
 
-  const sources = planSources();
+  const sources = planSources(hangar);
   // Without a clone there is nothing to collect FROM, and the shared user plans directory is
   // not fleet-scoped: a mistyped HANGAR_ROOT would otherwise drain another project's plans
   // into a stray directory.
-  if (discoverClones().length === 0) {
+  if (discoverClones(hangar).length === 0) {
     throw new CliError(
-      `no clones found in ${tildify(fleetRoot)}`,
+      `no clones found in ${tildify(hangar.root)}`,
       'plans collect gathers from the clones; run it from the fleet root.',
     );
   }
@@ -96,9 +99,9 @@ export const plansCollect = (opts: CollectOptions): void => {
     });
     candidates.push(...files);
   }
-  const archive = planFilesIn(fleetPlans, 'plans');
+  const archive = planFilesIn(hangar.paths.plans, 'plans');
   const bulk = bulkCopySeconds([...candidates, ...archive]);
-  const attributed = fleetAttribution();
+  const attributed = fleetAttribution(hangar);
   const userLabel = tildify(userPlans);
 
   // Skip what is not ours to move, before grouping: an unattributed file in the shared user
@@ -123,15 +126,15 @@ export const plansCollect = (opts: CollectOptions): void => {
     groups.set(file.stem, [...(groups.get(file.stem) ?? []), file]);
   }
 
-  if (!dryRun) mkdirSync(fleetPlans, { recursive: true });
-  const taken = archiveNames();
+  if (!dryRun) mkdirSync(hangar.paths.plans, { recursive: true });
+  const taken = archiveNames(hangar);
   let moved = 0;
   let dropped = 0;
   const conflicts: string[] = [];
   const undated: string[] = [];
 
   for (const [stem, files] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
-    const dated = resolveDay(files, bulk, opts.transcriptScan !== false);
+    const dated = resolveDay(hangar, files, bulk, opts.transcriptScan !== false);
     if (dated === undefined) undated.push(stem);
     const target = dated === undefined ? stem : stampedName(dated.day, stem);
 
@@ -159,7 +162,7 @@ export const plansCollect = (opts: CollectOptions): void => {
         conflicts.push(`${relabel(file)} — ${name} already exists, left in place`);
         continue;
       }
-      const to = join(fleetPlans, name);
+      const to = join(hangar.paths.plans, name);
       if (!dryRun) {
         // Two sessions can end at the same moment and both run this. Losing the race is not
         // an error worth failing a hook over -- the next run collects what is left.
@@ -200,18 +203,18 @@ export const plansCollect = (opts: CollectOptions): void => {
   }
 };
 
-export const plansStamp = (opts: StampOptions): void => {
+export const plansStamp = (hangar: Hangar, opts: StampOptions): void => {
   const dryRun = opts.dryRun === true;
-  heading(`Dating plans in ${tildify(fleetPlans)}${dryRun ? pc.dim(' (dry run)') : ''}`);
-  if (!existsSync(fleetPlans)) {
+  heading(`Dating plans in ${tildify(hangar.paths.plans)}${dryRun ? pc.dim(' (dry run)') : ''}`);
+  if (!existsSync(hangar.paths.plans)) {
     note('no archive yet — run `hangar plans collect` first');
     return;
   }
 
-  const inUse = planFilesInUse(windowMinutes(opts));
-  const files = planFilesIn(fleetPlans, 'plans');
+  const inUse = planFilesInUse(hangar, windowMinutes(opts));
+  const files = planFilesIn(hangar.paths.plans, 'plans');
   const bulk = bulkCopySeconds(files);
-  const taken = archiveNames();
+  const taken = archiveNames(hangar);
   let renamed = 0;
   let already = 0;
 
@@ -225,7 +228,7 @@ export const plansStamp = (opts: StampOptions): void => {
       warn(`${file.name} — ${why}, left alone`);
       continue;
     }
-    const dated = resolveDay([file], bulk, opts.transcriptScan !== false);
+    const dated = resolveDay(hangar, [file], bulk, opts.transcriptScan !== false);
     if (dated === undefined) {
       fail(`${file.name} — no recoverable date (filename, stat and transcripts all silent)`);
       continue;
@@ -238,8 +241,8 @@ export const plansStamp = (opts: StampOptions): void => {
     renamed += 1;
     ok(`${file.name} → ${name} ${pc.dim(`(from ${dated.from})`)}`);
     if (!dryRun) {
-      moveInto(file.path, join(fleetPlans, name));
-      setMtimeToDay(join(fleetPlans, name), dated.day);
+      moveInto(file.path, join(hangar.paths.plans, name));
+      setMtimeToDay(join(hangar.paths.plans, name), dated.day);
     }
     taken.add(name);
   }

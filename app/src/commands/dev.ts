@@ -8,16 +8,16 @@ import {
   envLocalPath,
   envrcPrivateContent,
   envrcPrivatePath,
-  EXCLUDE_BLOCK,
+  excludeBlock,
   excludePath,
-  FLEET_BIN_PATH_LINE,
-  JIRA_HOOK_COMMAND,
-  PLANS_HOOK_COMMAND,
+  fleetBinPathLine,
+  jiraHookCommand,
+  plansHookCommand,
   playwrightEnvLocalPath,
   settingsContentFor,
   settingsPath,
   storybookHealthCheckAllow,
-  TMP_HOOK_COMMAND,
+  tmpHookCommand,
   withJiraHook,
   withPlansHook,
   withTmpHook,
@@ -35,11 +35,12 @@ import { type Artifact } from '../generate/index.ts';
 import { statuslineArtifact } from '../generate/statusline-sh.ts';
 import { terminalHookArtifact } from '../generate/terminal-sh.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
-import { fleetRoot } from '../paths.ts';
+
 import { home } from '../user-paths.ts';
 import { PORT_ROLE_ORDER, PORT_ROLES } from '../ports.ts';
-import { currentHangarId, terminalColourSettings } from '../terminal/index.ts';
+
 import { heading, note, ok } from '../ui.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar dev golden` -- the regression net for a CLI with no test suite.
@@ -91,17 +92,17 @@ const TEMPLATE: SettingsJson = {
   plansDirectory: '.claude/plans',
 };
 
-const settingsTemplate = (): SettingsJson =>
-  withTmpHook(withJiraHook(withPlansHook(structuredClone(TEMPLATE))));
+const settingsTemplate = (hangar: Hangar): SettingsJson =>
+  withTmpHook(hangar, withJiraHook(hangar, withPlansHook(hangar, structuredClone(TEMPLATE))));
 
 /** Normalise the two absolute prefixes, longest first -- the hangar root lives under $HOME. */
-const normalise = (text: string): string =>
-  text.split(fleetRoot).join('%HANGAR%').split(home).join('%HOME%');
+const normalise = (hangar: Hangar, text: string): string =>
+  text.split(hangar.root).join('%HANGAR%').split(home).join('%HOME%');
 
-const write = (out: string, rel: string, content: string): void => {
+const write = (hangar: Hangar, out: string, rel: string, content: string): void => {
   for (const [dir, text] of [
     [join(out, 'verbatim'), content],
-    [join(out, 'normalised'), normalise(content)],
+    [join(out, 'normalised'), normalise(hangar, content)],
   ] as const) {
     const path = join(dir, rel);
     mkdirSync(dirname(path), { recursive: true });
@@ -109,36 +110,43 @@ const write = (out: string, rel: string, content: string): void => {
   }
 };
 
-const parseIndices = (spec: string): number[] =>
+const parseIndices = (hangar: Hangar, spec: string): number[] =>
   spec
     .split(',')
     .map((part) => Number.parseInt(part.trim(), 10))
     .filter((n) => Number.isInteger(n) && n > 0);
 
 /** Every per-clone artifact, as `<relative capture path>` -> `[destination, content]`. */
-const cloneCaptures = (clone: Clone): readonly (readonly [string, string, string])[] => {
+const cloneCaptures = (
+  hangar: Hangar,
+  clone: Clone,
+): readonly (readonly [string, string, string])[] => {
   const theme = themeArtifact(clone);
   return [
     ['env.local', envLocalPath(clone), envLocalContent(clone)],
-    ['envrc.private', envrcPrivatePath(clone), envrcPrivateContent()],
+    ['envrc.private', envrcPrivatePath(clone), envrcPrivateContent(hangar)],
     ['CLAUDE.local.md', claudeLocalMdPath(clone), claudeLocalMdContent(clone)],
-    ['settings.local.json', settingsPath(clone), settingsContentFor(clone, settingsTemplate())],
+    [
+      'settings.local.json',
+      settingsPath(clone),
+      settingsContentFor(clone, settingsTemplate(hangar)),
+    ],
     ['workspace.json', workspacePath(clone), workspaceContent(clone)],
     ['workspace-appdir.json', workspaceAngularPath(clone), workspaceContent(clone)],
     ['theme.json', themePath(clone), theme.content],
-    ['git-info-exclude', excludePath(clone), EXCLUDE_BLOCK],
+    ['git-info-exclude', excludePath(clone), excludeBlock(hangar)],
     ['direnv-snippet', envrcPrivatePath(clone), direnvSnippet(clone)],
     ['health-check-allow', settingsPath(clone), `${storybookHealthCheckAllow(clone)}\n`],
     ['playwright-symlink', playwrightEnvLocalPath(clone), '(symlink; target in the manifest)\n'],
   ];
 };
 
-export const golden = (opts: GoldenOptions): void => {
+export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
   const out = opts.out;
   const clones =
     opts.indices === undefined
-      ? discoverClones()
-      : parseIndices(opts.indices).map((i) => cloneAt(i));
+      ? discoverClones(hangar)
+      : parseIndices(hangar, opts.indices).map((i) => cloneAt(hangar, i));
 
   heading(`Capturing ${String(clones.length)} clone(s) into ${out}`);
 
@@ -146,26 +154,26 @@ export const golden = (opts: GoldenOptions): void => {
   // records which mechanism actually answered for this invocation.
   //
   // `hangar-root` and `discovery-root` below are TWO INDEPENDENT MECHANISMS, and their
-  // agreement today is a coincidence rather than evidence: `fleetRoot` is
+  // agreement today is a coincidence rather than evidence: `hangar.root` is
   // `HANGAR_ROOT ?? import.meta.dirname/../..`, while this is the real upward walk that only
   // `config show` and `config validate` currently reach. They match because the tool happens
   // to live inside the hangar it manages. Do not read two identical lines as "discovery is
-  // wired" -- the proof of that is `fleetRoot` DISAPPEARING from the manifest, not the two
+  // wired" -- the proof of that is `hangar.root` DISAPPEARING from the manifest, not the two
   // lines continuing to agree.
   const found = findHangar({ cwd: process.cwd(), env: process.env[ROOT_ENV_KEY] });
-  const selection = editors();
+  const selection = editors(hangar);
   const manifest: string[] = [
-    `hangar-root        ${fleetRoot}   (fleetRoot: what commands use)`,
-    `hangar-id          ${currentHangarId()}`,
+    `hangar-root        ${hangar.root}   (threaded: what every command acts on)`,
+    `hangar-id          ${hangar.id}`,
     `discovery-source   ${found?.source ?? '(none: no config found)'}`,
-    `discovery-root     ${found?.root ?? '(none)'}   (findHangar: the real walk)`,
-    `config-file        ${join(fleetRoot, CONFIG_FILENAME)}`,
+    `discovery-root     ${found?.root ?? '(none)'}   (findHangar: must agree)`,
+    `config-file        ${join(hangar.root, CONFIG_FILENAME)}`,
     `editor-fell-back   ${String(selection.fellBack)}`,
     `editor-kinds       ${selection.drivers.map((d) => d.kind).join(', ') || '(none)'}`,
-    `plans-hook         ${PLANS_HOOK_COMMAND}`,
-    `jira-hook          ${JIRA_HOOK_COMMAND}`,
-    `tmp-hook           ${TMP_HOOK_COMMAND}`,
-    `fleet-bin-path     ${FLEET_BIN_PATH_LINE()}`,
+    `plans-hook         ${plansHookCommand(hangar)}`,
+    `jira-hook          ${jiraHookCommand(hangar)}`,
+    `tmp-hook           ${tmpHookCommand(hangar)}`,
+    `fleet-bin-path     ${fleetBinPathLine(hangar)}`,
     `port-roles         ${PORT_ROLE_ORDER.map((r) => `${r}=${String(PORT_ROLES[r].base)}`).join(' ')}`,
     '',
   ];
@@ -175,25 +183,25 @@ export const golden = (opts: GoldenOptions): void => {
       `clone ${clone.name}  index=${String(clone.index)}  colour=${clone.colour.name}  theme=${themeName(clone)}`,
       `  ports  ${PORT_ROLE_ORDER.map((r) => `${r}=${String(clone.ports[r])}`).join(' ')}`,
     );
-    for (const [rel, destination, content] of cloneCaptures(clone)) {
-      write(out, join('builders', clone.name, rel), content);
+    for (const [rel, destination, content] of cloneCaptures(hangar, clone)) {
+      write(hangar, out, join('builders', clone.name, rel), content);
       manifest.push(`  ${rel.padEnd(22)} -> ${destination}`);
     }
     manifest.push('');
   }
 
   const shared: readonly Artifact[] = [
-    cloneColoursArtifact(clones, currentHangarId()),
-    terminalHookArtifact(currentHangarId(), terminalColourSettings()),
-    statuslineArtifact(clones),
+    cloneColoursArtifact(hangar, clones),
+    terminalHookArtifact(hangar, hangar.config.terminal.colour),
+    statuslineArtifact(hangar, clones),
   ];
   for (const artifact of shared) {
     const name = artifact.path.split('/').pop() ?? 'artifact';
-    write(out, join('artifacts', name), artifact.content);
+    write(hangar, out, join('artifacts', name), artifact.content);
     manifest.push(`artifact ${name.padEnd(22)} -> ${artifact.path}`);
   }
 
-  write(out, 'manifest.txt', `${manifest.join('\n')}\n`);
+  write(hangar, out, 'manifest.txt', `${manifest.join('\n')}\n`);
   ok(`${String(clones.length)} clone(s), ${String(shared.length)} shared artifact(s)`);
   note('verbatim/ and normalised/ hold the same tree; diff both.');
 };

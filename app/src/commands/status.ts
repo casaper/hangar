@@ -15,6 +15,7 @@ import {
 import { inferTicket, jiraUrl } from '../jira.ts';
 import { claudeSessionsIn, runningServersIn } from '../procs.ts';
 import { cloneLabel, fail, heading, note, ok, table, warn } from '../ui.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar status` -- everything you need to know about a clone before touching it.
@@ -148,8 +149,8 @@ export const statusOf = (clone: Clone, fetched: boolean): void => {
   table(rows.map(([label, value]) => [pc.dim(label ?? ''), value ?? '']));
 };
 
-export const status = (ref: string | undefined, opts: StatusOptions): void => {
-  const clones = opts.all === true ? discoverClones() : resolveOne(ref);
+export const status = (hangar: Hangar, ref: string | undefined, opts: StatusOptions): void => {
+  const clones = opts.all === true ? discoverClones(hangar) : resolveOne(hangar, ref);
 
   if (opts.fetch === true) {
     for (const clone of clones) {
@@ -165,23 +166,23 @@ export const status = (ref: string | undefined, opts: StatusOptions): void => {
     console.log('');
     note('Remote state was not refreshed. Add --fetch for an authoritative sync answer.');
   }
-  warnOnDuplicateBranches(clones);
+  warnOnDuplicateBranches(hangar, clones);
 };
 
-const resolveOne = (ref: string | undefined): Clone[] => {
+const resolveOne = (hangar: Hangar, ref: string | undefined): Clone[] => {
   if (ref === undefined) {
-    throw new CliError('status needs a clone name, or --all', knownClonesHint());
+    throw new CliError('status needs a clone name, or --all', knownClonesHint(hangar));
   }
-  return [requireClone(ref)];
+  return [requireClone(hangar, ref)];
 };
 
 /** Two clones on one branch is legal but almost always a mistake worth surfacing. */
-const warnOnDuplicateBranches = (clones: readonly Clone[]): void => {
+const warnOnDuplicateBranches = (hangar: Hangar, clones: readonly Clone[]): void => {
   if (clones.length < 2) return;
   // Two clones on the DEFAULT branch is the normal resting state, so it is the one pair not
   // worth a warning. This used to be the literal `master`, which made the exemption wrong in
   // every hangar but this one.
-  const defaultBranch = tryDefaultBranch();
+  const defaultBranch = tryDefaultBranch(hangar);
   const byBranch = new Map<string, string[]>();
   for (const clone of clones) {
     const branch = currentBranch(clone.path);

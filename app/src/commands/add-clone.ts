@@ -8,7 +8,7 @@ import {
   envLocalPath,
   envrcPrivateContent,
   envrcPrivatePath,
-  EXCLUDE_BLOCK,
+  excludeBlock,
   missingExcludeLines,
   excludePath,
   playwrightEnvLocalPath,
@@ -24,12 +24,13 @@ import { clearColourAssignment } from '../colour-assignments.ts';
 import { CliError, run } from '../exec.ts';
 import { cloneAt, discoverClones, nextFreeIndex, type Clone } from '../fleet.ts';
 import { FLEET_GIT_CONFIG, git, gitTry, setFleetGitConfig } from '../git.ts';
-import { envShared, fleetRoot, fleetTmp, originUrl } from '../paths.ts';
+import { originUrl } from '../paths.ts';
 import { tildify } from '../user-paths.ts';
 import { cloneTmpPath, linkStoreEntriesInto } from '../tmp.ts';
 import { cloneLabel, heading, note, ok, step, warn } from '../ui.ts';
 import { coloursSync } from './colours.ts';
 import { statusOf } from './status.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar add-clone` -- a new clone, wired into the fleet completely.
@@ -62,10 +63,10 @@ const settingsTemplate = (siblings: readonly Clone[]): SettingsJson => {
   );
 };
 
-export const addClone = (opts: AddCloneOptions): void => {
-  const existing = discoverClones();
-  const index = nextFreeIndex();
-  const clone = cloneAt(index);
+export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
+  const existing = discoverClones(hangar);
+  const index = nextFreeIndex(hangar);
+  const clone = cloneAt(hangar, index);
   const remoteUrl = opts.remote ?? originUrl;
 
   if (existsSync(clone.path)) {
@@ -77,7 +78,7 @@ export const addClone = (opts: AddCloneOptions): void => {
 
   // 1. the clone itself
   step(`git clone ${remoteUrl}`);
-  const cloned = run('git', ['clone', remoteUrl, clone.name], { cwd: fleetRoot, inherit: true });
+  const cloned = run('git', ['clone', remoteUrl, clone.name], { cwd: hangar.root, inherit: true });
   if (!cloned.ok) throw new CliError(`git clone failed (exit ${cloned.code})`);
 
   // 2. sibling remotes, BOTH directions -- a one-way wiring is worse than none, because
@@ -105,15 +106,17 @@ export const addClone = (opts: AddCloneOptions): void => {
   writeFile(envLocalPath(clone), envLocalContent(clone));
   ok(`.env.local (${clone.ports.ng} / ${clone.ports.storybook} / ${clone.ports.playwrightReport})`);
 
-  writeFile(envrcPrivatePath(clone), envrcPrivateContent());
-  ok(`.envrc.private -> ${tildify(envShared)} + the fleet bin/ on PATH (both absolute on purpose)`);
+  writeFile(envrcPrivatePath(clone), envrcPrivateContent(hangar));
+  ok(
+    `.envrc.private -> ${tildify(hangar.paths.envShared)} + the fleet bin/ on PATH (both absolute on purpose)`,
+  );
 
   const pwPath = playwrightEnvLocalPath(clone);
   if (existsSync(dirname(pwPath))) {
     if (!existsSync(pwPath)) {
       // Not redundant with .envrc.private: the tracked tests/.env sets USER_READWRITE_PASSWORD
       // empty and direnv loads it AFTER .envrc.private, so this reload is what wins.
-      symlinkSync(relative(dirname(pwPath), envShared), pwPath);
+      symlinkSync(relative(dirname(pwPath), hangar.paths.envShared), pwPath);
       ok('tests/playwright-regression-tests/.env.local symlink');
     }
   } else {
@@ -124,7 +127,7 @@ export const addClone = (opts: AddCloneOptions): void => {
   writeFile(claudeLocalMdPath(clone), claudeLocalMdContent(clone));
   const exclude = existsSync(excludePath(clone)) ? readFileSync(excludePath(clone), 'utf8') : '';
   if (missingExcludeLines(exclude).length > 0) {
-    writeFile(excludePath(clone), exclude + EXCLUDE_BLOCK);
+    writeFile(excludePath(clone), exclude + excludeBlock(hangar));
   }
   ok('CLAUDE.local.md + .git/info/exclude (always as a pair)');
 
@@ -134,8 +137,8 @@ export const addClone = (opts: AddCloneOptions): void => {
   // so there is nothing to merge, only links to make.
   const tmp = cloneTmpPath(clone);
   mkdirSync(tmp, { recursive: true });
-  const { linked, taken } = linkStoreEntriesInto(tmp);
-  ok(`tmp/ (its own) with ${String(linked.length)} link(s) into ${tildify(fleetTmp)}`);
+  const { linked, taken } = linkStoreEntriesInto(hangar, tmp);
+  ok(`tmp/ (its own) with ${String(linked.length)} link(s) into ${tildify(hangar.paths.tmp)}`);
   if (taken.length > 0) warn(`tmp/ already had ${taken.join(', ')} — not linked`);
 
   // 7. Claude Code settings: copied, except the two values that must not be.
@@ -158,12 +161,12 @@ export const addClone = (opts: AddCloneOptions): void => {
 
   // 10. regenerate everything derived from the palette, now that the fleet is bigger. A
   //     colour assignment left at this index by a clone that used to live here is dropped
-  //     first: a new clone starts on the formula, and `nextFreeIndex()` reuses gaps.
-  if (clearColourAssignment(clone.index)) {
+  //     first: a new clone starts on the formula, and `nextFreeIndex(hangar)` reuses gaps.
+  if (clearColourAssignment(hangar, clone.index)) {
     warn(`dropped a leftover colour assignment for index ${String(clone.index)}`);
   }
   heading('Regenerating colour artifacts');
-  coloursSync({});
+  coloursSync(hangar, {});
 
   // 11. dependencies -- a clone without its own node_modules is the one thing the fleet
   //     exists to provide, so this is the default.

@@ -2,9 +2,9 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
 import { run } from './exec.ts';
-import { fleetRoot } from './paths.ts';
 import { projectsDir } from './user-paths.ts';
 import { allClaudeSessions, type ClaudeSession } from './procs.ts';
+import type { Hangar } from './hangar.ts';
 
 /**
  * Which plan files a live agent is still using.
@@ -28,8 +28,8 @@ export const transcriptDirFor = (cwd: string): string =>
   join(projectsDir, cwd.replaceAll('/', '-').replaceAll('_', '-'));
 
 /** Every transcript directory belonging to this fleet -- the clones and the fleet root itself. */
-const fleetTranscriptDirs = (): string[] => {
-  const prefix = basename(transcriptDirFor(fleetRoot));
+const fleetTranscriptDirs = (hangar: Hangar): string[] => {
+  const prefix = basename(transcriptDirFor(hangar.root));
   try {
     return readdirSync(projectsDir)
       .filter((name) => name === prefix || name.startsWith(`${prefix}-`))
@@ -104,16 +104,16 @@ export type InUsePlans = {
  *     session that is mid-plan but has not written the file yet, and for a session whose pid
  *     or cwd could not be read (an IDE-hosted one, say).
  */
-export const planFilesInUse = (windowMinutes = 30): InUsePlans => {
+export const planFilesInUse = (hangar: Hangar, windowMinutes = 30): InUsePlans => {
   const sessions = allClaudeSessions().filter(
-    (s) => s.cwd === fleetRoot || s.cwd.startsWith(`${fleetRoot}/`),
+    (s) => s.cwd === hangar.root || s.cwd.startsWith(`${hangar.root}/`),
   );
   const belt = Date.now() - windowMinutes * 60_000;
   const starts = sessions.map((s) => s.startedAtMs).filter((ms) => ms !== undefined);
   // An unparsed start time must not narrow the scan, so fall back to the belt only.
   const cutoff = starts.length === 0 ? belt : Math.min(belt, ...starts);
 
-  const dirs = new Set<string>(fleetTranscriptDirs());
+  const dirs = new Set<string>(fleetTranscriptDirs(hangar));
   for (const session of sessions) dirs.add(transcriptDirFor(session.cwd));
 
   const live = [...dirs].filter((dir) => existsSync(dir));
@@ -134,9 +134,9 @@ export const planFilesInUse = (windowMinutes = 30): InUsePlans => {
 };
 
 /** Every plan file this fleet's transcripts have EVER mentioned -- the attribution signal. */
-export const planFilesEverMentioned = (): Set<string> =>
+export const planFilesEverMentioned = (hangar: Hangar): Set<string> =>
   planFilesMatching(
-    fleetTranscriptDirs().flatMap((dir) => transcriptsIn(dir, 0)),
+    fleetTranscriptDirs(hangar).flatMap((dir) => transcriptsIn(dir, 0)),
     PLAN_PATH,
   );
 
@@ -144,9 +144,9 @@ export const planFilesEverMentioned = (): Set<string> =>
  * When a fleet transcript first mentioned this plan file -- the last resort for a plan whose
  * filesystem timestamps were destroyed by a bulk copy.
  */
-export const firstMentionOf = (planFile: string): Date | undefined => {
+export const firstMentionOf = (hangar: Hangar, planFile: string): Date | undefined => {
   let earliest: Date | undefined;
-  for (const dir of fleetTranscriptDirs()) {
+  for (const dir of fleetTranscriptDirs(hangar)) {
     for (const transcript of transcriptsIn(dir, 0)) {
       const res = run('awk', [
         '-v',

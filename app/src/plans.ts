@@ -4,9 +4,9 @@ import { basename, join } from 'node:path';
 
 import { run } from './exec.ts';
 import { discoverClones, type Clone } from './fleet.ts';
-import { fleetPlans } from './paths.ts';
 import { tildify, userPlans } from './user-paths.ts';
 import { firstMentionOf, planFilesEverMentioned } from './sessions.ts';
+import type { Hangar } from './hangar.ts';
 
 /**
  * The shared plan archive, and the dates that go in front of the filenames.
@@ -114,9 +114,9 @@ export const planDirsIn = (clone: Clone): string[] => {
 export type PlanSource = { readonly dir: string; readonly label: string };
 
 /** Everywhere a fleet plan can currently be, in the order the archive should prefer. */
-export const planSources = (): PlanSource[] => {
+export const planSources = (hangar: Hangar): PlanSource[] => {
   const sources: PlanSource[] = [];
-  for (const clone of discoverClones()) {
+  for (const clone of discoverClones(hangar)) {
     for (const dir of planDirsIn(clone)) {
       sources.push({ dir, label: dir.endsWith(join('.claude', 'plans')) ? clone.name : dir });
     }
@@ -148,6 +148,7 @@ export type DatedPlan = { readonly day: string; readonly from: string };
 
 /** The date to put in front of a plan, and which signal produced it. */
 export const resolveDay = (
+  hangar: Hangar,
   files: readonly PlanFile[],
   bulk: ReadonlySet<number>,
   scanTranscripts: boolean,
@@ -162,7 +163,7 @@ export const resolveDay = (
 
   if (scanTranscripts) {
     for (const file of files) {
-      const mention = firstMentionOf(file.name);
+      const mention = firstMentionOf(hangar, file.name);
       if (mention !== undefined) return { day: isoDay(mention), from: 'transcript' };
     }
   }
@@ -170,7 +171,8 @@ export const resolveDay = (
 };
 
 /** True when a fleet session has ever mentioned this plan file -- the attribution signal. */
-export const fleetAttribution = (): ReadonlySet<string> => planFilesEverMentioned();
+export const fleetAttribution = (hangar: Hangar): ReadonlySet<string> =>
+  planFilesEverMentioned(hangar);
 
 /**
  * Set the resolved date as the file's mtime, so it survives in the archive. Without this, a
@@ -192,9 +194,9 @@ export const moveInto = (from: string, to: string): void => {
   renameSync(from, to);
 };
 
-export const archiveNames = (): Set<string> => {
+export const archiveNames = (hangar: Hangar): Set<string> => {
   try {
-    return new Set(readdirSync(fleetPlans));
+    return new Set(readdirSync(hangar.paths.plans));
   } catch {
     return new Set();
   }

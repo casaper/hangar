@@ -12,6 +12,7 @@ import {
   linkToStore,
   storeRecordPath,
 } from '../jira-records.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar jira hook` -- a `PreToolUse` hook that serves a cached ticket instead of fetching it.
@@ -107,8 +108,8 @@ export const parseSyncCommand = (command: string): Invocation | undefined => {
 /** A store record that exists, has a frontmatter timestamp, and is inside the TTL. */
 type FreshRecord = { readonly key: string; readonly content: string; readonly at: number };
 
-const freshRecord = (key: string, ttlMs: number): FreshRecord | undefined => {
-  const path = storeRecordPath(key);
+const freshRecord = (hangar: Hangar, key: string, ttlMs: number): FreshRecord | undefined => {
+  const path = storeRecordPath(hangar, key);
   if (!existsSync(path)) return undefined;
   const { at, source } = freshnessOf(path);
   // `mtime` means no `fetched_at:` this could read. The file's own timestamp is the fallback
@@ -245,7 +246,7 @@ const destinationFreshness = (destination: string): number | undefined => {
  */
 type Decline = { readonly reason: string };
 
-const decline = (reason: string): Decline => ({ reason });
+const decline = (hangar: Hangar, reason: string): Decline => ({ reason });
 
 /**
  * The whole set of links to make, or undefined if any part of it cannot be satisfied.
@@ -257,6 +258,7 @@ const decline = (reason: string): Decline => ({ reason });
  * case, and passes the common one where the ticket has no attachments at all.
  */
 export const planLinks = (
+  hangar: Hangar,
   clone: Clone,
   invocation: Invocation,
   ttlMs: number,
@@ -264,34 +266,40 @@ export const planLinks = (
 ): Plan[] | Decline => {
   const plans: Plan[] = [];
   for (const trunkKey of invocation.keys) {
-    const trunk = freshRecord(trunkKey, ttlMs);
+    const trunk = freshRecord(hangar, trunkKey, ttlMs);
     if (trunk === undefined)
-      return decline(`${trunkKey} is not in the store, or is older than the TTL`);
+      return decline(hangar, `${trunkKey} is not in the store, or is older than the TTL`);
     const wanted = wantedFiles(trunk, invocation.relations);
     if (wanted === undefined) {
       return decline(
+        hangar,
         `${trunkKey}'s record does not state its neighbourhood (no \`relations:\`/\`parent:\` ` +
           'keys, or an entry without an id) — only the newer sync contract does',
       );
     }
 
     for (const item of wanted) {
-      const record = item.key === trunk.key ? trunk : freshRecord(item.key, ttlMs);
+      const record = item.key === trunk.key ? trunk : freshRecord(hangar, item.key, ttlMs);
       if (record === undefined) {
         return decline(
+          hangar,
           `${trunkKey} needs ${item.key} (${item.relation ?? 'the trunk'}), which is not in the ` +
             'store or is older than the TTL',
         );
       }
       const destination = destinationOf(clone, trunkKey, item, created);
       if (destination === undefined) {
-        return decline(`${clone.name} could not name the file for ${item.key} under ${trunkKey}`);
+        return decline(
+          hangar,
+          `${clone.name} could not name the file for ${item.key} under ${trunkKey}`,
+        );
       }
       if (invocation.assets) {
         const dir = dirname(destination);
         for (const ref of assetRefsIn(record.content)) {
           if (!existsSync(join(dir, ref))) {
             return decline(
+              hangar,
               `${item.key}'s record references ${ref}, which is not beside ${destination} — ` +
                 'attachment names are trunk-specific, so this record belongs to another trunk',
             );
@@ -334,10 +342,19 @@ export type JiraHookOptions = {
  * Never throws and never exits non-zero: a hook that errors is a hook that has to be
  * diagnosed from inside a clone that cannot fetch a ticket.
  */
-export const jiraHook = (opts: JiraHookOptions): void => {
+export const jiraHook = (hangar: Hangar | undefined, opts: JiraHookOptions): void => {
   const say = (reason: string): void => {
     if (opts.explain === true) process.stderr.write(`jira hook: ${reason}\n`);
   };
+
+  // FAIL OPEN, and this is the whole reason the hangar arrives possibly-undefined here. A
+  // non-zero exit from a `PreToolUse` hook blocks the tool call it exists to accelerate, so
+  // "there is no hangar to serve a cached ticket from" has to end in exit 0 and silence, exactly
+  // like every other reason this hook declines.
+  if (hangar === undefined) {
+    say('not inside a hangar, or its config will not parse');
+    return;
+  }
 
   let payload: HookPayload;
   try {
@@ -362,7 +379,7 @@ export const jiraHook = (opts: JiraHookOptions): void => {
     return;
   }
 
-  const clone = cloneForCwd(payload.cwd ?? process.cwd());
+  const clone = cloneForCwd(hangar, payload.cwd ?? process.cwd());
   if (clone === undefined) {
     say(`${payload.cwd ?? process.cwd()} is not inside a clone`);
     return;
@@ -379,7 +396,7 @@ export const jiraHook = (opts: JiraHookOptions): void => {
   const created: string[] = [];
   let outcome: Plan[] | Decline;
   try {
-    outcome = planLinks(clone, invocation, minutes * 60_000, created);
+    outcome = planLinks(hangar, clone, invocation, minutes * 60_000, created);
   } catch (error) {
     removeEmpty(created);
     say(`could not decide — ${(error as Error).message}`);
@@ -396,11 +413,11 @@ export const jiraHook = (opts: JiraHookOptions): void => {
   for (const plan of plans) {
     try {
       if (plan.kept) continue;
-      if (inodeOf(plan.destination) === inodeOf(storeRecordPath(plan.record.key))) {
+      if (inodeOf(plan.destination) === inodeOf(storeRecordPath(hangar, plan.record.key))) {
         linked.push(plan.destination);
         continue;
       }
-      if (opts.dryRun !== true) linkToStore(plan.record.key, plan.destination);
+      if (opts.dryRun !== true) linkToStore(hangar, plan.record.key, plan.destination);
       linked.push(plan.destination);
     } catch (error) {
       // A link that could not be made means the directory is not in the shape the run would

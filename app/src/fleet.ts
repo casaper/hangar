@@ -3,8 +3,8 @@ import { join, resolve } from 'node:path';
 
 import { colourAssignmentFor } from './colour-assignments.ts';
 import { CliError } from './exec.ts';
+import type { Hangar } from './hangar.ts';
 import { colourFor, type CloneColour } from './palette.ts';
-import { fleetRoot } from './paths.ts';
 import { portsFor, type ClonePorts } from './ports.ts';
 
 /**
@@ -30,34 +30,45 @@ export type Clone = {
   readonly path: string;
   readonly colour: CloneColour;
   readonly ports: ClonePorts;
+  /**
+   * The hangar this clone belongs to.
+   *
+   * A back-reference rather than a parameter on every builder, and that is the whole reason the
+   * seven byte-compared per-clone artifacts kept their signatures when the hangar stopped being
+   * a module constant. `doctor` compares each file against the same builder `add-clone` and
+   * `--fix` write; had those signatures moved, the highest-consequence code in this CLI would
+   * have moved with them.
+   */
+  readonly hangar: Hangar;
 };
 
 export const cloneNameFor = (index: number): string => `clone_${String(index).padStart(2, '0')}`;
 
-const makeClone = (index: number): Clone => ({
+const makeClone = (hangar: Hangar, index: number): Clone => ({
   name: cloneNameFor(index),
   index,
-  path: join(fleetRoot, cloneNameFor(index)),
-  colour: colourFor(index, colourAssignmentFor(index)),
+  path: join(hangar.root, cloneNameFor(index)),
+  colour: colourFor(index, colourAssignmentFor(hangar, index)),
   ports: portsFor(index),
+  hangar,
 });
 
 /** Every clone directory present in the fleet root, ordered by index. */
-export const discoverClones = (): Clone[] => {
+export const discoverClones = (hangar: Hangar): Clone[] => {
   const indices: number[] = [];
-  for (const entry of readdirSync(fleetRoot, { withFileTypes: true })) {
+  for (const entry of readdirSync(hangar.root, { withFileTypes: true })) {
     // A clone may legitimately be a symlink to a directory, so stat rather than isDirectory().
     if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     const match = CLONE_DIR_RE.exec(entry.name);
     if (!match?.[1]) continue;
     try {
-      if (!statSync(join(fleetRoot, entry.name)).isDirectory()) continue;
+      if (!statSync(join(hangar.root, entry.name)).isDirectory()) continue;
     } catch {
       continue;
     }
     indices.push(Number.parseInt(match[1], 10));
   }
-  return indices.sort((a, b) => a - b).map(makeClone);
+  return indices.sort((a, b) => a - b).map((index) => makeClone(hangar, index));
 };
 
 /**
@@ -65,8 +76,8 @@ export const discoverClones = (): Clone[] => {
  * Returns undefined when no such directory exists -- callers turn that into a CliError
  * listing what the fleet actually has.
  */
-export const findClone = (ref: string): Clone | undefined => {
-  const clones = discoverClones();
+export const findClone = (hangar: Hangar, ref: string): Clone | undefined => {
+  const clones = discoverClones(hangar);
   const direct = clones.find((c) => c.name === ref);
   if (direct) return direct;
   const asNumber = Number.parseInt(ref.replace(/^clone_?/, ''), 10);
@@ -81,39 +92,39 @@ export const findClone = (ref: string): Clone | undefined => {
  * every mutating command takes the clone as an argument, because "wrong clone" is the failure
  * this fleet is most prone to and a cwd is exactly the signal that moves without being noticed.
  */
-export const cloneForCwd = (cwd: string = process.cwd()): Clone | undefined => {
+export const cloneForCwd = (hangar: Hangar, cwd: string = process.cwd()): Clone | undefined => {
   const here = resolve(cwd);
-  if (here !== fleetRoot && !here.startsWith(`${fleetRoot}/`)) return undefined;
-  const segment = here.slice(fleetRoot.length + 1).split('/')[0];
+  if (here !== hangar.root && !here.startsWith(`${hangar.root}/`)) return undefined;
+  const segment = here.slice(hangar.root.length + 1).split('/')[0];
   if (segment === undefined || !CLONE_DIR_RE.test(segment)) return undefined;
-  return findClone(segment);
+  return findClone(hangar, segment);
 };
 
 /** Lowest index not currently taken -- reuses a gap left by `remove-clone`. */
-export const nextFreeIndex = (): number => {
-  const taken = new Set(discoverClones().map((c) => c.index));
+export const nextFreeIndex = (hangar: Hangar): number => {
+  const taken = new Set(discoverClones(hangar).map((c) => c.index));
   let index = 1;
   while (taken.has(index)) index += 1;
   return index;
 };
 
 /** A clone the CLI created but has not yet finished wiring up still needs a Clone shape. */
-export const cloneAt = (index: number): Clone => makeClone(index);
+export const cloneAt = (hangar: Hangar, index: number): Clone => makeClone(hangar, index);
 
 /**
  * The hint every "which clone?" error carries. Indices, not directory names: the index is what
  * you type, and `findClone` accepts nothing the index does not cover.
  */
-export const knownClonesHint = (): string =>
+export const knownClonesHint = (hangar: Hangar): string =>
   `Known clones: ${
-    discoverClones()
+    discoverClones(hangar)
       .map((c) => String(c.index))
       .join(', ') || '(none)'
   }`;
 
 /** `findClone`, but a missing clone is a CliError rather than `undefined`. */
-export const requireClone = (ref: string): Clone => {
-  const clone = findClone(ref);
-  if (!clone) throw new CliError(`no such clone: ${ref}`, knownClonesHint());
+export const requireClone = (hangar: Hangar, ref: string): Clone => {
+  const clone = findClone(hangar, ref);
+  if (!clone) throw new CliError(`no such clone: ${ref}`, knownClonesHint(hangar));
   return clone;
 };

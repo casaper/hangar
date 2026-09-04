@@ -1,9 +1,4 @@
-import { basename, join } from 'node:path';
-
-import { CONFIG_FILENAME, loadConfigFile } from '../config/load.ts';
-import { terminalSchema } from '../config/schema.ts';
-import type { TerminalColourSettings } from '../generate/terminal-sh.ts';
-import { fleetRoot } from '../paths.ts';
+import type { Hangar } from '../hangar.ts';
 import { appleTerminalDriver } from './apple-terminal.ts';
 import { gnomeTerminalDriver } from './gnome-terminal.ts';
 import { iterm2Driver } from './iterm2.ts';
@@ -98,40 +93,12 @@ const PROBE_ORDER: Record<string, readonly TerminalKind[]> = {
 };
 
 /**
- * The hangar's id, for namespacing the tags a driver writes into a terminal.
+ * What the generated shell hook should paint.
  *
- * Read straight from the config file rather than taken as a parameter, because the terminal
- * drivers are reached from three commands and threading one string through all of them buys
- * nothing until `loadHangar()` is threaded properly (it becomes a `Hangar` field then). A config
- * that will not parse falls back to the directory name, which is what `hangar setup` derives the
- * id from anyway -- so the tabs still get tagged distinctly from a neighbouring hangar's.
+ * A plain read of the threaded config now. It used to catch an unparseable config and fall back
+ * to the schema defaults on its own; that fallback is a `Hangar` field
+ * (`configFellBack`) so there is one of it rather than four.
  */
-export const currentHangarId = (): string => {
-  try {
-    return loadConfigFile(join(fleetRoot, CONFIG_FILENAME)).id;
-  } catch {
-    // Only a config too broken to PARSE reaches here -- an absent one is already refused by the
-    // gate in `cli.ts`. Falling back to the directory name keeps `open` working; `doctor` and
-    // `config validate` are what report the file.
-    return basename(fleetRoot);
-  }
-};
-
-/**
- * What the generated shell hook should paint, from this hangar's config.
- *
- * The defaults come from the schema rather than being repeated here, so there is one authority
- * for them.
- */
-export const terminalColourSettings = (): TerminalColourSettings => {
-  try {
-    return loadConfigFile(join(fleetRoot, CONFIG_FILENAME)).terminal.colour;
-  } catch {
-    // Unparseable only; absence is refused earlier. `colours sync` regenerating with default
-    // colouring is a better failure than `colours sync` refusing to run.
-    return terminalSchema.parse({}).colour;
-  }
-};
 
 /**
  * Pick a terminal driver. `kind` comes from the config; `'auto'` or undefined means detect.
@@ -141,10 +108,10 @@ export const terminalColourSettings = (): TerminalColourSettings => {
  * that knows which capability it needed.
  */
 export const resolveTerminal = (
+  id: string,
   kind?: TerminalKind | 'auto',
   env: NodeJS.ProcessEnv = process.env,
 ): ResolvedTerminal => {
-  const id = currentHangarId();
   const envSaid = terminalKindFromEnv(env) ?? env['TERM_PROGRAM'] ?? env['TERM'];
 
   if (kind !== undefined && kind !== 'auto') {
@@ -172,12 +139,5 @@ export const resolveTerminal = (
  * The single entry point for the commands: they should not care whether the kind was configured
  * or detected.
  */
-export const terminal = (): ResolvedTerminal => {
-  try {
-    return resolveTerminal(loadConfigFile(join(fleetRoot, CONFIG_FILENAME)).terminal.kind);
-  } catch {
-    // Unparseable only; absence is refused earlier. Detecting the terminal is a better failure
-    // than refusing to open one over a YAML typo somewhere else in the file.
-    return resolveTerminal(undefined);
-  }
-};
+export const terminal = (hangar: Hangar): ResolvedTerminal =>
+  resolveTerminal(hangar.id, hangar.config.terminal.kind);

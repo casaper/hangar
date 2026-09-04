@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 
 import { gitTry } from './git.ts';
-import { bitbucketWorkspaceUrl, bitbucketRepo, envShared } from './paths.ts';
+import { bitbucketWorkspaceUrl, bitbucketRepo } from './paths.ts';
 import { tildify } from './user-paths.ts';
+import type { Hangar } from './hangar.ts';
 
 /**
  * Bitbucket: links that need no auth, and the one lookup that does.
@@ -68,10 +69,10 @@ export type PullRequestLookup =
  * `hangar` is just as often run from the fleet root, whose `.envrc` only does `PATH_add`.
  * Commented-out lines cannot match: they start with `#`.
  */
-const sharedEnvValue = (key: string): string | undefined => {
+const sharedEnvValue = (hangar: Hangar, key: string): string | undefined => {
   let text: string;
   try {
-    text = readFileSync(envShared, 'utf8');
+    text = readFileSync(hangar.paths.envShared, 'utf8');
   } catch {
     return undefined;
   }
@@ -79,9 +80,11 @@ const sharedEnvValue = (key: string): string | undefined => {
   return raw === undefined ? undefined : raw.replace(/^(['"])(.*)\1$/, '$2');
 };
 
-const bitbucketToken = (): string | undefined => {
+const bitbucketToken = (hangar: Hangar): string | undefined => {
   const fromEnv = process.env['BITBUCKET_TOKEN'];
-  return fromEnv !== undefined && fromEnv !== '' ? fromEnv : sharedEnvValue('BITBUCKET_TOKEN');
+  return fromEnv !== undefined && fromEnv !== ''
+    ? fromEnv
+    : sharedEnvValue(hangar, 'BITBUCKET_TOKEN');
 };
 
 /** Bitbucket's query language quotes string literals, so a branch name has to be escaped. */
@@ -124,12 +127,16 @@ const TIMEOUT_MS = 8000;
  * Never throws. Offline, tokenless, 401, malformed JSON: all one soft `ok: false`.
  */
 export const openPullRequests = async (
+  hangar: Hangar,
   ref: RepoRef,
   branch: string,
 ): Promise<PullRequestLookup> => {
-  const token = bitbucketToken();
+  const token = bitbucketToken(hangar);
   if (token === undefined) {
-    return { ok: false, reason: `no BITBUCKET_TOKEN in the environment or ${tildify(envShared)}` };
+    return {
+      ok: false,
+      reason: `no BITBUCKET_TOKEN in the environment or ${tildify(hangar.paths.envShared)}`,
+    };
   }
   const url = new URL(
     `https://api.bitbucket.org/2.0/repositories/${ref.workspace}/${ref.repo}/pullrequests`,

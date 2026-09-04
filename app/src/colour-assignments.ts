@@ -1,6 +1,6 @@
 import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 
-import { colourAssignmentsFile } from './paths.ts';
+import type { Hangar } from './hangar.ts';
 import { tildify } from './user-paths.ts';
 
 /**
@@ -27,7 +27,14 @@ const DOC =
 
 type Assignments = Map<number, string>;
 
-let cache: Assignments | undefined;
+/**
+ * Parsed assignments per hangar ROOT, not one per process.
+ *
+ * `discoverClones` reads every clone's colour and is called many times per command, so the
+ * cache earns its place -- but it is keyed on the root now, because one process can render two
+ * hangars and a single slot would hand the second one the first hangar's overrides.
+ */
+const cache = new Map<string, Assignments>();
 
 const parse = (text: string): Assignments => {
   const map: Assignments = new Map();
@@ -49,29 +56,30 @@ const parse = (text: string): Assignments => {
 };
 
 /** Every assignment on disk. Cached: `discoverClones()` is called many times per command. */
-export const colourAssignments = (): Assignments => {
-  if (cache === undefined) {
-    let text: string;
-    try {
-      text = readFileSync(colourAssignmentsFile, 'utf8');
-    } catch {
-      text = '';
-    }
-    cache = parse(text);
+export const colourAssignments = (hangar: Hangar): Assignments => {
+  const hit = cache.get(hangar.root);
+  if (hit !== undefined) return hit;
+  let text: string;
+  try {
+    text = readFileSync(hangar.paths.colourAssignmentsFile, 'utf8');
+  } catch {
+    text = '';
   }
-  return cache;
+  const parsed = parse(text);
+  cache.set(hangar.root, parsed);
+  return parsed;
 };
 
-export const colourAssignmentFor = (index: number): string | undefined =>
-  colourAssignments().get(index);
+export const colourAssignmentFor = (hangar: Hangar, index: number): string | undefined =>
+  colourAssignments(hangar).get(index);
 
-const write = (assignments: Assignments): void => {
-  cache = assignments;
+const write = (hangar: Hangar, assignments: Assignments): void => {
+  cache.set(hangar.root, assignments);
   if (assignments.size === 0) {
     // No assignments left: remove the file rather than leave an empty object behind, so the
     // fleet root goes back to holding no colour bookkeeping at all.
     try {
-      unlinkSync(colourAssignmentsFile);
+      unlinkSync(hangar.paths.colourAssignmentsFile);
     } catch {
       /* already gone */
     }
@@ -82,13 +90,13 @@ const write = (assignments: Assignments): void => {
     const name = assignments.get(index);
     if (name !== undefined) body[String(index)] = name;
   }
-  writeFileSync(colourAssignmentsFile, `${JSON.stringify(body, null, 2)}\n`, 'utf8');
+  writeFileSync(hangar.paths.colourAssignmentsFile, `${JSON.stringify(body, null, 2)}\n`, 'utf8');
 };
 
-export const setColourAssignment = (index: number, name: string): void => {
-  const next = new Map(colourAssignments());
+export const setColourAssignment = (hangar: Hangar, index: number, name: string): void => {
+  const next = new Map(colourAssignments(hangar));
   next.set(index, name);
-  write(next);
+  write(hangar, next);
 };
 
 /**
@@ -98,11 +106,12 @@ export const setColourAssignment = (index: number, name: string): void => {
  * `add-clone`: `nextFreeIndex()` reuses the gap a removal leaves, so an assignment left behind
  * would hand a brand-new clone the colour of the one that used to live at that index.
  */
-export const clearColourAssignment = (index: number): boolean => {
-  const next = new Map(colourAssignments());
+export const clearColourAssignment = (hangar: Hangar, index: number): boolean => {
+  const next = new Map(colourAssignments(hangar));
   if (!next.delete(index)) return false;
-  write(next);
+  write(hangar, next);
   return true;
 };
 
-export const colourAssignmentsLabel = (): string => tildify(colourAssignmentsFile);
+export const colourAssignmentsLabel = (hangar: Hangar): string =>
+  tildify(hangar.paths.colourAssignmentsFile);

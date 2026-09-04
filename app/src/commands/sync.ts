@@ -22,6 +22,7 @@ import { terminal } from '../terminal/index.ts';
 import { claudeSessionsIn, type ClaudeSession } from '../procs.ts';
 import { resolveWithClaude } from '../resolve-conflicts.ts';
 import { cloneLabel, confirm, fail, heading, note, ok, step, warn } from '../ui.ts';
+import type { Hangar } from '../hangar.ts';
 
 /**
  * `hangar sync` -- bring a clone's branch up to date with whatever it will be merged into.
@@ -124,7 +125,12 @@ type Target = {
  * for `master` comes back with `master`'s own historical PRs (`master` -> `release9`, merged in
  * 2024), which must never become a sync target.
  */
-const resolveTarget = async (clone: Clone, branch: string, opts: SyncOptions): Promise<Target> => {
+const resolveTarget = async (
+  hangar: Hangar,
+  clone: Clone,
+  branch: string,
+  opts: SyncOptions,
+): Promise<Target> => {
   if (opts.onto !== undefined) {
     // A bare name is qualified with `origin/` when that exists, for the ambiguity reason above;
     // anything already qualified (`origin/release9`, `clone_01/some-branch`) is taken verbatim.
@@ -149,7 +155,7 @@ const resolveTarget = async (clone: Clone, branch: string, opts: SyncOptions): P
    * run that was given its base needs none of that, which is why the question is asked here and
    * not at the top -- and `-n` never records anything, so a dry run cannot change the config.
    */
-  const defaultBranch = requireDefaultBranch({ persist: opts.dryRun !== true });
+  const defaultBranch = requireDefaultBranch(hangar, { persist: opts.dryRun !== true });
   const onDefault = (why: string, guessed = false): Target => ({
     branch: defaultBranch,
     ref: `origin/${defaultBranch}`,
@@ -161,7 +167,7 @@ const resolveTarget = async (clone: Clone, branch: string, opts: SyncOptions): P
   if (branch === defaultBranch) return onDefault(`on the default branch (${defaultBranch})`);
   if (branch === DETACHED) return onDefault('detached HEAD — no branch to look a PR up by');
 
-  const lookup = await openPullRequests(repoRef(clone.path), branch);
+  const lookup = await openPullRequests(hangar, repoRef(clone.path), branch);
   if (!lookup.ok) {
     warn(`could not ask Bitbucket which branch this one's PR targets: ${lookup.reason}`);
     return onDefault(`assuming the default branch (${defaultBranch}) — PR target unknown`, true);
@@ -201,7 +207,7 @@ const stripRemote = (clone: Clone, ref: string): string => {
 };
 
 /** The target line, printed for every sync so the base is never implicit. */
-const describeTarget = (clone: Clone, target: Target): void => {
+const describeTarget = (hangar: Hangar, clone: Clone, target: Target): void => {
   note(`target ${target.ref}${target.guessed ? pc.yellow(' (a guess)') : ''} — ${target.why}`);
   if (target.pr !== undefined) note(pc.dim(target.pr.url));
   // Fleet-aware, and print-only: a stacked PR targets a branch a sibling clone is working in,
@@ -209,7 +215,7 @@ const describeTarget = (clone: Clone, target: Target): void => {
   // only said of an `origin/` ref -- a `clone_NN/` one IS that clone, fetched.
   const siblings = !target.ref.startsWith('origin/')
     ? []
-    : discoverClones()
+    : discoverClones(hangar)
         .filter((other) => other.name !== clone.name && currentBranch(other.path) === target.branch)
         .map((other) => other.name);
   if (siblings.length > 0) {
@@ -355,7 +361,7 @@ const ACTION: Record<Strategy['kind'], string> = {
  * ever came. So the closing message is sent from a `finally` (see `closeSessions`) and the marker
  * is what makes it recognisable in a tab full of ordinary conversation.
  */
-export const pauseMessage = (strategy: Strategy): string =>
+export const pauseMessage = (hangar: Hangar, strategy: Strategy): string =>
   'SYNC PAUSE — STOP what you are doing and do not edit, stage or commit any file. ' +
   `\`hangar sync\` is about to ${ACTION[strategy.kind]} this clone onto ${strategy.target.ref}. ` +
   'If it conflicts, a separate headless Claude Code run will edit the conflicted files in this ' +
@@ -506,10 +512,11 @@ export const closingMessage = (kind: Closing, strategy: Strategy, state: TreeAft
  * rebased under it and cannot be told.
  */
 const notifySessions = (
+  hangar: Hangar,
   sessions: readonly ClaudeSession[],
   message: string,
 ): readonly ClaudeSession[] => {
-  const { driver } = terminal();
+  const { driver } = terminal(hangar);
   if (!driver.capabilities.writeToTty) {
     warn(`${driver.label} cannot be typed into — no session can be told to pause`);
     note('Pause them yourself, or set `terminal.kind` in hangar.config.yaml if this is wrong.');
@@ -600,7 +607,7 @@ type Run = {
  * `notifySessions` prints per session and can only fail inside the terminal driver, which must
  * never replace the error the operator actually needs.
  */
-const closeSessions = (clone: Clone, run: Run): void => {
+const closeSessions = (hangar: Hangar, clone: Clone, run: Run): void => {
   if (run.paused.length === 0) return;
   try {
     const state = inspectAfterSync(clone, run.stashLabel);
@@ -609,14 +616,14 @@ const closeSessions = (clone: Clone, run: Run): void => {
       : run.integrated
         ? 'aborted-after-integrating'
         : 'aborted';
-    notifySessions(run.paused, closingMessage(kind, run.strategy, state));
+    notifySessions(hangar, run.paused, closingMessage(kind, run.strategy, state));
   } catch (error) {
     warn(`could not tell the paused session(s) how this ended: ${String(error)}`);
   }
 };
 
 /** The same facts as `closingMessage`, worded for the operator's terminal. */
-const leftovers = (state: TreeAfterSync): string =>
+const leftovers = (hangar: Hangar, state: TreeAfterSync): string =>
   [
     state.pending === undefined ? undefined : `a ${state.pending} is still in progress`,
     state.conflicted === 0 ? undefined : `${state.conflicted} file(s) still conflicted`,
@@ -625,7 +632,7 @@ const leftovers = (state: TreeAfterSync): string =>
     .filter((part): part is string => part !== undefined)
     .join(', ');
 
-const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
+const syncOne = async (hangar: Hangar, clone: Clone, opts: SyncOptions): Promise<boolean> => {
   heading(`Syncing ${cloneLabel(clone)}`);
 
   const sessions = claudeSessionsIn(clone.path);
@@ -647,8 +654,8 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
   // The pull-request lookup is the one network call and happens ONCE, here. Whether
   // `origin/<target>` is actually in this clone is a separate question, asked after the fetch
   // below: a stacked PR can target a branch this clone has never fetched.
-  const target = await resolveTarget(clone, branch, opts);
-  describeTarget(clone, target);
+  const target = await resolveTarget(hangar, clone, branch, opts);
+  describeTarget(hangar, clone, target);
   const autoBefore = chooseStrategy(clone, target);
   const strategyBefore = decideStrategy(autoBefore, opts.strategy);
   const overridden = overrideWarning(autoBefore, opts.strategy);
@@ -682,9 +689,9 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
     finished: false,
   };
   try {
-    return await integrate(clone, opts, sessions, run);
+    return await integrate(hangar, clone, opts, sessions, run);
   } finally {
-    closeSessions(clone, run);
+    closeSessions(hangar, clone, run);
   }
 };
 
@@ -695,6 +702,7 @@ const syncOne = async (clone: Clone, opts: SyncOptions): Promise<boolean> => {
  * wraps one call rather than a hundred indented lines.
  */
 const integrate = async (
+  hangar: Hangar,
   clone: Clone,
   opts: SyncOptions,
   sessions: readonly ClaudeSession[],
@@ -708,7 +716,7 @@ const integrate = async (
       warn(`${sessions.length} live Claude session(s) — not notified (--no-session-notify)`);
     } else {
       step(`pausing ${sessions.length} live Claude Code session(s)`);
-      run.paused = notifySessions(sessions, pauseMessage(run.strategy));
+      run.paused = notifySessions(hangar, sessions, pauseMessage(hangar, run.strategy));
       if (run.paused.length !== sessions.length) {
         if (!confirm('Some sessions could not be reached. Sync anyway?')) {
           note('skipped');
@@ -792,7 +800,7 @@ const integrate = async (
   if (!integrated) {
     abortAndRestore(clone, strategy, stashed);
     // Asked, not assumed: `abortAndRestore`'s `stash pop` can fail, and it only warns.
-    const left = leftovers(inspectAfterSync(clone, run.stashLabel));
+    const left = leftovers(hangar, inspectAfterSync(clone, run.stashLabel));
     throw new CliError(
       `${clone.name}: ${strategy.kind} onto ${target.ref} failed and was rolled back`,
       left === ''
@@ -836,8 +844,12 @@ const integrate = async (
   return true;
 };
 
-export const sync = async (ref: string | undefined, opts: SyncOptions): Promise<void> => {
-  const clones = opts.all === true ? discoverClones() : [namedClone(ref)];
+export const sync = async (
+  hangar: Hangar,
+  ref: string | undefined,
+  opts: SyncOptions,
+): Promise<void> => {
+  const clones = opts.all === true ? discoverClones(hangar) : [namedClone(hangar, ref)];
   const skipped: string[] = [];
   const failed: string[] = [];
 
@@ -855,7 +867,7 @@ export const sync = async (ref: string | undefined, opts: SyncOptions): Promise<
       }
     }
     try {
-      if (!(await syncOne(clone, opts))) failed.push(clone.name);
+      if (!(await syncOne(hangar, clone, opts))) failed.push(clone.name);
     } catch (error) {
       if (!(error instanceof CliError) || clones.length === 1) throw error;
       fail(`${clone.name}: ${error.message}`);
@@ -874,9 +886,9 @@ export const sync = async (ref: string | undefined, opts: SyncOptions): Promise<
   if (skipped.length > 0) note(pc.dim(`skipped (busy): ${skipped.join(', ')}`));
 };
 
-const namedClone = (ref: string | undefined): Clone => {
+const namedClone = (hangar: Hangar, ref: string | undefined): Clone => {
   if (ref === undefined) {
-    throw new CliError('sync needs a clone name, or --all', knownClonesHint());
+    throw new CliError('sync needs a clone name, or --all', knownClonesHint(hangar));
   }
-  return requireClone(ref);
+  return requireClone(hangar, ref);
 };
