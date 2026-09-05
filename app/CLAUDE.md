@@ -214,6 +214,13 @@ Two things about that pair are load-bearing:
   `perf`.** With them, v0.11.0 — the release that added the whole `node:test` suite — rendered as
   a heading with nothing under it.
 
+`pnpm changelog` is `dev/changelog.sh` rather than a one-line script entry, for the same reason
+`pnpm golden` is: **it has to be reproducible.** The bare `conventional-changelog` invocation
+regenerates every section and drops the `# Changelog` heading, so running it would show the next
+developer a one-line diff they did not make. The script puts the heading back. That heading is
+load-bearing — `.releaserc.json` sets `changelogTitle` to it, and semantic-release prepends
+_under_ it.
+
 `hangar --version` reads `app/package.json` rather than repeating it, so a release bump moves one
 file. It used to be a literal, which is the kind of duplicate nothing notices until a tool starts
 moving the other copy.

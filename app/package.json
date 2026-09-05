@@ -15,7 +15,7 @@
     "hangar": "node src/cli.ts",
     "golden": "sh dev/golden.sh",
     "commitlint": "commitlint",
-    "changelog": "cd .. && app/node_modules/.bin/conventional-changelog -n app/changelog.preset.ts -i CHANGELOG.md -s -r 0 -k app/package.json --tag-prefix v",
+    "changelog": "sh dev/changelog.sh",
     "hooks": "cd .. && husky app/.husky",
     "prepare": "cd .. && husky app/.husky"
   },
