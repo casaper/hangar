@@ -54,5 +54,17 @@ export default defineConfig([
     files: ['src/cli.ts'],
     rules: { 'n/no-process-exit': 'off' },
   },
+  {
+    /*
+     * The suite under `test/`, run by `pnpm test` (`node --test`).
+     *
+     * `node:test`'s `test()` returns a promise that the RUNNER awaits, which is the whole point
+     * of it -- so every top-level call is a floating promise by construction and the rule fires
+     * once per test. `void test(...)` everywhere would be noise hiding the one place it might
+     * ever matter, so the rule is off here and nowhere else.
+     */
+    files: ['test/**/*.ts'],
+    rules: { '@typescript-eslint/no-floating-promises': 'off' },
+  },
   prettierConfig,
 ]);

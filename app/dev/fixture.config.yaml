@@ -79,6 +79,12 @@ ports:
       envKey: FIXTURE_DB_PORT
       base: 5432
       label: PostgreSQL
+      # `null`, not omitted. Omitting it takes the schema DEFAULT of `http://localhost:{port}`,
+      # which for a database port is a link to nothing -- and the capture then published that
+      # link in the hangar-root CLAUDE.local.md every clone session reads. It also left the one
+      # branch `roleUrl` has, and the one the `sql-postgrest` preset relies on, covered by
+      # nothing. Found by `test/ports.test.ts`, which is what a seed suite is for.
+      url: null
     - id: swagger
       envKey: FIXTURE_SWAGGER_PORT
       base: 8080

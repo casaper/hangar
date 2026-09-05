@@ -32,7 +32,7 @@ Every clone's ports are a pure function of its index:
 | role | env var | base | URL |
 | ---- | ------- | ---- | --- |
 | PostgREST | `FIXTURE_API_PORT` | 3000 | `http://localhost:{port}` |
-| PostgreSQL | `FIXTURE_DB_PORT` | 5432 | `http://localhost:{port}` |
+| PostgreSQL | `FIXTURE_DB_PORT` | 5432 | _none_ |
 | Swagger UI | `FIXTURE_SWAGGER_PORT` | 8080 | `http://localhost:{port}` |
 
 The offset is this hangar's residue class mod 100, and that is the whole
