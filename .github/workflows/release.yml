@@ -1,0 +1,67 @@
+# The hangar repo's only workflow.
+#
+# Two jobs, and the first one is the point: `pnpm-workspace.yaml` sets `ignoreScripts: true`, so
+# husky's `prepare` never runs on install and a fresh clone of this repo has NO commit-msg hook
+# until somebody runs `pnpm hooks` by hand. The hook is the fast feedback; this job is the
+# enforcement that does not depend on anyone having read the README.
+name: release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  commitlint:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: commitlint lints a RANGE, and a shallow clone has no range to lint.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable pnpm
+      - run: pnpm --dir app install --frozen-lockfile
+      - name: Lint the pushed commits
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            from='${{ github.event.pull_request.base.sha }}'
+            to='${{ github.event.pull_request.head.sha }}'
+          else
+            # `github.event.before` is all-zeroes on a branch's first push; fall back to HEAD~1.
+            from='${{ github.event.before }}'
+            case "$from" in *[!0]*) ;; *) from="$(git rev-parse HEAD~1)" ;; esac
+            to='${{ github.sha }}'
+          fi
+          app/node_modules/.bin/commitlint --config app/.commitlintrc.json --from "$from" --to "$to"
+
+  release:
+    needs: commitlint
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # tag, push the release commit, create the GitHub release
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable pnpm
+      - run: pnpm --dir app install --frozen-lockfile
+      # Run from the REPO ROOT, not from app/: `.releaserc.json` is here, and semantic-release
+      # takes the git repository and its remote from the working directory. The binary is reached
+      # by path for the same reason the git hook does it -- there is no package.json at this level
+      # and there never may be, so `pnpm exec` here would resolve nothing.
+      - run: ./app/node_modules/.bin/semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

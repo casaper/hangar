@@ -23,5 +23,11 @@
     "noPropertyAccessFromIndexSignature": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "eslint.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "eslint.config.ts",
+    "changelog.preset.ts",
+    "types/**/*.d.ts"
+  ]
 }
