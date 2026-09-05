@@ -373,16 +373,24 @@ to them. That asymmetry is why there are two modes rather than one.
 After any change, from `app/`:
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm format:check
+pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 hangar config schema --check     # only if you touched config/schema.ts
 ```
 
-The fleet has **no test suite**. Two conventions stand in for it, both of which exist because they
-caught a real bug: anything that produces text for a human or an agent gets a pure, exported builder
-so every variant can be printed side by side; and state is derived at the moment it is reported
-rather than carried in a flag that can go stale. `.claude/skills/hangar-internals` records why each
-command is built the way it is — those "this exists because it caught something" notes are the only
-surviving record of the bugs they prevent.
+**The test suite is a seed, not a safety net**, and knowing what it does and does not cover is the
+point of saying so. `app/test/` holds the things a capture structurally cannot express — two
+hangars rendered in ONE process (the golden capture runs the binary twice, so a cache keyed on
+nothing passes it every time), what happens to input that is wrong rather than to input that is
+right, and that `pathsFor` is frozen and pure. It asserts properties, never whole expected text:
+byte-exactness belongs to `pnpm golden`, and a second copy of it here would be a second oracle to
+update on every prose edit.
+
+Two older conventions carry the rest, and both exist because they caught a real bug: anything that
+produces text for a human or an agent gets a pure, exported builder so every variant can be printed
+side by side; and state is derived at the moment it is reported rather than carried in a flag that
+can go stale. `.claude/skills/hangar-internals` records why each command is built the way it is —
+those "this exists because it caught something" notes are the only surviving record of the bugs
+they prevent.
 
 ## Using the CLI by hand
 

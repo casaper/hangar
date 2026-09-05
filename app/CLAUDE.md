@@ -37,7 +37,7 @@ which is the single source of truth for both the shell and CI. Run the CLI's own
 `app/`** — they cover the CLI, not the app:
 
 ```bash
-cd app && pnpm typecheck && pnpm lint && pnpm format:check
+cd app && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 # pnpm lint:fix and pnpm format write; format:check is what a commit gate wants
 pnpm golden && git diff --exit-code dev/golden/gated   # the regression net; see below
 ```
@@ -53,11 +53,12 @@ of those commands is not found, the answer is almost always that direnv has not 
 
 Both exist because they caught something, and both apply to every edit under `app/src/**`.
 
-- **There is no test suite, so anything that produces text for a human or an agent gets a PURE
-  builder, given its facts and exported.** Every variant can then be printed side by side
-  without constructing the state that produces it, which is how `sync`'s eight closing messages
-  were checked — and it found two bugs reading the code had not: one froze an agent after a
-  SUCCESSFUL sync, the other told it a branch had moved when nothing was integrated.
+- **Anything that produces text for a human or an agent gets a PURE builder, given its facts and
+  exported.** Every variant can then be printed side by side without constructing the state that
+  produces it, which is how `sync`'s eight closing messages were checked — and it found two bugs
+  reading the code had not: one froze an agent after a SUCCESSFUL sync, the other told it a
+  branch had moved when nothing was integrated. This convention predates the test suite and is
+  what made one possible at all: every assertion in `test/` is a call to a pure builder.
 - **`pnpm golden` is the first convention, mechanised.** It captures every artifact this hangar
   would write — through the same pure builders `doctor` compares against and `add-clone` writes —
   and records each one's **destination** alongside its content, because every path in this CLI is
@@ -76,6 +77,27 @@ Both exist because they caught something, and both apply to every edit under `ap
   - **An expected diff is fine; an unenumerated one is the finding.** Making a config key live for
     the first time is _supposed_ to change the fixture half, and that change is the proof. Write
     the expected delta down before making the change.
+- **`pnpm test` covers what a capture structurally cannot, and nothing else.** `app/test/`, run by
+  `node --test` with no flags — Node 24 strips the types, and `test/**/*.ts` is in the tsconfig
+  include so the suite is checked under the same strict flags as `src/`. Three things live there
+  and the boundary matters:
+  - **Two hangars in ONE process.** `dev/golden.sh` runs the binary twice, so a module-level
+    singleton or a cache keyed on nothing passes it every time and still hands the second hangar
+    the first one's answers. `two-hangars.test.ts` reads them interleaved and asserts no path and
+    no port of one appears in the other's.
+  - **Input that is WRONG.** A capture shows what one config rendered to; it cannot show the
+    refusal. An unknown `{token}`, a known token with no value in context, two port roles
+    congruent mod step.
+  - **Properties, never snapshots.** `gated/fixture/` already pins every builder byte for byte, so
+    expected text here would be a second oracle to hand-update on every prose edit — the work the
+    golden net exists to absorb. Assert that the offset reached the port and that an identity file
+    names no sibling; leave the bytes to golden.
+
+  Everything runs against a synthetic root and a synthetic `~/.claude`, and that is a requirement:
+  `makeClone` reads `.hangar/colour-assignments.json` under the hangar root and caches it per
+  root, so a test aimed at this hangar would read one developer's own `colours change` history.
+  `namesNoMachinePath` in `test/fixture.ts` is the standing guard.
+
 - **Derive state at the moment you report it; carry a flag only for what git cannot know.** A
   `restored` boolean set beside a `git stash pop` lies whenever the pop fails, which it can — it
   only warns. Ask `inProgressOperation`, `conflictedFiles`, `syncStashes` instead. Whether an
@@ -102,6 +124,7 @@ stale on the next commit and nothing checks it, so run `wc -l` when you want one
 | platform              | `platform/` — `darwin.ts`, `linux.ts`, `index.ts`, `types.ts`                                                                                                                                                                                                                                                                                                                                                                        |
 | git / forge / tracker | `git.ts`, `bitbucket.ts`, `jira-records.ts`, `jira.ts`                                                                                                                                                                                                                                                                                                                                                                               |
 | fleet                 | `fleet.ts` — clone discovery, and everything per-clone derived from the index                                                                                                                                                                                                                                                                                                                                                        |
+| tests                 | `test/**/*.test.ts` — run by `pnpm test`; `test/fixture.ts` builds the synthetic hangar they all use                                                                                                                                                                                                                                                                                                                                 |
 | shared                | `dedupe.ts`, `claude-sessions.ts`, `resolve-conflicts.ts`, `procs.ts`, `plans.ts`, `environment.ts`, `install.ts`, `tui.ts`, `palette.ts`, `tmp.ts`, `sessions.ts`, `adopt.ts`, `ui.ts`, `hangar.ts`, `user-paths.ts`, `template.ts`, `exec.ts`                                                                                                                                                                                      |
 
 **Five seams**, each a capability record plus a driver interface rather than a pretence that the
@@ -432,6 +455,7 @@ Load it before editing anything here. Its `SKILL.md` is a short index; the depth
 until they are read — so take the one that matches the subsystem you are touching rather than all
 six.
 
-**The reason those notes read the way they do:** the fleet has no test suite, so every "this exists
-because it caught something" paragraph is the regression record. When you change behaviour there,
+**The reason those notes read the way they do:** the test suite is a seed covering the pure core,
+so for everything outside it every "this exists because it caught something" paragraph is still the
+regression record. When you change behaviour there,
 update the note; when you tidy prose, leave them alone.
