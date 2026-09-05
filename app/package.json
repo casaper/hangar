@@ -1,6 +1,6 @@
 {
   "name": "hangar",
-  "version": "1.0.0",
+  "version": "0.13.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.7.0",
@@ -13,7 +13,11 @@
     "format:check": "prettier --check .",
     "test": "node --test \"test/**/*.test.ts\"",
     "hangar": "node src/cli.ts",
-    "golden": "sh dev/golden.sh"
+    "golden": "sh dev/golden.sh",
+    "commitlint": "commitlint",
+    "changelog": "cd .. && app/node_modules/.bin/conventional-changelog -n app/changelog.preset.ts -i CHANGELOG.md -s -r 0 -k app/package.json --tag-prefix v",
+    "hooks": "cd .. && husky app/.husky",
+    "prepare": "cd .. && husky app/.husky"
   },
   "engines": {
     "node": ">=24.0.0"
@@ -27,13 +31,21 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@commitlint/cli": "21.2.2",
+    "@commitlint/config-conventional": "21.2.2",
     "@eslint/js": "10.0.1",
+    "@semantic-release/changelog": "7.0.0",
+    "@semantic-release/git": "11.0.1",
     "@types/node": "^24.7.2",
+    "conventional-changelog-cli": "5.0.0",
+    "conventional-changelog-conventionalcommits": "8.0.0",
     "eslint": "10.8.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-n": "18.3.0",
+    "husky": "9.1.7",
     "jiti": "2.7.0",
     "prettier": "^3.6.2",
+    "semantic-release": "25.0.9",
     "typescript": "^5.9.3",
     "typescript-eslint": "8.67.0"
   }
