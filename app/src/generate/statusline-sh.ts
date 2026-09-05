@@ -15,6 +15,31 @@ import { type Artifact, artifactHeader } from './index.ts';
  * derives it from the directory it is invoked in, and the table below is generated from the
  * same `src/palette.ts` as the themes and `clone-colours.sh`, so the three cannot drift.
  */
+/**
+ * Finding `jq` when PATH is not the developer's PATH.
+ *
+ * A status line is spawned by Claude Code, not by a shell the developer configured, so `jq` can
+ * easily be off PATH even on a machine where typing `jq` works. The old fallback was the single
+ * literal `/opt/homebrew/bin/jq`, which is Homebrew on Apple Silicon and **nowhere else** -- on
+ * Linux, and on an Intel Mac, the fallback silently fails, `field()` returns empty for every
+ * query, and the status line renders with no clone, no branch and no model. It does not error;
+ * it just goes blank, which reads as a Claude Code problem rather than a missing binary.
+ *
+ * So: a search list, ordered most-specific first. **The identical list is duplicated by hand in
+ * `.claude/modes/statusline.sh`**, which badges the hangar-root modes -- that file is
+ * hand-maintained and nothing derives it from here, so fixing only this one leaves the mode badge
+ * broken on exactly the platforms this list exists for. Change one, change both.
+ */
+export const JQ_SEARCH_LINES: readonly string[] = Object.freeze([
+  'JQ="$(command -v jq || true)"',
+  'if [ -z "$JQ" ]; then',
+  '    for candidate in /opt/homebrew/bin/jq /usr/local/bin/jq /usr/bin/jq /bin/jq \\',
+  '                     /snap/bin/jq "$HOME/.local/bin/jq"; do',
+  '        if [ -x "$candidate" ]; then JQ="$candidate"; break; fi',
+  '    done',
+  'fi',
+]);
+
 export const statuslineArtifact = (hangar: Hangar, clones: readonly Clone[]): Artifact => {
   const labelWidth = Math.max(3, ...clones.map((c) => c.name.length + 2));
   // Pad AFTER the semicolon, not before it, so the assignments line up the way a human
@@ -44,8 +69,7 @@ export const statuslineArtifact = (hangar: Hangar, clones: readonly Clone[]): Ar
     '# generated from src/palette.ts.',
     'set -uo pipefail',
     '',
-    'JQ="$(command -v jq || true)"',
-    '[ -n "$JQ" ] || JQ=/opt/homebrew/bin/jq',
+    ...JQ_SEARCH_LINES,
     '',
     'input="$(cat)"',
     `field() { printf '%s' "$input" | "$JQ" -r "$1 // empty" 2>/dev/null; }`,

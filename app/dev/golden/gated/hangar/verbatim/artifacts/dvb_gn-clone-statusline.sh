@@ -11,7 +11,12 @@
 set -uo pipefail
 
 JQ="$(command -v jq || true)"
-[ -n "$JQ" ] || JQ=/opt/homebrew/bin/jq
+if [ -z "$JQ" ]; then
+    for candidate in /opt/homebrew/bin/jq /usr/local/bin/jq /usr/bin/jq /bin/jq \
+                     /snap/bin/jq "$HOME/.local/bin/jq"; do
+        if [ -x "$candidate" ]; then JQ="$candidate"; break; fi
+    done
+fi
 
 input="$(cat)"
 field() { printf '%s' "$input" | "$JQ" -r "$1 // empty" 2>/dev/null; }

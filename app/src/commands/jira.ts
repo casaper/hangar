@@ -356,6 +356,14 @@ export const jiraHook = (hangar: Hangar | undefined, opts: JiraHookOptions): voi
     return;
   }
 
+  // A hangar with no tracker has no record store to serve from, and declining here rather than
+  // three passes down keeps the fail-open contract cheap: no filesystem walk, no `jira-cache.mjs`
+  // subprocess, no `tmp/jira-tickets/` created in a repo that will never have a ticket.
+  if (hangar.config.tracker.kind === 'none') {
+    say('this hangar declares no tracker');
+    return;
+  }
+
   let payload: HookPayload;
   try {
     payload = JSON.parse(readFileSync(0, 'utf8')) as HookPayload;

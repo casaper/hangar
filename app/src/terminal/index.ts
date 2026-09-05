@@ -1,3 +1,4 @@
+import { CliError } from '../exec.ts';
 import type { Hangar } from '../hangar.ts';
 import { appleTerminalDriver } from './apple-terminal.ts';
 import { gnomeTerminalDriver } from './gnome-terminal.ts';
@@ -141,3 +142,30 @@ export const resolveTerminal = (
  */
 export const terminal = (hangar: Hangar): ResolvedTerminal =>
   resolveTerminal(hangar.id, hangar.config.terminal.kind);
+
+/**
+ * The refusal a driver that cannot be typed into produces, as a NAMED error rather than a note.
+ *
+ * GNOME Terminal is the case this exists for, and it is not an omission anyone can close: VTE
+ * exposes no API for writing into a running tab, and the generic POSIX route -- the `TIOCSTI`
+ * ioctl -- has been disabled by default since Linux 6.2. So `writeToTty: false` is permanent
+ * there, and permanent limitations are exactly the ones that must not read as a quiet `false`
+ * in a capability record nobody prints.
+ *
+ * Constructed here and printed by `doctor`'s platform section, which is what makes it visible
+ * BEFORE a sync rather than after one: `sync` itself degrades correctly (it reports every
+ * session as missed and asks before touching the clone), and the failure this names is a
+ * developer discovering at that moment that the protocol their `CLAUDE.md` describes has never
+ * been available on their machine.
+ */
+export const syncPauseUnsupported = (driver: TerminalDriver): CliError =>
+  new CliError(
+    `${driver.label} cannot deliver \`SYNC PAUSE\` — it cannot be typed into`,
+    driver.kind === 'gnome-terminal'
+      ? 'Not a gap in this driver: VTE has no API for writing into a running tab, and TIOCSTI ' +
+          'has been off by default since Linux 6.2. Run the fleet under tmux, or set ' +
+          '`terminal.kind: konsole` if Konsole is what you use. `hangar sync` still works — it ' +
+          'reports every live session as unreachable and asks before touching the clone.'
+      : '`hangar sync` reports every live session as unreachable and asks before touching the ' +
+          'clone, rather than rewriting a branch under an agent that was never told.',
+  );

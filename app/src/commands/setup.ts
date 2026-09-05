@@ -20,7 +20,7 @@ import {
   type Preset,
 } from '../config/presets.ts';
 import { MANAGER_COMMANDS } from '../config/schema.ts';
-import { inspectEnvironment, type EnvironmentReport } from '../environment.ts';
+import { inspectEnvironment, installHint, type EnvironmentReport } from '../environment.ts';
 import { CliError } from '../exec.ts';
 
 import {
@@ -89,7 +89,7 @@ export const reportEnvironment = (report: EnvironmentReport): void => {
 
   for (const { tool, present } of report.statuses.filter((s) => s.tool.kind === 'required')) {
     if (present) ok(`${tool.name.padEnd(18)} found`);
-    else fail(`${tool.name.padEnd(18)} MISSING — ${tool.why}\n  ${tool.install}`);
+    else fail(`${tool.name.padEnd(18)} MISSING — ${tool.why}\n  ${installHint(tool)}`);
   }
 
   const { found, candidates } = report.nodeManager;
@@ -120,7 +120,7 @@ export const reportEnvironment = (report: EnvironmentReport): void => {
     for (const { tool, present } of preferred) {
       if (present) continue;
       warn(`${tool.name.padEnd(18)} ${tool.why}`);
-      note(`  ${tool.install}`);
+      note(`  ${installHint(tool)}`);
     }
   }
 

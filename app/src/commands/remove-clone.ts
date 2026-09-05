@@ -33,10 +33,19 @@ type Guard = { readonly message: string };
 /** Things that break the moment the directory moves, whether renamed or deleted. */
 const movementGuards = (clone: Clone): Guard[] => {
   const found: Guard[] = [];
-  const servers = runningServersIn(clone.path);
-  if (servers.length > 0) {
+  const scan = runningServersIn(clone);
+  if (scan.servers.length > 0) {
     found.push({
-      message: `running: ${servers.map((s) => `${s.name} (pid ${s.pid})`).join(', ')} — stop it first, its cwd is about to move`,
+      message: `running: ${scan.servers.map((s) => `${s.name} (pid ${s.pid})`).join(', ')} — stop it first, its cwd is about to move`,
+    });
+  } else if (!scan.portsChecked) {
+    // A guard that could not run is not a guard that passed. `lsof` is how this knows a clone is
+    // still serving in a repo that writes no pid files, and without it the only evidence left is
+    // a convention this hangar's repo may not follow.
+    found.push({
+      message:
+        'no pid file, and `lsof` could not be run — nothing here can tell whether this clone is ' +
+        'still serving. Check its ports by hand first.',
     });
   }
   const sessions = claudeSessionsIn(clone.path);

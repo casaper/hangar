@@ -1,6 +1,7 @@
 import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 
+import { platform } from './platform/index.ts';
 import { home } from './user-paths.ts';
 
 /**
@@ -14,7 +15,7 @@ import { home } from './user-paths.ts';
 export type ToolKind = 'required' | 'preferred';
 
 export type Tool = {
-  /** How a human refers to it -- also the Homebrew formula name. */
+  /** How a human refers to it. */
   readonly name: string;
   /**
    * The executable to look for, when it differs from `name`. ripgrep installs `rg`, and
@@ -25,7 +26,24 @@ export type Tool = {
   readonly kind: ToolKind;
   /** Why Hangar wants it, in one clause. Printed beside a miss, so it must earn the line. */
   readonly why: string;
-  readonly install: string;
+  /**
+   * The name a package manager knows it by, when it IS a package.
+   *
+   * Split from the hint text because the hint is platform-specific and the package name almost
+   * never is: `brew install jq` on macOS and `apt install jq` on Debian differ in the verb, not
+   * the noun. Before F11 every one of these read `brew install …` on every platform, which on
+   * Linux is an instruction that cannot be followed -- printed at exactly the moment someone is
+   * already stuck.
+   */
+  readonly pkg?: string;
+  /**
+   * A hint that is not a package install, or the step that FOLLOWS one.
+   *
+   * Node, pnpm and the two Node managers are the real cases: none of them is installed by a
+   * package manager here (Node comes from `.nvmrc` through fnm, pnpm through corepack), so their
+   * hints are already platform-neutral and stay written out.
+   */
+  readonly install?: string;
   /** Present when the program is not a plain binary on PATH (nvm is a shell function). */
   readonly detect?: (root: string) => boolean;
 };
@@ -92,14 +110,14 @@ export const TOOLS: readonly Tool[] = Object.freeze([
     name: 'git',
     kind: 'required',
     why: 'every clone is a git checkout, and sibling remotes are how commits move between them',
-    install: 'brew install git',
+    pkg: 'git',
   },
   {
     name: 'direnv',
     kind: 'required',
     why: 'the only thing that puts this hangar’s own `hangar` on PATH, and loads each clone’s ports',
-    install:
-      'brew install direnv   # then hook it into your shell: https://direnv.net/docs/hook.html',
+    pkg: 'direnv',
+    install: 'then hook it into your shell: https://direnv.net/docs/hook.html',
   },
   {
     // The name carries the CONDITION because the renderer's verb is fixed at `MISSING`: a
@@ -120,54 +138,65 @@ export const TOOLS: readonly Tool[] = Object.freeze([
       '`direnv allow` at the hangar root activates it through corepack, at the version app/package.json pins — no separate install',
   },
   {
+    // Not optional and not only for ports: `cwdsOf` in `procs.ts` maps a pid to its working
+    // directory with it, which is how a live Claude Code session is attributed to a clone at
+    // all. Without lsof `sync --all` stops skipping busy clones and `remove-clone` loses both
+    // of its liveness guards -- and every one of those failures looks like "nothing is running".
+    name: 'lsof',
+    kind: 'required',
+    why: 'attributes a running process to a clone — live sessions by working directory, dev servers by listening port',
+    pkg: 'lsof',
+  },
+  {
     name: 'jq',
     kind: 'required',
     why: 'reads Claude Code settings and session transcripts, which are JSON',
-    install: 'brew install jq',
+    pkg: 'jq',
   },
   {
     name: 'yq',
     kind: 'required',
     why: 'reads hangar.config.yaml from shell contexts that cannot start Node (the statusline)',
-    install: 'brew install yq',
+    pkg: 'yq',
   },
   {
     name: 'ripgrep',
     bin: 'rg',
     kind: 'preferred',
     why: 'faster than grep with a stronger regex engine; `hangar teach-rg` points agents at it',
-    install: 'brew install ripgrep',
+    pkg: 'ripgrep',
   },
   {
     name: 'ripgrep-all',
     bin: 'rga',
     kind: 'preferred',
     why: 'searches inside PDFs and archives, which plain rg skips',
-    install: 'brew install ripgrep-all',
+    pkg: 'ripgrep-all',
   },
   {
     name: 'tree',
     kind: 'preferred',
     why: 'the cheapest way to show an agent a directory shape',
-    install: 'brew install tree',
+    pkg: 'tree',
   },
   {
     name: 'git-lfs',
     kind: 'preferred',
     why: 'repos with large binary assets need it, and a missing filter corrupts checkouts silently',
-    install: 'brew install git-lfs && git lfs install',
+    pkg: 'git-lfs',
+    install: 'then `git lfs install` once, per user account',
   },
   {
     name: 'git-extras',
     kind: 'preferred',
     why: 'adds git summary / git effort / git delete-branch, used when comparing clones',
-    install: 'brew install git-extras',
+    pkg: 'git-extras',
   },
   {
     name: 'git-filter-repo',
     kind: 'preferred',
     why: 'the only safe way to rewrite history, e.g. when extracting a hangar into its own repo',
-    install: 'brew install git-filter-repo',
+    pkg: 'git-filter-repo',
   },
 ]);
 
@@ -177,16 +206,32 @@ export const NODE_MANAGERS: readonly Tool[] = Object.freeze([
     name: 'fnm',
     kind: 'required',
     why: 'resolves the .nvmrc Node version per directory (preferred: faster, and a real binary)',
-    install: 'brew install fnm',
+    pkg: 'fnm',
+    install: 'or the upstream installer: https://github.com/Schniz/fnm#installation',
   },
   {
     name: 'nvm',
     kind: 'required',
     why: 'alternative Node version manager',
-    install: 'brew install nvm',
+    // No package: nvm is a shell function sourced from a script, and every distribution that
+    // packages it produces an install that `nvmPresent` below cannot see.
+    install: 'the upstream installer: https://github.com/nvm-sh/nvm#installing-and-updating',
     detect: nvmPresent,
   },
 ]);
+
+/**
+ * The one line to print beside a missing tool, for THIS machine.
+ *
+ * Not a field on the tool, and not computed when `TOOLS` is built: `TOOLS` is a module constant
+ * evaluated at import, and a hint baked in there would be the import-time-evaluation trap this
+ * CLI has already paid for once -- correct here, and silently wrong the moment anything renders
+ * for a platform other than the one that loaded the module.
+ */
+export const installHint = (tool: Tool): string =>
+  [tool.pkg === undefined ? undefined : platform().installHint(tool.pkg), tool.install]
+    .filter((part) => part !== undefined)
+    .join(' — ');
 
 export type ToolStatus = { readonly tool: Tool; readonly present: boolean };
 

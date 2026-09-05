@@ -10,6 +10,9 @@ tmp-hook           %HANGAR%/bin/hangar --hangar %HANGAR% tmp merge --quiet
 fleet-bin-path     PATH_add "$HOME/code/dvb_gn/bin"
 colour-assignments %HANGAR%/.hangar/colour-assignments.json
 memory-dir         %HOME%/.claude/dvb_gn-memory
+platform           darwin — %HOME%/Library/Application Support
+platform-caps      openExternally=true openApplicationByName=true vscodeWindowState=true
+vscode-state       %HOME%/Library/Application Support/Code/User/globalStorage/storage.json
 port-roles         ng(NG_DEV_SERVER_PORT)=4200 storybook(STORYBOOK_DEV_SERVER_PORT)=6006 playwrightReport(PLAYWRIGHT_REPORT_PORT)=9323
 port-step/offset   100 / 0
 

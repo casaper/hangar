@@ -43,6 +43,7 @@ import { statuslineArtifact } from '../generate/statusline-sh.ts';
 import { terminalHookArtifact } from '../generate/terminal-sh.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
 
+import { platform } from '../platform/index.ts';
 import { home } from '../user-paths.ts';
 
 import { heading, note, ok } from '../ui.ts';
@@ -205,6 +206,7 @@ export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
    * produced by the very code meant to prove they agree.
    */
   const selection = editors(hangar);
+  const os = platform();
   const manifest: string[] = [
     `hangar-root        ${hangar.root}`,
     `hangar-id          ${hangar.id}`,
@@ -226,6 +228,21 @@ export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
      */
     `colour-assignments ${hangar.paths.colourAssignmentsFile}`,
     `memory-dir         ${hangar.paths.memory}`,
+    /*
+     * The platform seam, for the same reason as the two lines above: it decides DESTINATIONS.
+     *
+     * `vscodeWindowState` is `~/Library/Application Support/…` here and `~/.config/…` on Linux,
+     * and it is the path `open` reads to notice a clone's workspace is already open. Normalised
+     * to `%HOME%` in the second capture like every other user path, so what this row actually
+     * pins is the SHAPE below `$HOME` -- which is the half that differs by platform. The
+     * capabilities are here because a false one is a refusal by name, and a refusal that
+     * appeared or disappeared silently is what this net exists to catch.
+     */
+    `platform           ${os.id} — ${os.machineConfigDir}`,
+    `platform-caps      ${Object.entries(os.capabilities)
+      .map(([name, on]) => `${name}=${String(on)}`)
+      .join(' ')}`,
+    `vscode-state       ${os.vscodeWindowState('Code') ?? '(unlocatable)'}`,
     `port-roles         ${hangar.config.ports.roles.map((r) => `${r.id}(${r.envKey})=${String(r.base)}`).join(' ')}`,
     `port-step/offset   ${String(hangar.config.ports.step)} / ${String(hangar.config.ports.offset)}`,
     '',

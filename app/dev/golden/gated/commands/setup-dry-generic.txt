@@ -6,6 +6,7 @@ ok  git                found
 ok  direnv             found
 ok  node (.nvmrc)      found
 ok  pnpm               found
+ok  lsof               found
 ok  jq                 found
 ok  yq                 found
 ok  fnm                found (of fnm / nvm)

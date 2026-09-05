@@ -7,7 +7,7 @@ import { CliError, run } from '../exec.ts';
 import { cloneDirPattern, type Clone } from '../fleet.ts';
 import { git } from '../git.ts';
 import { render as renderTemplate } from '../template.ts';
-import { vscodeWindowState } from '../user-paths.ts';
+import { platform } from '../platform/index.ts';
 import { VSCODE_FAMILY, type VscodeFork } from './kinds.ts';
 import type { EditorArtifact, EditorDriver, LaunchResult } from './types.ts';
 import type { Hangar } from '../hangar.ts';
@@ -329,9 +329,14 @@ export const writeCopy = (path: string, text: string): void => {
  * root copy.
  */
 export const openWorkspaceFile = (clone: Clone, stateDir = 'Code'): string | undefined => {
+  // A platform that does not know where this file lives says so, rather than handing back a
+  // path under someone else's `~/Library`: an unreadable file and an unlocatable one both mean
+  // "no opinion" here, but only one of them is a bug worth being able to see.
+  const statePath = platform().vscodeWindowState(stateDir);
+  if (statePath === undefined) return undefined;
   let state: unknown;
   try {
-    state = JSON.parse(readFileSync(vscodeWindowState(stateDir), 'utf8'));
+    state = JSON.parse(readFileSync(statePath, 'utf8'));
   } catch {
     return undefined;
   }

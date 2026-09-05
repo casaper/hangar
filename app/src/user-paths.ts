@@ -24,20 +24,15 @@ export const projectsDir = join(claudeDir, 'projects');
 /** Where plans land when `plansDirectory` is absent or rejected -- shared with other projects. */
 export const userPlans = join(claudeDir, 'plans');
 
-/**
- * A VS Code-family editor's window state -- which workspace each window has open. Written by the
- * editor as windows come and go, so it is LAST KNOWN rather than live; see `openWorkspaceFile`.
+/*
+ * `vscodeWindowState` used to live here, and moved to `platform/` at F11.
  *
- * Takes the directory name because every fork has its own: `Code`, `Cursor`, `Windsurf`,
- * `Code - Insiders`. Reading the wrong one answers about a different application's windows.
- *
- * macOS only as written. The Linux location is
- * `~/.config/<stateDir>/User/globalStorage/storage.json`, and getting that wrong is not
- * cosmetic: this file is how `open` notices a clone's workspace is ALREADY open, and a
- * workspace opened twice is how two Claude Code sessions end up in one clone.
+ * It looked like a user path -- one directory under `$HOME`, the same for every hangar -- and
+ * that is exactly what made it wrong. The test above asks whether two HANGARS would disagree
+ * about a path; it does not ask whether two PLATFORMS would, and this one is
+ * `~/Library/Application Support/…` on macOS and `~/.config/…` on Linux. Anything here that
+ * turns out to differ by platform belongs on that seam, not in this file.
  */
-export const vscodeWindowState = (stateDir = 'Code'): string =>
-  join(home, 'Library', 'Application Support', stateDir, 'User', 'globalStorage', 'storage.json');
 
 /** Render an absolute path under $HOME as `~/...` for output. */
 export const tildify = (p: string): string => (p.startsWith(home) ? `~${p.slice(home.length)}` : p);

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { run } from '../exec.ts';
 import type { Clone } from '../fleet.ts';
+import { platform } from '../platform/index.ts';
 import { JETBRAINS_PRODUCTS, type JetbrainsProduct } from './kinds.ts';
 import type { EditorArtifact, EditorDriver, LaunchResult } from './types.ts';
 
@@ -112,17 +113,18 @@ const launchJetbrains = (
     };
   }
 
-  // macOS fallback: Toolbox may not have installed a shell script, but the app bundle is still
-  // openable by name. `-a … <path>` hands the directory to it exactly as the launcher would.
-  if (process.platform === 'darwin') {
-    const res = run('open', ['-a', app, clone.path]);
-    if (res.ok) {
-      return {
-        target: clone.path,
-        reused: false,
-        note: `via \`open -a "${app}"\` (no launcher on PATH)`,
-      };
-    }
+  // Toolbox may not have installed a shell script, and then the application BUNDLE is the only
+  // handle left. That is a capability, not a platform: `openApplicationByName` is true on macOS
+  // and false on Linux, where a desktop entry is addressed by a reverse-DNS id nobody types and
+  // there is no lookup from `WebStorm` to it. A platform without it has nothing to fall back to,
+  // and the caller's own message names the launcher that was not found.
+  const os = platform();
+  if (os.capabilities.openApplicationByName && os.openExternally(clone.path, app)) {
+    return {
+      target: clone.path,
+      reused: false,
+      note: `via the ${app} application bundle (no launcher on PATH)`,
+    };
   }
   return undefined;
 };

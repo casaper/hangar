@@ -433,6 +433,16 @@ const stamp = (ms: number): string => {
  * right now. Here a ticket's own record wins regardless of age, so the state is unreachable.
  */
 const syncJiraStore = (hangar: Hangar, dryRun: boolean): void => {
+  /*
+   * A hangar with no tracker has no tickets, and this pass is entirely about ticket records.
+   *
+   * The check is `tracker.kind`, not "did we find any files": every rule below -- what counts as
+   * a ticket record, which of a group's copies is the ticket's OWN, what may be stripped when
+   * two names collapse onto one inode -- is Jira's shape. Running it against a hangar that
+   * declared no tracker would be applying those rules to whatever else happens to look like
+   * them, and it would create `tmp/jira-tickets/` in a repo that will never have one.
+   */
+  if (hangar.config.tracker.kind === 'none') return;
   const groups = groupTicketRecords(hangar, ticketRecordPaths(hangar));
   if (groups.length === 0) return;
 

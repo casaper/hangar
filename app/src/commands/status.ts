@@ -128,7 +128,7 @@ export const statusOf = (clone: Clone, fetched: boolean): void => {
   const ticket = inferTicket(clone, branch);
   const ref = repoRef(clone.hangar, clone.path);
   const sessions = claudeSessionsIn(clone.path);
-  const servers = runningServersIn(clone.path);
+  const scan = runningServersIn(clone);
   const pending = inProgressOperation(clone.path);
   const strandedStashes = syncStashes(clone.path);
 
@@ -150,9 +150,16 @@ export const statusOf = (clone: Clone, fetched: boolean): void => {
     ['ports', portSummary(clone.ports)],
     [
       'servers',
-      servers.length === 0
-        ? pc.dim('none running')
-        : servers.map((s) => `${s.name} (pid ${s.pid})`).join(', '),
+      scan.servers.length === 0
+        ? // Not "none running" when the port half could not be asked: an absent `lsof` means
+          // nobody looked, and this row is read as an answer.
+          pc.dim(scan.portsChecked ? 'none running' : 'no pid file — ports not checked (no lsof)')
+        : scan.servers
+            .map(
+              (s) =>
+                `${s.name} (pid ${s.pid}${s.how === 'port' ? `, listening on ${String(s.port ?? 0)}` : ''})`,
+            )
+            .join(', '),
     ],
     [
       'claude',

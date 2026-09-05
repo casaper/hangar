@@ -81,7 +81,9 @@ import {
 } from '../tmp.ts';
 import { paletteEntry } from '../palette.ts';
 import { portSummary } from '../ports.ts';
-import { terminal, type TerminalCapabilities } from '../terminal/index.ts';
+import { platform } from '../platform/index.ts';
+import { claudeSessionDiagnostic } from '../procs.ts';
+import { syncPauseUnsupported, terminal, type TerminalCapabilities } from '../terminal/index.ts';
 import {
   hangarClaudeLocalMdContent,
   hangarClaudeLocalMdPath,
@@ -619,6 +621,77 @@ const CAPABILITY_LABELS = [
 const SHELL_RC_FILES = ['.zshrc', '.zprofile', '.bashrc', '.bash_profile', '.profile'] as const;
 
 /**
+ * The platform row: what this operating system can do for Hangar, and what it refuses BY NAME.
+ *
+ * Printed on every OS, including the one it was written on. A row that only appeared when
+ * something was wrong would be a row nobody had ever seen working, which is how this CLI ended
+ * up shipping three macOS-only paths in the first place -- none of them failed loudly anywhere,
+ * because nowhere else ever ran them.
+ *
+ * The session line is the important half and is a DIAGNOSTIC, not a pass: it says how many rows
+ * `ps` returned and how many the Claude Code matcher accepted. Zero matched on a machine with
+ * `claude` running is the Linux failure this fleet cannot test for -- see
+ * `claudeSessionDiagnostic` -- and it is indistinguishable from an idle machine unless the row
+ * prints both numbers.
+ */
+const reportPlatform = (): void => {
+  const os = platform();
+  const caps = [
+    os.capabilities.openExternally ? 'open externally' : undefined,
+    os.capabilities.openApplicationByName ? 'name an application' : undefined,
+    os.capabilities.vscodeWindowState ? 'VS Code window state' : undefined,
+  ].filter((c) => c !== undefined);
+  ok(
+    `${'platform'.padEnd(22)} ${pc.dim(`${os.label} — ${caps.length === 0 ? 'no desktop integration' : caps.join(', ')}`)}`,
+  );
+  if (!os.capabilities.vscodeWindowState) {
+    note(
+      'Hangar does not know where a VS Code-family editor keeps its window state here, so ' +
+        '`hangar open` cannot tell that a clone’s workspace is ALREADY open and may open a ' +
+        'second window on it.',
+    );
+  }
+  if (!os.capabilities.openApplicationByName) {
+    note(
+      'An application cannot be addressed by display name here, so a JetBrains install with no ' +
+        'launcher on PATH has nothing to fall back to. Generate the shell scripts from Toolbox.',
+    );
+  }
+
+  const seen = claudeSessionDiagnostic();
+  const label = 'claude sessions'.padEnd(22);
+  if (!seen.psOk) {
+    warn(`${label} \`ps\` failed, so no live session can be detected`);
+    note(
+      '`hangar sync --all` cannot skip a busy clone and cannot deliver `SYNC PAUSE`; it will ' +
+        'ask before touching each clone instead.',
+    );
+    return;
+  }
+  ok(
+    `${label} ${pc.dim(`${String(seen.matched)} found (${String(seen.withCwd)} located) in ${String(seen.rows)} processes`)}`,
+  );
+  if (seen.matched === 0 && seen.nearMisses.length > 0) {
+    // The one line that answers the open Linux question. `argv[0]` is `claude` on macOS; if
+    // procps reports something else, that something else is standing right here.
+    warn(
+      `no process has \`claude\` as argv[0], but ${String(seen.nearMisses.length)} command name(s) ` +
+        `mention it: ${seen.nearMisses.join(', ')}`,
+    );
+    note(
+      'If a Claude Code session IS running, this is the detector missing it — every busy-clone ' +
+        'skip and the whole `SYNC PAUSE` protocol are off. Report the command names above.',
+    );
+  }
+  if (seen.matched > seen.withCwd) {
+    note(
+      `${String(seen.matched - seen.withCwd)} session(s) have no working directory — \`lsof\` ` +
+        'could not read them, so they belong to no clone as far as `sync` is concerned.',
+    );
+  }
+};
+
+/**
  * Is the terminal colour hook sourced from a shell rc, and does any rc name a file that is gone?
  *
  * The second half is the important one, and it is why this check exists at all. The idiomatic way
@@ -925,6 +998,8 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
    * a detected driver with no `type` capability silently changes what `sync` can do, and a hook
    * nobody sources is a colour scheme that quietly does not exist.
    */
+  reportPlatform();
+
   const { driver, source } = terminal(hangar);
   const can = CAPABILITY_LABELS.filter(([key]) => driver.capabilities[key]).map(
     ([, label]) => label,
@@ -934,9 +1009,13 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
     note(driver.unavailableHint());
   } else {
     ok(`${'terminal'.padEnd(22)} ${pc.dim(`${driver.label} (${source}) — ${can.join(', ')}`)}`);
-    if (!driver.capabilities.writeToTty) {
-      note(`${driver.label} cannot be typed into, so \`hangar sync\` cannot pause a live session.`);
-    }
+  }
+  if (!driver.capabilities.writeToTty) {
+    // Named, not noted: see `syncPauseUnsupported`. A permanent limitation printed as a passing
+    // capability record is the silent degradation this whole section exists to end.
+    const refusal = syncPauseUnsupported(driver);
+    warn(refusal.message);
+    if (refusal.hint !== undefined) note(refusal.hint);
   }
   reportShellHook(hangar);
 

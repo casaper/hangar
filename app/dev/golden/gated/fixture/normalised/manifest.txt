@@ -10,6 +10,9 @@ tmp-hook           %HANGAR%/bin/hangar --hangar %HANGAR% tmp merge --quiet
 fleet-bin-path     PATH_add "%HANGAR%/bin"
 colour-assignments %HANGAR%/.hangar/colour-assignments.json
 memory-dir         %HOME%/.claude/wt-memory
+platform           darwin — %HOME%/Library/Application Support
+platform-caps      openExternally=true openApplicationByName=true vscodeWindowState=true
+vscode-state       %HOME%/Library/Application Support/Code/User/globalStorage/storage.json
 port-roles         api(FIXTURE_API_PORT)=3000 db(FIXTURE_DB_PORT)=5432 swagger(FIXTURE_SWAGGER_PORT)=8080
 port-step/offset   100 / 37
 
