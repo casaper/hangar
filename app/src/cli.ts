@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { Argument, Command, Option, type CommandUnknownOpts } from '@commander-js/extra-typings';
 import pc from 'picocolors';
 
@@ -41,6 +43,21 @@ import { PALETTE_NAMES } from './palette.ts';
  * This is the ONLY place allowed to end the process; every command signals failure by
  * throwing a CliError, which is rendered here as a message rather than a stack trace.
  */
+/**
+ * The CLI's version, read from `app/package.json` rather than repeated here.
+ *
+ * It used to be the literal `'1.0.0'`, which is the kind of duplicate nothing notices until a
+ * release tool moves the other copy: semantic-release bumps `app/package.json` and would have
+ * left `hangar --version` answering last year's number forever. Reading it is the only way the
+ * two cannot disagree.
+ *
+ * The cast is not decoration -- `JSON.parse` returns `any`, which `strictTypeChecked` rejects.
+ * The cost is one small synchronous read per invocation, `jira hook` included.
+ */
+const { version } = JSON.parse(
+  readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+) as { version: string };
+
 const program = new Command()
   .name('hangar')
   .description(
@@ -48,7 +65,7 @@ const program = new Command()
       'Clones are discovered from the filesystem; their colour and their ports are pure\n' +
       'functions of the clone index, so adding or removing one needs no bookkeeping.',
   )
-  .version('1.0.0')
+  .version(version)
   /*
    * The hangar to act on. Precedence is --hangar > the upward walk from cwd > HANGAR_ROOT,
    * and NOT commander's `.env()`, which would collapse the flag and the variable onto one
