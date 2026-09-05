@@ -15,6 +15,7 @@ import pc from 'picocolors';
 import {
   claudeLocalMdContent,
   effectivePlansDirectory,
+  hasAnyJiraHook,
   hasJiraHook,
   hasPlansHook,
   hasTmpHook,
@@ -181,19 +182,22 @@ const writeFile = (path: string, content: string): void => {
 };
 
 /**
- * Add one hook to the clone's settings, reading the file again first.
+ * Reconcile one hook with the clone's settings, reading the file again first.
  *
  * All three hook checks are built from ONE `readSettings` at the top of `checksFor`, and
  * `--fix` runs every repair in that same pass -- so a repair rendering that captured object
  * would drop the hook a previous repair had just written. A clone missing two of them is the
  * normal case for a fresh clone, which is exactly when it would go unnoticed.
+ *
+ * "Reconcile" rather than "add" because `withJiraHook` REMOVES on a hangar that declares no
+ * tracker; the plans and tmp hooks are unconditional and so are still pure adds through here.
  */
-const addHook =
-  (hangar: Hangar, clone: Clone, add: (settings: SettingsJson) => SettingsJson): (() => void) =>
+const reconcileHook =
+  (hangar: Hangar, clone: Clone, apply: (settings: SettingsJson) => SettingsJson): (() => void) =>
   () => {
     const current = readSettings(clone);
     if (current === undefined) return;
-    writeFile(settingsPath(clone), `${JSON.stringify(add(current), null, 2)}\n`);
+    writeFile(settingsPath(clone), `${JSON.stringify(apply(current), null, 2)}\n`);
   };
 
 /** `statusLine.command` out of a mode settings file, or undefined if it has none. */
@@ -514,29 +518,52 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
       ? "collects this clone's finished plans into the shared archive"
       : 'missing — a finished plan stays in this clone until `hangar plans collect` is run by hand',
     repair:
-      settings === undefined ? undefined : addHook(hangar, clone, (s) => withPlansHook(hangar, s)),
+      settings === undefined
+        ? undefined
+        : reconcileHook(hangar, clone, (s) => withPlansHook(hangar, s)),
   });
 
-  const jiraOk = hasJiraHook(hangar, settings);
+  /*
+   * The tracker hook is the one check whose CORRECT answer depends on the config, so the row
+   * asks the opposite question on a hangar that declares no tracker: not "is it wired" but "is
+   * it gone". Both directions repair through the same `withJiraHook`, which reconciles.
+   *
+   * The two predicates are not interchangeable here. Enabled, the question is whether to
+   * rewrite, so exact equality is right -- a drifted command should be rewritten. Disabled, the
+   * question is whether to remove, and `withJiraHook` removes by `invokesOurCli`; asking exact
+   * equality would report "correctly absent" about a stale hook the repair then deletes.
+   */
+  const trackerOff = hangar.config.tracker.kind === 'none';
+  const jiraOk = trackerOff ? !hasAnyJiraHook(hangar, settings) : hasJiraHook(hangar, settings);
   checks.push({
     name: 'jira record hook',
     ok: jiraOk,
-    detail: jiraOk
-      ? 'a ticket fetched in the last hour is served from the shared record store, not re-fetched'
-      : 'missing — every `jira-ticket-sync` run re-fetches the ticket and its whole neighbourhood',
+    detail: trackerOff
+      ? jiraOk
+        ? 'correctly absent — this hangar declares no tracker'
+        : 'wired, but this hangar declares `tracker.kind: none` — it serves nothing and starts a process on every Bash call'
+      : jiraOk
+        ? 'a ticket fetched in the last hour is served from the shared record store, not re-fetched'
+        : 'missing — every `jira-ticket-sync` run re-fetches the ticket and its whole neighbourhood',
     repair:
-      settings === undefined ? undefined : addHook(hangar, clone, (s) => withJiraHook(hangar, s)),
+      settings === undefined
+        ? undefined
+        : reconcileHook(hangar, clone, (s) => withJiraHook(hangar, s)),
   });
 
   const tmpHookOk = hasTmpHook(hangar, settings);
   checks.push({
     name: 'tmp SessionEnd hook',
     ok: tmpHookOk,
+    // Not "Jira cache entries": this hook shares every `tmp/` entry, and naming only the
+    // tracker's promised a hangar with no tracker something it would never get.
     detail: tmpHookOk
-      ? "folds this clone's new Jira cache entries into the shared record store at session end"
-      : 'missing — a ticket first fetched here reaches the siblings only when `hangar tmp merge` is run by hand',
+      ? "folds this clone's new `tmp/` entries into the shared store at session end"
+      : 'missing — anything first written here reaches the siblings only when `hangar tmp merge` is run by hand',
     repair:
-      settings === undefined ? undefined : addHook(hangar, clone, (s) => withTmpHook(hangar, s)),
+      settings === undefined
+        ? undefined
+        : reconcileHook(hangar, clone, (s) => withTmpHook(hangar, s)),
   });
 
   const strayPlanDirs = planDirsIn(clone).filter(

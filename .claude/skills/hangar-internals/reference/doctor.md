@@ -437,6 +437,43 @@ So the check and the builder moved together:
   no new repair plumbing: that row's repair already called `settingsContentFor`, so widening the
   builder widened `--fix`.
 
+### The one hook row whose right answer comes from the config
+
+Two of the three hook rows are unconditional: every clone wants the plan collector and the `tmp`
+merger, so the row asks "is it wired" and `--fix` wires it. **The tracker hook is not**, and it
+went a long time behaving as if it were. `withJiraHook` and `hasJiraHook` read no config at all,
+so a hangar declaring `tracker.kind: none` — which is the schema DEFAULT, and so every hangar
+adopting this tool before configuring a tracker — got the hook written into every clone by
+`add-clone`, kept there by the overlay, reported **missing** by `doctor` when it was not there,
+and installed by `--fix`. It is inert: `jiraHook` declines on `kind: none` before it touches the
+filesystem. It is not free: a `PreToolUse` matcher on `Bash` starts a Node process on **every Bash
+tool call in every clone**, forever, to serve nothing.
+
+So `withJiraHook` reconciles rather than adds — it already filtered its own stale matchers before
+appending, and dropping the append turns that filter into the removal. **The gate is inside the
+builder, not at the four call sites** (`defaultSettings`, `settingsContentFor`, this row's repair,
+and the golden capture's template): a gate at the call sites is one that a fifth caller is added
+without. The row then asks the opposite question when the tracker is off — not "is it wired" but
+"is it gone" — and the same `withJiraHook` repairs both directions, so the jira → none transition
+is repairable rather than merely un-made.
+
+**The two predicates beside it are deliberately different strengths, and swapping them is silent.**
+`hasJiraHook` is exact equality on the command this hangar would write today, which is right where
+the answer decides whether to REWRITE: a drifted command *should* be rewritten. `hasAnyJiraHook`
+is the same `invokesOurCli` test the filter uses, and is right where the answer decides whether to
+REMOVE. Ask exact equality on the disabled path and `doctor` reports "correctly absent" about a
+stale pre-`--hangar` hook that its own repair then deletes in the same run — the report and the fix
+disagreeing, which is the failure the pair exists to make impossible.
+
+**None of this is in `gated/`, and it cannot be.** Both fixtures declare `kind: jira`, and neither
+can flip: `dev/fixture.config.yaml` is pinned by `tracker-config.test.ts` asserting its cache keys
+disagree with the other fixture's and with the schema defaults, and `dev/fixture-vscode.config.yaml`
+is the sole carrier of `syncScript`, `namerScript` and six other enumerated things. So the disabled
+settings shape has no byte-level pin; `app/test/tracker-config.test.ts` carries it as properties
+instead, including the negative case a capture could never state — that a hook belonging to another
+tool in the same `PreToolUse` array is left alone. An empty `gated/` diff after this change is
+therefore the meaningful result: it proves the enabled path did not move.
+
 **Moving live memory is still not something `--fix` finishes.** It repoints the clones at
 `<id>-memory`; the memories already written under the old name have to be merged across by hand,
 appending to the surviving `MEMORY.md` rather than overwriting it, and no running session sees any

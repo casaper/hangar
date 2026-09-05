@@ -86,6 +86,12 @@ Four things to say correctly when you relay a report:
   both.) Which of the two is right
   is genuinely unknown: git writes `origin/HEAD` at clone time and never updates it, so a clone
   predating a rename keeps the old answer for good and the config may well be the newer one.
+- **`jira record hook` asks the opposite question on a hangar with no tracker, so read its
+  detail rather than its name.** Where `tracker.kind` is `jira` the row wants the hook wired and
+  goes red when it is missing. Where the config says `none` — which is the default — it wants the
+  hook GONE, reports `correctly absent`, and goes red only when a stale one is still there from
+  before the tracker was switched off. Both directions are `hangar doctor --fix`. Never relay a
+  red row here as "the Jira cache is broken" without saying which of the two it is.
 - **How much of the shared cache a clone has linked is deliberately not checked.** A ticket fetched
   in one clone reaches the others at the next `tmp merge`; a check that is red in normal operation
   is a check nobody reads. (`hangar-internals/reference/doctor.md` says the same — change one and

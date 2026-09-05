@@ -1,8 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import {
+  defaultSettings,
+  hasAnyJiraHook,
+  hasJiraHook,
+  jiraHookCommand,
+  withJiraHook,
+  type HookMatcher,
+  type SettingsJson,
+} from '../src/clone-config.ts';
 import { parseSyncCommand, scriptTail } from '../src/commands/jira.ts';
-import { fixtureVscodeConfigText, syntheticHangar } from './fixture.ts';
+import { cloneAt } from '../src/fleet.ts';
+import { fixtureConfigText, fixtureVscodeConfigText, syntheticHangar } from './fixture.ts';
 
 /**
  * The `tracker.*` keys the Jira cache hook runs on, asserted to have been READ.
@@ -92,4 +102,126 @@ test('the script keys are OPTIONAL, and the fixture that omits them says so', ()
   const tracker = syntheticHangar().config.tracker;
   assert.equal(tracker.syncScript, undefined);
   assert.equal(tracker.namerScript, undefined);
+});
+
+/**
+ * The DISABLED tracker, which is the schema's default and which nothing used to honour.
+ *
+ * `tracker.kind` has defaulted to `none` for a long time and every consumer that reads tracker
+ * DATA branched on it -- `issueUrl`, `jiraHook`'s decline, `tmp merge`'s store pass, `status`'s
+ * row, the two `CLAUDE.local.md` builders. The per-clone `PreToolUse` hook did not: it read no
+ * config at all, so a hangar with no tracker got the hook in every clone, `doctor` went red
+ * demanding it, and `--fix` installed a process that runs on every Bash tool call and serves
+ * nothing.
+ *
+ * **This lives in the suite rather than in a capture because neither fixture can carry it.**
+ * `fixture.config.yaml` cannot flip: the tests above assert its cache keys disagree with the
+ * vscode fixture's and with the schema defaults, which a `kind: none` block has no reason to
+ * hold. `fixture-vscode.config.yaml` cannot either -- it is the sole carrier of `syncScript`,
+ * `namerScript` and six other enumerated things. So the disabled settings shape gets no
+ * byte-level golden pin, and these properties are what stands in for one.
+ */
+
+/** The fixture with its tracker switched off explicitly. */
+const disabledHangar = (): ReturnType<typeof syntheticHangar> =>
+  syntheticHangar({ configText: fixtureConfigText().replace('kind: jira', 'kind: none') });
+
+/**
+ * The fixture with no `tracker:` block at all -- a different claim from the one above.
+ *
+ * `trackerSchema.prefault({})` is what makes an omitted block mean `kind: none`, and that is the
+ * half a reader assumes rather than checks. The replace is anchored on the following `repo:` key
+ * and asserted to have bitten: a regex that quietly matched nothing would leave `kind: jira` in
+ * place and send the next person debugging the wrong assertion.
+ */
+const noTrackerHangar = (): ReturnType<typeof syntheticHangar> => {
+  const text = fixtureConfigText().replace(/\ntracker:\n[\s\S]*?\n\nrepo:/, '\nrepo:');
+  assert.ok(!text.includes('tracker:'), 'the tracker block was not removed from the fixture');
+  return syntheticHangar({ configText: text });
+};
+
+const preToolUse = (settings: SettingsJson): HookMatcher[] | undefined =>
+  settings.hooks?.['PreToolUse'];
+
+const jiraMatchers = (settings: SettingsJson): HookMatcher[] =>
+  (preToolUse(settings) ?? []).filter((matcher) =>
+    matcher.hooks.some((hook) => hook.command.includes('jira hook')),
+  );
+
+test('a hangar with no tracker declares kind none, whether it says so or omits the block', () => {
+  // Guard on the guard, and the premise of every assertion below: if a fixture edit ever put a
+  // tracker back, these tests must fail here rather than pass while proving nothing.
+  assert.equal(disabledHangar().config.tracker.kind, 'none');
+  assert.equal(noTrackerHangar().config.tracker.kind, 'none');
+  assert.equal(syntheticHangar().config.tracker.kind, 'jira', 'the plain fixture IS enabled');
+});
+
+test('a clone of a tracker-less hangar is built with no jira hook and no empty key', () => {
+  for (const hangar of [disabledHangar(), noTrackerHangar()]) {
+    const settings = defaultSettings(cloneAt(hangar, 1));
+    assert.deepEqual(jiraMatchers(settings), [], 'a hook was wired for a hangar with no tracker');
+    // Not `"PreToolUse": []`. An empty array is a key promising a hook that is not there, and it
+    // would differ from a clone that never had one -- two shapes for one state.
+    assert.equal(preToolUse(settings), undefined);
+  }
+});
+
+test('the enabled fixture still gets exactly one jira hook', () => {
+  // The other direction, and the reason it is asserted: a gate that stripped unconditionally
+  // would satisfy every test above and disable the cache in the one hangar that wants it.
+  const settings = defaultSettings(cloneAt(syntheticHangar(), 1));
+  assert.equal(jiraMatchers(settings).length, 1);
+  assert.equal(
+    jiraMatchers(settings)[0]?.hooks[0]?.command,
+    jiraHookCommand(syntheticHangar()),
+    'the wired command is the one this hangar would write today',
+  );
+});
+
+test('switching a tracker off REMOVES the hook the clone already carries', () => {
+  /*
+   * The jira -> none transition, which is the whole reason `withJiraHook` filters before it
+   * appends rather than gating at the call sites. Without the removal a hangar that switches its
+   * tracker off keeps the hook in every clone forever: inert, since `jiraHook` declines, but a
+   * Node process spawned on every Bash tool call for a feature nobody asked for any more.
+   */
+  const enabled = syntheticHangar();
+  const wired = defaultSettings(cloneAt(enabled, 1));
+  assert.equal(jiraMatchers(wired).length, 1, 'the premise: it starts out wired');
+
+  const off = disabledHangar();
+  assert.deepEqual(jiraMatchers(withJiraHook(off, wired)), []);
+  assert.equal(preToolUse(withJiraHook(off, wired)), undefined);
+});
+
+test('removal matches an OLD hook form, which exact equality would miss', () => {
+  /*
+   * `hasJiraHook` is exact equality and `withJiraHook` strips by `invokesOurCli`, which also
+   * matches a command with no `--hangar` -- the form wired before the root was baked in, and
+   * the form a hangar-root move leaves behind. Reporting on one and repairing by the other is
+   * how `doctor` would call a hook "correctly absent" and then delete it in the same run.
+   */
+  const off = disabledHangar();
+  const stale: SettingsJson = {
+    hooks: {
+      PreToolUse: [
+        { matcher: 'Bash', hooks: [{ type: 'command', command: `${off.paths.bin} jira hook` }] },
+      ],
+    },
+  };
+  assert.equal(hasJiraHook(off, stale), false, 'the premise: exact equality does not see it');
+  assert.equal(hasAnyJiraHook(off, stale), true, 'the weaker predicate does');
+  assert.equal(preToolUse(withJiraHook(off, stale)), undefined, 'and it is what gets removed');
+});
+
+test('a hook belonging to ANOTHER tool is left alone', () => {
+  // The filter is scoped to our own CLI, so switching a tracker off must not touch a repo's own
+  // `PreToolUse` guard sitting in the same array.
+  const off = disabledHangar();
+  const foreign: HookMatcher = {
+    matcher: 'Bash',
+    hooks: [{ type: 'command', command: 'node ./scripts/guard.mjs' }],
+  };
+  const result = withJiraHook(off, { hooks: { PreToolUse: [foreign] } });
+  assert.deepEqual(result.hooks?.['PreToolUse'], [foreign]);
 });

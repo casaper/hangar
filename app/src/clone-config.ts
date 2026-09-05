@@ -516,17 +516,57 @@ const jiraHookMatcher = (hangar: Hangar): HookMatcher => ({
   hooks: [{ type: 'command', command: jiraHookCommand(hangar), timeout: 30 }],
 });
 
+/** The hook, wired exactly as this hangar would write it today. */
 export const hasJiraHook = (hangar: Hangar, settings: SettingsJson | undefined): boolean =>
   (settings?.hooks?.['PreToolUse'] ?? []).some((matcher) =>
     matcher.hooks.some((hook) => hook.command === jiraHookCommand(hangar)),
   );
 
+/**
+ * A jira hook of OURS in any form, which is a deliberately weaker question than `hasJiraHook`.
+ *
+ * The two are not interchangeable and picking the wrong one is silent. `hasJiraHook` is exact
+ * equality, which is right where the answer decides whether to REWRITE: a command that has
+ * drifted from what this hangar would write -- an older form with no `--hangar`, or one left
+ * behind by a hangar-root move -- should be rewritten, so reporting it as absent is correct
+ * there. It is wrong where the answer decides whether something must be REMOVED: `withJiraHook`
+ * strips by `invokesOurCli`, so an exact-equality check would report "correctly absent" about a
+ * stale hook sitting right there that its own repair would then delete. Doctor's report and
+ * doctor's fix would disagree, which is the failure this pair exists to make impossible.
+ */
+export const hasAnyJiraHook = (hangar: Hangar, settings: SettingsJson | undefined): boolean =>
+  (settings?.hooks?.['PreToolUse'] ?? []).some((matcher) =>
+    matcher.hooks.some((hook) => invokesOurCli(hangar, hook.command, 'jira hook')),
+  );
+
+/**
+ * Reconcile the jira hook with what the config declares -- add it, or take it away.
+ *
+ * **This is the one place that decides whether a clone carries the hook at all**, which is why
+ * the gate is here and not at the four call sites (`defaultSettings`, `settingsContentFor`,
+ * `doctor`'s repair and the golden capture's template). A gate at the call sites is one someone
+ * adds a fifth caller without.
+ *
+ * Filter-then-append is what makes the jira -> none transition repairable rather than merely
+ * un-made: a hangar that switches its tracker off still has the hook wired in every clone, where
+ * it is inert (`jiraHook` declines on `kind: none`) but spawns a Node process on every Bash tool
+ * call forever. Dropping the append turns the existing filter into the removal, so `doctor --fix`
+ * repairs both directions through this one function.
+ */
 export const withJiraHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
   const hooks = { ...settings.hooks };
   const existing = (hooks['PreToolUse'] ?? []).filter(
     (matcher) => !matcher.hooks.some((hook) => invokesOurCli(hangar, hook.command, 'jira hook')),
   );
-  hooks['PreToolUse'] = [...existing, jiraHookMatcher(hangar)];
+  if (hangar.config.tracker.kind !== 'none') {
+    hooks['PreToolUse'] = [...existing, jiraHookMatcher(hangar)];
+  } else if (existing.length > 0) {
+    hooks['PreToolUse'] = existing;
+  } else {
+    // Not `[]`: an empty array is a `PreToolUse` key in every tracker-less clone's settings
+    // promising a hook that is not there, and it would differ from a clone that never had one.
+    delete hooks['PreToolUse'];
+  }
   return { ...settings, hooks };
 };
 

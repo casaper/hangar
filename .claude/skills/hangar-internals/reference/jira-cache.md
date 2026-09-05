@@ -115,7 +115,7 @@ attachment). Three things follow:
 
 **A ticket fetched in the last hour is not fetched again.** `hangar jira hook` is a
 `PreToolUse` hook, wired into each clone's untracked `.claude/settings.local.json` by absolute
-path (`doctor` checks it, `--fix` wires it). It reads the Bash command Claude Code is about to
+path — **but only where `tracker.kind` is not `none`** (see below). It reads the Bash command Claude Code is about to
 run; when every file a `tracker.syncScript` run would write is already on disk and inside the TTL,
 it hard-links from the record store whatever is missing and **denies** the command, telling the
 agent what it got instead. Five properties are the whole design:
@@ -146,6 +146,28 @@ agent what it got instead. Five properties are the whole design:
   freshness guarantee. It comes from `tracker.cache.ttlMinutes`, and `--ttl <minutes>` overrides
   it. `<tracker.cache.bypassEnvKey>=1` in front of the command bypasses the hook — an env var and
   not a flag, because the sync script dies on an unknown flag.
+
+## The hook is wired only where a tracker is declared
+
+`tracker.kind` has defaulted to `none` since the schema was written, and every consumer that reads
+tracker DATA branches on it — `issueUrl`, this hook's own decline, `tmp merge`'s record-store pass,
+`status`'s issue row, `secrets.ts`'s `ATLASSIAN_*` variables, `setup`'s blank-means-none question
+and both `CLAUDE.local.md` builders. **The wiring did not.** `withJiraHook` read no config, so a
+hangar with no tracker got the hook in every clone anyway, `doctor` reported it *missing* when it
+was correctly absent, and `--fix` installed it.
+
+That is the same defect as the four literals below, one level up: obeyed in the one hangar that
+happens to want it, and imposed on every other. It is not dangerous — the decline above is the
+first thing this hook does, before any filesystem walk — but a `PreToolUse` matcher on `Bash`
+starts a Node process on **every Bash tool call in every clone**, and paying that forever to be
+told "this hangar declares no tracker" is not a cache.
+
+So `withJiraHook` reconciles: it filters its own matchers, then appends only when a tracker is
+declared. Switching a hangar from `jira` to `none` therefore REMOVES the hook at the next
+`doctor --fix` rather than leaving it wired, which matters because a running session never sees a
+settings change — the clone keeps spawning the process until it restarts either way, and without
+the removal it would keep doing so for good. `hangar-internals/reference/doctor.md` has the row,
+and why the removal test is deliberately weaker than the presence test.
 
 ## The four `tracker.*` keys this hook runs on, and what they do NOT make configurable
 
