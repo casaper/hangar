@@ -40,6 +40,7 @@ which is the single source of truth for both the shell and CI. Run the CLI's own
 cd app && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 # pnpm lint:fix and pnpm format write; format:check is what a commit gate wants
 pnpm golden && git diff --exit-code dev/golden/gated   # the regression net; see below
+pnpm hooks   # ONCE per clone of this repo: installs the commit-msg hook. See Commit messages
 ```
 
 `pnpm` is not assumed to be on PATH: it lives inside an fnm multishell and so moves when the Node
@@ -131,6 +132,104 @@ Both exist because they caught something, and both apply to every edit under `ap
   only warns. Ask `inProgressOperation`, `conflictedFiles`, `syncStashes` instead. Whether an
   integration got committed is the one thing git cannot answer, so that one is carried, and a
   carried flag needs guarding for the paths that do nothing (`up-to-date` integrates nothing).
+
+## Commit messages
+
+**Every commit in this repo is a Conventional Commit, and a `commit-msg` hook enforces it.**
+`type(scope): subject`, then a blank line, then the body. The subject keeps the house style — a
+sentence saying what changed, in Sentence case — and the body keeps doing the work it already
+does: for the two thirds of this CLI that no test covers, the commit body IS the regression
+record.
+
+```
+fix(editor): Let a hangar whose editor is not VS Code actually be one
+feat(sync):  Stream the headless conflict resolver, and refuse to sync onto a half-applied rebase
+docs(test):  Say the suite exists, and say exactly what it does not cover
+```
+
+**Types** are `@commitlint/config-conventional`'s: `feat` `fix` `docs` `style` `refactor` `perf`
+`test` `build` `ci` `chore` `revert`. What they mean here — `feat` adds a command, a flag, a seam,
+a driver or a generated artifact; `fix` corrects behaviour that was wrong; `docs` is `CLAUDE.md`,
+the README or the skills and nothing else.
+
+**Scopes** are the subsystem: `sync` `doctor` `open` `tmp` `plans` `jira` `colours` `config`
+`editor` `terminal` `platform` `setup` `add-clone` `install` `resume` `ide` `status` `golden`
+`cli` `fleet` `modes` `test`. That list is documented and deliberately **not** enforced — a
+`scope-enum` rule goes red the first time somebody adds a subsystem, and this repo already knows
+what a check that is red in normal operation is worth.
+
+Three rules in `.commitlintrc.json` differ from the defaults, and each one is there because the
+default rejected this repo's own history:
+
+- **`header-max-length` is 120, not 100.** The longest subject here is 89 characters and a
+  `fix(golden): ` prefix puts it at 102. Cutting eighty-four hand-written subjects down to fit a
+  round number is the wrong side of that trade.
+- **`subject-case` is off.** `config-conventional` forbids Sentence case, which is the case every
+  subject in this repo is written in.
+- **`body-max-line-length` is left at 100** and needs no exception: the longest body line in the
+  whole history is 88.
+
+`footer-leading-blank` warns on about a quarter of the history and is left warning. The parser
+reads any `word: value` line in a prose body as a footer token, and these bodies are full of them
+(`kind: none`, `type: module`). Reflowing twenty-one bodies to satisfy a heuristic would damage
+the record to silence a warning that blocks nothing.
+
+**No `!` and no `BREAKING CHANGE:` footer while the CLI is 0.x.** Several changes here are
+breaking by content — the `orch-util` → `hangar` rename, untracking files a command rewrites — and
+marking them would make semantic-release cut a 1.0.0. Versions move by patch and minor only until
+somebody decides otherwise, and that is a decision, not a commit message.
+
+### The hook, and why CI is the thing that actually enforces this
+
+`pnpm hooks` installs it, once per clone of this repo, **by hand**. It cannot be automatic:
+`pnpm-workspace.yaml` sets `ignoreScripts: true`, so husky's `prepare` never runs on install. The
+hook itself lives at `app/.husky/commit-msg`, reaches `commitlint` by path rather than through
+`pnpm` (pnpm lives inside an fnm multishell and moves with the Node version, so a hook needing it
+fails in any shell direnv has not touched), and names `direnv allow` when it cannot find `node` —
+the same failure and the same fix `bin/hangar` already reports.
+
+So the hook is fast feedback for whoever installed it, and **`.github/workflows/release.yml`'s
+`commitlint` job is the enforcement**, because it does not depend on anyone having read this.
+
+**`hangar doctor` deliberately gets no row for `core.hooksPath`.** Every hangar root is a clone of
+this repo, but only a CLI developer ever commits in one — an operator's hangar would carry that
+row red forever, which is the check nobody reads.
+
+### Releasing
+
+`.releaserc.json` at the hangar root drives semantic-release from the `release` job: it derives
+the version from the commit types, prepends to `CHANGELOG.md`, bumps `app/package.json`
+(`npmPublish: false`, `pkgRoot: app` — the package is `private` and has never been on a registry)
+and cuts a GitHub release. `docs`, `refactor`, `test` and `build` are given `patch` there rather
+than the default of no release, because in this repo a documentation commit is a real change.
+
+Two things about that pair are load-bearing:
+
+- **`.releaserc.json` is the single source of the CHANGELOG's section list.**
+  `app/changelog.preset.ts` — the preset behind `pnpm changelog` — reads `presetConfig.types` out
+  of it rather than declaring its own. Two copies of an eleven-entry table that must agree is the
+  drift this repo keeps finding, and the symptom would be sections with different titles in one
+  file with nothing saying why.
+- **The list exists at all because the preset's defaults hide everything but `feat`, `fix` and
+  `perf`.** With them, v0.11.0 — the release that added the whole `node:test` suite — rendered as
+  a heading with nothing under it.
+
+`hangar --version` reads `app/package.json` rather than repeating it, so a release bump moves one
+file. It used to be a literal, which is the kind of duplicate nothing notices until a tool starts
+moving the other copy.
+
+### The history was rewritten once
+
+All 84 commits up to `v0.13.0` were originally prose subjects with no type; they were rewritten in
+place — prefix added, body byte-identical, GPG signature re-made, committer date preserved — and
+tagged into fourteen milestone releases. `git filter-repo` cannot re-sign and was ruled out for
+that reason; `git rebase --root --exec` re-signs from `commit.gpgsign`.
+
+One thing that rewrite found, worth knowing before anyone tries it again: **a root rebase cannot
+run in a live hangar.** `.claude/settings.json`, `clone-colours.sh`, `clone-terminal.sh` and
+`hangar.config.yaml` are generated and untracked _now_, but were tracked earlier in this history —
+so replaying the root commit tries to overwrite the live files and git refuses. Do it in a
+throwaway clone and fetch the result back.
 
 ## The code, by role
 
@@ -356,11 +455,11 @@ on every `git pull` from a published upstream._
 | `.hangar/colour-assignments.json` — **INPUT** | `hangar colours change` — nothing else |
 
 Tracked: this file, the root `CLAUDE.md`, `bin/**`, `app/**`, `.envrc`, `.envrc.hangar`, `.nvmrc`,
-`.editorconfig`, `hangar.config.example.yaml`, `hangar.schema.json`, `.gitignore`, `.claude/**`
-except the generated `settings.json`, and the two `.gitkeep` files under `plans/` and `tmp/`.
-Never the application.
+`.editorconfig`, `hangar.config.example.yaml`, `hangar.schema.json`, `.gitignore`, `CHANGELOG.md`,
+`.releaserc.json`, `.github/**`, `.claude/**` except the generated `settings.json`, and the two
+`.gitkeep` files under `plans/` and `tmp/`. Never the application.
 
-Three of those rows are worth a sentence each:
+Four of those rows are worth a sentence each:
 
 - **`.hangar/colour-assignments.json` is the only file here that is both untracked and
   irreplaceable** — operator input that nothing regenerates. It has its own gitignore entry rather
@@ -371,6 +470,11 @@ Three of those rows are worth a sentence each:
   that is a security property: their permission arrays are operator mode's boundary, and operator
   mode may run `hangar doctor`. `hangar-internals/reference/modes.md` has the reasoning and the
   three alternatives that were rejected.
+- **`CHANGELOG.md` is generated AND tracked, and that is not an exception to the rule above.**
+  That rule is about files whose content differs PER HANGAR — a config, an identity file, a
+  palette rendered for this hangar's clones. The CLI's own release history is the same in every
+  hangar, so a pull brings the upstream copy and there is nothing local for it to conflict with.
+  Only semantic-release writes it, and only on `main`.
 - **The gated golden baseline is entirely portable and entirely tracked**, which is what makes
   `git diff --exit-code dev/golden/gated` mean the same thing in every clone of this repo. The
   capture of THIS hangar is still taken and is worth reading, but it lands under the gitignored

@@ -556,6 +556,22 @@ those rows and nothing else. They are captured rather than normalised away on pu
 else to run, and this is the line that shows one. `dev/golden/README.md` has the rest, including
 why there are two fixtures rather than one.
 
+**Commit messages are Conventional Commits, and a hook enforces it.** `type(scope): subject` —
+`fix(editor): Let a hangar whose editor is not VS Code actually be one`. The subject keeps the
+house style; the body keeps doing the work it always did. Install the hook once per clone of this
+repo:
+
+```bash
+pnpm hooks
+```
+
+It is a manual step and cannot be otherwise — `pnpm-workspace.yaml` sets `ignoreScripts: true`, so
+husky's `prepare` never runs on install. Until you run it, the only thing checking your message is
+the `commitlint` job in CI, after the push. That matters more than tidiness: semantic-release reads
+these types on `main` to pick the next version and write `CHANGELOG.md`, so a wrong type is a wrong
+release. `app/CLAUDE.md`'s **Commit messages** section has the vocabularies and the three
+commitlint rules this repo's own history forced.
+
 **The test suite is a seed, not a safety net**, and knowing what it does and does not cover is the
 point of saying so. `app/test/` holds the things a capture structurally cannot express — two
 hangars rendered in ONE process (the golden capture runs the binary once per hangar, so a cache keyed on
