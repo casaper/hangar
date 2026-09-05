@@ -18,6 +18,15 @@ $schema: ./hangar.schema.json
 #  are the ones this hangar actually runs, and everything the live file leaves out is here with the
 #  reason it was left out. When the schema changes, this file changes with it.
 #
+#  **Five keys are the exception, and they are placeholders on purpose.** `displayName`, `profile`,
+#  `forge.originUrl`, `forge.webBaseUrl` and `tracker.baseUrl` name one organisation's repository
+#  and issue tracker. A committed file cannot carry them: this one is published, and the live
+#  config's values belong to whoever runs the hangar, not to everyone who reads it. So they read
+#  `acme`/`storefront_ui` here and differ from the live file by design -- `hangar config validate`
+#  excludes exactly these four from its drift comparison and reports every other key, which is
+#  where the check earns its keep. `forge.defaultBranch`, the line the check was written for after
+#  the pair had silently drifted `main` against `master`, is still covered.
+#
 #  ## Two things to know before editing
 #
 #  **Every object is strict: an unknown key is an error.** Not ignored -- `orgin_url` would leave

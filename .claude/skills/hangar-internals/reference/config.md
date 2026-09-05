@@ -13,8 +13,19 @@ its default, and every alternative that the cross-field checks will not let stan
 Three properties hold that pair together, and each is a decision:
 
 - **The example is a faithful SUPERSET of the live file, and `hangar config validate` now checks
-  it.** `hangar config show` on each must differ only in the free-text `_` note. It is the only
-  committed record of how this hangar is configured, so a drifting example is a lost config.
+  it.** `hangar config show` on each must differ only in the free-text `_` note **and in five
+  site-identity keys** — `displayName`, `profile`, `forge.originUrl`, `forge.webBaseUrl` and
+  `tracker.baseUrl`. It is the only committed record of how this hangar is configured, so a
+  drifting example is a lost config.
+
+  Those five are excluded by `SITE_LOCAL_PATHS` in `config/drift.ts`, and the exclusion is not a
+  weakening but the condition for the check surviving publication. The example is public; the live
+  values name one organisation's repository and issue tracker. Holding them equal would mean
+  either committing a real origin and a real Jira host, or a check that is red in the very hangar
+  that ships the example — the failure this file names three times over. Two of the five are
+  free-text labels no code reads, three are addresses, and none of them changes behaviour.
+  `forge.defaultBranch` is still compared, which is the point: it is the line the check was
+  written for.
 
   For a long time that was asserted here and run by nothing, and the two had duly drifted — by
   the single worst line available. `forge.defaultBranch` read `main` in the committed example and

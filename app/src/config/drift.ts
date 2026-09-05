@@ -25,6 +25,34 @@ import type { HangarConfig } from './schema.ts';
 /** The free-text note. Excluded by the invariant itself -- it is prose, and differs on purpose. */
 const NOTE_KEY = '_';
 
+/**
+ * The keys a PUBLISHED example structurally cannot carry, so they are compared by nobody.
+ *
+ * Two kinds, and neither changes behaviour: `displayName` and `profile` are free-text labels no
+ * code reads, and the other three are addresses. All five name one organisation's repository and
+ * issue tracker. The example is committed and
+ * public; the live file's values belong to whoever runs the hangar. Holding them equal would mean
+ * either publishing a real origin and a real Jira host, or a check that is red in every hangar
+ * including the one it was written in -- and `hangar-internals` names that failure three times
+ * over: a check that is red in normal operation is a check nobody reads.
+ *
+ * So the invariant is restated rather than dropped: **`hangar config show` on each must differ
+ * only in the free-text note and in these four site-identity keys.** Everything else is still
+ * held equal, `forge.defaultBranch` included -- which is the line the check was written for, after
+ * the pair had drifted `main` in the example against `master` live and sent a colleague adopting
+ * this fleet at a branch the repo does not have.
+ *
+ * Dotted paths, matched against the same path `diffValue` builds, so nesting is exact: a future
+ * `tracker.baseUrl` under some other parent is not silently excluded too.
+ */
+const SITE_LOCAL_PATHS: readonly string[] = [
+  'displayName',
+  'profile',
+  'forge.originUrl',
+  'forge.webBaseUrl',
+  'tracker.baseUrl',
+];
+
 export type ConfigDrift = {
   /** Dotted path, e.g. `forge.defaultBranch` or `ports.roles[1].base`. */
   readonly path: string;
@@ -63,7 +91,9 @@ export const configDrift = (live: HangarConfig, example: HangarConfig): readonly
     const { [NOTE_KEY]: _note, ...rest } = c as unknown as Record<string, unknown>;
     return rest;
   };
-  return diffValue('', strip(live), strip(example));
+  return diffValue('', strip(live), strip(example)).filter(
+    (d) => !SITE_LOCAL_PATHS.includes(d.path),
+  );
 };
 
 /**

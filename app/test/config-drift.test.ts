@@ -66,6 +66,43 @@ test('a value left to its DEFAULT on one side matches one written out on the oth
   assert.equal(mode.example, '640');
 });
 
+test('the four site-identity keys are excluded — a published example cannot carry them', () => {
+  // `displayName`, `forge.originUrl`, `forge.webBaseUrl` and `tracker.baseUrl` name one
+  // organisation's repository and issue tracker. Holding them equal would mean either publishing
+  // a real origin and a real tracker host, or a check that is red in the hangar that ships the
+  // example -- the same failure the id gate above exists to avoid.
+  const example = withEdit((lines) => {
+    const set = (key: string, value: string): void => {
+      const i = lines.findIndex((l) => l.trimStart().startsWith(`${key}:`));
+      assert.notEqual(i, -1, `the fixture must pin ${key} for this test to mean anything`);
+      const indent = lines[i]?.match(/^ */)?.[0] ?? '';
+      lines[i] = `${indent}${key}: ${value}`;
+    };
+    set('displayName', 'a published placeholder');
+    set('originUrl', 'git@bitbucket.org:acme/storefront_ui.git');
+    set('baseUrl', 'https://acme.atlassian.net');
+  });
+
+  assert.deepEqual(configDrift(base(), example), []);
+});
+
+test('excluding those four does not weaken the check that caught the real drift', () => {
+  // The regression this whole module exists for: `forge.defaultBranch`, `main` in the example
+  // against `master` live. It sits inside `forge`, beside an excluded key, and must survive.
+  const example = withEdit((lines) => {
+    const originIdx = lines.findIndex((l) => l.trimStart().startsWith('originUrl:'));
+    assert.notEqual(originIdx, -1);
+    lines[originIdx] = '  originUrl: git@bitbucket.org:acme/storefront_ui.git';
+    const branchIdx = lines.findIndex((l) => l.trimStart().startsWith('defaultBranch:'));
+    assert.notEqual(branchIdx, -1);
+    lines[branchIdx] = '  defaultBranch: some-other-branch';
+  });
+
+  const drift = configDrift(base(), example);
+  assert.equal(drift.length, 1, 'the excluded origin must not be reported, the branch must be');
+  assert.equal(first(drift, 'drift entry').path, 'forge.defaultBranch');
+});
+
 test('the id gate is what keeps this check quiet in a hangar it was not written for', () => {
   // Without it, every hangar but the one shipping the example would be permanently red -- the
   // failure mode `hangar-internals` names three times: a check that is red in normal operation
