@@ -297,7 +297,7 @@ export const terminalSchema = z.strictObject({
    * Claude Code session rather than claiming to have paused it.
    */
   kind: z
-    .enum(['auto', 'iterm2', 'apple-terminal', 'konsole', 'gnome-terminal', 'none'])
+    .enum(['auto', 'iterm2', 'apple-terminal', 'konsole', 'gnome-terminal', 'tmux', 'none'])
     .default('auto'),
   /**
    * What the generated shell hook paints when a shell moves into a clone.

@@ -391,6 +391,7 @@
             "apple-terminal",
             "konsole",
             "gnome-terminal",
+            "tmux",
             "none"
           ]
         },

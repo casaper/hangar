@@ -5,6 +5,7 @@ import { gnomeTerminalDriver } from './gnome-terminal.ts';
 import { iterm2Driver } from './iterm2.ts';
 import { konsoleDriver } from './konsole.ts';
 import { noneDriver } from './none.ts';
+import { tmuxDriver } from './tmux.ts';
 import type { TerminalDriver, TerminalKind } from './types.ts';
 
 export * from './types.ts';
@@ -41,6 +42,19 @@ export const ENV_SIGNALS: readonly (readonly [string, TerminalKind])[] = [
 
 /** The kind the current environment names, or undefined if it names none. Pure. */
 export const terminalKindFromEnv = (env: NodeJS.ProcessEnv): TerminalKind | undefined => {
+  /*
+   * tmux wins over every emulator signal, and it has to be tested FIRST.
+   *
+   * Inside tmux inside iTerm2, `ITERM_SESSION_ID` is still set -- tmux passes the outer shell's
+   * environment through -- so an ordered scan that reached iTerm2 first would drive the emulator
+   * and never see the multiplexer. Everything `open` and `sync` want then happens to the wrong
+   * layer: a new iTerm2 TAB rather than a tmux window, and a `SYNC PAUSE` typed into the pane
+   * that happens to be showing rather than the one holding the session.
+   *
+   * `$TMUX` is set by the tmux server in every pane and by nothing else, so its presence is the
+   * fact, not a preference. `terminal.kind` in the config still overrides it.
+   */
+  if (env['TMUX'] !== undefined && env['TMUX'] !== '') return 'tmux';
   for (const [key, kind] of ENV_SIGNALS) {
     if (env[key] !== undefined && env[key] !== '') return kind;
   }
@@ -75,6 +89,8 @@ const driverFor = (kind: TerminalKind, hangarId: string): TerminalDriver => {
       return konsoleDriver(hangarId);
     case 'gnome-terminal':
       return gnomeTerminalDriver();
+    case 'tmux':
+      return tmuxDriver(hangarId);
     case 'none':
       return noneDriver(undefined);
   }
@@ -87,10 +103,17 @@ const driverFor = (kind: TerminalKind, hangarId: string): TerminalDriver => {
  * before GNOME Terminal for the same reason. `isAvailable` then filters -- for the mac drivers
  * that means "is it running", since AppleScript cannot address an application that is not, and
  * for the Linux ones "is it installed", since both start on demand.
+ *
+ * **tmux is first on both**, and only its `isAvailable` keeps that honest: it demands a running
+ * SERVER, not just the binary. A tmux session is a tmux session whichever emulator is drawing it,
+ * and driving the emulator instead would open a tab beside the multiplexer rather than a window
+ * inside it. Reaching this probe at all means `$TMUX` was unset -- so this is the case where the
+ * developer keeps a tmux server but ran `hangar` from somewhere outside it (a hook, a `claude -p`
+ * child, VS Code's integrated terminal), and the fleet's windows belong in that server.
  */
 const PROBE_ORDER: Record<string, readonly TerminalKind[]> = {
-  darwin: ['iterm2', 'apple-terminal'],
-  linux: ['konsole', 'gnome-terminal'],
+  darwin: ['tmux', 'iterm2', 'apple-terminal'],
+  linux: ['tmux', 'konsole', 'gnome-terminal'],
 };
 
 /**

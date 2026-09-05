@@ -347,15 +347,26 @@ terminal:
   #   apple-terminal  tabs, list, type        tag via `custom title`; needs Accessibility
   #                                           permission, because a new tab can only be made by
   #                                           sending Cmd-T through System Events
+  #   tmux            tabs, list, tag, type   a tmux SESSION is the window and a tmux WINDOW is
+  #                                           the tab; the tag lives in `@hangar_*` window
+  #                                           options, tmux's real analogue of iTerm2's user
+  #                                           variables -- which is why it reaches the full set
   #   konsole         tabs; the rest with qdbus
   #   gnome-terminal  tabs only -- VTE exposes no way to type into a live tab, and the generic
   #                   POSIX route (TIOCSTI) has been off by default since Linux 6.2, so `sync`
   #                   reports every session as missed and asks first
   #
-  # The Linux drivers are written from Konsole's documented D-Bus interface and gnome-terminal's
-  # documented command line and have NOT been exercised against live ones. `hangar doctor` prints
-  # the detected driver and its capabilities.
+  # `auto` tests $TMUX FIRST, before any emulator signal: inside tmux inside iTerm2 both are set,
+  # and driving the emulator there opens a tab BESIDE the multiplexer and types a `SYNC PAUSE`
+  # into whichever pane happens to be showing. On Linux without KDE, tmux is the only route that
+  # carries `writeToTty` at all.
+  #
+  # Konsole and gnome-terminal are written from Konsole's documented D-Bus interface and
+  # gnome-terminal's documented command line and have NOT been exercised against live ones; tmux
+  # HAS been, on macOS, where it is the same program. `hangar doctor` prints the detected driver
+  # and its capabilities.
   # kind: auto
+  # kind: tmux
   # kind: iterm2
 
   # What the generated `clone-terminal.sh` paints when a shell moves into a clone. Three

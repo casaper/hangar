@@ -22,7 +22,8 @@
  * this fleet is built on, and a driver that silently no-ops the hard parts would be worse still:
  * `sync` would report a Claude session paused when nothing had been typed anywhere.
  */
-export type TerminalKind = 'iterm2' | 'apple-terminal' | 'konsole' | 'gnome-terminal' | 'none';
+export type TerminalKind =
+  'iterm2' | 'apple-terminal' | 'konsole' | 'gnome-terminal' | 'tmux' | 'none';
 
 export type TerminalCapabilities = {
   /** Create a clone's tabs at all. False means `hangar open` cannot run. */
