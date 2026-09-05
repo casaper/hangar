@@ -203,18 +203,25 @@ running, and overridden by `terminal.kind` in `hangar.config.yaml`. Drivers decl
 **capabilities** rather than pretending to be equivalent, and every caller degrades one
 capability at a time:
 
-| driver         | tabs | list         | tag                | type into a live tab |
-| -------------- | ---- | ------------ | ------------------ | -------------------- |
-| iTerm2         | yes  | yes          | yes                | yes                  |
-| Terminal.app   | yes  | yes          | via `custom title` | yes                  |
-| Konsole        | yes  | with `qdbus` | with `qdbus`       | with `qdbus`         |
-| GNOME Terminal | yes  | no           | no                 | **no**               |
+| driver         | tabs | list         | tag                 | type into a live tab |
+| -------------- | ---- | ------------ | ------------------- | -------------------- |
+| iTerm2         | yes  | yes          | yes                 | yes                  |
+| tmux           | yes  | yes          | `@hangar_*` options | yes                  |
+| Terminal.app   | yes  | yes          | via `custom title`  | yes                  |
+| Konsole        | yes  | with `qdbus` | with `qdbus`        | with `qdbus`         |
+| GNOME Terminal | yes  | no           | no                  | **no**               |
 
-iTerm2 is the reference because it is the only one with scriptable per-session **user variables**
-— everything `open` does safely (find the fleet window, notice a clone is already open, refuse to
-adopt another hangar's window) rests on tagging a tab and reading the tag back. Terminal.app and
-Konsole approximate that with a title; GNOME Terminal cannot do it at all, so there `open` says
-so once and only appends.
+iTerm2 is the reference because it has scriptable per-session **user variables** — everything
+`open` does safely (find the fleet window, notice a clone is already open, refuse to adopt
+another hangar's window) rests on tagging a tab and reading the tag back. **tmux is the only
+other driver with a real equivalent**: `@hangar_id`/`@hangar_clone`/`@hangar_role` window
+options, which is why it reaches the full capability set. Terminal.app and Konsole approximate
+it with a title; GNOME Terminal cannot do it at all, so there `open` says so once and only
+appends.
+
+**tmux maps a SESSION to a window and a WINDOW to a tab**, and `$TMUX` is tested before every
+emulator signal — inside tmux inside iTerm2 both are set, and driving the emulator opens a tab
+beside the multiplexer and types a `SYNC PAUSE` into whichever pane happens to be showing.
 
 Two consequences worth knowing before debugging either:
 
@@ -228,9 +235,13 @@ Two consequences worth knowing before debugging either:
   ignores the escape sequence the shell hook uses — so a Terminal.app tab opened by hand in a
   clone stays uncoloured.
 
-The Linux drivers are written from Konsole's documented D-Bus interface and gnome-terminal's
-documented command line, and have **not been exercised against live ones** — macOS is the
-platform this fleet runs on. `hangar doctor` prints the detected driver and its capabilities,
+Konsole and GNOME Terminal are written from Konsole's documented D-Bus interface and
+gnome-terminal's documented command line, and have **not been exercised against live ones** —
+macOS is the platform this fleet runs on. **tmux is the exception and deliberately so**: it is
+the same program on both platforms, so it was exercised here — sessions created and tagged, read
+back, selected, and a real `SYNC PAUSE` delivered into one pane and confirmed absent from the
+others. That is what makes it a safe answer for a Linux hangar, where it is the only route
+carrying `writeToTty` at all. `hangar doctor` prints the detected driver and its capabilities,
 which is the first thing to look at.
 
 ## What `colours sync` generates

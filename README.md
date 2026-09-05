@@ -77,9 +77,14 @@ Two consequences worth knowing up front:
 
 `hangar setup` checks all of this for you and refuses to continue if something required is missing.
 
-**Required:** `git`, `direnv`, `jq`, `yq`, and either `fnm` or `nvm` (to resolve the `.nvmrc` Node
-version per directory). On macOS, Homebrew as well — it is where the GNU userland and every install
-hint come from. Node 24 (`.nvmrc`), and `pnpm`, which direnv activates for you.
+**Required:** `git`, `direnv`, `jq`, `yq`, `lsof`, and either `fnm` or `nvm` (to resolve the
+`.nvmrc` Node version per directory). On macOS, Homebrew as well — it is where the GNU userland and
+every install hint come from. Node 24 (`.nvmrc`), and `pnpm`, which direnv activates for you.
+
+`lsof` is the one that looks optional and is not: it is how a running process is attributed to a
+clone at all — a live Claude Code session by its working directory, a dev server by its listening
+port. Without it `hangar sync --all` stops skipping busy clones and `hangar remove-clone` loses
+both of its liveness guards, and each of those failures looks exactly like "nothing is running".
 
 **Node is a requirement of the tool, not of your repository.** Hangar is a TypeScript program that
 Node runs directly, so Node 24, direnv and fnm have to be on the machine whatever the repo you
@@ -91,9 +96,13 @@ under whatever Node comes first on PATH, and a shell where direnv has not loaded
 
 **Recommended:** `ripgrep`, `ripgrep-all`, `tree`, `git-lfs`, `git-extras`, `git-filter-repo`.
 
-**Platform:** macOS is the platform this has actually been run on. The Linux terminal drivers
-(Konsole, GNOME Terminal) are written from documentation and have not been exercised against live
-ones. VS Code is the only editor that is exercised; the other eight kinds are best effort.
+**Platform:** macOS is the platform this has actually been run on. On Linux, **run the fleet under
+tmux** — Hangar has a tmux driver that was exercised here (tmux is the same program on both), and
+it is the only route that can deliver a `SYNC PAUSE` into a live session on a machine without KDE.
+The Konsole and GNOME Terminal drivers are written from documentation and have not been exercised
+against live ones, and GNOME Terminal cannot be typed into at all. VS Code is the only editor that
+is exercised; the other eight kinds are best effort. `hangar doctor` prints a platform row and a
+session-detection row on every OS — read those first.
 
 ## Getting a hangar onto your machine
 
@@ -265,12 +274,28 @@ hangar doctor --all --fix
 
 ### How far the genericisation goes today
 
-The config surface above describes the whole tool, and it is now wired. One gap remains:
+The config surface above describes the whole tool, and it is now wired. One thing is left, and it
+is narrower than it was:
 
-1. **Linux is unexercised.** The VS Code window-state path is macOS-only, two generated scripts
-   fall back to a Homebrew `jq`, every install hint says `brew install`, and the Konsole and GNOME
-   Terminal drivers have never run against a live terminal. GNOME Terminal structurally cannot
-   deliver a `SYNC PAUSE`.
+1. **Two Linux details are unverified, and both are reported rather than assumed.**
+   - **Whether `ps` under procps names a Claude Code process `claude`.** Everything the fleet does
+     about live sessions rests on it — the busy-clone skip, and delivering a `SYNC PAUSE` before a
+     rebase — and if the answer is `node`, a Linux hangar finds zero sessions and says nothing,
+     because zero sessions is also what an idle machine looks like. So `hangar doctor` prints a
+     `claude sessions` row saying how many processes it looked at, how many matched, and when none
+     did, which command names mention `claude` anyway. Your first `doctor` answers this in a line;
+     please report what it says.
+   - **The Konsole and GNOME Terminal drivers have never run against a live terminal.** They are
+     written from Konsole's documented D-Bus interface and gnome-terminal's documented command
+     line. **tmux is the exception** and is the recommended answer on Linux: it is the same program
+     on macOS, where all five of its capabilities were exercised, and it is the only route that can
+     deliver a `SYNC PAUSE` at all on a machine without KDE. GNOME Terminal structurally cannot —
+     VTE has no API for it and `TIOCSTI` has been off by default since Linux 6.2 — and `doctor`
+     says so by name rather than leaving a capability quietly false.
+
+   Everything else that was on this list is done: the VS Code window-state path, `open -a` and the
+   install hints all go through a platform seam with a `darwin` and a `linux` implementation, and
+   the Homebrew-only `jq` fallback in both status-line scripts is a search list.
 
 What *is* wired, and worth knowing because that list used to have six entries: ports, port roles
 and their env keys, the per-hangar port offset, clone directory naming, the per-clone dotenv and
@@ -280,9 +305,17 @@ VS Code's per-clone path keys in both directions, theme and statusline naming, t
 tracker identity, the first clone of a fresh hangar, and which hangar a command acts on
 (`--hangar`, then the walk up from your working directory, then `HANGAR_ROOT`).
 
-The one thing that is still this hangar's rather than yours is the **published repository itself**:
-`CLAUDE.md`, `.claude/settings.json` and the two mode settings files name paths under
-`/Users/someone`, and `colour-assignments.json` is tracked. Those are the last items on the list.
+The repository itself is now yours rather than this hangar's. `CLAUDE.md` is generic and the
+machine-specific half is a generated, gitignored `CLAUDE.local.md` beside it; `.claude/settings.json`
+is generated by `hangar setup` and repaired by `doctor`; `colour-assignments.json` has moved to the
+gitignored `.hangar/`, with a fallback read so a `git pull` cannot lose your assignments.
+
+**The two `.claude/modes/*.settings.json` files stay tracked, and that is deliberate.** They carry
+operator mode's permission list, which is its security boundary — generating them would let a
+command operator mode is allowed to run (`doctor --fix`) rewrite the list that constrains it. So
+`doctor` reports a stale `statusLine.command` in them and does not repair it; fix the one line by
+hand after cloning. `hangar-internals/reference/modes.md` has the three alternatives that were
+considered and why each is worse.
 
 ## Starting Claude Code in operator mode
 

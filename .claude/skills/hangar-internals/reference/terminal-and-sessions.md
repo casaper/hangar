@@ -126,3 +126,56 @@ generated one leaves the mode badge broken. And `environment.ts`'s install hints
 from the seam (`Tool.pkg` carries the package name, which is almost never platform-specific);
 `installHint` is a function rather than a field because `TOOLS` is a module constant, and a hint
 baked in at import is the trap `hangar.ts` records.
+
+## The tmux driver
+
+`app/src/terminal/tmux.ts`. The fifth terminal driver, and the only one on Linux that carries
+`writeToTty` — which is to say the only one that makes the `SYNC PAUSE` protocol above possible
+on a box without KDE. GNOME Terminal cannot be typed into at all, and Konsole needs `qdbus`
+installed for anything past opening a tab.
+
+| Hangar           | tmux           | why                                                    |
+| ---------------- | -------------- | ------------------------------------------------------ |
+| `TerminalWindow` | a **session**  | a session is what a developer looks at and attaches to |
+| `TerminalTab`    | a **window**   | tmux windows are the tab bar                           |
+| the tag          | window options | `@hangar_*`, tmux's own user-option namespace          |
+
+**The tag is a WINDOW option, not a pane option.** A pane inherits its window's options in a
+format lookup, so `list-panes -a -F '#{@hangar_clone}'` reads either — but a tab the developer
+*splits* keeps its tag on every pane only if the option lives on the window. Pane options would
+leave the new pane untagged, and an untagged pane sitting in a clone is exactly what makes `open`
+stop and ask whether some other window is already there.
+
+**`$TMUX` is tested before every emulator signal, and that ordering is the point.** Inside tmux
+inside iTerm2, `ITERM_SESSION_ID` is still set — tmux passes the outer environment through — so a
+scan that reached iTerm2 first would drive the wrong layer: a new iTerm2 *tab* beside the
+multiplexer, and a `SYNC PAUSE` typed into whichever pane happened to be showing rather than the
+one holding the session. tmux is also first in `PROBE_ORDER` on both platforms, kept honest by an
+`isAvailable` that demands a running **server** and not just the binary: windows in a session
+nobody is attached to are `open` succeeding while the developer sees nothing.
+
+**No fleet session yet means a DETACHED one plus `switch-client`.** Detached is the only kind a
+subprocess can create — tmux attaches *clients*, and `hangar` is not one — and `switch-client`
+works precisely when `hangar` was run from inside tmux, which is when this driver gets chosen.
+Outside it, tmux reports `no current client` and the call is a no-op: the windows exist, they are
+just not brought forward, and `tmux attach -t hangar-<id>` finishes the job. The window
+`new-session` unavoidably creates *becomes* the first tab rather than being left beside it — a
+spare untagged window sitting in a clone is the foreign window `open` is built to be suspicious
+of.
+
+**`send-keys -l -- <text>` then a separate `Enter`.** `-l` is literal, so a word like `Enter`
+inside a `SYNC PAUSE` message stays a word instead of becoming a keypress, and `--` guards a
+message beginning with a dash. The newline has to be its own call for the same reason `-l` is
+used: without it the line sits unsent on the agent's input, which is the worst of the three
+outcomes — delivered, and not read.
+
+### Exercised, unlike its two Linux neighbours
+
+Konsole and GNOME Terminal ship on documentation alone and their headers say so. tmux does not,
+because it is the same program on macOS: against tmux 3.7c here, `openTabs` created a detached
+session and tagged its windows, `pickFleetWindow` found it and a later tab appended to it,
+`windows()` read the tags back and reported a bystander session as untagged, re-tagging one
+window `@hangar_id other_hangar` made it read as foreign, `select` moved the active window to the
+named clone's `claude` tab and returned false for a clone with no tabs, and a real `SYNC PAUSE`
+line landed in the pane on the named tty and — confirmed with `capture-pane` — in **no** other.
+A tty nothing owns returns false, so `sync` reports a miss rather than claiming a pause.

@@ -90,6 +90,11 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   finding, not a quiet nothing** — it means `sync --all` will not skip busy clones and no
   `SYNC PAUSE` can be delivered. When that happens the row names the command names that mention
   `claude` anyway; report those, they are the whole diagnosis.
+- **Inside tmux, Hangar drives tmux and not the emulator around it** — `$TMUX` beats every other
+  signal, so `open` makes tmux *windows* in one tmux *session* rather than tabs in iTerm2. If a
+  new fleet session is created while you are not attached to tmux, the windows are there but not
+  in front: `tmux attach -t hangar-<id>`. `terminal.kind` in `hangar.config.yaml` overrides the
+  detection, and `doctor`'s `terminal` row is where to check what it picked.
 - **`status`'s `servers` row now finds a server two ways** — a `*.pid` file, or something
   listening on one of the clone's ports. A port-found server is shown as
   `<role> (pid N, listening on P)`. `no pid file — ports not checked (no lsof)` is **not** "nothing
