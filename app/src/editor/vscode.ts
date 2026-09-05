@@ -168,7 +168,7 @@ export type Templatized = {
  *
  * The root is DISCOVERED from the declared keys (value minus its declared suffix) rather than
  * assumed to be the source clone's own path -- which matters here, because every clone's
- * settings currently point at `~/code/storefront_ui` or `~/code/separate_clone_storefront_ui`,
+ * settings can still point at the directory the file was first written in, or at a sibling,
  * two directories that no longer exist. Rendering therefore repairs those paths as a side
  * effect of syncing, and is idempotent afterwards.
  */
