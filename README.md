@@ -469,16 +469,24 @@ hangar config schema --check     # only if you touched config/schema.ts
 pnpm golden && git diff --exit-code dev/golden/gated
 ```
 
-**In a hangar that is not the one this baseline was recorded in, that last line fails on the
-first run, and it is supposed to.** `dev/golden/gated/` has two halves: `fixture/` derives from a
-checked-in config with `%HANGAR%`/`%HOME%` normalised away and renders identically anywhere,
-while `hangar/` is a capture of *this* hangar's real config and real clones. Regenerate once,
-read the diff to confirm it is only your own paths and clones, and commit it as your baseline.
-From then on it is a gate. `dev/golden/README.md` has the rest.
+**That last line is expected to produce no diff, in your hangar as much as in the one it was
+recorded in.** Everything under `dev/golden/gated/` is rendered from two checked-in fixture
+configs in temp directories, with `%HANGAR%`/`%HOME%` normalised away, so a diff on your first
+run is a finding rather than a formality. It used to hold a capture of the maintainer's own
+hangar too, which meant the first developer gate anyone else ran opened with a 120-file diff
+that looked like a broken tool; that capture still runs, into the gitignored
+`dev/golden/advisory/`, where it is worth reading and never diffed.
+
+The one thing that legitimately differs is the **platform**: each fixture's `manifest.txt`
+carries the platform driver's own answers — the kind and application-support directory, the
+capability flags, and the VS Code window-state path — recorded here on macOS. A Linux run diffs
+those rows and nothing else. They are captured rather than normalised away on purpose — every platform difference in this CLI was invisible until it was published for someone
+else to run, and this is the line that shows one. `dev/golden/README.md` has the rest, including
+why there are two fixtures rather than one.
 
 **The test suite is a seed, not a safety net**, and knowing what it does and does not cover is the
 point of saying so. `app/test/` holds the things a capture structurally cannot express — two
-hangars rendered in ONE process (the golden capture runs the binary twice, so a cache keyed on
+hangars rendered in ONE process (the golden capture runs the binary once per hangar, so a cache keyed on
 nothing passes it every time), what happens to input that is wrong rather than to input that is
 right, and that `pathsFor` is frozen and pure. It asserts properties, never whole expected text:
 byte-exactness belongs to `pnpm golden`, and a second copy of it here would be a second oracle to

@@ -145,7 +145,7 @@ Five properties, each of which is a decision:
 - **It keys on the threaded hangar's root, and the `Map` is now load-bearing rather than
   aspirational.** Two hangars resolved in one process must stay disjoint, and since the root comes
   from real discovery (`--hangar`, then the walk, then `HANGAR_ROOT`) there can genuinely be more
-  than one key. `pnpm golden` renders two in a single run.
+  than one key. `pnpm golden` renders three in a single run: this hangar and both fixtures.
 - **`doctor` compares the stored value with each clone's `origin/HEAD`, and only warns.** (How to
   relay that row to a user is `hangar-ops/reference/reading-output.md`, which states the same
   rule — change one and change both.) Storing

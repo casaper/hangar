@@ -19,12 +19,12 @@ input-box border only does in Manual mode, which is expected — see the shared 
 | PostgreSQL | 5569                                                                             |
 | Swagger UI | 8217                                                                             |
 
-These ports are **yours alone**. They come from this clone's untracked `.env.local`; resolve
-them at run time with `node dev/ports.mjs` rather than typing a number. A server answering on
+These ports are **yours alone**. They come from this clone's untracked `.env.fixture`; resolve
+them at run time with `hangar ports` rather than typing a number. A server answering on
 any other port in those families belongs to a sibling — never test against it, never restart
 it, never kill it.
 
-Your siblings are the other `clone_NN/` directories beside this one, each also a git remote of
+Your siblings are the other `wt-<NN>/` directories beside this one, each also a git remote of
 that same name for cherry-picking (`hangar list`, or `git remote`). Their working trees are
 off limits for writes. Which clones exist is deliberately not written down anywhere, this file
 included — the fleet adds and removes them without bookkeeping.
@@ -47,13 +47,17 @@ up with no pause before it, tell the user rather than picking up where you left 
 
 ## `tmp/` is shared with the whole fleet
 
-Every `tmp/<name>` entry is a symlink into `%HANGAR%/tmp/`, and each cached Jira
-record is normally a **hard link** to one file the whole fleet shares — so editing
-`tmp/ABC-1234/ticket_ABC-1234.md` in place may rewrite every clone's copy of it, and you cannot
-tell from inside the clone (a re-sync detaches that one file until the next `tmp merge`). Read
-those files and regenerate them with the skill; never hand-edit one. The links are not damage,
-so leave them alone. Dev-server PID files are the exception: they are real files, they stay in
-this clone, and they are why `tmp/` itself is never a symlink.
+Every `tmp/<name>` entry is a symlink into `%HANGAR%/tmp/`, so anything
+you write there is written for the whole fleet.
+
+Each cached issue record is normally a **hard link** to one file the whole fleet shares — so
+editing `tmp/BE-1234/ticket_BE-1234.md` in place may rewrite every clone's copy of it, and
+you cannot tell from inside the clone (a re-sync detaches that one file until the next
+`tmp merge`). Read those files and regenerate them with the skill; never hand-edit one.
+The links are not damage, so leave them alone.
+
+Dev-server PID files are the exception: they are real files, they stay in this clone, and
+they are why `tmp/` itself is never a symlink.
 
 ## `hangar` is on your PATH — read with it, do not sync with it
 

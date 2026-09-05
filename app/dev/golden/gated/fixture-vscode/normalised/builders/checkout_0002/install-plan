@@ -1,0 +1,2 @@
+web: pnpm install --frozen-lockfile — the app's dependencies, pinned by the lockfile the repo commits
+.: mvn -q -B dependency:go-offline (optional) — the Java backend fixtures the e2e suite runs against, which not every task needs

@@ -65,20 +65,37 @@ Both exist because they caught something, and both apply to every edit under `ap
   a bare `string` and a builder rendering perfect text into the wrong file passes a content-only
   diff. `dev/golden/README.md` has the detail; three things about it are worth knowing before
   relying on it:
-  - **`gated/` is a gate and `advisory/` is not.** Advisory output moves with what the clones are
-    doing, and that includes `doctor --all`, `status --all` and the `tmp`/`plans` dry runs, so a
-    green command diff proves less than it looks like it does. The builder trees are the net.
-  - **In a hangar this baseline was not recorded in, `gated/hangar/` diffs on the first run.**
-    That half is a capture of THIS config and THESE clones, so a fresh clone of a published
-    hangar regenerates it once and commits it as its own baseline; only `gated/fixture/` is
-    portable. Say so before handing anyone the gate line, or the first thing they meet is a
-    136-file diff that looks like a broken tool.
-  - **`gated/fixture/` is the half that certifies anything.** `dev/fixture.config.yaml` disagrees
-    with this hangar's config _and_ with every schema default on purpose. While a config agrees
-    with the defaults, "read the config file" and "fell into a catch and used the defaults"
-    produce identical output — so a capture of this hangar alone cannot tell a wired reader from
-    a swallowed error. The manifest also records the discovery `source` and
-    `EditorSelection.fellBack` for exactly that reason.
+  - **`gated/` is a gate, portable, and expected to diff for NOBODY.** Everything in it renders
+    from a checked-in fixture config in a temp directory with `%HANGAR%`/`%HOME%` normalised
+    away, so `pnpm golden` in a fresh clone of this repo on another machine produces no diff and
+    any diff is a finding. It did not always: a capture of this hangar was gated too, and the
+    first developer gate a colleague ran opened with a 120-file diff that looked like a broken
+    tool. **The one legitimate exception is the platform** — each fixture's `manifest.txt` carries
+    the platform driver's own answers, including the capability record, and a Linux run diffs
+    those rows. They are captured rather
+    than normalised because a capture that hid them would hide the seam that only exists at all
+    because three `darwin`-only assumptions survived unnoticed until this was published.
+  - **`advisory/` is not a gate, for either of two reasons.** It MOVES — `doctor --all`,
+    `status --all`, `list` and the `tmp`/`plans` dry runs read live state, so a green command
+    diff proves less than it looks like it does. Or it is stable but NOT PORTABLE:
+    `advisory/hangar/` is this hangar's own artifact tree, and `advisory/commands/` holds the
+    four command captures that read this config and these clones. `config validate` is the one
+    that could not simply be re-aimed at a fixture — the example-vs-live comparison is its whole
+    value and a temp directory has no committed example — so it moved rather than being weakened
+    in place.
+  - **Two fixtures, and the second one is not a variant.** A fixture disagreeing with the schema
+    defaults is what proves the config file was read at all: while a config agrees with the
+    defaults, "read the config file" and "fell into a catch and used the defaults" produce
+    identical output. Two fixtures that also disagree with EACH OTHER are what no single
+    swallowed error can satisfy. `dev/fixture.config.yaml` is Zed-shaped — no app subdirectory,
+    one workspace directory, a literal install `command`, a non-zero port offset.
+    `dev/fixture-vscode.config.yaml` is the shape the DEFAULT editor takes, and its header lists
+    the seven things it is the only capture of: an editor kind that consumes `rootPathKeys`, a
+    non-empty `rootPathKeys` table, two `workspaceDirs`, a non-empty `repo.appDir`, `manager:`
+    install steps with and without an `INSTALL_MARKERS` entry, `skipIfDirMissing: true`, and
+    `ports.offset: 0`. Adding a kind or a key means asking which of the two should carry it.
+    The manifest also records the discovery `source` and `EditorSelection.fellBack`, for the
+    same reason the fixtures disagree.
   - **An expected diff is fine; an unenumerated one is the finding.** Making a config key live for
     the first time is _supposed_ to change the fixture half, and that change is the proof. Write
     the expected delta down before making the change.
@@ -86,7 +103,7 @@ Both exist because they caught something, and both apply to every edit under `ap
   `node --test` with no flags — Node 24 strips the types, and `test/**/*.ts` is in the tsconfig
   include so the suite is checked under the same strict flags as `src/`. Three things live there
   and the boundary matters:
-  - **Two hangars in ONE process.** `dev/golden.sh` runs the binary twice, so a module-level
+  - **Two hangars in ONE process.** `dev/golden.sh` runs the binary once per hangar, so a module-level
     singleton or a cache keyed on nothing passes it every time and still hands the second hangar
     the first one's answers. `two-hangars.test.ts` reads them interleaved and asserts no path and
     no port of one appears in the other's.
@@ -97,6 +114,12 @@ Both exist because they caught something, and both apply to every edit under `ap
     expected text here would be a second oracle to hand-update on every prose edit — the work the
     golden net exists to absorb. Assert that the offset reached the port and that an identity file
     names no sibling; leave the bytes to golden.
+  - **Text that must name NO repo in particular.** `generic-text.test.ts` renders the per-clone
+    builders against a config disagreeing with this repo's _and_ with every schema default, and
+    asserts six literals from this repo appear nowhere in the result. A capture says what the
+    bytes are; only this says what they may never contain — and two of the six (`clone_`,
+    `.env.local`) are schema defaults, so a fixture agreeing with a default could not have shown
+    them. `hangar-internals/reference/doctor.md` has the table.
 
   Everything runs against a synthetic root and a synthetic `~/.claude`, and that is a requirement:
   `makeClone` reads `.hangar/colour-assignments.json` under the hangar root and caches it per
@@ -344,9 +367,11 @@ Three of those rows are worth a sentence each:
   that is a security property: their permission arrays are operator mode's boundary, and operator
   mode may run `hangar doctor`. `hangar-internals/reference/modes.md` has the reasoning and the
   three alternatives that were rejected.
-- **The gated golden baseline's `hangar/` half is this hangar's**, so a fresh clone of a published
-  hangar repo diffs against it on the first `pnpm golden`. `gated/fixture/` is the portable half;
-  see `dev/golden/README.md`.
+- **The gated golden baseline is entirely portable and entirely tracked**, which is what makes
+  `git diff --exit-code dev/golden/gated` mean the same thing in every clone of this repo. The
+  capture of THIS hangar is still taken and is worth reading, but it lands under the gitignored
+  `dev/golden/advisory/` — a gitignored path INSIDE `gated/` would have made the gate cover less
+  than its own name says. See `dev/golden/README.md`.
 
 ## The hangar root files this package owns
 

@@ -1,0 +1,8 @@
+{
+  "autoMemoryDirectory": "%HOME%/.claude/vsfix-memory",
+  "plansDirectory": "plans",
+  "statusLine": {
+    "type": "command",
+    "command": "%HANGAR%/.claude/modes/statusline.sh"
+  }
+}

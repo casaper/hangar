@@ -37,6 +37,40 @@ per entry means, and a check that is red in normal operation is a check nobody r
 (`hangar-ops/reference/reading-output.md` says the same to whoever reads the report — change one
 and change both.)
 
+## Six literals from this repo that were being written into every hangar
+
+The builders in `clone-config.ts` render text a clone session READS as authoritative, and six
+values in it named the repo Hangar was built in rather than the repo it was pointed at:
+
+| was | is now | why it was invisible |
+| --- | --- | --- |
+| `node dev/ports.mjs` (×2) | `portCheckHint(hangar)` | `repo.portCheckCommand` was a schema key nothing read |
+| `clone_NN/` | `clones.prefix` + `<NN>` | `clone_` is also the schema DEFAULT prefix |
+| `.env.local` | `repo.cloneEnv.file` | `.env.local` is also the schema DEFAULT filename |
+| `tmp/ABC-1234/ticket_ABC-1234.md` | `exampleIssueKey(hangar)` | no hangar but this one has `DN-` keys |
+| "each cached **Jira** record" | branched on `tracker.kind` | a trackerless hangar has no record store at all |
+| `<clone_NN>` in `clone-colours.sh` | `<clone>` | a usage placeholder, beside a line already saying `"$clone"` |
+
+**Each was surrounded by derived output, which is what made them read as derived.** A session in
+`clone_02` told to run `node dev/ports.mjs` is being told to run a script that does not exist, by
+the one file whose whole job is to stop it guessing a port — and the failure is a session that
+believes a wrong number, not an error.
+
+They survived because the gated golden baseline used to include a capture of THIS hangar, where
+all six are correct. **The second fixture is what found them, on its first run**: two configs that
+disagree with each other make a literal visible the moment one of them contradicts it. Two of the
+six could not have been found by a fixture that agreed with a schema default — `clone_` and
+`.env.local` ARE the defaults, so only a config that overrides them shows the difference. That is
+the reason `test/generic-text.test.ts` builds its hangar from a config disagreeing with this
+repo's *and* with the defaults, and asserts the six literals appear in no generated text: a golden
+capture proves what the bytes ARE, and this proves what they may never contain.
+
+**`portCheckHint` degrades rather than omitting.** With no `repo.portCheckCommand` it names
+`hangar ports`, which is always on PATH — correct, but it answers for the FLEET rather than for
+the clone you are standing in, since only the repo's own resolver reads that clone's dotenv
+through direnv. Naming the weaker command is better than naming none: the sentence exists to stop
+somebody typing a literal port number.
+
 ## The `secrets` row, and the one gap `--fix` structurally cannot close
 
 `secrets.variables[]` is a list of `{name, why, optional}`, and `doctor` reports each expected

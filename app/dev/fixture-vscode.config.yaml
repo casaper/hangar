@@ -1,0 +1,191 @@
+# The second hostile fixture for `hangar dev golden --indices 1,2,3`.
+#
+# Read `dev/fixture.config.yaml`'s header first: everything it says about why this file is not
+# named `hangar.config.yaml`, and why disagreeing with the schema defaults on every key is the
+# entire point, applies here unchanged.
+#
+# What this one adds is a SECOND disagreement. Two fixtures that differ from the defaults but
+# agree with each other can still both be satisfied by one swallowed error, so this file also
+# differs from `dev/fixture.config.yaml` key by key. Where a key has only two values -- every
+# boolean, `tracker.kind`, `forge.kind` -- the pair covers both between them rather than each
+# one covering both.
+#
+# It exists because the gated baseline used to include a capture of the maintainer's own hangar,
+# which was the only place these seven shapes were rendered at all -- and which diffed on the
+# first `pnpm golden` in anybody else's clone of this repo. This file is that coverage, made
+# portable:
+#
+#   * an editor kind that CONSUMES `editor.rootPathKeys` (the only per-clone TEXT transform here)
+#   * a non-empty `rootPathKeys` table to be consumed
+#   * two `workspaceDirs`, so a second workspace file is rendered per clone
+#   * a non-empty `repo.appDir`, which is also what an install step's `dir` defaults to
+#   * install steps given as `manager:` rather than `command:`, one with an INSTALL_MARKERS entry
+#     and one without, so both branches of doctor's install row have an input
+#   * `skipIfDirMissing: true` on a symlink
+#   * `ports.offset: 0`
+id: vsfix
+displayName: vscode fixture
+profile: node-web
+
+clones:
+  prefix: checkout_
+  pad: 4
+
+forge:
+  kind: bitbucketCloud
+  originUrl: git@bitbucket.org:example/storefront_ui.git
+  # Set explicitly rather than derived from originUrl, which is the branch the other fixture
+  # leaves uncovered.
+  webBaseUrl: https://bitbucket.example.invalid/example/storefront_ui
+  # Set explicitly so no capture ever asks git or the network for it.
+  defaultBranch: release
+  tokenEnvKey: VSFIX_FORGE_TOKEN
+
+tracker:
+  kind: jira
+  baseUrl: https://jira.example.invalid
+  # Non-default, so a capture can tell a read template from the fallback one.
+  issueUrlTemplate: '{baseUrl}/jira/software/issue/{key}'
+  keyPrefixes: [UI, PLAT]
+  cache:
+    ttlMinutes: 90
+    bypassEnvKey: VSFIX_NO_CACHE
+  # Both optional, and both omitted by the other fixture: the hook lines that name them are
+  # rendered by nothing else.
+  syncScript: .claude/skills/issue-sync/sync.mjs
+  namerScript: .claude/skills/issue-sync/name.mjs
+
+repo:
+  # NON-EMPTY, which is the shape this fixture exists for: it is the directory the clone's
+  # package lives in, and it is also what `repo.install[].dir` defaults to.
+  appDir: web
+  envrcDirs: ['.', 'web']
+  cloneEnv:
+    file: .env.development.local
+    rootPathEnvKey: VSFIX_CHECKOUT_ROOT
+    vars:
+      NEXT_PUBLIC_APP_NAME: '{displayName} {index}'
+      COMPOSE_PROJECT_NAME: '{id}_{index2}'
+      REDIS_NAMESPACE: '{clone}'
+  symlinks:
+    # TWO of them, because a list of one renders the same whether the builder loops or takes the
+    # head, and `skipIfDirMissing: true` -- the value the other fixture does not carry.
+    - path: web/e2e/.env.local
+      target: '{secretsFile}'
+      skipIfDirMissing: true
+      why: >-
+        the Playwright project reads web/e2e/.env.local and the tracked web/e2e/.env sets the
+        password empty AFTER direnv, so this reload is what wins
+    - path: web/.env.secrets
+      target: '{secretsFile}'
+      skipIfDirMissing: true
+      why: >-
+        the Next.js dev server reads .env.secrets from the app directory and will not look above
+        it, so the shared file has to appear inside web/
+  install:
+    # `dir` omitted ON PURPOSE: it defaults to `repo.appDir`, which is `web` here and the repo
+    # root in every other config, so this is the only capture that shows the default resolving
+    # to something.
+    - manager: pnpm
+      nodeVersionFile: web/.nvmrc
+      why: the app's dependencies, pinned by the lockfile the repo commits
+    - dir: '.'
+      manager: maven
+      optional: true
+      # `maven` has no INSTALL_MARKERS entry (it installs into ~/.m2), so `doctor` must say
+      # "cannot verify" here and print a real row for the pnpm step above it.
+      why: the Java backend fixtures the e2e suite runs against, which not every task needs
+  # Omitted by the other fixture, so the "this hangar has a port resolver to check against"
+  # branch is rendered nowhere else.
+  portCheckCommand: [pnpm, --dir, web, run, ports:print]
+
+ports:
+  step: 50
+  # ZERO, and that is the one value in this file that AGREES with the schema default. It is
+  # covered here rather than avoided: `offset: 0` is what an existing hangar keeps so its ports
+  # do not move out from under a running dev server, so it is a case the formula has to get
+  # right, and the other fixture's 37 is what proves the offset is read at all.
+  offset: 0
+  roles:
+    - id: web
+      envKey: VSFIX_WEB_PORT
+      base: 4200
+      label: Next dev server
+      # A templated URL that is not the schema default, and not http.
+      url: https://local.example.invalid:{port}/app
+      healthCheck:
+        kind: httpCurl
+        timeoutSeconds: 20
+        path: /healthz
+    - id: storybook
+      envKey: VSFIX_STORYBOOK_PORT
+      base: 6006
+      label: Storybook
+    - id: e2eReport
+      envKey: VSFIX_E2E_REPORT_PORT
+      base: 9323
+      label: Playwright report
+
+terminal:
+  kind: tmux
+  colour:
+    # The other fixture sets all three false; between them the pair covers both values of each.
+    chrome: true
+    title: false
+    env: true
+    tint: 0.9
+  tabs:
+    - role: claude
+      dir: web
+      command: claude
+    - role: dev
+      dir: web
+      command: pnpm dev
+    # No `command`, which is the plain-shell branch the other fixture never takes.
+    - role: shell
+      dir: '.'
+
+editor:
+  # The point of this fixture. `vscode` is the only family that consumes `rootPathKeys`, and a
+  # SECOND kind beside it is what keeps the list from agreeing with the schema default -- while
+  # also being the shape a developer who keeps a clone open in two editors at once actually has.
+  kinds: [vscode, jetbrains]
+  jetbrains:
+    product: webstorm
+  workspaceFileName: '{id}.{index2}.code-workspace'
+  workspaceFolderLabel: '{id} clone {index2}'
+  # TWO, so a second workspace file is rendered per clone. With one entry a builder that only
+  # ever emits the first is indistinguishable from a correct one.
+  workspaceDirs: ['.', 'web']
+  # The config half of the only per-clone TEXT transform in this CLI: VS Code resolves these
+  # against nothing, so each value has to be rewritten to an absolute path per clone.
+  rootPathKeys:
+    stylelint.configFile: web/.stylelintrc.json
+    prettier.prettierPath: web/node_modules/prettier
+    jest.rootPath: web
+
+secrets:
+  file: .env.vsfix-shared
+  mode: '400'
+  variables:
+    - name: VSFIX_DB_PASSWORD
+      why: the required credential, so the red branch of doctor's row has an input here too
+    - name: VSFIX_SENTRY_DSN
+      why: the optional one, for the dim branch
+      optional: true
+
+palette:
+  # Declared, and read by NOTHING today -- `config.palette` has a schema and no consumer, so the
+  # capture beside this file records the built-in 16 and an unrotated assignment. That is what a
+  # fixture is for: the day either key becomes live, this tree diffs and the diff is the proof.
+  # `dev/fixture.config.yaml` sets `rotate` alone; the replacement hue list is only here.
+  hues:
+    - name: rust
+      hex: '#b7410e'
+    - name: moss
+      hex: '#8a9a5b'
+    - name: slate
+      hex: '#708090'
+    - name: plum
+      hex: '#8e4585'
+  rotate: 1

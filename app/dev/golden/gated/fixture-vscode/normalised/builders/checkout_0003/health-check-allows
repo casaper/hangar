@@ -1,0 +1,1 @@
+Bash(curl -s -o /dev/null -w "%{http_code}" --max-time 20 https://local.example.invalid:4300/app/healthz)

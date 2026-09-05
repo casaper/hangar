@@ -1,8 +1,0 @@
-    unchanged  ~/code/dvb_gn/clone-colours.sh
-    unchanged  ~/code/dvb_gn/clone-terminal.sh
-    unchanged  ~/.claude/dvb_gn-clone-statusline.sh
-    unchanged  ~/.claude/themes/dvb_gn-clone-01-cyan.json
-    unchanged  ~/.claude/themes/dvb_gn-clone-02-yellow.json
-    unchanged  ~/.claude/themes/dvb_gn-clone-03-green.json
-    unchanged  ~/.claude/themes/dvb_gn-clone-04-red.json
-    All colour artifacts are up to date.

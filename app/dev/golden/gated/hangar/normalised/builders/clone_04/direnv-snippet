@@ -1,3 +1,0 @@
-(cd "%HANGAR%/clone_04" && direnv allow .)
-(cd "%HANGAR%/clone_04/angular" && direnv allow .)
-(cd "%HANGAR%/clone_04/tests/playwright-regression-tests" && direnv allow .)

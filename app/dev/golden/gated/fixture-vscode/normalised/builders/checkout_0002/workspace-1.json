@@ -1,0 +1,11 @@
+{
+  "settings": {
+    "yaml.maxItemsComputed": 25000
+  },
+  "folders": [
+    {
+      "name": "vsfix clone 0002",
+      "path": "%HANGAR%/checkout_0002"
+    }
+  ]
+}

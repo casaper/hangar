@@ -1,0 +1,11 @@
+{
+  "name": "checkout_0002 (yellow)",
+  "base": "dark",
+  "overrides": {
+    "claude": "#ffcc00",
+    "claudeShimmer": "#ffe066",
+    "briefLabelClaude": "#ffcc00",
+    "promptBorder": "#cca300",
+    "promptBorderShimmer": "#ffcc00"
+  }
+}

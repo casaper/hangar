@@ -1,0 +1,74 @@
+hangar-root        %HANGAR%
+hangar-id          vsfix
+discovery-source   walk
+config-file        %HANGAR%/hangar.config.yaml
+editor-fell-back   false
+editor-kinds       vscode, jetbrains
+plans-hook         %HANGAR%/bin/hangar --hangar %HANGAR% plans collect --quiet
+jira-hook          %HANGAR%/bin/hangar --hangar %HANGAR% jira hook
+tmp-hook           %HANGAR%/bin/hangar --hangar %HANGAR% tmp merge --quiet
+fleet-bin-path     PATH_add "%HANGAR%/bin"
+colour-assignments %HANGAR%/.hangar/colour-assignments.json
+memory-dir         %HOME%/.claude/vsfix-memory
+platform           darwin — %HOME%/Library/Application Support
+platform-caps      openExternally=true openApplicationByName=true vscodeWindowState=true
+vscode-state       %HOME%/Library/Application Support/Code/User/globalStorage/storage.json
+port-roles         web(VSFIX_WEB_PORT)=4200 storybook(VSFIX_STORYBOOK_PORT)=6006 e2eReport(VSFIX_E2E_REPORT_PORT)=9323
+port-step/offset   50 / 0
+
+clone checkout_0001  index=1  colour=cyan  theme=vsfix-clone-0001-cyan
+  ports  VSFIX_WEB_PORT=4200 VSFIX_STORYBOOK_PORT=6006 VSFIX_E2E_REPORT_PORT=9323
+  env.local              -> %HANGAR%/checkout_0001/.env.development.local
+  envrc.private          -> %HANGAR%/checkout_0001/.envrc.private
+  CLAUDE.local.md        -> %HANGAR%/checkout_0001/CLAUDE.local.md
+  settings.local.json    -> %HANGAR%/checkout_0001/.claude/settings.local.json
+  settings-default.json  -> %HANGAR%/checkout_0001/.claude/settings.local.json
+  workspace-1.json       -> %HANGAR%/checkout_0001/vsfix.0001.code-workspace
+  workspace-2.json       -> %HANGAR%/checkout_0001/web/vsfix.0001.code-workspace
+  theme.json             -> %HOME%/.claude/themes/vsfix-clone-0001-cyan.json
+  git-info-exclude       -> %HANGAR%/checkout_0001/.git/info/exclude
+  direnv-snippet         -> %HANGAR%/checkout_0001/.envrc.private
+  health-check-allows    -> %HANGAR%/checkout_0001/.claude/settings.local.json
+  install-plan           -> (printed by add-clone and hangar install)
+  symlink-web_e2e_.env.local -> %HANGAR%/checkout_0001/web/e2e/.env.local
+  symlink-web_.env.secrets -> %HANGAR%/checkout_0001/web/.env.secrets
+
+clone checkout_0002  index=2  colour=yellow  theme=vsfix-clone-0002-yellow
+  ports  VSFIX_WEB_PORT=4250 VSFIX_STORYBOOK_PORT=6056 VSFIX_E2E_REPORT_PORT=9373
+  env.local              -> %HANGAR%/checkout_0002/.env.development.local
+  envrc.private          -> %HANGAR%/checkout_0002/.envrc.private
+  CLAUDE.local.md        -> %HANGAR%/checkout_0002/CLAUDE.local.md
+  settings.local.json    -> %HANGAR%/checkout_0002/.claude/settings.local.json
+  settings-default.json  -> %HANGAR%/checkout_0002/.claude/settings.local.json
+  workspace-1.json       -> %HANGAR%/checkout_0002/vsfix.0002.code-workspace
+  workspace-2.json       -> %HANGAR%/checkout_0002/web/vsfix.0002.code-workspace
+  theme.json             -> %HOME%/.claude/themes/vsfix-clone-0002-yellow.json
+  git-info-exclude       -> %HANGAR%/checkout_0002/.git/info/exclude
+  direnv-snippet         -> %HANGAR%/checkout_0002/.envrc.private
+  health-check-allows    -> %HANGAR%/checkout_0002/.claude/settings.local.json
+  install-plan           -> (printed by add-clone and hangar install)
+  symlink-web_e2e_.env.local -> %HANGAR%/checkout_0002/web/e2e/.env.local
+  symlink-web_.env.secrets -> %HANGAR%/checkout_0002/web/.env.secrets
+
+clone checkout_0003  index=3  colour=green  theme=vsfix-clone-0003-green
+  ports  VSFIX_WEB_PORT=4300 VSFIX_STORYBOOK_PORT=6106 VSFIX_E2E_REPORT_PORT=9423
+  env.local              -> %HANGAR%/checkout_0003/.env.development.local
+  envrc.private          -> %HANGAR%/checkout_0003/.envrc.private
+  CLAUDE.local.md        -> %HANGAR%/checkout_0003/CLAUDE.local.md
+  settings.local.json    -> %HANGAR%/checkout_0003/.claude/settings.local.json
+  settings-default.json  -> %HANGAR%/checkout_0003/.claude/settings.local.json
+  workspace-1.json       -> %HANGAR%/checkout_0003/vsfix.0003.code-workspace
+  workspace-2.json       -> %HANGAR%/checkout_0003/web/vsfix.0003.code-workspace
+  theme.json             -> %HOME%/.claude/themes/vsfix-clone-0003-green.json
+  git-info-exclude       -> %HANGAR%/checkout_0003/.git/info/exclude
+  direnv-snippet         -> %HANGAR%/checkout_0003/.envrc.private
+  health-check-allows    -> %HANGAR%/checkout_0003/.claude/settings.local.json
+  install-plan           -> (printed by add-clone and hangar install)
+  symlink-web_e2e_.env.local -> %HANGAR%/checkout_0003/web/e2e/.env.local
+  symlink-web_.env.secrets -> %HANGAR%/checkout_0003/web/.env.secrets
+
+hangar-root settings.json       -> %HANGAR%/.claude/settings.json
+hangar-root CLAUDE.local.md     -> %HANGAR%/CLAUDE.local.md
+artifact clone-colours.sh       -> %HANGAR%/clone-colours.sh
+artifact clone-terminal.sh      -> %HANGAR%/clone-terminal.sh
+artifact vsfix-clone-statusline.sh -> %HOME%/.claude/vsfix-clone-statusline.sh

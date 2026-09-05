@@ -1,0 +1,51 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(%HANGAR%/**)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" --max-time 20 https://local.example.invalid:4250/app/healthz)"
+    ],
+    "deny": [
+      "Read(%HANGAR%/.env.vsfix-shared)"
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "%HOME%/.claude/vsfix-clone-statusline.sh"
+  },
+  "autoMemoryDirectory": "%HOME%/.claude/vsfix-memory",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%HANGAR%/bin/hangar --hangar %HANGAR% jira hook",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%HANGAR%/bin/hangar --hangar %HANGAR% plans collect --quiet",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%HANGAR%/bin/hangar --hangar %HANGAR% tmp merge --quiet",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  },
+  "theme": "custom:vsfix-clone-0002-yellow"
+}

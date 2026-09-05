@@ -1,30 +1,30 @@
-# This clone: wt-003 (green)
+# This clone: checkout_0003 (green)
 
-You are working in **`wt-003`**, one of the sibling clones under `%HANGAR%/`.
+You are working in **`checkout_0003`**, one of the sibling clones under `%HANGAR%/`.
 Announce yourself as **green** when the user needs to tell your session apart from
 the others.
 
 Your colour is wired the same way as every other clone: the shared statusline script
-`~/.claude/wt-clone-statusline.sh` (it derives the hue from this directory) plus the theme
-`~/.claude/themes/wt-clone-003-green.json`, both selected in this clone's untracked
+`~/.claude/vsfix-clone-statusline.sh` (it derives the hue from this directory) plus the theme
+`~/.claude/themes/vsfix-clone-0003-green.json`, both selected in this clone's untracked
 `.claude/settings.local.json`. The status line shows the colour in every permission mode; the
 input-box border only does in Manual mode, which is expected — see the shared memory
 `clone-colour-identity` before "fixing" it.
 
-|            |                                                                                  |
-| ---------- | -------------------------------------------------------------------------------- |
-| Root       | `%HANGAR%/wt-003` |
-| Colour     | green                                                                            |
-| PostgREST  | 3237                                                                             |
-| PostgreSQL | 5669                                                                             |
-| Swagger UI | 8317                                                                             |
+|                   |                                                                                         |
+| ----------------- | --------------------------------------------------------------------------------------- |
+| Root              | `%HANGAR%/checkout_0003` |
+| Colour            | green                                                                                   |
+| Next dev server   | 4300                                                                                    |
+| Storybook         | 6106                                                                                    |
+| Playwright report | 9423                                                                                    |
 
-These ports are **yours alone**. They come from this clone's untracked `.env.fixture`; resolve
-them at run time with `hangar ports` rather than typing a number. A server answering on
+These ports are **yours alone**. They come from this clone's untracked `.env.development.local`; resolve
+them at run time with `pnpm --dir web run ports:print` rather than typing a number. A server answering on
 any other port in those families belongs to a sibling — never test against it, never restart
 it, never kill it.
 
-Your siblings are the other `wt-<NN>/` directories beside this one, each also a git remote of
+Your siblings are the other `checkout_<NN>/` directories beside this one, each also a git remote of
 that same name for cherry-picking (`hangar list`, or `git remote`). Their working trees are
 off limits for writes. Which clones exist is deliberately not written down anywhere, this file
 included — the fleet adds and removes them without bookkeeping.
@@ -51,7 +51,7 @@ Every `tmp/<name>` entry is a symlink into `%HANGAR%/tmp/`, so anything
 you write there is written for the whole fleet.
 
 Each cached issue record is normally a **hard link** to one file the whole fleet shares — so
-editing `tmp/BE-1234/ticket_BE-1234.md` in place may rewrite every clone's copy of it, and
+editing `tmp/UI-1234/ticket_UI-1234.md` in place may rewrite every clone's copy of it, and
 you cannot tell from inside the clone (a re-sync detaches that one file until the next
 `tmp merge`). Read those files and regenerate them with the skill; never hand-edit one.
 The links are not damage, so leave them alone.

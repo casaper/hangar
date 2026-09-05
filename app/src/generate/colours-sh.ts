@@ -50,7 +50,9 @@ export const cloneColoursArtifact = (hangar: Hangar, clones: readonly Clone[]): 
       `Canonical per-clone hues for the ${hangarId} hangar. Sourceable by sh/bash/zsh.`,
     ),
     '#',
-    `# ${fn} <clone_NN>  ->  "<r;g;b> <xterm-256 index> <name>"`,
+    // `<clone>`, not a literal directory pattern: `clone_NN` was this fleet's own prefix, and
+    // the very next usage line already passes `"$clone"`.
+    `# ${fn} <clone>  ->  "<r;g;b> <xterm-256 index> <name>"`,
     '#',
     '# Read it with two lines, in any POSIX shell:',
     `#     set -- $(${fn} "$clone") ; rgb=$1 x256=$2 name=$3`,

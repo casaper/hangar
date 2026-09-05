@@ -1,8 +1,0 @@
-{
-  "autoMemoryDirectory": "%HOME%/.claude/dvb_gn-memory",
-  "plansDirectory": "plans",
-  "statusLine": {
-    "type": "command",
-    "command": "%HANGAR%/.claude/modes/statusline.sh"
-  }
-}
