@@ -11,6 +11,6 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "/Users/someone/code/dvb_gn/.claude/modes/statusline.sh dev"
+    "command": "hangar-statusline dev"
   }
 }

@@ -1,4 +1,6 @@
 import {
+  accessSync,
+  constants,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -1192,10 +1194,11 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
   /*
    * The hangar root's own `.claude/settings.json`, by CONTENT, like every generated artifact.
    *
-   * It was tracked with `/Users/someone` in two of its three values, so on any other machine the
-   * memory directory pointed at nothing and the status line's command was not there -- and
-   * Claude Code fails both SILENTLY. No error, no log; the mode badge simply never appears. That
-   * is the failure this hangar could never observe, because here the paths happen to be right.
+   * It was tracked with one machine's home directory in two of its three values, so on any
+   * other machine the memory directory pointed at nothing and the status line's command was not
+   * there -- and Claude Code fails both SILENTLY. No error, no log; the mode badge simply never
+   * appears. That is the failure this hangar could never observe, because here the paths happen
+   * to be right.
    */
   /*
    * The hangar's own `CLAUDE.local.md`, by CONTENT -- the ninth byte-compared builder.
@@ -1245,44 +1248,60 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
   /*
    * The two mode settings files, REPORTED and never repaired.
    *
-   * Their `statusLine.command` is an absolute path into this hangar, so a fresh clone of a
-   * published hangar repo carries the previous owner's -- and Claude Code fails silently on it,
-   * exactly like an unresolvable theme: the mode badge simply never appears, and a session with
-   * no badge is a session whose permission rules nobody can see at a glance.
-   *
-   * There is deliberately NO `--fix`, and this is the one check where that is a security
-   * property rather than a limitation. `ops.settings.json`'s ~40 `allow`/`ask`/`deny` entries ARE
-   * operator mode's boundary; operator mode is denied `Edit(./.claude/modes/**)` and allowed
+   * There is deliberately NO `--fix`, and this is the one check where that is a security property
+   * rather than a limitation. `ops.settings.json`'s ~40 `allow`/`ask`/`deny` entries ARE operator
+   * mode's boundary; operator mode is denied `Edit(./.claude/modes/**)` and allowed
    * `Bash(hangar doctor:*)`, so a repair that rewrote that file would let operator mode edit its
    * own permission list through a command it is permitted to run. `setup` does not write them
-   * either, for the same reason. Editing one line in two tracked files is the manual step, and it
-   * is named here.
+   * either, for the same reason.
    *
-   * The cost of that decision falls on whoever clones a published hangar, and it is worth saying
-   * out loud rather than leaving them to discover it: the two files are TRACKED, so the hand edit
-   * shows as a permanent modification and conflicts on every `git pull` that touches them -- and
-   * they are the files carrying operator mode's permission list, so those are conflicts nobody
-   * should resolve carelessly. That is the price of the boundary being structural. What this row
-   * can do is stop making them read prose and work out the edit: it prints the `sed` that makes
-   * it, so the manual step is one paste rather than one decision.
+   * WHAT is checked changed when the value stopped naming a machine. `statusLine.command` used to
+   * be an absolute path into this hangar, so a fresh clone of a published hangar carried the
+   * previous owner's home directory -- and Claude Code fails silently on it, exactly like an
+   * unresolvable theme: the badge simply never appeared, and a session with no badge is one whose
+   * permission rules nobody can see at a glance. Fixing it meant a hand edit that then stayed
+   * modified in `git status` and conflicted on every pull, in the two files nobody should resolve
+   * a conflict in carelessly.
+   *
+   * It is now `hangar-statusline <mode>`, resolved on PATH, so both files are byte-identical on
+   * every machine and that whole cost is gone. This row therefore no longer asks "does this
+   * absolute path exist here". It asks whether the command is the expected one, and whether
+   * `bin/hangar-statusline` is present and executable in THIS hangar -- which is what a partial
+   * checkout or a lost permission bit actually looks like. `hangar-internals/reference/modes.md`
+   * has why a name on PATH is sound here and still refused for the clone hooks.
    */
+  const launcher = join(hangar.root, 'bin', 'hangar-statusline');
+  const executable = (path: string): boolean => {
+    try {
+      accessSync(path, constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   for (const mode of ['ops', 'dev'] as const) {
     const path = join(hangar.root, '.claude', 'modes', `${mode}.settings.json`);
     if (!existsSync(path)) continue;
+    const want = `hangar-statusline ${mode}`;
     const command = readModeStatusLine(path);
-    const script = command?.split(' ')[0];
-    if (script !== undefined && existsSync(script) && script.startsWith(hangar.root)) continue;
+    if (command === want) {
+      if (executable(launcher)) continue;
+      problem(
+        `${tildify(launcher)} is missing or not executable, so \`${want}\` resolves to nothing`,
+      );
+      note('Claude Code fails SILENTLY on it: the badge never appears. `chmod +x` or restore it.');
+      continue;
+    }
     problem(
       `${tildify(path)}: statusLine.command ${
-        script === undefined ? 'is missing' : `→ ${tildify(script)} does not resolve in this hangar`
-      }`,
+        command === undefined ? 'is missing' : `is \`${command}\``
+      }, expected \`${want}\``,
     );
-    const want = `${join(hangar.root, '.claude', 'modes', 'statusline.sh')} ${mode}`;
-    note(`Set statusLine.command to: ${want}`);
     /*
      * A `sed` rather than a repair: `--fix` must never write this file (operator mode can run
      * `doctor` and this file is what constrains it), but nothing stops us handing over the exact
-     * edit. `|` as the delimiter, because the value is a path.
+     * edit. `|` as the delimiter, because the value this replaces was a path.
      *
      * Written to a temp file and moved, NOT `sed -i`. In-place editing is the one sed flag the
      * GNU and BSD versions spell incompatibly (`-i` versus `-i ''`), and this hangar's own
@@ -1290,12 +1309,9 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
      * in a plain terminal and silently wrong inside the hangar, where it reads the script as a
      * filename. This line is going to be pasted into a shell nobody here can see.
      */
-    note(`  sed 's|"command": ".*statusline.sh.*"|"command": "${want}"|' ${path} > ${path}.tmp \\`);
+    note(`  sed 's|"command": ".*statusline.*"|"command": "${want}"|' ${path} > ${path}.tmp \\`);
     note(`    && mv ${path}.tmp ${path}`);
-    note(
-      "Not repairable on purpose: that file is operator mode's permission boundary. It is also " +
-        'tracked, so this edit stays modified in `git status` and conflicts on a pull.',
-    );
+    note("Not repairable on purpose: that file is operator mode's permission boundary.");
   }
 
   /*
