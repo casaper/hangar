@@ -36,12 +36,37 @@ jobs:
             # `github.event.before` is all-zeroes on a branch's first push; fall back to HEAD~1.
             from='${{ github.event.before }}'
             case "$from" in *[!0]*) ;; *) from="$(git rev-parse HEAD~1)" ;; esac
+            # And it names an UNREACHABLE commit after a force-push: the old tip is no longer on
+            # any ref, and actions/checkout fetches refs, not dangling objects -- so commitlint
+            # would die on a bad object rather than lint anything. `release` needs this job, so
+            # that failure blocks the release outright instead of just being noisy.
+            git cat-file -e "$from^{commit}" 2>/dev/null || from="$(git rev-parse HEAD~1)"
             to='${{ github.sha }}'
           fi
           app/node_modules/.bin/commitlint --config app/.commitlintrc.json --from "$from" --to "$to"
 
+  # Hygiene: no organisation identifier, no machine path, no credential -- in the tree or the
+  # history. Both gates also run in `app/.husky/pre-commit`, which is fast feedback for whoever
+  # ran `pnpm hooks`; this is the enforcement that does not depend on anyone having done so.
+  #
+  # They cover different things and neither replaces the other: gitleaks was measured against a
+  # canary of seven planted credentials and missed both plain `*_PASSWORD=<human value>` lines,
+  # because low entropy defeats its `generic-api-key` rule. `scrub-check.sh` carries that shape.
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: the secret scan walks every commit, not the checkout.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_CONFIG: .gitleaks.toml
+      - name: Identifiers, machine paths and pasted passwords
+        run: sh app/dev/scrub-check.sh
+
   release:
-    needs: commitlint
+    needs: [commitlint, scan]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
