@@ -361,6 +361,15 @@ This is also why renaming anything under `~/.claude` is a three-phase operation 
 write the new names BESIDE the old, repair the settings that point at them, and only then delete
 the old ones -- each phase reversible on its own, and `settings targets` green throughout.
 
+**And that is exactly how this check went green over a rename that was never finished.**
+`settings targets` asks only whether the named path EXISTS. Phase one wrote
+`~/.claude/<id>-clone-statusline.sh` beside `~/.claude/dvb-clone-statusline.sh`; phase two never
+ran; and because the old script was still sitting there, all four clones went on pointing at it
+with this row green. An existence check cannot notice a rename it is standing in the middle of.
+So `settings.local.json` -- the row below it, the one that already compared `theme` against the
+generated name -- now compares `statusLine.command` and `autoMemoryDirectory` too. Existence is
+the weaker question and it stays where it is; identity is what closes the phase.
+
 
 ## `defaultSettings`, and the line between derived and personal
 
@@ -381,14 +390,54 @@ A sibling is still preferred, and that is not a fallback ordering. The split is:
   stranger's fresh hangar, where none of them resolve — a config that looks configured and is not,
   which is the failure this whole track is about.
 
-`settingsContentFor` regenerates the derived half on top of either template, so the two paths
-cannot disagree about a theme or a port. Both renders are in the golden capture
+`settingsContentFor` reapplies the derived half on top of either template, so the two paths
+cannot disagree about ANY of it. Both renders are in the golden capture
 (`settings.local.json` from the fixed template, `settings-default.json` from nothing) because they
 answer different questions: what `settingsContentFor` does to a file it was handed, versus what a
 hangar can derive from nothing at all.
 
-**`HangarPaths.memory` is `~/.claude/<id>-memory` by the naming rule, and this hangar's four live
-clones still name `dvb-gn-memory`.** That predates the rule and is where the fleet's actual memory
-is. Nothing renames it: moving live memory needs the tracked `.claude/settings.json` and four
-per-clone files moved with it plus a session restart each, and only `defaultSettings` — a hangar
-with no sibling — reads the path today, so leaving it splits nothing.
+### It reapplied two of the eight, and said it reapplied all of them
+
+For a long time `settingsContentFor` regenerated `theme` and the health-check allows — the two
+values that differ per CLONE — while its own header claimed it covered the derived half, and
+`doctor` held the same two. The other six were written once by `add-clone` and never looked at
+again by anything.
+
+That is invisible while a hangar keeps its name and its place, which is why the note that used to
+sit here was wrong. It read: *`HangarPaths.memory` is `~/.claude/<id>-memory` by the naming rule,
+and this hangar's four live clones still name `dvb-gn-memory` … only `defaultSettings` — a hangar
+with no sibling — reads the path today, so leaving it splits nothing.* The premise stopped being
+true the moment the hangar root's own `.claude/settings.json` became generated: it names
+`<id>-memory`, the clones named `dvb-gn-memory`, and `~/.claude/dvb_gn-memory` and
+`~/.claude/dvb-gn-memory` both existed with 25 entries each. The fleet's ONE shared memory
+directory was two directories, a hangar-root session and a clone session could not see each
+other's memories, and `hangar doctor --all` closed with `No problems in 4 clone(s).` The two
+were still byte-identical when it was found -- nothing had been lost, and the repair needed no
+hand-merge -- but they would have diverged at the next write from either side. That is the shape
+of every bug this check exists for: correct today because nothing has happened yet.
+
+So the check and the builder moved together:
+
+- `settingsContentFor` now OVERLAYS the whole derived half — theme, statusline, memory directory,
+  the hangar-root allow, the secrets deny, the health checks and the three hooks — and leaves the
+  personal half exactly as the template had it. Overlay, never rebuild: a rewrite from
+  `defaultSettings` would delete a developer's MCP servers to fix a theme.
+- The two permission ARRAYS are add-if-absent. A stale deny only ever restricts, and a stale
+  allow cannot be told from a rule the developer wrote themselves without knowing every root this
+  fleet has ever had. What matters is that the CURRENT deny is present — its absence is what let
+  `Read(<hangar root>/**)` reach a live secrets file after a move.
+- `invokesOurCli` gained a second arm. It matched on this hangar's own `bin/` only, so a matcher
+  naming a PREVIOUS root was not replaced but appended beside — two `SessionEnd` collectors and,
+  worse, two `PreToolUse` Jira hooks, one of them a path that is not there. `bin/hangar` exits 0
+  silently for `jira hook` precisely because a non-zero `PreToolUse` exit blocks the tool call,
+  and a binary that does not exist cannot exit 0 at all. `--hangar <path> <subcommand>` is a shape
+  only this CLI emits, and a clone belongs to exactly one hangar, so a matcher naming another root
+  is always this hangar's own stale one, never a neighbour's live one.
+- `doctor`'s `settings.local.json` row checks all of it and names which value drifted. It needed
+  no new repair plumbing: that row's repair already called `settingsContentFor`, so widening the
+  builder widened `--fix`.
+
+**Moving live memory is still not something `--fix` finishes.** It repoints the clones at
+`<id>-memory`; the memories already written under the old name have to be merged across by hand,
+appending to the surviving `MEMORY.md` rather than overwriting it, and no running session sees any
+of it until it restarts.

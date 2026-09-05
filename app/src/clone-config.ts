@@ -454,16 +454,35 @@ export type SettingsJson = {
  *
  * Matching on the hangar's own `bin/` directory plus the subcommand is what survives a rename:
  * `bin/orch-util jira hook` and `bin/hangar jira hook` are both recognised as ours, while
- * another hangar's identically-named binary is not (different directory) and a different
- * subcommand is not either.
+ * a different subcommand is not.
+ *
+ * **The second arm is what survives a MOVE of the hangar root**, and it was added because a test
+ * against a template from another root showed the first arm alone appending beside the stale
+ * matcher instead of replacing it -- so a moved fleet ended up with two `SessionEnd` collectors
+ * and, worse, two `PreToolUse` Jira hooks, one of them a path that is not there. `bin/hangar`
+ * exits 0 silently for `jira hook` precisely because a non-zero `PreToolUse` exit BLOCKS the
+ * tool call; a matcher naming a binary that no longer exists cannot exit 0 at all.
+ *
+ * `<abs>/bin/<binary> --hangar <path> <subcommand>` is a shape only this CLI emits, and a clone
+ * belongs to exactly one hangar -- it lives inside that hangar's root -- so a matcher in a
+ * clone's settings naming some OTHER root is always this hangar's own stale one, never a
+ * neighbour's live one.
+ *
+ * It is a REGEX anchored at the start rather than two `includes`, and that is the difference
+ * between widening it and breaking it. `subcommand` is matched as a substring, so a bare
+ * `includes(' --hangar ')` would also have swallowed a hook a developer wrapped themselves --
+ * `sh -c '... && /other/bin/hangar --hangar /other tmp merge'` -- which is theirs to keep. The
+ * anchor means only a command that IS the invocation qualifies, never one that contains it.
  *
  * The `has*Hook` readers deliberately do NOT use this: they answer "is the hook `doctor` would
  * write already in place", so a stale one has to read as a PROBLEM rather than as fine.
  */
+const MOVED_ROOT_INVOCATION = /^\/\S*\/bin\/\S+ --hangar \S+ /;
+
 const invokesOurCli = (hangar: Hangar, command: string | undefined, subcommand: string): boolean =>
   command !== undefined &&
-  command.startsWith(`${join(hangar.root, 'bin')}/`) &&
-  command.includes(subcommand);
+  command.includes(subcommand) &&
+  (command.startsWith(`${join(hangar.root, 'bin')}/`) || MOVED_ROOT_INVOCATION.test(command));
 
 export const plansHookCommand = (hangar: Hangar): string =>
   `${hangar.paths.bin} --hangar ${hangar.root} plans collect --quiet`;
@@ -593,19 +612,25 @@ export const withPlansHook = (hangar: Hangar, settings: SettingsJson): SettingsJ
  * then regenerates the derived half on top either way, so the two paths cannot disagree about a
  * theme or a port.
  */
+/*
+ * The hangar root is readable, its secrets file is not.
+ *
+ * The deny rule has to be an ABSOLUTE path: the secrets file sits outside every clone (so that
+ * no clone can commit it), which also means no `Read(./**)`-relative rule can reach it. A clone
+ * session that could read it would put credentials in a transcript.
+ *
+ * Both are functions rather than literals in `defaultSettings` because `settingsContentFor` has
+ * to be able to ask for the SAME two strings when it reapplies the derived half over a template.
+ */
+export const hangarRootAllow = (hangar: Hangar): string => `Read(${hangar.root}/**)`;
+export const secretsDeny = (hangar: Hangar): string => `Read(${hangar.paths.envShared})`;
+
 export const defaultSettings = (clone: Clone): SettingsJson => {
   const hangar = clone.hangar;
   const base: SettingsJson = {
     permissions: {
-      /*
-       * The hangar root is readable, its secrets file is not.
-       *
-       * The deny rule has to be an ABSOLUTE path: the secrets file sits outside every clone (so
-       * that no clone can commit it), which also means no `Read(./**)`-relative rule can reach
-       * it. A clone session that could read it would put credentials in a transcript.
-       */
-      allow: [`Read(${hangar.root}/**)`, ...healthCheckAllows(clone)],
-      deny: [`Read(${hangar.paths.envShared})`],
+      allow: [hangarRootAllow(hangar), ...healthCheckAllows(clone)],
+      deny: [secretsDeny(hangar)],
     },
     statusLine: { type: 'command', command: hangar.paths.statuslineScript },
     autoMemoryDirectory: hangar.paths.memory,
@@ -614,33 +639,74 @@ export const defaultSettings = (clone: Clone): SettingsJson => {
 };
 
 /**
- * The clone's `.claude/settings.local.json`, built from a template clone.
+ * The clone's `.claude/settings.local.json`: the template's PERSONAL half, this hangar's DERIVED
+ * half reapplied over it.
  *
- * Everything except two values is byte-identical across the fleet, so the template is copied
- * wholesale -- but `theme` and the Storybook health-check allow are GENERATED. Copying the
- * health-check arm would point the new clone's check at the template clone's Storybook, and
- * a health check that passes against the wrong server is the exact failure the per-clone
- * ports exist to prevent.
+ * This used to regenerate `theme` and the health-check allows and nothing else, while its own
+ * header claimed it reapplied "the derived half" -- eight things -- "so the two paths cannot
+ * disagree". Six of the eight were written once by `add-clone` and never looked at again, and
+ * `doctor` held the same two. What that costs shows up at a rename or a move of the hangar root,
+ * and it showed up here: after `<id>-clone-…` replaced `dvb-clone-…`, all four clones went on
+ * naming `~/.claude/dvb-clone-statusline.sh` and `~/.claude/dvb-gn-memory` while the generator
+ * and the hangar-root session had moved to the new names. The fleet's ONE shared memory
+ * directory was two directories, and `doctor` said `No problems in 4 clone(s).` -- because the
+ * only check on the statusline asked whether the named path exists, and the pre-rename script
+ * was still sitting there.
+ *
+ * OVERLAY, never regenerate. The template carries the personal half no generator can invent --
+ * `enabledMcpjsonServers`, `enabledPlugins`, the `terminal.*` keys -- and a rewrite from
+ * `defaultSettings` would delete a developer's MCP servers to fix a theme.
+ *
+ * The two arrays are ADD-IF-ABSENT rather than replace-by-shape. Adding the CURRENT secrets deny
+ * is what closes the hole -- a hangar whose root or `secrets.file` moved had every clone denying
+ * a path that no longer exists while still allowing `Read(<root>/**)` over the live one. A
+ * leftover deny for the old path is inert (a deny only ever restricts), and a developer's own
+ * rules have to survive, so nothing here removes an entry it did not write. The health-check
+ * allows are the exception, and they are removable precisely because `HEALTH_CHECK_RE` matches
+ * only the exact string this generator emits.
  */
 export const settingsContentFor = (clone: Clone, template: SettingsJson): string => {
+  const hangar = clone.hangar;
   const settings: SettingsJson = structuredClone(template);
   settings.theme = `custom:${themeName(clone)}`;
-  const allow = settings.permissions?.allow;
-  if (allow) {
-    /*
-     * Drop every allow this generator wrote, then write this clone's own.
-     *
-     * It used to find the ONE match and replace it in place, refusing when there were two
-     * because there was no way to tell which port was meant. With a role table there is no
-     * ambiguity to protect against: the generated set IS the answer, however many roles declare
-     * a health check, so removing and re-appending is both simpler and correct for N. The order
-     * follows `ports.roles[]`, so the file is stable across runs.
-     */
-    const kept = allow.filter((entry) => !HEALTH_CHECK_RE.test(entry));
-    allow.length = 0;
-    allow.push(...kept, ...healthCheckAllows(clone));
-  }
-  return `${JSON.stringify(settings, null, 2)}\n`;
+  settings['statusLine'] = { type: 'command', command: hangar.paths.statuslineScript };
+  settings['autoMemoryDirectory'] = hangar.paths.memory;
+
+  const permissions = { ...settings.permissions };
+  /*
+   * Drop every health-check allow this generator wrote, then write this clone's own.
+   *
+   * It used to find the ONE match and replace it in place, refusing when there were two because
+   * there was no way to tell which port was meant. With a role table there is no ambiguity to
+   * protect against: the generated set IS the answer, however many roles declare a health check,
+   * so removing and re-appending is both simpler and correct for N. The order follows
+   * `ports.roles[]`, so the file is stable across runs.
+   */
+  const kept = (permissions.allow ?? []).filter((entry) => !HEALTH_CHECK_RE.test(entry));
+  const rootAllow = hangarRootAllow(hangar);
+  permissions.allow = [
+    ...kept,
+    ...(kept.includes(rootAllow) ? [] : [rootAllow]),
+    ...healthCheckAllows(clone),
+  ];
+  const deny = permissions.deny ?? [];
+  const wantDeny = secretsDeny(hangar);
+  permissions.deny = deny.includes(wantDeny) ? deny : [...deny, wantDeny];
+  settings.permissions = permissions;
+
+  /*
+   * `plansDirectory` is carried across, and that is why the three hook writers are applied here
+   * rather than `withPlansHook` alone being trusted with it: that one DROPS the key, because a
+   * per-clone copy of the repo's own tracked `.claude/plans` is one more place to drift. But
+   * `doctor` has a separate repair that WRITES an explicit `plansDirectory` for the one case
+   * that needs it -- a tracked value resolving outside the clone, which Claude Code rejects
+   * silently. Letting this builder strip it would undo that repair on the next `--fix`.
+   */
+  const plansDirectory = settings.plansDirectory;
+  const withHooks = withTmpHook(hangar, withPlansHook(hangar, withJiraHook(hangar, settings)));
+  const final: SettingsJson =
+    plansDirectory === undefined ? withHooks : { ...withHooks, plansDirectory };
+  return `${JSON.stringify(final, null, 2)}\n`;
 };
 
 const readSettingsFile = (path: string): SettingsJson | undefined => {

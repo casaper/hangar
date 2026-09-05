@@ -213,8 +213,9 @@ hook runs with an unpredictable PATH), and getting it wrong is the same silent f
 
 ## Four probes that produced confident wrong answers — do not repeat them
 
-The fleet has no test suite, so this is the regression record for the next person who assumes one
-flag would have done it.
+Nothing here is reachable from `pnpm test` -- a seed suite over the pure core cannot launch a
+Claude Code session -- so this is the regression record for the next person who assumes one flag
+would have done it.
 
 - **Asking a `-p` session to list its own skills is noise.** Two byte-identical invocations gave
   opposite answers — one reported `NONE`, one listed both hangar skills. So `skillOverrides`

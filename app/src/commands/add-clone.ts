@@ -63,8 +63,13 @@ const writeFile = (path: string, content: string): void => {
  * A sibling is still preferred, and that is not a fallback ordering: the personal half of that
  * file (the MCP servers a developer has enabled, their editor keys) is exactly what a new clone
  * should inherit and exactly what a generated default must never invent. `defaultSettings` covers
- * only what the hangar can derive; `settingsContentFor` regenerates the derived half on top of
- * either, so the two paths cannot disagree about a theme or a port.
+ * only what the hangar can derive; `settingsContentFor` reapplies that whole derived half over
+ * either -- theme, statusline, memory directory, the hangar-root allow, the secrets deny, the
+ * health checks and the three hooks -- so the two paths cannot disagree about any of them.
+ *
+ * It did not always: for a long time it reapplied the theme and the health checks alone, and the
+ * sentence above was written as if it did more. What that cost is in `settingsContentFor`'s own
+ * header.
  */
 const settingsTemplate = (clone: Clone, siblings: readonly Clone[]): SettingsJson => {
   for (const sibling of siblings) {

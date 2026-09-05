@@ -10,12 +10,15 @@ import {
   envLocalContent,
   envrcPrivateContent,
   excludeBlock,
+  hangarRootAllow,
   healthCheckAllows,
+  secretsDeny,
   settingsContentFor,
   workspaceContent,
   workspacePaths,
 } from '../src/clone-config.ts';
 import { cloneAt } from '../src/fleet.ts';
+import { themeName } from '../src/generate/theme-json.ts';
 import { hangarClaudeLocalMdContent } from '../src/hangar-files.ts';
 import { namesNoMachinePath, syntheticHangar } from './fixture.ts';
 
@@ -182,4 +185,108 @@ test('a hangar under $HOME is written as $HOME, not as a literal home path', () 
   const text = envrcPrivateContent(underHome);
   assert.match(text, /\$HOME\/synthetic-hangar\/\.env\.fixture-shared/);
   assert.ok(!text.includes(realHome), 'the literal home path reached the generated file');
+});
+
+test('settingsContentFor reapplies the whole derived half over a foreign template', () => {
+  /*
+   * The regression this exists for is a rename, and it is the one a capture cannot show: both
+   * fixtures capture `settingsContentFor` against a template belonging to the SAME hangar, so
+   * every derived value is already right in them and would stay right however little the
+   * builder reapplied.
+   *
+   * What happened here: after `<id>-clone-…` replaced `dvb-clone-…`, every clone went on naming
+   * the old statusline script and the old memory directory, because this builder reapplied
+   * `theme` and the health-check allows and nothing else. The fleet's one shared memory
+   * directory was two directories and `doctor` reported no problems at all.
+   *
+   * So the template below is a PLAUSIBLE WRONG one -- another hangar's derived half, plus the
+   * personal keys no generator may invent -- and what is asserted is that none of the other
+   * hangar's values survive and all of the personal ones do.
+   */
+  const other = syntheticHangar({ root: '/other', claudeDir: '/other-claude' });
+  const otherClone = cloneAt(other, 1);
+  const template = {
+    ...defaultSettings(otherClone),
+    enabledMcpjsonServers: ['playwright', 'sentry'],
+    enabledPlugins: { 'frontend-design@official': false },
+    'terminal.external.osxExec': 'iTerm.app',
+  };
+
+  const clone = cloneAt(hangar(), 2);
+  const rendered = settingsContentFor(clone, template);
+  const parsed = JSON.parse(rendered) as Record<string, unknown>;
+
+  /*
+   * Every SCALAR the other hangar set is gone, the hooks included -- `invokesOurCli` matches on
+   * a hangar's own `bin/`, so a matcher naming yesterday's root is replaced rather than appended
+   * beside. That is the half that has to be exact: two `SessionEnd` collectors or a memory
+   * directory belonging to another fleet are silent wrong answers.
+   */
+  assert.ok(!JSON.stringify(parsed['hooks']).includes('/other'), rendered);
+
+  assert.deepEqual(parsed['statusLine'], {
+    type: 'command',
+    command: clone.hangar.paths.statuslineScript,
+  });
+  assert.equal(parsed['autoMemoryDirectory'], clone.hangar.paths.memory);
+  assert.equal(parsed['theme'], `custom:${themeName(clone)}`);
+
+  const permissions = parsed['permissions'] as { allow: string[]; deny: string[] };
+  assert.ok(permissions.allow.includes(hangarRootAllow(clone.hangar)));
+  assert.ok(permissions.deny.includes(secretsDeny(clone.hangar)));
+  for (const want of healthCheckAllows(clone)) assert.ok(permissions.allow.includes(want));
+  /*
+   * The two ARRAYS are add-if-absent, so the other hangar's entries are still there -- asserted
+   * rather than merely tolerated, because it is the deliberate half of the policy. A stale deny
+   * only ever restricts, and a stale allow cannot be told apart from a rule the developer wrote
+   * themselves without knowing every root this fleet has ever had. What matters is that THIS
+   * hangar's deny is present: its absence is what let `Read(<root>/**)` reach a live secrets
+   * file after a move.
+   */
+  assert.ok(permissions.deny.includes(secretsDeny(otherClone.hangar)));
+
+  // The personal half is the template's to keep: a rewrite from `defaultSettings` would delete
+  // a developer's MCP servers to fix a theme, which is why this is an overlay and not a rebuild.
+  assert.deepEqual(parsed['enabledMcpjsonServers'], ['playwright', 'sentry']);
+  assert.deepEqual(parsed['enabledPlugins'], { 'frontend-design@official': false });
+  assert.equal(parsed['terminal.external.osxExec'], 'iTerm.app');
+  assert.ok(namesNoMachinePath(rendered));
+});
+
+test('a hook a developer wrapped themselves is not mistaken for a stale one', () => {
+  /*
+   * The limit of the moved-root arm, asserted so it cannot quietly widen again. It exists to
+   * replace `<abs>/bin/hangar --hangar <old root> tmp merge` after a move, and it is anchored at
+   * the start of the command precisely so that a hook wrapping the CLI in something else stays
+   * the developer's. `subcommand` is matched as a substring, so an unanchored test would have
+   * swallowed this one.
+   */
+  const clone = cloneAt(hangar(), 1);
+  const mine = "sh -c 'make audit && /other/bin/hangar --hangar /other tmp merge'";
+  const rendered = settingsContentFor(clone, {
+    ...defaultSettings(clone),
+    hooks: { SessionEnd: [{ hooks: [{ type: 'command', command: mine }] }] },
+  });
+  assert.ok(rendered.includes('make audit'), rendered);
+});
+
+test('settingsContentFor adds the secrets deny without discarding a foreign one', () => {
+  /*
+   * Add-if-absent, not replace-by-shape. Adding the CURRENT deny is what closes the hole a moved
+   * hangar root opens -- every clone denying a path that is gone while still allowing
+   * `Read(<root>/**)` over the live secrets file. A leftover deny only ever restricts, and a
+   * developer's own rules have to survive, so nothing is removed that this generator did not
+   * write.
+   */
+  const clone = cloneAt(hangar(), 1);
+  const template = defaultSettings(clone);
+  const rendered = settingsContentFor(clone, {
+    ...template,
+    permissions: { allow: ['Read(./docs/**)'], deny: ['Read(./.env)'] },
+  });
+  const permissions = (JSON.parse(rendered) as { permissions: { allow: string[]; deny: string[] } })
+    .permissions;
+  assert.deepEqual(permissions.deny, ['Read(./.env)', secretsDeny(clone.hangar)]);
+  assert.ok(permissions.allow.includes('Read(./docs/**)'));
+  assert.ok(permissions.allow.includes(hangarRootAllow(clone.hangar)));
 });

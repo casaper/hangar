@@ -30,6 +30,24 @@ export const FIXTURE_CONFIG = join(import.meta.dirname, '..', 'dev', 'fixture.co
  */
 export const fixtureConfigText = (): string => readFileSync(FIXTURE_CONFIG, 'utf8');
 
+/**
+ * The second fixture, and it is not a variant of the first -- see `app/CLAUDE.md`.
+ *
+ * Where it earns its place here is the `tracker` block: it is the only one of the two that
+ * declares `syncScript` and `namerScript`, and both fixtures name a `bypassEnvKey` and a
+ * `ttlMinutes` that disagree with the schema defaults AND with each other. A test that only had
+ * the first could not tell "read the config" from "fell back to a literal" for the two optional
+ * keys, because absent is what the fallback looks like.
+ */
+export const FIXTURE_VSCODE_CONFIG = join(
+  import.meta.dirname,
+  '..',
+  'dev',
+  'fixture-vscode.config.yaml',
+);
+
+export const fixtureVscodeConfigText = (): string => readFileSync(FIXTURE_VSCODE_CONFIG, 'utf8');
+
 export type SyntheticOptions = {
   readonly root?: string;
   readonly claudeDir?: string;

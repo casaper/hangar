@@ -61,10 +61,41 @@ const KEY_RE = /^[A-Z][A-Z0-9]+-\d+$/;
 /** The skill's own accepted flags. Anything else and `sync.mjs` would refuse the run itself. */
 const KNOWN_FLAGS = ['--no-relations', '--no-assets', '--quiet', '--json'];
 
-/** The escape hatch, and the reason it is an env var: `sync.mjs` dies on an unknown flag. */
-const BYPASS = 'JIRA_SYNC_NO_CACHE';
+/*
+ * The four `tracker.*` keys this hook runs on, read from the config rather than spelt here.
+ *
+ * All four used to be literals -- `JIRA_SYNC_NO_CACHE`, a 60-minute TTL, and the two script
+ * paths -- beside a schema that declared every one of them as a config key. That is the same
+ * defect `forge.tokenEnvKey` turned out to be: a key the schema carries, the example documents
+ * and nothing reads, which fails by being obeyed in the one hangar whose config happens to
+ * spell the same literal.
+ *
+ * `bypassEnvKey` is the one that reached furthest. Its schema DEFAULT is
+ * `HANGAR_TRACKER_NO_CACHE`, and the hangar-root `CLAUDE.md` -- prepended to every clone
+ * session -- tells agents that setting `tracker.cache.bypassEnvKey` in front of the command
+ * bypasses the cache. A hangar that omitted the key was told one name by `hangar config show`
+ * and obeyed another, with a denial and no clue why.
+ *
+ * The escape hatch is an env var and not a flag because `sync.mjs` dies on an unknown flag.
+ */
+const bypassEnvKey = (hangar: Hangar): string => hangar.config.tracker.cache.bypassEnvKey;
 
-const SYNC_SCRIPT = 'jira-ticket-sync/sync.mjs';
+/*
+ * The declared script paths, both OPTIONAL in the schema -- so `undefined` is a real answer and
+ * has to fail open like every other decline here.
+ *
+ * Deliberately no fallback to this repo's own `.claude/skills/…` layout. That literal is the
+ * kind `add-clone` had for `forge.originUrl`, where the fallback meant another hangar silently
+ * got this fleet's repo; a hook that guesses a script path would silently aim at a file the
+ * hangar never declared.
+ *
+ * What these keys do NOT make configurable is the ARGV CONTRACT: whatever `syncScript` names is
+ * still called `<script> <KEY>… [known flags]`, and whatever `namerScript` names is still asked
+ * `name <TRUNK> [relation] [KEY]` and expected to print one path. Those are requirements of the
+ * script you name, and `hangar-internals/reference/jira-cache.md` says so.
+ */
+const syncScriptOf = (hangar: Hangar): string | undefined => hangar.config.tracker.syncScript;
+const namerScriptOf = (hangar: Hangar): string | undefined => hangar.config.tracker.namerScript;
 
 /** Anything that makes the tail of the command more than a plain argument list. */
 const SHELL_META = /[|&;<>(){}$`\n]/;
@@ -75,6 +106,9 @@ export type Invocation = {
   readonly assets: boolean;
 };
 
+/** The last two path segments of a declared script, which is what a command line is matched on. */
+export const scriptTail = (path: string): string => path.split('/').slice(-2).join('/');
+
 /**
  * The keys and flags of a `sync.mjs` call, or undefined when this is not one to touch.
  *
@@ -82,9 +116,20 @@ export type Invocation = {
  * a second command in the tail is not -- the agent is then doing something with the output that
  * a denial would not give it.
  */
-export const parseSyncCommand = (command: string): Invocation | undefined => {
-  if (command.includes(BYPASS)) return undefined;
-  const parts = command.split(SYNC_SCRIPT);
+export const parseSyncCommand = (
+  command: string,
+  declared: { readonly syncScript: string; readonly bypassEnvKey: string },
+): Invocation | undefined => {
+  if (command.includes(declared.bypassEnvKey)) return undefined;
+  /*
+   * Split on the TAIL of the declared path, not the whole of it.
+   *
+   * `tracker.syncScript` is stored clone-relative (`.claude/skills/jira-ticket-sync/sync.mjs`)
+   * while a real invocation may name it any number of ways -- bare, from a subdirectory, with a
+   * `cd … &&` in front. Matching the last two segments keeps both forms hitting, which is what
+   * the fixed literal `jira-ticket-sync/sync.mjs` did before this became configurable.
+   */
+  const parts = command.split(scriptTail(declared.syncScript));
   if (parts.length !== 2) return undefined;
   const tail = parts[1] ?? '';
   if (SHELL_META.test(tail)) return undefined;
@@ -175,6 +220,7 @@ export const wantedFiles = (trunk: FreshRecord, relations: boolean): Wanted[] | 
  */
 const destinationOf = (
   clone: Clone,
+  namerScript: string,
   trunk: string,
   wanted: Wanted,
   created: string[],
@@ -183,7 +229,7 @@ const destinationOf = (
   const existed = existsSync(dir);
   const args =
     wanted.relation === undefined ? ['name', trunk] : ['name', trunk, wanted.relation, wanted.key];
-  const res = run('node', ['.claude/skills/jira-scope/jira-cache.mjs', ...args], {
+  const res = run('node', [namerScript, ...args], {
     cwd: clone.path,
     timeoutMs: 20_000,
   });
@@ -265,6 +311,19 @@ export const planLinks = (
   created: string[] = [],
 ): Plan[] | Decline => {
   const plans: Plan[] = [];
+  /*
+   * `tracker.namerScript` is optional in the schema, so its absence is a normal decline rather
+   * than a crash -- the same fail-open contract as every other reason in this function. Nothing
+   * here reimplements the naming: where each file belongs is the named script's answer, and an
+   * untracked copy of it would drift the moment a branch changed the layout.
+   */
+  const namerScript = namerScriptOf(hangar);
+  if (namerScript === undefined) {
+    return decline(
+      hangar,
+      'this hangar declares no `tracker.namerScript`, so no file can be named',
+    );
+  }
   for (const trunkKey of invocation.keys) {
     const trunk = freshRecord(hangar, trunkKey, ttlMs);
     if (trunk === undefined)
@@ -287,7 +346,7 @@ export const planLinks = (
             'store or is older than the TTL',
         );
       }
-      const destination = destinationOf(clone, trunkKey, item, created);
+      const destination = destinationOf(clone, namerScript, trunkKey, item, created);
       if (destination === undefined) {
         return decline(
           hangar,
@@ -381,9 +440,19 @@ export const jiraHook = (hangar: Hangar | undefined, opts: JiraHookOptions): voi
     say('the payload carries no command');
     return;
   }
-  const invocation = parseSyncCommand(command);
+  /*
+   * No declared `tracker.syncScript` means there is no call shape to recognise, so this hook has
+   * nothing to do -- decline and exit 0, exactly as it does for a command it does not know.
+   */
+  const syncScript = syncScriptOf(hangar);
+  if (syncScript === undefined) {
+    say('this hangar declares no `tracker.syncScript`');
+    return;
+  }
+  const bypass = bypassEnvKey(hangar);
+  const invocation = parseSyncCommand(command, { syncScript, bypassEnvKey: bypass });
   if (invocation === undefined) {
-    say(`not a plain \`${SYNC_SCRIPT}\` call, or ${BYPASS} is set`);
+    say(`not a plain \`${scriptTail(syncScript)}\` call, or ${bypass} is set`);
     return;
   }
 
@@ -393,9 +462,20 @@ export const jiraHook = (hangar: Hangar | undefined, opts: JiraHookOptions): voi
     return;
   }
 
-  const minutes = Number.parseInt(opts.ttl ?? '60', 10);
+  /*
+   * `--ttl` OVERRIDES `tracker.cache.ttlMinutes`; it does not shadow it.
+   *
+   * Commander used to carry a `'60'` default on the flag and this line repeated it, which meant
+   * `opts.ttl` was never unset and the config value could not be reached even in principle.
+   * Nothing passes `--ttl` -- the hook every clone runs is a bare `hangar … jira hook` -- so the
+   * config value is what actually governs freshness now.
+   */
+  const declaredTtl = String(hangar.config.tracker.cache.ttlMinutes);
+  const minutes = Number.parseInt(opts.ttl ?? declaredTtl, 10);
   if (!Number.isFinite(minutes) || minutes <= 0) {
-    say(`--ttl ${opts.ttl ?? '(unset)'} is not a positive number of minutes`);
+    say(
+      `--ttl ${opts.ttl ?? `(unset, tracker.cache.ttlMinutes=${declaredTtl})`} is not a positive number of minutes`,
+    );
     return;
   }
 
@@ -452,6 +532,6 @@ export const jiraHook = (hangar: Hangar | undefined, opts: JiraHookOptions): voi
       `within ${String(minutes)} min — ${String(linked.length)} from the fleet's ticket record ` +
       `store, ${String(plans.length - linked.length)} already in this clone. Read them:\n${files}\n` +
       `Whether Jira changed since cannot be known without asking it. To fetch anyway, re-run ` +
-      `the same command with ${BYPASS}=1 in front of it.`,
+      `the same command with ${bypassEnvKey(hangar)}=1 in front of it.`,
   );
 };

@@ -116,9 +116,9 @@ attachment). Three things follow:
 **A ticket fetched in the last hour is not fetched again.** `hangar jira hook` is a
 `PreToolUse` hook, wired into each clone's untracked `.claude/settings.local.json` by absolute
 path (`doctor` checks it, `--fix` wires it). It reads the Bash command Claude Code is about to
-run; when every file a `jira-ticket-sync/sync.mjs` run would write is already on disk and inside
-the TTL, it hard-links from the record store whatever is missing and **denies** the command,
-telling the agent what it got instead. Five properties are the whole design:
+run; when every file a `tracker.syncScript` run would write is already on disk and inside the TTL,
+it hard-links from the record store whatever is missing and **denies** the command, telling the
+agent what it got instead. Five properties are the whole design:
 
 - **It fails open.** A flag it does not know, a frontmatter shape it cannot read, a record with
   no parsable timestamp, a shell construct in the tail — all exit silently and let the fetch
@@ -131,9 +131,10 @@ telling the agent what it got instead. Five properties are the whole design:
   empty, and absent is declined — reading it as "no neighbours" would turn a full sync into one
   linked file.
 - **It never reimplements the naming.** Where each file belongs comes from that clone's own
-  `jira-scope/jira-cache.mjs name`, one subprocess per file. `paths.mjs` calls itself the single
-  owner of every filename in that directory, it is tracked and branch-versioned, and an
-  untracked copy of `stemFor` here would drift the first time a branch changed a relation slug.
+  `tracker.namerScript`, one subprocess per file. In this hangar that is
+  `jira-scope/jira-cache.mjs name`; `paths.mjs` calls itself the single owner of every filename
+  in that directory, it is tracked and branch-versioned, and an untracked copy of `stemFor` here
+  would drift the first time a branch changed a relation slug.
 - **It never hands back a worse copy than the clone already has.** This is the case immediately
   after any real fetch: `sync.mjs` replaces the inode, so the clone holds the fresh copy while
   the store still holds the previous one until the next `tmp merge`. Linking then would put the
@@ -141,10 +142,39 @@ telling the agent what it got instead. Five properties are the whole design:
   `fetched_at:` is at least as fresh as the store record's is left exactly where it is and
   counted as satisfied — the file that run would have written is present and fresh, just not by
   way of the store.
-- **Whether Jira changed cannot be known without asking Jira**, so the TTL (`--ttl <minutes>`,
-  default 60) is the whole of the freshness guarantee. `JIRA_SYNC_NO_CACHE=1` in front of the
-  command bypasses the hook — an env var and not a flag, because `sync.mjs` dies on an unknown
-  flag.
+- **Whether Jira changed cannot be known without asking Jira**, so the TTL is the whole of the
+  freshness guarantee. It comes from `tracker.cache.ttlMinutes`, and `--ttl <minutes>` overrides
+  it. `<tracker.cache.bypassEnvKey>=1` in front of the command bypasses the hook — an env var and
+  not a flag, because the sync script dies on an unknown flag.
+
+## The four `tracker.*` keys this hook runs on, and what they do NOT make configurable
+
+`cache.bypassEnvKey`, `cache.ttlMinutes`, `syncScript` and `namerScript` are read from the
+config. All four were literals for a long time — `JIRA_SYNC_NO_CACHE`, 60, and this repo's two
+skill paths — beside a schema that declared every one of them. That is the same defect
+`forge.tokenEnvKey` turned out to be, and it fails the same way: **it is obeyed in the one hangar
+whose config happens to spell the same literal, and silently ignored everywhere else.**
+
+`bypassEnvKey` reached furthest, because the hangar-root `CLAUDE.md` is prepended to every clone
+session and tells agents that setting `tracker.cache.bypassEnvKey` in front of the command
+bypasses the cache. Its schema DEFAULT is `HANGAR_TRACKER_NO_CACHE`, so a hangar that omitted the
+key was told one name by `hangar config show` and obeyed another — a denial with no clue why.
+
+Two things stay fixed on purpose:
+
+- **The ARGV CONTRACT.** Whatever `syncScript` names is still invoked `<script> <KEY>… [flags]`
+  with `--no-relations`/`--no-assets`/`--quiet`/`--json` the only flags recognised, and whatever
+  `namerScript` names is still asked `name <TRUNK> [relation] [KEY]` and expected to print one
+  path. These keys make the PATHS configurable, not the interface. A script that answers
+  differently is not a plug-in replacement.
+- **No fallback when either is absent.** Both are optional in the schema, and an absent one is a
+  normal fail-open decline (`this hangar declares no tracker.syncScript`). Falling back to
+  `.claude/skills/…` would be the same literal `add-clone` used to carry for `forge.originUrl`,
+  where the fallback meant another hangar silently got this fleet's repo.
+
+The command is matched on the **last two segments** of the declared path, so `node
+.claude/skills/issue-sync/sync.mjs UI-42` and a bare `node issue-sync/sync.mjs UI-42` both hit —
+an agent types it both ways, and the fixed literal it replaced was a two-segment tail too.
 
 None of this needs anything from the clones. Their `.claude/` is shared with every other
 contributor and must work without this fleet, so the record store appears in no tracked file: the

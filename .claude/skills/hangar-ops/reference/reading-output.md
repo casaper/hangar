@@ -67,7 +67,15 @@ Each per-clone check is a **green `ok` line** or a **red failure**. A failure wh
 derivable from the clone index adds `` fixable with `hangar doctor --fix` ``; a failure without that
 line cannot be repaired automatically and needs a human decision. The footer counts the problems.
 
-Three things to say correctly when you relay a report:
+Four things to say correctly when you relay a report:
+
+- **`settings targets` and `settings.local.json` are not the same question, so they can disagree
+  and neither is wrong.** `settings targets` asks only whether the theme file and the statusline
+  script the clone NAMES are on disk; `settings.local.json` asks whether it names the ones this
+  hangar generates. A half-finished rename shows exactly that pair — a green `settings targets`
+  (the old artifact is still there) beside a red `settings.local.json` naming the statusline. Say
+  which of the two is red rather than "doctor contradicts itself"; the red one is the answer, and
+  `hangar doctor --fix` repairs it.
 
 - **`No problems in N clone(s)` describes what is on disk, not what the running sessions are
   using.** Claude Code reads `.claude/settings.local.json` and `CLAUDE.local.md` once at startup, so

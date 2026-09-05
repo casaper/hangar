@@ -3,10 +3,12 @@
     "allow": [
       "Bash(git status)",
       "Bash(curl -s -o /dev/null --max-time 3 http://localhost:9999)",
+      "Read(%HANGAR%/**)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" --max-time 20 https://local.example.invalid:4250/app/healthz)"
     ],
     "deny": [
-      "Read(./.env)"
+      "Read(./.env)",
+      "Read(%HANGAR%/.env.vsfix-shared)"
     ]
   },
   "hooks": {
@@ -43,5 +45,10 @@
       }
     ]
   },
-  "theme": "custom:vsfix-clone-0002-yellow"
+  "theme": "custom:vsfix-clone-0002-yellow",
+  "statusLine": {
+    "type": "command",
+    "command": "%HOME%/.claude/vsfix-clone-statusline.sh"
+  },
+  "autoMemoryDirectory": "%HOME%/.claude/vsfix-memory"
 }

@@ -410,7 +410,9 @@ const jira = program
 jira
   .command('hook')
   .description('PreToolUse hook: serve a cached ticket from the record store instead of fetching')
-  .option('--ttl <minutes>', 'how old a stored record may be and still be served', '60')
+  // No commander default: an unset flag has to fall through to `tracker.cache.ttlMinutes`, and
+  // a default here made `opts.ttl` permanently set, so the config value was unreachable.
+  .option('--ttl <minutes>', 'how old a stored record may be and still be served')
   .option('-n, --dry-run', 'decide without making any link')
   .option(
     '--explain',

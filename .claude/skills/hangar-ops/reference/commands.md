@@ -35,7 +35,7 @@ Global: `--hangar <path>` (the hangar root to operate on; **only `config show` a
 | `config show` | — | — | report |
 | `config validate` | — | — | report (also compares `hangar.config.example.yaml` with the live file when both declare the same `id`) |
 | `config schema` | — | `--check` · `--out <path>` | act (writes `hangar.schema.json`; `--check` is the read-only form) |
-| `jira hook` | — | `--ttl <minutes>` (default `60`) · `-n, --dry-run` · `--explain` | act (a `PreToolUse` hook; you do not call this by hand) |
+| `jira hook` | — | `--ttl <minutes>` (overrides `tracker.cache.ttlMinutes`, which is the default) · `-n, --dry-run` · `--explain` | act (a `PreToolUse` hook; you do not call this by hand) |
 | `plans collect` | — | `-n, --dry-run` · `-q, --quiet` · `--no-transcript-scan` · `--in-use-window <minutes>` | act (runs from each clone's `SessionEnd` hook) |
 | `plans stamp` | — | `-n, --dry-run` · `--no-transcript-scan` · `--in-use-window <minutes>` | act |
 | `tmp merge` | — | `-n, --dry-run` · `-q, --quiet` | act (runs from each clone's `SessionEnd` hook) |

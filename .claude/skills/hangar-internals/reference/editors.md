@@ -67,7 +67,8 @@ caveat:
   first and depend on all of them. And an editor the developer named by running
   `hangar ide <kind> sync` is not a bystander: its failure is the answer to that command.
 
-What this was checked with, since there is no test suite: `kinds` set to all seven families at
+What this was checked with, since the seed suite covers the pure core and reaches none of this:
+`kinds` set to all seven families at
 once (`doctor` printed seven honest rows, no throw), VS Code placed **third** in that list (its
 row still green), and `zedDriver` temporarily made to throw at construction — `doctor` reported
 `the zed editor driver would not build: …` and VS Code's row survived, while `hangar ide zed sync`

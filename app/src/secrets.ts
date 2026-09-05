@@ -128,7 +128,7 @@ export const hangarOwnSecretVariables = (facts: {
     ? [
         {
           name: facts.forgeTokenEnvKey ?? DEFAULT_BITBUCKET_TOKEN_ENV_KEY,
-          why: 'lets `sync` ask Bitbucket which branch a pull request targets; without it the target is a guess',
+          why: 'lets `sync` ask Bitbucket which branch a pull request targets; without it the target is a guess. An ACCESS TOKEN (repo/project/workspace, `pullrequest:read`) — the adapter sends `Authorization: Bearer`, which an App Password cannot satisfy',
           optional: true,
         },
       ]
@@ -142,7 +142,7 @@ export const hangarOwnSecretVariables = (facts: {
         },
         {
           name: 'ATLASSIAN_API_TOKEN',
-          why: 'the Jira API token; a ticket fetch fails without it',
+          why: 'the Jira API token; a ticket fetch fails without it. Made at id.atlassian.com/manage-profile/security/api-tokens, paired with the email above',
           optional: true,
         },
       ]

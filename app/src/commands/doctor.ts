@@ -39,6 +39,8 @@ import {
   settingsContentFor,
   settingsPath,
   healthCheckAllows,
+  hangarRootAllow,
+  secretsDeny,
   workspacePaths,
   workspaceContent,
   workspacePath,
@@ -408,14 +410,47 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
         ? 'the theme and statusline it names are both on disk'
         : `${unresolved.join('; ')} — Claude Code fails both SILENTLY; run \`hangar colours sync\``,
   });
+  /*
+   * The DERIVED half of the settings file, all of it -- not just the two keys that used to be
+   * checked here.
+   *
+   * `theme` and the health-check allows were held; `statusLine`, `autoMemoryDirectory`, the
+   * hangar-root read allow and the shared-secrets deny were not, and the check above only asks
+   * whether the statusline PATH exists. That combination is green for a fleet whose clones name
+   * a previous hangar id: after `<id>-clone-…` replaced `dvb-clone-…` here, four clones went on
+   * pointing at `~/.claude/dvb-clone-statusline.sh` (still on disk, so the existence check
+   * passed) and `~/.claude/dvb-gn-memory`, which quietly split the fleet's ONE shared memory
+   * directory in two while this command reported no problems at all.
+   *
+   * The deny is the one with teeth. It is an absolute path at the secrets file, and it sits
+   * beside an allow for `Read(<hangar root>/**)` -- so a hangar whose root or `secrets.file`
+   * moved leaves every clone denying a path that is not there any more and allowing a read of
+   * the one that is. There is no reason for that to be discovered later than the rename.
+   *
+   * All of it repairs through the existing hook below: `settingsContentFor` now reapplies the
+   * derived half over the file's own personal half, so widening the builder widened `--fix`.
+   */
   const wantAllows = healthCheckAllows(clone);
   const themeOk = settings?.theme === wantTheme;
   const allow = settings?.permissions?.allow ?? [];
   const missingAllows = wantAllows.filter((want) => !allow.includes(want));
   const allowOk = missingAllows.length === 0;
+  const wantStatus = clone.hangar.paths.statuslineScript;
+  const rawStatus = (settings?.['statusLine'] as { command?: unknown } | undefined)?.command;
+  const haveStatus = typeof rawStatus === 'string' ? rawStatus : undefined;
+  const statusOk = haveStatus === wantStatus;
+  const wantMemory = clone.hangar.paths.memory;
+  const rawMemory = settings?.['autoMemoryDirectory'];
+  const haveMemory = typeof rawMemory === 'string' ? rawMemory : undefined;
+  const memoryOk = haveMemory === wantMemory;
+  const wantRootAllow = hangarRootAllow(clone.hangar);
+  const rootAllowOk = allow.includes(wantRootAllow);
+  const wantDeny = secretsDeny(clone.hangar);
+  const denyOk = (settings?.permissions?.deny ?? []).includes(wantDeny);
   checks.push({
     name: 'settings.local.json',
-    ok: settings !== undefined && themeOk && allowOk,
+    ok:
+      settings !== undefined && themeOk && allowOk && statusOk && memoryOk && rootAllowOk && denyOk,
     detail:
       settings === undefined
         ? 'missing or unparseable'
@@ -424,6 +459,16 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
             allowOk
               ? undefined
               : `health check missing or aimed elsewhere: ${missingAllows.join('; ')}`,
+            statusOk
+              ? undefined
+              : `statusLine is ${haveStatus === undefined ? 'unset' : tildify(haveStatus)}, expected ${tildify(wantStatus)}`,
+            memoryOk
+              ? undefined
+              : `autoMemoryDirectory is ${haveMemory === undefined ? 'unset' : tildify(haveMemory)}, expected ${tildify(wantMemory)} — this clone's memory is not the fleet's`,
+            rootAllowOk ? undefined : `no read allow for the hangar root (${wantRootAllow})`,
+            denyOk
+              ? undefined
+              : `the shared secrets are not denied (${wantDeny}) — and ${wantRootAllow} would reach them`,
           ]
             .filter((x) => x !== undefined)
             .join('; ') || `${wantTheme}, ${String(wantAllows.length)} health check(s)`,

@@ -145,6 +145,15 @@ forge:
 
   # Which environment variable holds the API token, read from `secrets.file`. Never the token
   # itself: this file is committed, and that one is mode 600 and outside every clone.
+  #
+  # WHICH KIND of credential matters and is not something `doctor` can check for you. The
+  # bitbucketCloud adapter sends `Authorization: Bearer <token>`, so this has to be a Bitbucket
+  # ACCESS TOKEN -- repository, project or workspace scoped, with at least `pullrequest:read`.
+  # An App Password is Basic auth only and 401s under Bearer. Both look identical from up here:
+  # `doctor` reports set / empty / absent and never calls the API, so the wrong kind reads as
+  # configured right up until your first `sync`, which is also the moment it has just stashed
+  # your tree. `sync` does name the status it got back, so the answer is in that run.
+  # Repository settings -> Security -> Access tokens (or the workspace equivalent).
   tokenEnvKey: BITBUCKET_TOKEN
 
 # --------------------------------------------------------------------------------------------
@@ -455,9 +464,16 @@ editor:
   #   launcher: /Applications/Eclipse.app/Contents/MacOS/eclipse
 
   # The VS Code workspace file, one per clone. Default '{id}_{index2}.code-workspace'.
-  workspaceFileName: 'dvb_gn_{index2}.code-workspace'
+  #
+  # Use `{id}`, not the id spelt out. Both of these named `dvb_gn` literally for a while, which
+  # is inert here and wrong the moment somebody copies this file and changes `id` -- the README
+  # tells them to do exactly that when a second hangar on the machine already has the name, and
+  # then every workspace file and every VS Code folder label still says `dvb_gn`. Nothing
+  # complains either: `config validate`'s example-vs-live comparison is gated on the two files
+  # sharing an `id`, so changing it is also the moment that check goes quiet.
+  workspaceFileName: '{id}_{index2}.code-workspace'
   # The folder label inside it. Default '{index}: {id}'.
-  workspaceFolderLabel: '{index}: dvb_gn'
+  workspaceFolderLabel: '{index}: {id}'
   # Which directories of the clone get a copy. Two here, because VS Code only offers a
   # `*.code-workspace` from the directory you OPENED, and this repo is opened at both its root
   # and at `angular/`. Default: ['.'].

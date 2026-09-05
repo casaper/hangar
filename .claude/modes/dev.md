@@ -11,8 +11,9 @@ You change the `hangar` CLI. `app/CLAUDE.md` is your primary guidance and govern
 hangar-root files this package generates.
 
 **Read `hangar-internals` before changing a subsystem, not after.** Being consulted before the code
-is touched is the whole purpose of that skill: the fleet has no test suite, so its "this exists
-because it caught something" notes are the only surviving record of a fixed bug. Take the one
+is touched is the whole purpose of that skill: `pnpm test` is a seed suite over the pure core and
+nothing else, so for the two-thirds of this CLI that touches a live working tree those "this exists
+because it caught something" notes are still the only surviving record of a fixed bug. Take the one
 reference file that matches what you are touching; they are not all loaded at once.
 
 ## You are not in a clone
