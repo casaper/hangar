@@ -99,18 +99,32 @@ stale on the next commit and nothing checks it, so run `wc -l` when you want one
 | generators            | `generate/` — `terminal-sh.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                                                                                                                                                                                                                          |
 | editor drivers        | `editor/` — `vscode.ts`, `jetbrains.ts`, `index.ts`, `kinds.ts`, `types.ts`, `launch-only.ts`, `emacs.ts`, `vim.ts`, `zed.ts`                                                                                                                                                                                                                                                                                                        |
 | terminal drivers      | `terminal/` — `apple-terminal.ts`, `konsole.ts`, `iterm2.ts`, `index.ts`, `types.ts`, `gnome-terminal.ts`, `applescript.ts`, `none.ts`                                                                                                                                                                                                                                                                                               |
+| platform              | `platform/` — `darwin.ts`, `linux.ts`, `index.ts`, `types.ts`                                                                                                                                                                                                                                                                                                                                                                        |
 | git / forge / tracker | `git.ts`, `bitbucket.ts`, `jira-records.ts`, `jira.ts`                                                                                                                                                                                                                                                                                                                                                                               |
 | fleet                 | `fleet.ts` — clone discovery, and everything per-clone derived from the index                                                                                                                                                                                                                                                                                                                                                        |
 | shared                | `dedupe.ts`, `claude-sessions.ts`, `resolve-conflicts.ts`, `procs.ts`, `plans.ts`, `environment.ts`, `install.ts`, `tui.ts`, `palette.ts`, `tmp.ts`, `sessions.ts`, `adopt.ts`, `ui.ts`, `hangar.ts`, `user-paths.ts`, `template.ts`, `exec.ts`                                                                                                                                                                                      |
 
-**Four seams**, each a capability record plus a driver interface rather than a pretence that the
+**Five seams**, each a capability record plus a driver interface rather than a pretence that the
 implementations are equivalent. Adding a kind means implementing the interface and registering it;
 callers degrade one capability at a time instead of branching on a product name:
 
 - `editor/types.ts` — `EditorCapabilities` / `EditorDriver`; registered in `editor/kinds.ts`
 - `terminal/types.ts` — `TerminalCapabilities` / `TerminalDriver`; registered in `terminal/index.ts`
+- `platform/types.ts` — `PlatformCapabilities` / `PlatformDriver`; registered in
+  `platform/index.ts`. The only one **not** overridable by config: `editor.kinds` and
+  `terminal.kind` name a preference, this names a fact
 - `generate/index.ts` — every generated artifact is a pure function of the clone plus a path
 - `fleet.ts` — clone discovery is filesystem-only; there is no list of clones in any file
+
+The platform seam arrived last, and the reason is worth keeping: this fleet runs on macOS, so
+every platform difference here was invisible until the tool was published for someone else to
+run. Three were already in the code, written as if `darwin` were the only case — and none of
+them **failed**. `vscodeWindowState` returned a plausible path under a `~/Library` that is not
+there, the read threw, the catch said "no opinion", and `hangar open` opened a second window on
+a workspace that was already open. That is how two Claude Code sessions end up in one clone.
+`hangar-internals/reference/terminal-and-sessions.md` has the capability table, the two Linux
+fixes with no seam of their own, and the one open question the seam does **not** answer: whether
+`ps` under procps reports a Claude Code process as `claude` at all.
 
 One thing in here is known and deliberate rather than waiting to be found:
 `resolve-conflicts.ts` reads `ORCH_UTIL_RESOLVE_TIMEOUT_MS`, the last `ORCH_UTIL_` name left in

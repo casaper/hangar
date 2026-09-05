@@ -75,6 +75,18 @@ raised, which is the intended asymmetry. The live VS Code path: `openWorkspaceFi
 clone_03's already-open workspace and `launch` returned `reused: true`, so it focused that window
 instead of opening a second one on the identical twin.
 
+**The window-state file that makes `openWorkspaceFile` work is platform-specific, and moved onto
+the platform seam at F11.** It is `~/Library/Application Support/<stateDir>/User/globalStorage/
+storage.json` on macOS and `~/.config/<stateDir>/User/globalStorage/storage.json` on Linux — only
+the config directory differs, which is exactly what `PlatformDriver.machineConfigDir` carries.
+Written for macOS it does not fail elsewhere: it returns a plausible path, the read throws, the
+catch reports "no opinion", and `open` opens a **second** window on a workspace that was already
+open — the duplicate this whole mechanism exists to prevent, and the way two Claude Code sessions
+end up in one clone. It now returns `undefined` on a platform whose location is unknown, so the
+caller gets a nullable rather than a wrong path. `<stateDir>` still matters as much as ever: every
+fork has its own (`Code`, `Cursor`, `Windsurf`, `Code - Insiders`), and reading the wrong one
+answers about a different application's windows.
+
 `doctor`'s editor row names the two things that differ **between** these editors, both the
 editor's doing: who works out which window already has the clone open (`focus-existing` when
 Hangar must, `self-deduping` when the editor does, `a terminal tab` for terminal vim, which is not

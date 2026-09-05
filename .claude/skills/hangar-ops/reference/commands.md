@@ -83,6 +83,21 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   runs comes from `repo.install[]`, and this repo's step is `npm ci` — which DELETES
   `node_modules` before refetching it, so a clone with a dev server running loses it mid-request.
   `hangar install <clone> -n` prints every step without spawning anything.
+- **`doctor` prints two machine-level rows before the clones, and both are diagnostics rather
+  than passes.** `platform` names the OS and what it can do for Hangar, with a note per capability
+  it lacks; `claude sessions` says how many live sessions the detector found and how many
+  processes it looked at. **Zero sessions on a machine where Claude Code is running is a real
+  finding, not a quiet nothing** — it means `sync --all` will not skip busy clones and no
+  `SYNC PAUSE` can be delivered. When that happens the row names the command names that mention
+  `claude` anyway; report those, they are the whole diagnosis.
+- **`status`'s `servers` row now finds a server two ways** — a `*.pid` file, or something
+  listening on one of the clone's ports. A port-found server is shown as
+  `<role> (pid N, listening on P)`. `no pid file — ports not checked (no lsof)` is **not** "nothing
+  is running": it means `lsof` is missing, so nobody could ask. Install it.
+- **`remove-clone` refuses when `lsof` is missing and the clone has no pid file.** A guard that
+  could not run is not a guard that passed — without `lsof` nothing can tell whether the clone is
+  still serving. Check its ports by hand, or install `lsof`; `--force` overrides, and on a
+  `--delete` that is unrecoverable.
 - **`doctor` never runs an install step; it only checks the declaration.** A green install row
   means the directory exists and the manager's marker is there. A **dim** row (rather than green)
   means the manager leaves nothing inside the clone to look at — maven, go, cargo, pip, poetry,
