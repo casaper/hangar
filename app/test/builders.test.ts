@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { join } from 'node:path';
+
 import {
   claudeLocalMdContent,
   cloneSymlinks,
   defaultSettings,
   envLocalContent,
+  envrcPrivateContent,
   excludeBlock,
   healthCheckAllows,
   settingsContentFor,
@@ -102,10 +105,31 @@ test('one health-check permission per role that declares one, anchored to its po
   assert.ok(!rendered.includes('3237'), 'clone 2 was allowed to curl clone 3');
 });
 
-test('defaultSettings builds a usable file with no sibling to copy from', () => {
-  // The path `add-clone` takes for clone #1, which used to throw -- the only reason the README
-  // once told a stranger to create the first clone by hand.
-  const text = settingsContentFor(cloneAt(hangar(), 1), defaultSettings(cloneAt(hangar(), 1)));
+test('defaultSettings denies the secrets file and allows only its own clone', () => {
+  /*
+   * The path `add-clone` takes for clone #1, which used to throw -- the only reason the README
+   * once told a stranger to create the first clone by hand. Asserting it parses would pass for
+   * `{}`, so what is checked is the two entries that actually do something:
+   *
+   * - the DENY on the hangar's secrets file. It is the one line keeping a clone session from
+   *   reading every credential the fleet has, and it must name the CONFIGURED file rather than
+   *   `.env.shared`, which is only the default.
+   * - the allow scoped to this hangar's root, so a session cannot read a second hangar's tree.
+   */
+  const clone = cloneAt(hangar(), 1);
+  const settings = defaultSettings(clone);
+  const permissions = settings.permissions;
+  assert.ok(permissions !== undefined, 'defaultSettings produced no permissions block');
+  assert.deepEqual(permissions.deny, ['Read(/wt/.env.fixture-shared)']);
+  // Exactly these, and nothing else. A permission list is a security boundary, so "contains" is
+  // the wrong assertion: an entry that appeared here without anyone deciding to add it is the
+  // failure, and only an exhaustive comparison catches that.
+  assert.deepEqual(permissions.allow, [
+    'Read(/wt/**)',
+    'Bash(curl -s -o /dev/null -w "%{http_code}" --max-time 7 http://localhost:3037/ready)',
+  ]);
+
+  const text = settingsContentFor(clone, settings);
   const parsed: unknown = JSON.parse(text);
   assert.ok(typeof parsed === 'object' && parsed !== null);
   assert.ok(namesNoMachinePath(text));
@@ -138,4 +162,24 @@ test('workspace files come from editor.workspaceDirs and workspaceFileName', () 
   // here -- rather than to the literal 2 its name suggests.
   assert.deepEqual(paths, ['/wt/wt-002/wt-002.fixture-workspace']);
   assert.ok(namesNoMachinePath(workspaceContent(clone)));
+});
+
+test('a hangar under $HOME is written as $HOME, not as a literal home path', () => {
+  /*
+   * The one place a builder reads the environment rather than the threaded hangar
+   * (`envSharedShellRef` in `clone-config.ts`), and so the one live subject
+   * `namesNoMachinePath` has -- every other test here passes it by construction, because a
+   * synthetic root cannot contain a home directory to leak.
+   *
+   * `$HOME` rather than `/Users/someone` is what lets the generated `.envrc.private` be read by
+   * a human without it looking like one machine's file, and it is what the existing clones
+   * already carry. A regression here is invisible: both forms work on the machine that wrote
+   * them.
+   */
+  const realHome = process.env['HOME'];
+  assert.ok(realHome !== undefined && realHome !== '', 'this test needs $HOME set');
+  const underHome = syntheticHangar({ root: join(realHome, 'synthetic-hangar') });
+  const text = envrcPrivateContent(underHome);
+  assert.match(text, /\$HOME\/synthetic-hangar\/\.env\.fixture-shared/);
+  assert.ok(!text.includes(realHome), 'the literal home path reached the generated file');
 });

@@ -54,10 +54,19 @@ export const syntheticHangar = (opts: SyntheticOptions = {}): Hangar => {
 /**
  * Nothing in `text` names this machine.
  *
- * Cheap, and it guards the one mistake that would make the whole suite pass here and fail
- * everywhere else: a builder reaching `homedir()` or the real hangar root through some path
- * that was not threaded. Checked against `/Users/` and `/home/` rather than the actual home
- * directory, so it catches a hardcoded path belonging to somebody else too.
+ * **Passing by construction is the point, and is also the limit of it.** Every value built from
+ * `syntheticHangar()` derives from `/wt` and `/synthetic-claude`, so there is no home directory
+ * available to leak -- this cannot fail today, and that is the state it exists to preserve. What
+ * it would catch is a builder wired to `homedir()` DIRECTLY instead of through the threaded
+ * hangar, which is the mistake that makes a whole suite pass here and fail everywhere else.
+ *
+ * The one builder that genuinely reads the environment (`envSharedShellRef`, which writes
+ * `$HOME/...` rather than a literal path) is covered on its own terms in `builders.test.ts`,
+ * against a hangar deliberately rooted under the real `$HOME` -- because this guard, by
+ * construction, could never reach it.
+ *
+ * Checked against `/Users/` and `/home/` rather than the actual home directory, so it catches a
+ * hardcoded path belonging to somebody else too.
  */
 export const namesNoMachinePath = (text: string): boolean =>
   !text.includes('/Users/') && !text.includes('/home/');

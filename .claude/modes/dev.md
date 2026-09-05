@@ -26,14 +26,20 @@ other agents' live working directories**, and reading them is fine while writing
 From `app/`, after any change:
 
 ```
-pnpm typecheck && pnpm lint && pnpm format:check
+pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 ```
 
-and, if you touched `config/schema.ts`, a fourth that nothing runs for you:
+and, if you touched `config/schema.ts`, a fifth that nothing runs for you:
 
 ```
 hangar config schema --check
 ```
+
+`pnpm test` is a **seed** suite over the pure core, not a safety net — it holds what a golden
+capture structurally cannot (two hangars in one process, input that is wrong rather than right,
+`pathsFor`'s purity) and asserts properties rather than expected text. A green run says nothing
+about the two-thirds of this CLI that touches a live working tree. `pnpm golden` is still the net
+for the builders, and `app/CLAUDE.md` draws the boundary.
 
 `app/**` is prettier-governed while the root `CLAUDE.md` and `.claude/**` are not, so a doc edit
 inside `app/` has to pass `format:check` and the same edit outside it does not.
