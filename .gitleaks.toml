@@ -1,0 +1,29 @@
+# gitleaks configuration for the hangar root.
+#
+# Two jobs: `pnpm scan:secrets` walks the whole history, and `app/.husky/pre-commit` scans what is
+# staged. Both read this file, so an allowlist entry added for one applies to the other.
+#
+# WHAT THIS DOES NOT COVER, measured rather than assumed. A canary of seven planted credentials was
+# scanned with the default rule set: it caught an Atlassian API token, an `ATBB` Bitbucket token,
+# an AWS access key id, a GitHub PAT and a quoted `db_password`, and it MISSED both plain
+# `USER_READWRITE_PASSWORD=<human-chosen value>` lines, because low entropy defeats
+# `generic-api-key`. That is one of this hangar's four real credentials and the exact shape a
+# person pastes. `app/dev/scrub-check.sh` carries the pattern for it; neither gate replaces the
+# other, and `app/CLAUDE.md` lists both.
+
+title = "hangar"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "pnpm's lockfile is base64 integrity hashes -- high entropy by construction, and no prose"
+paths = ['''app/pnpm-lock\.yaml$''']
+
+[[allowlists]]
+description = "the clones are separate repos with their own history; scanning them here says nothing about this one"
+paths = ['''^clone_''', '''node_modules''']
+
+[[allowlists]]
+description = "archived plans discuss auth mechanisms in prose (\"auth chain, CORS/Keycloak\"); they are also gitignored"
+paths = ['''^plans/''']

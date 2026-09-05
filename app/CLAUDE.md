@@ -40,8 +40,19 @@ which is the single source of truth for both the shell and CI. Run the CLI's own
 cd app && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 # pnpm lint:fix and pnpm format write; format:check is what a commit gate wants
 pnpm golden && git diff --exit-code dev/golden/gated   # the regression net; see below
-pnpm hooks   # ONCE per clone of this repo: installs the commit-msg hook. See Commit messages
+pnpm scan     # both hygiene gates; see **Nothing in here names one organisation**
+pnpm hooks    # ONCE per clone of this repo: installs the two git hooks. See Commit messages
 ```
+
+**`pnpm scan` is two gates and they are not interchangeable.** `scan:secrets` is gitleaks over the
+whole history; `scan:literals` is `dev/scrub-check.sh` over the tracked tree. The split is
+measured rather than stylistic: gitleaks was run against a canary of seven planted credentials and
+caught the Atlassian token, an `ATBB` Bitbucket token, an AWS key id, a GitHub PAT and a quoted
+`db_password` — and **missed both plain `USER_READWRITE_PASSWORD=<human-chosen value>` lines**,
+because low entropy defeats its `generic-api-key` rule. That is one of this hangar's four real
+credentials and the exact shape a person pastes, so `scrub-check.sh` carries the pattern for it.
+Both also run in `app/.husky/pre-commit` (on what is staged) and in the workflow's `scan` job,
+which `release` needs — the same fast-feedback-plus-enforcement shape as `commitlint`.
 
 `pnpm` is not assumed to be on PATH: it lives inside an fnm multishell and so moves when the Node
 version moves. The hangar root's `.envrc` activates it through `hangar_use_pnpm` (defined in
@@ -133,6 +144,41 @@ Both exist because they caught something, and both apply to every edit under `ap
   integration got committed is the one thing git cannot answer, so that one is carried, and a
   carried flag needs guarding for the paths that do nothing (`up-to-date` integrates nothing).
 
+## Nothing in here names one organisation
+
+Hangar manages any repo, but it was built in one, and a tool built inside a company tends to name
+it — a Bitbucket URL here, a Jira host there, a ticket key in a worked example, one machine's home
+directory in a tracked settings file. None of that is true of the next hangar, and all of it is
+somebody's business but the reader's. `pnpm scan:literals` is what keeps it out.
+
+The rule, and the two halves it splits into:
+
+- **A name that identifies a company, a repository, a ticket or a person does not belong in a
+  tracked file.** Worked examples still name something concrete, because a paragraph with
+  `<some file>` in it is a claim rather than evidence — they name `ABC-1323` and `storefront_ui`,
+  which are fictional and match `dev/fixture*.config.yaml`'s vocabulary (`acme`, `storefront_ui`,
+  `warehouse_sql`).
+- **The hangar id `dvb_gn` is deliberately NOT in that set.** It is an opaque slug naming no
+  organisation, and it is load-bearing outside this repo: `~/.claude/<id>-clone-statusline.sh`,
+  one theme file per clone, and the `hangar_dvb_gn_colour` shell function two hangars can both
+  source. Renaming it is a three-phase operation, not a find-and-replace.
+
+Two consequences worth knowing before editing the files they touch:
+
+- **`hangar.config.example.yaml` is a superset of the live config EXCEPT for five keys.**
+  `displayName`, `profile`, `forge.originUrl`, `forge.webBaseUrl` and `tracker.baseUrl` are
+  placeholders, and `configDrift` in `config/drift.ts` excludes exactly those from the
+  example-vs-live comparison. Everything else is still held equal — `forge.defaultBranch`
+  included, which is the line that comparison was written for after the pair silently drifted.
+- **`app/test/generic-text.test.ts`'s `THIS_REPOS_OWN` names `DN-`, the live config's
+  `keyPrefixes`, and that is the only place in this repo that may.** It is the guard asserting
+  those strings never reach text generated for another hangar, and a guard has to name what it
+  forbids. The **bare prefix** rather than a whole key, twice over: it forbids every ticket rather
+  than one, and a whole key is exactly what a bulk find-and-replace over the tree would rewrite —
+  leaving a guard that guards nothing while every check stays green. `dev/scrub-check.sh` writes
+  its own patterns as `datav[a]ult` and `__D[V]B_` for the same reason, and needs no allow-list at
+  all as a result.
+
 ## Commit messages
 
 **Every commit in this repo is a Conventional Commit, and a `commit-msg` hook enforces it.**
@@ -179,17 +225,24 @@ breaking by content — the `orch-util` → `hangar` rename, untracking files a 
 marking them would make semantic-release cut a 1.0.0. Versions move by patch and minor only until
 somebody decides otherwise, and that is a decision, not a commit message.
 
-### The hook, and why CI is the thing that actually enforces this
+### The hooks, and why CI is the thing that actually enforces this
 
-`pnpm hooks` installs it, once per clone of this repo, **by hand**. It cannot be automatic:
-`pnpm-workspace.yaml` sets `ignoreScripts: true`, so husky's `prepare` never runs on install. The
-hook itself lives at `app/.husky/commit-msg`, reaches `commitlint` by path rather than through
-`pnpm` (pnpm lives inside an fnm multishell and moves with the Node version, so a hook needing it
-fails in any shell direnv has not touched), and names `direnv allow` when it cannot find `node` —
-the same failure and the same fix `bin/hangar` already reports.
+`pnpm hooks` installs **both**, once per clone of this repo, **by hand**. It cannot be automatic:
+`pnpm-workspace.yaml` sets `ignoreScripts: true`, so husky's `prepare` never runs on install.
 
-So the hook is fast feedback for whoever installed it, and **`.github/workflows/release.yml`'s
-`commitlint` job is the enforcement**, because it does not depend on anyone having read this.
+- **`app/.husky/commit-msg`** reaches `commitlint` by path rather than through `pnpm` (pnpm lives
+  inside an fnm multishell and moves with the Node version, so a hook needing it fails in any
+  shell direnv has not touched), and names `direnv allow` when it cannot find `node` — the same
+  failure and the same fix `bin/hangar` already reports.
+- **`app/.husky/pre-commit`** runs the two hygiene gates on what is STAGED. It calls `gitleaks` by
+  NAME, and **skips with a message rather than failing when it is absent**: gitleaks is a per-
+  machine developer tool (`brew install gitleaks`), not a dependency of this package, and a
+  missing scanner must not block a commit. `scrub-check.sh` has no such dependency and always
+  runs. The workflow's `scan` job is where neither can be skipped.
+
+So the hooks are fast feedback for whoever installed them, and **`.github/workflows/release.yml`'s
+`commitlint` and `scan` jobs are the enforcement**, because they do not depend on anyone having
+read this. `release` needs both.
 
 **`hangar doctor` deliberately gets no row for `core.hooksPath`.** Every hangar root is a clone of
 this repo, but only a CLI developer ever commits in one — an operator's hangar would carry that
@@ -553,8 +606,8 @@ Five more root files are hand-maintained and belong to this package rather than 
   `resolveBrewPrefix` does the same three in the same order, deliberately. The probe is last and
   conditional in both: an Intel Mac without `brew shellenv` in its profile has the variable unset,
   and stopping at the default aborted the whole `.envrc` on a machine that has Homebrew.
-- **`bin/hangar-mode` plus `bin/hangar-ops` / `bin/hangar-dev`, and the five files in
-  `.claude/modes/`** — `ops.md`, `dev.md`, a `*.settings.json` beside each, and `statusline.sh`.
+- **`bin/hangar-mode` plus `bin/hangar-ops` / `bin/hangar-dev` / `bin/hangar-statusline`, and the
+  five files in `.claude/modes/`** — `ops.md`, `dev.md`, a `*.settings.json` beside each, and `statusline.sh`.
   A mode is `--settings` + `--append-system-prompt-file` + `-n`, read once at startup, and `dev`'s
   working directory is `app/` so that THIS file is loaded from its first turn. **`statusline.sh`
   badges the window `OPS` / `DEV` / a red `NO MODE`**, taking the mode from its own argv or
@@ -562,13 +615,18 @@ Five more root files are hand-maintained and belong to this package rather than 
   it would reach every shell in the hangar and make the badge meaningless.
   **The launchers are scripts in `bin/` and cannot be shell functions in `.envrc.hangar`**:
   direnv exports an environment diff, and a function is not an environment variable —
-  `PATH_add bin` is what actually reaches the shell. All five are **hand-maintained, so they add
+  `PATH_add bin` is what actually reaches the shell. That same `PATH_add` is why the two settings
+  files say **`hangar-statusline <mode>` rather than an absolute path**: a tracked file cannot name
+  one machine's home directory, and a session running in a mode is proof direnv loaded, because the
+  launcher it started from was found the same way. All five are **hand-maintained, so they add
   no row to the derivation table above and need no `--check`** — nothing derives them from
   `app/src/**`. Operator mode is denied writes to `app/**`, `.claude/skills/**` and
   `.claude/modes/**`, which means **developer mode is the only one that can improve operator
   mode's instructions**; that asymmetry is the reason the pair exists.
   `hangar-internals/reference/modes.md` has the rationale, including why the root `CLAUDE.md`
-  cannot be suppressed for either of them and four probes that answered wrongly.
+  cannot be suppressed for either of them, four probes that answered wrongly, and two more that
+  could not answer at all — the status line does not run under `claude -p`, and
+  `$CLAUDE_PROJECT_DIR` is not exported to tool subprocesses.
 - **`.nvmrc` and `app/.nvmrc`** are a pair, both `24`. Move them together.
 - **`.claude/skills/**` is tracked, and both skills are artifacts of this package.** A command
   whose flags change is a `hangar-ops/reference/commands.md` edit; a design decision that changes

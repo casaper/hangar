@@ -1,0 +1,16 @@
+# Two hygiene gates, on what is STAGED. Rationale and the measured coverage split: app/CLAUDE.md.
+#
+# Hooks run with the working directory at the GIT ROOT, so every path here is root-relative.
+#
+# gitleaks is called by name, not by path: it is a developer tool installed per machine
+# (`brew install gitleaks`), not a dependency of this package. When it is absent the hook SAYS SO
+# and continues rather than failing -- a missing scanner must not block a commit on a machine that
+# never installed it, and `.github/workflows/release.yml` runs the same scan where it cannot be
+# skipped. The literal scan below has no such dependency and always runs.
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git . --config .gitleaks.toml --staged --no-banner --redact || exit 1
+else
+  echo "hangar: gitleaks not installed -- staged secret scan SKIPPED (brew install gitleaks)" >&2
+fi
+
+exec sh app/dev/scrub-check.sh

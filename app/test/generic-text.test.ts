@@ -16,20 +16,26 @@ import { syntheticHangar } from './fixture.ts';
  *
  * This is the one property a golden capture could express and structurally did not: for most of
  * this CLI's life the gated baseline included a capture of the maintainer's own hangar, where
- * `node dev/ports.mjs`, `clone_NN/` and `tmp/ABC-1234/...` are all correct -- so six hardcoded
- * literals sat in files that are written into every clone of EVERY hangar, each one reading as
- * derived output because it was surrounded by derived output. They were found by pointing a
- * second fixture at a config that disagrees, which is what the assertions below do directly.
+ * `node dev/ports.mjs`, `clone_NN/` and this fleet's own ticket keys are all correct -- so six
+ * hardcoded literals sat in files that are written into every clone of EVERY hangar, each one
+ * reading as derived output because it was surrounded by derived output. They were found by
+ * pointing a second fixture at a config that disagrees, which is what the assertions below do.
  *
  * The list is deliberately literal rather than a pattern. A regex for "looks like this fleet"
  * would need updating to stay true; these six strings are facts about one repo and will never
  * legitimately appear in text rendered for another.
+ *
+ * `DN-` is the live config's `keyPrefixes`, and the ONLY place in this repo allowed to name it.
+ * It is the bare prefix rather than a whole key on purpose, twice over: it forbids every ticket
+ * rather than one, and a whole key is exactly what a bulk find-and-replace over the tree would
+ * rewrite -- silently turning the guard into one that guards nothing while this suite still
+ * passes. `dev/scrub-check.sh` writes its own patterns the same way, for the same reason.
  */
 const THIS_REPOS_OWN = [
   'dev/ports.mjs',
   'clone_NN',
   'clone_0',
-  'ABC-1234',
+  'DN-',
   '.env.local',
   'angular/',
 ] as const;
