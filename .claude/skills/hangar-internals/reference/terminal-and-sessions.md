@@ -71,6 +71,13 @@ Both halves, not one: a listener answers *is this clone serving*, a pid file ans
 called and how do I stop it*, and only the pid file survives a server on a port this hangar never
 assigned. A pid file wins when both name the same process.
 
+**Both of `remove-clone`'s guards depend on `lsof`, and only one of them says so.** The server
+guard reports `portsChecked: false` and blocks. The SESSION guard cannot: `claudeSessionsIn` needs
+`cwdsOf` to attribute a pid to a clone, so without `lsof` it simply returns an empty list and
+passes quietly. The deletion is still blocked — by the server guard, which fires on the same
+missing tool — so nothing gets through; but do not read a passing session guard on a machine
+without `lsof` as evidence that no session is running.
+
 **`ServerScan.portsChecked` is why this is a record and not an array.** "Nothing is running" and
 "nobody could ask" are the same empty list, and `remove-clone` turns the first into a deletion —
 so a missing `lsof` is reported as its own guard rather than passing quietly. `lsof` is a
@@ -153,6 +160,18 @@ multiplexer, and a `SYNC PAUSE` typed into whichever pane happened to be showing
 one holding the session. tmux is also first in `PROBE_ORDER` on both platforms, kept honest by an
 `isAvailable` that demands a running **server** and not just the binary: windows in a session
 nobody is attached to are `open` succeeding while the developer sees nothing.
+
+**`isAvailable` demands an ATTACHED CLIENT, not just a running server**, and that distinction is
+the whole check. A leftover detached session — started for something else and abandoned — makes a
+server-only test answer "available", and this driver is probed first on both platforms. `hangar
+open` from somewhere the environment cannot identify (VS Code's integrated terminal, a hook, a
+`claude -p` child) would then create a session nobody is looking at, `switch-client` would fail
+with `no current client`, and `open` would report success while the developer saw nothing —
+precisely the failure the check exists to prevent, through the one condition an earlier version of
+it did not test. `list-clients` exits 0 with **empty output** when nothing is attached, so the
+output is the answer and not the exit code; both directions were verified here. Tightening it
+cannot break the case tmux exists for: running inside tmux sets `$TMUX`, which `resolveTerminal`
+answers from the environment and never consults `isAvailable` for.
 
 **No fleet session yet means a DETACHED one plus `switch-client`.** Detached is the only kind a
 subprocess can create — tmux attaches *clients*, and `hangar` is not one — and `switch-client`

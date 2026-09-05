@@ -104,8 +104,9 @@ const driverFor = (kind: TerminalKind, hangarId: string): TerminalDriver => {
  * that means "is it running", since AppleScript cannot address an application that is not, and
  * for the Linux ones "is it installed", since both start on demand.
  *
- * **tmux is first on both**, and only its `isAvailable` keeps that honest: it demands a running
- * SERVER, not just the binary. A tmux session is a tmux session whichever emulator is drawing it,
+ * **tmux is first on both**, and only its `isAvailable` keeps that honest: it demands an ATTACHED
+ * CLIENT, not just the binary and not just a running server. A leftover detached session would
+ * otherwise win this probe and `open` would create windows nobody is looking at. A tmux session is a tmux session whichever emulator is drawing it,
  * and driving the emulator instead would open a tab beside the multiplexer rather than a window
  * inside it. Reaching this probe at all means `$TMUX` was unset -- so this is the case where the
  * developer keeps a tmux server but ran `hangar` from somewhere outside it (a hook, a `claude -p`

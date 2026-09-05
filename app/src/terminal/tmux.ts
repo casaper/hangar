@@ -301,14 +301,32 @@ export const tmuxDriver = (hangarId: string): TerminalDriver => {
       // the shell at all, which today is Terminal.app alone.
       paintOnCreate: false,
     },
-    // Two questions in one: is tmux installed, and is there a server to talk to. A tmux with no
-    // server can still start one, but every window it created would be in a session nobody is
-    // attached to -- which is `open` succeeding and the developer seeing nothing.
-    isAvailable: () =>
-      run('sh', ['-c', 'command -v tmux >/dev/null 2>&1']).ok && tmux(['list-sessions']).ok,
+    /*
+     * Installed, AND with a client actually attached. The second half is the whole check.
+     *
+     * A running server is not enough: a leftover DETACHED session -- started for something else
+     * and abandoned -- makes tmux answer "available", and this driver is probed first on both
+     * platforms. `hangar open` from somewhere the environment cannot identify (VS Code's
+     * integrated terminal, a hook, a `claude -p` child) would then create a session nobody is
+     * looking at, `switch-client` would fail with `no current client`, and `open` would report
+     * success while the developer saw nothing. That is exactly the failure this check exists to
+     * prevent, arriving through the one condition an earlier version of it did not test.
+     *
+     * `list-clients` exits 0 with EMPTY output when nothing is attached, so the exit code is not
+     * the answer -- the output is. Verified both ways here.
+     *
+     * Tightening this cannot break the case tmux exists for: running inside tmux sets `$TMUX`,
+     * which `resolveTerminal` answers from the environment (`source: 'env'`) without ever
+     * consulting `isAvailable`.
+     */
+    isAvailable: () => {
+      if (!run('sh', ['-c', 'command -v tmux >/dev/null 2>&1']).ok) return false;
+      const clients = tmux(['list-clients']);
+      return clients.ok && clients.out !== '';
+    },
     unavailableHint: () =>
-      'tmux is not on PATH, or no tmux server is running. Start one (`tmux`) and run this from ' +
-      'inside it, or set `terminal.kind` in hangar.config.yaml.',
+      'tmux is not on PATH, or no tmux client is attached to a session. Start one (`tmux`) and ' +
+      'run this from inside it, or set `terminal.kind` in hangar.config.yaml.',
     windows: readWindows,
     openTabs,
     select,

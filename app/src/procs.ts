@@ -44,14 +44,15 @@ const ETIME_RE = /^((?:\d+-)?(?:\d+:)?\d+:\d\d)\s+(.*)$/;
 /**
  * The no-tty marker, which is spelled DIFFERENTLY by the two `ps` implementations.
  *
- * BSD `ps` (macOS) prints `??`; procps (Linux) prints `?`. The check used to be `=== '??'`
+ * Two values and no more: every other spelling would be a guess. BSD `ps` (macOS) prints `??`;
+ * procps (Linux) prints `?`. The check used to be `=== '??'`
  * alone, so on Linux every process without a controlling terminal came back with the tty
  * literally named `?` -- which is not "no tty", it is a tty that does not exist. `status` would
  * print `on ?`, and `sync` would try to deliver `SYNC PAUSE` to `/dev/?`. Verified for `??` on
  * this machine; the `?` half is from procps's documented output and is the one thing here a
  * first Linux run should confirm.
  */
-const isNoTty = (field: string): boolean => field === '??' || field === '?' || field === '-';
+const isNoTty = (field: string): boolean => field === '??' || field === '?';
 
 const parseEtime = (etime: string): number | undefined => {
   const dash = etime.indexOf('-');
