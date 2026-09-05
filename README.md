@@ -337,6 +337,54 @@ keys in both directions, theme and statusline naming, the forge and tracker iden
 clone of a fresh hangar, and which hangar a command acts on (`--hangar`, then the walk up from
 your working directory, then `HANGAR_ROOT`).
 
+**A second walk of that first day, on a real clone of this repo, found five more — all now
+fixed.** Four of them shared one cause: `hangar setup` was the sole gate for both the machine's
+tooling check and the shared secrets file, and the fastest way in for somebody joining a
+configured fleet ("copy the example and stop") routes around `setup` entirely.
+
+- **`hangar doctor --all --fix` stopped at the first clone.** The declared symlink points at the
+  shared secrets file, `realpathSync` throws on a link whose target does not exist yet, and a
+  correct link was therefore reported as a wrong one — after which the repair refused, and
+  refusing threw out of the per-clone loop. Every remaining clone's ports, hooks, remotes and
+  theme went unvisited with nothing saying so, and deleting the link and re-running was a closed
+  loop. A link is now judged on where it points, and one failed repair no longer ends the run.
+- **Nothing but `setup` ever created the secrets file.** `doctor` now reports its absence and
+  `--fix` creates the commented-out scaffold. Clones load it with `dotenv_if_exists`, so an
+  absent one loaded nothing and said nothing.
+- **`doctor` was silent about three of the four credentials this fleet uses.** The forge token
+  and the Atlassian pair are now derived from `forge` and `tracker` instead of waiting to be
+  declared — and `forge.tokenEnvKey`, which turned out to be a config key nothing read, is now
+  honoured by the adapter that reads the token.
+- **The tooling check ran only in `setup`.** `doctor` prints it too, one green line or a named
+  list. Its Homebrew probe now asks `brew --prefix`, so an Intel Mac without `brew shellenv` in
+  its profile is no longer told it has no Homebrew.
+- **A copied config declared eight VS Code path rewrites for a file no clone had.**
+  `.vscode/settings.json` is untracked, so a fresh fleet has none of it and `ide vscode sync` has
+  nothing to seed from — leaving the keys correctly declared and completely inert, with every
+  symptom appearing inside the editor. `doctor` now says so. Nothing generates that file: its
+  contents are yours.
+
+**And five more from the same walk, further from the first day but found on it:**
+
+- **`doctor`'s summary counted only the clones.** A hangar with none yet printed five warnings
+  and closed with `No problems in 0 clone(s).` It now counts both halves and says which is which.
+  The exit code is still 0 — in this CLI a `--check` flag is the gate and a report is a report —
+  so read the summary line, never `$?`.
+- **`open` had no `-n` while this file said three commands lacked one.** It has one now, which
+  matters more than the omission looked: `open --all` fetches and moves a branch in every clone,
+  and `--no-checkout` is a way to not do that rather than a way to see it first.
+- **`.envrc.hangar` could not find Homebrew on an Intel Mac.** `brew shellenv` exports
+  `HOMEBREW_PREFIX` and is in the Apple-silicon install instructions but not the older Intel one,
+  so a machine with Homebrew at `/usr/local` aborted `direnv allow` with "requires Homebrew". It
+  asks `brew --prefix` now, last and only when the default is absent.
+- **`doctor`'s terminal-hook row matched a bare filename.** `clone-terminal.sh` is the same name
+  in every hangar, so a second hangar reported the hook sourced on the strength of the first
+  one's line in `.zshrc` while its own colours did nothing.
+- **The two mode settings files still need a hand edit, and now say what it costs.** `doctor`
+  prints the exact shell line instead of prose, and says out loud that the change stays modified
+  in `git status` and conflicts on a pull — because those files are tracked on purpose and there
+  will never be a `--fix` for them.
+
 Two things that were true of the *documentation* rather than the code have also been closed, and
 both were found by walking a colleague's first day end to end. The example config had drifted
 from the live one by one line — `forge.defaultBranch`, `main` against `master` — which pointed
@@ -354,8 +402,10 @@ gitignored `.hangar/`, with a fallback read so a `git pull` cannot lose your ass
 **The two `.claude/modes/*.settings.json` files stay tracked, and that is deliberate.** They carry
 operator mode's permission list, which is its security boundary — generating them would let a
 command operator mode is allowed to run (`doctor --fix`) rewrite the list that constrains it. So
-`doctor` reports a stale `statusLine.command` in them and does not repair it; fix the one line by
-hand after cloning. `hangar-internals/reference/modes.md` has the three alternatives that were
+`doctor` reports a stale `statusLine.command` in them, prints the exact shell line that fixes it,
+and does not repair it. **Expect that edit to stay in `git status` and to conflict on a pull** —
+they are tracked files a hangar command must never write, so there is no version of this that is
+free. `hangar-internals/reference/modes.md` has the three alternatives that were
 considered and why each is worse.
 
 ## Starting Claude Code in operator mode
@@ -467,7 +517,8 @@ hangar config validate
 
 Most of these take `-n` / `--dry-run`, and running it first is the habit — it prints every decision
 the real run would make. The three that have no dry run are `add-clone`, `remove-clone` and
-`colours change`; each asks before it acts instead.
+`colours change`; each asks before it acts instead. `open` used to be a fourth and is not any
+more — worth knowing, because it moves a branch in every clone it touches.
 
 ```bash
 hangar sync 2 -n            # resolved target branch and chosen strategy, no changes
@@ -482,6 +533,7 @@ hangar rebase-default 2
 hangar checkout-default 2   # fetch, check out the repo's default branch, fast-forward it
 hangar checkout 2           # alias
 
+hangar open 1 -n            # the branch, tabs and editors it would touch, changing nothing
 hangar open 1               # a terminal window with this clone's tabs, plus its editor
 hangar open --all
 hangar open 2 -b feature/x  # check out this branch instead of the default one
@@ -558,10 +610,12 @@ anything locally. Nothing is duplicated per clone, so rotating a token is one ed
 The config never holds a token, only the **name of the variable** that does (`forge.tokenEnvKey`).
 The config example is committed; the secrets file is not.
 
-**Declare what your repo needs, in `secrets.variables`.** `setup` scaffolds the names Hangar
-itself uses — the forge token, the tracker pair — because those come from keys it already has.
-Everything your own tooling reads is invisible from up here, and an undeclared credential fails
-in the worst available way:
+**Hangar's own credentials come free; declare what your REPO needs.** The forge token named by
+`forge.tokenEnvKey` and the Atlassian pair follow from `forge` and `tracker`, so `doctor` derives
+a row for each without being told — asking you to restate your own config was the gap that let
+this fleet's own `doctor` stay silent about three of the four credentials it uses. Everything your
+own tooling reads is invisible from up here, and an undeclared credential fails in the worst
+available way:
 
 ```yaml
 secrets:
@@ -571,12 +625,18 @@ secrets:
       optional: false # true renders doctor's row dim rather than red
 ```
 
-`hangar doctor` then prints a row per declared variable and tells **absent** apart from the worse
-**set but empty**, which reads as configured to everything downstream. It never repairs one — a
-credential is the one thing in the fleet that cannot be derived from a clone index, which is
-exactly why it is worth a row of its own. The `why` is required, for the same reason
-`repo.symlinks[].why` is: a variable name explains what breaks without it no better than a
-symlink does.
+`hangar doctor` then prints a row per expected variable — derived and declared alike — and tells
+**absent** apart from the worse **set but empty**, which reads as configured to everything
+downstream. A declared entry with the same name overrides the derived one, which is how you make
+a forge token red rather than dim. It never repairs a credential — that is the one thing in the
+fleet that cannot be derived from a clone index, which is exactly why it is worth a row of its
+own. The `why` is required, for the same reason `repo.symlinks[].why` is: a variable name explains
+what breaks without it no better than a symlink does.
+
+**The FILE, unlike its contents, `doctor --fix` does create** — mode 600, with every line
+commented out, exactly as `setup` writes it. That matters because copying the example config never
+runs `setup`, which was the only thing that had ever created it: each clone loads the file with
+`dotenv_if_exists`, so an absent one loads nothing and reports nothing.
 
 This is the gap that used to swallow a new hangar whole. The Playwright symlink above exists
 *because* the tracked test `.env` blanks that password — its `why` says so — but nothing told a

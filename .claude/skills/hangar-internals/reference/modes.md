@@ -197,6 +197,13 @@ simply never appears, and a session with no badge is a session whose permission 
 see at a glance. `doctor` names the file, the value and what to point it at; editing two lines is
 the manual step.
 
+**What this costs the next person, stated plainly:** both files are tracked, so the hand edit is a
+permanent modification in `git status` and a conflict on every pull that touches them -- on the
+two files that carry operator mode's permission list, which are the last two anyone should resolve
+a conflict in carelessly. `doctor` now prints the exact shell line that makes the edit (through a
+temp file, not `sed -i`, whose in-place flag GNU and BSD spell differently and this hangar puts
+GNU sed first). The trade is still right; it is not free, and a colleague meets it on day one.
+
 Three alternatives were considered and all three trade a security property or a certainty for one
 line saved. A generated statusline path breaks the asymmetry above. A relative command depends on
 which cwd Claude Code runs a status line in, and the two modes have different ones. A

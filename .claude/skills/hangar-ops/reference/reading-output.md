@@ -82,16 +82,64 @@ Three things to say correctly when you relay a report:
   in one clone reaches the others at the next `tmp merge`; a check that is red in normal operation
   is a check nobody reads. (`hangar-internals/reference/doctor.md` says the same — change one and
   change both.)
-- **The `secrets` row has no `--fix` and never will.** It reports `secrets.variables[]` — what the
-  repo's own tooling needs out of the shared secrets file — against what that file actually sets,
-  and a credential is the one thing in the fleet that cannot be derived from a clone index. So
-  relay it as a job for the human, with the variable's `why`, and never as something you can
-  repair. It distinguishes two states worth keeping apart when you report them: **not set** is a
+- **The summary counts BOTH halves, and the exit code is always 0.** The closing line names
+  `N problem(s)` and says where they are — `above the clones`, `in N clone(s)`, or both — because
+  the two are fixed in different places: a clone problem is almost always derivable and `--fix`
+  closes it, while a hangar one is as often a decision (a credential to paste, one line in a
+  tracked settings file). It used to count only the clone half, so a fresh hangar printed five
+  warnings and then `No problems in 0 clone(s).` What it deliberately does NOT count is the
+  machine's capabilities — a `ps` that will not run, a terminal that cannot be typed into — since
+  those are facts about where the fleet runs, permanent on some platforms, and a check red in
+  normal operation is a check nobody reads. **Never read exit 0 as "healthy": in this CLI a
+  `--check` flag is the gate (`config schema --check`, `colours sync --check` both exit 1) and a
+  report is a report. Read the summary line, not `$?`.**
+- **The `secrets` row reports two sources and repairs neither.** What it checks is
+  `secrets.variables[]` — what the repo's own tooling needs — **plus the credentials Hangar
+  itself needs, derived from the config**: the forge token named by `forge.tokenEnvKey` when the
+  origin is a Bitbucket URL, and the Atlassian pair when `tracker.kind` is `jira`. Those three
+  need no declaration, and they used to need one nobody wrote: this fleet declared only its
+  Playwright password, so `doctor` was silent about three of the four credentials it actually
+  uses. A declared entry with the same NAME overrides the derived one, which is how you make a
+  forge token red rather than dim. A credential is the one thing in the fleet that cannot be
+  derived from a clone index, so relay it as a job for the human, with the variable's `why`, and
+  never as something you can repair. It distinguishes two states worth keeping apart when you report them: **not set** is a
   gap, while **set but EMPTY** is worse, because an empty value reads as configured to everything
   downstream — an empty token produces a 401 rather than "no token configured". A row printed dim
   and prefixed `optional:` is a variable declared `optional: true`; mention it, do not chase it.
-  A hangar that declares nothing gets no row at all, which is not the same as being fully
+  A hangar that expects nothing gets no row at all, which is not the same as being fully
   configured.
+- **The secrets FILE, unlike its contents, `--fix` does create.** A separate row above the
+  variables says when the shared secrets file does not exist at all, and `--fix` writes the same
+  commented-out scaffold `hangar setup` writes — mode 600, every line inert. That is not deriving
+  a credential; it is creating the container, and it exists because the fastest way into a
+  configured fleet (`cp hangar.config.example.yaml hangar.config.yaml`) never runs `setup`, which
+  was the only thing that had ever written the file. Each clone loads it with `dotenv_if_exists`,
+  so an absent one loads nothing and reports nothing. When one run both creates the file and
+  reports every variable unset, that is one finding, not two.
+- **`terminal hook` matches the hook's full PATH, not its filename.** `clone-terminal.sh` is
+  written inside the hangar root, so by the naming rule it carries no hangar id and every hangar's
+  copy has the same name — a second hangar used to report the hook as sourced on the strength of
+  the FIRST one's line in `.zshrc`, while its own colours did nothing. A green row now means this
+  hangar's own file.
+- **A `tooling` row names missing required programs.** Green is one line; anything missing is
+  named with its install hint. It is the same check `hangar setup` runs and refuses on — `doctor`
+  only reports — and it is here because copying a config skips `setup` entirely. `lsof` is the one
+  worth chasing: without it nothing can attribute a process to a clone, so `sync --all` stops
+  skipping busy clones and every failure looks like "nothing is running".
+- **The two `.claude/modes/*.settings.json` rows are a one-time manual step, and they count.**
+  Those files are tracked and carry an absolute `statusLine.command`, so a fresh clone of a
+  published hangar has the previous owner's path and the mode badge silently never appears.
+  `doctor` prints the value to set and the exact shell line that sets it — relay that line rather
+  than the prose. There is deliberately no `--fix`: operator mode may run `hangar doctor` and
+  those files hold its permission list, so a repair would let it rewrite its own boundary through
+  a command it is allowed to run. Warn the user that the edit stays modified in `git status` and
+  conflicts on a pull; that is the price of the boundary being structural rather than argued.
+- **`<file> is in no clone, so <editor>'s N per-clone path setting(s) are inert`** means the
+  config declares `editor.rootPathKeys` — settings that hold an absolute path into the checkout
+  and so must differ per clone — while no clone has the file those keys live in. Nothing is
+  broken and nothing is repairable: the file's contents are the developer's, not Hangar's. Tell
+  them to set it up in one clone and run `hangar ide <kind> sync`, which gives every other clone
+  the same file with its own root.
 
 ## `hangar list`
 

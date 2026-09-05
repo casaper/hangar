@@ -14,7 +14,7 @@ import {
   type TerminalTabSpec,
   type TerminalWindow,
 } from '../terminal/index.ts';
-import { confirm, note, ok, warn } from '../ui.ts';
+import { confirm, note, ok, step, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
 import { portSummary } from '../ports.ts';
 
@@ -74,6 +74,21 @@ export type OpenOptions = {
    * flag. It governs the CHECKOUT only -- the tabs open either way.
    */
   includeBusy?: boolean | undefined;
+  /**
+   * Print every decision and change nothing -- the branch, the tabs and the editors alike.
+   *
+   * `open` was the one acting command in this CLI without a dry run, and the README's line about
+   * "every decision the real run would make" named three exceptions when there were four. It
+   * mattered more than the omission looked, because `open` grew a checkout: `--all` now fetches
+   * and moves a branch in EVERY clone, and `--no-checkout` is a way to not do that rather than a
+   * way to see what it would do first.
+   *
+   * `landOnBranch` already honoured a `dryRun`, since `checkout-default` has one -- so the branch
+   * half needed only threading. The terminal and editor halves separate reads from writes
+   * cleanly: which window is the fleet's, whether this clone is already in it and whether an
+   * editor can be launched are all questions, and only `openTabs`/`select`/`launch` are answers.
+   */
+  dryRun?: boolean | undefined;
 };
 
 /**
@@ -193,8 +208,16 @@ const openTabs = (
   assumed: TerminalWindow | undefined,
   editorDrivers: readonly EditorDriver[],
 ): TerminalWindow | undefined => {
+  const tabs = tabsFor(hangar, clone, opts, driver, editorDrivers);
+  const describe = (): string => tabs.map((tab) => tab.role).join(', ');
+
   if (!driver.capabilities.inspect) {
-    const res = driver.openTabs(tabsFor(hangar, clone, opts, driver, editorDrivers), assumed);
+    if (opts.dryRun === true) {
+      step(`would add ${String(tabs.length)} tab(s) for ${clone.name} (${describe()})`);
+      note(`${driver.label} cannot list its tabs, so it cannot say whether some are already open.`);
+      return assumed;
+    }
+    const res = driver.openTabs(tabs, assumed);
     if (res === undefined) {
       warn(`${driver.label} refused to open tabs for ${clone.name}`);
       return assumed;
@@ -210,6 +233,10 @@ const openTabs = (
   const fleet = pickFleetWindow(windows);
 
   if (fleet?.tabs.some((tab) => tab.clone === clone.name) === true) {
+    if (opts.dryRun === true) {
+      step(`${clone.name} already has tabs in the fleet window — would select them, adding none`);
+      return undefined;
+    }
     if (driver.capabilities.select && driver.select(fleet.id, clone.name)) {
       ok(`${clone.name} already has tabs in the fleet window — selected them instead`);
     } else {
@@ -223,13 +250,36 @@ const openTabs = (
       `${clone.name} already has tabs in an existing ${driver.label} window this CLI did not open`,
     );
     note('Opened by hand, or before the one-window change — it may hold a live Claude session.');
+    // The real run asks a human here. A dry run must not: `-n` is the thing you run to find out
+    // what would happen, and stopping it on a prompt makes it the one command you cannot script.
+    if (opts.dryRun === true) {
+      note(`The real run would ask before opening a second set of tabs for ${clone.name}.`);
+      return undefined;
+    }
     if (!confirm(`Open a second set of tabs for ${clone.name} anyway?`)) {
       note(`left ${clone.name}'s tabs alone — close that window, then open ${clone.index} again`);
       return undefined;
     }
   }
 
-  const res = driver.openTabs(tabsFor(hangar, clone, opts, driver, editorDrivers), fleet);
+  if (opts.dryRun === true) {
+    /*
+     * `assumed` matters here and only here.
+     *
+     * A real run creates the fleet window on the first clone and adds to it for the rest, and
+     * `driver.windows()` shows that as it happens. A dry run re-reads the same unchanged machine
+     * every iteration, so without carrying the window it would have made, every clone reports
+     * "would open the fleet window" -- four windows in the report and one in reality.
+     */
+    const first = fleet === undefined && assumed === undefined;
+    step(
+      first
+        ? `would open the fleet window with ${String(tabs.length)} tab(s) for ${clone.name} (${describe()})`
+        : `would add ${String(tabs.length)} tab(s) for ${clone.name} to the fleet window (${describe()})`,
+    );
+    return fleet ?? assumed ?? assumedWindow(hangar, -1);
+  }
+  const res = driver.openTabs(tabs, fleet);
   if (res === undefined) {
     warn(`${driver.label} refused the request — no tabs opened for ${clone.name}`);
     return undefined;
@@ -251,12 +301,17 @@ const openTabs = (
  * content. JetBrains is handed the clone DIRECTORY and dedupes itself, which is why it reports
  * `reused: false` and there is nothing to say about it either way.
  */
-const openEditors = (hangar: Hangar, clone: Clone, drivers: readonly EditorDriver[]): void => {
+const openEditors = (
+  hangar: Hangar,
+  clone: Clone,
+  drivers: readonly EditorDriver[],
+  dryRun: boolean,
+): void => {
   for (const driver of drivers) {
     // Already opened as one of the clone's terminal tabs, above -- not a window to launch.
     if (driver.capabilities.inTerminalTab === true) continue;
     try {
-      openEditor(clone, driver);
+      openEditor(clone, driver, dryRun);
     } catch (err) {
       // One editor's failure is one line, and the loop goes on. Only the default editor has to
       // work; the rest are best effort, and every one of them shells out to a launcher nobody
@@ -275,7 +330,7 @@ const openEditors = (hangar: Hangar, clone: Clone, drivers: readonly EditorDrive
 };
 
 /** One editor, one clone. Throws only if the driver does; `openEditors` owns that. */
-const openEditor = (clone: Clone, driver: EditorDriver): void => {
+const openEditor = (clone: Clone, driver: EditorDriver, dryRun: boolean): void => {
   if (!driver.capabilities.launch) {
     warn(`${driver.label} cannot be opened by Hangar`);
     note(driver.unavailableHint());
@@ -284,6 +339,13 @@ const openEditor = (clone: Clone, driver: EditorDriver): void => {
   if (!driver.isAvailable()) {
     warn(`${driver.label} is not available — ${clone.name} not opened in it`);
     note(driver.unavailableHint());
+    return;
+  }
+  if (dryRun) {
+    // Stops before `launch`, which is the only call here that opens anything. Both checks above
+    // are probes, so a dry run still answers the question people actually have -- would my editor
+    // come up at all -- rather than assuming it would.
+    step(`would open ${clone.name} in ${driver.label}`);
     return;
   }
   const res = driver.launch(clone);
@@ -396,9 +458,14 @@ export const open = (hangar: Hangar, refs: readonly string[], opts: OpenOptions)
   for (const clone of clones) {
     if (opts.checkout !== false) land(clone, opts, clones.length > 1);
     assumed = openTabs(hangar, driver, clone, opts, assumed, drivers) ?? assumed;
-    if (opts.editor !== false) openEditors(hangar, clone, drivers);
+    if (opts.editor !== false) openEditors(hangar, clone, drivers, opts.dryRun === true);
     note(`ports: ${portSummary(clone.ports)}`);
   }
 
+  if (opts.dryRun === true) {
+    console.log('');
+    note('(dry run — no branch was moved, no tab and no editor was opened)');
+    return;
+  }
   if (driver.capabilities.inspect) reportTabOrder(hangar, driver);
 };

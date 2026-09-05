@@ -27,8 +27,10 @@ merge and the ticket record hook — each repair re-reads the file, so a clone m
 gets both in one `--fix` pass), the sibling remotes in both directions, and the
 `checkout.defaultRemote=origin` those remotes make necessary. Above the clones it also holds the
 hangar's own generated `CLAUDE.local.md` and `.claude/settings.json` to their renders, reports
-`secrets.variables[]` against the shared secrets file, reports the two mode settings files
-without repairing them, and migrates a legacy `colour-assignments.json`.
+the machine's required tooling, reports the shared secrets file and the variables expected in it
+(**creating the file** under `--fix`, never its contents), warns when a declared
+`editor.rootPathKeys` table has no file in any clone to apply it to, reports the two mode settings
+files without repairing them, and migrates a legacy `colour-assignments.json`.
 Run it after any re-clone. **How much of the shared cache a clone links is deliberately not a
 check** — a ticket fetched here reaches the others at the next `tmp merge`, which is what linking
 per entry means, and a check that is red in normal operation is a check nobody reads.
@@ -37,8 +39,31 @@ and change both.)
 
 ## The `secrets` row, and the one gap `--fix` structurally cannot close
 
-`secrets.variables[]` is a list of `{name, why, optional}`, and `doctor` reports each declared
-name against what the shared secrets file actually sets. `src/secrets.ts` holds the pure half:
+`secrets.variables[]` is a list of `{name, why, optional}`, and `doctor` reports each expected
+name against what the shared secrets file actually sets. **Expected is derived PLUS declared**:
+`hangarOwnSecretVariables` turns the config's own answers into rows — the forge token named by
+`forge.tokenEnvKey` whenever the origin parses as a Bitbucket URL, and the Atlassian pair when
+`tracker.kind` is `jira` — and `expectedSecretVariables` merges the declared list on top, where a
+matching NAME wins outright so a hangar can make its forge token red rather than dim.
+
+**That derivation closed the gap the declaration alone left open.** The paragraph below explains
+why `secrets.variables` exists at all; what it did not say is that `setup` scaffolding Hangar's
+own names into the FILE is not the same as `doctor` checking them. This fleet declared exactly
+one variable, so `doctor` was silent about `BITBUCKET_TOKEN`, `ATLASSIAN_USER_EMAIL` and
+`ATLASSIAN_API_TOKEN` — three of the four credentials it actually uses. `sync` names its missing
+token at the point of use and the tracker path names nothing, so a colleague who copied this
+hangar's committed example config inherited the silence with it. Deriving them means no hangar
+has to restate its own config to get the row, and `optional: true` on all three keeps `doctor`
+green for a hangar whose owner never syncs: each degrades visibly rather than breaking.
+
+**`usesBitbucket` in `bitbucket.ts` is the one place that decides whether this hangar talks to
+Bitbucket**, and it exists because three callers were each deciding it differently: `repoRef`
+parsed the origin URL and ignored `forge.kind` entirely, `setup` used
+`originUrl.includes('bitbucket.org')` (a substring test `notbitbucket.org.example.com` passes),
+and the token reader hardcoded the literal `BITBUCKET_TOKEN` — so **`forge.tokenEnvKey` was a
+config key nothing read**. A hangar naming a different variable got a `sync` that looked for
+`BITBUCKET_TOKEN`, did not find it, and reported the target branch as a guess. `DEFAULT_BITBUCKET_TOKEN_ENV_KEY`
+is now the single literal, on the `DEFAULT_EDITOR_KIND` precedent. `src/secrets.ts` holds the pure half:
 `secretVariableStatuses` takes the declaration and the file's TEXT — never a path — so every
 state can be asserted without a mode-600 file full of live credentials on disk, which is the only
 way this is testable at all. The value never leaves that module; callers get a three-state enum,
@@ -69,12 +94,142 @@ Three decisions in it:
   Playwright suite must not have a permanently red `doctor`. A hangar declaring nothing gets no
   row at all — silence beats `0 variables declared` for the majority that never fill this in.
 
-There is no `repair`, and it is the one check here where that is structural rather than a
-choice: a credential cannot be derived from the clone index the way a port, a theme or an
-identity file can. Everything else `doctor` reports outside git is recoverable from the formula;
+**The FILE is repairable even though its contents are not.** A row above the variables reports a
+shared secrets file that does not exist, and `--fix` writes the same commented-out scaffold
+`setup` writes — through the same `secretsFileContent` builder, which now takes the variable list
+rather than `Answers` so the two cannot drift. `setup` was the ONLY thing that had ever created
+that file, and README's fastest way into a fleet somebody else configured is "copy the example
+config and stop", which never runs `setup`; running it afterwards answers "already exists and is
+valid" and stops, and `--force` rewrites the config. So there was no route to the one file every
+credential lives in, and each clone's `.envrc.private` loads it with `dotenv_if_exists` — an
+absent one loads nothing and says nothing. Creating it is not deriving a credential. Both writers
+pass `{ mode: 0o600 }` on the create rather than chmod-ing afterwards: between the two syscalls a
+world-readable file sits where credentials are about to go. When one `--fix` run both creates the
+file and reports every variable unset, the note says so, because two rows reading as contradictory
+findings is how a correct report gets ignored.
+
+There is no `repair` for the CONTENTS, and it is the one check here where that is structural
+rather than a choice: a credential cannot be derived from the clone index the way a port, a theme
+or an identity file can. Everything else `doctor` reports outside git is recoverable from the formula;
 this is the only thing a human has to supply. Which makes it worth a row precisely because it is
 the row `--fix` will never close. (`hangar-ops/reference/reading-output.md` says the same to
 whoever relays the report — change one and change both.)
+
+## `--fix` runs to the end, and a symlink is judged on where it POINTS
+
+Two bugs in one report, both found by walking a colleague's first day, and both about the same
+`repo.symlinks[]` row.
+
+**`resolveLink` used `realpathSync` alone, which throws on a dangling link.** The one symlink this
+fleet declares targets the shared secrets file, which does not exist in a hangar nobody has run
+`setup` in — so a perfectly correct link answered `undefined` and was reported as a different link
+entirely: `expected a symlink resolving to <root>/.env.shared, found ../../../.env.shared`, of a
+link that lands exactly there. `realpathSync` stays FIRST, because it is the only one that
+resolves a symlinked path COMPONENT (a hangar reached through `/tmp` -> `/private/tmp`); the
+lexical `resolve(dirname, readlink)` is the fallback when it throws. Creating an empty
+`.env.shared` turned the row green with no change to the link, which is what proved it.
+
+**The repair call was not wrapped, inside two loops.** `check.repair()` sat bare in the per-check
+loop inside the per-clone loop, and the symlink repair refuses by design when something
+unexpected is already at the path — refusing throws a `CliError`, which propagated out of both
+loops. So `hangar doctor --all --fix`, the last command the README's walkthrough tells a new
+hangar to run, printed one error and stopped, leaving the ports, hooks, remotes and themes of
+every remaining clone unvisited with nothing saying they had been skipped. Deleting the link and
+re-running recreated the identical link, reported it repaired, and called it broken again on the
+next run: a closed loop nothing in the output explained. A refusal is information about ONE
+artifact; it is now reported where that artifact's row would have been and the run continues.
+`--fix` is the pass people run without reading, so the one thing it must not do is quietly do
+less than it says.
+
+## Two checks that exist because the peer path skips `setup`
+
+`hangar setup` is where the machine's tooling is proved and where the secrets file is created, and
+README's fastest way into a fleet somebody has already configured routes around it entirely. Both
+of these are the same structural finding, presented as two rows because they fail differently.
+
+- **The `tooling` row.** `inspectEnvironment` had exactly one caller, `setup` — so the check
+  README introduces with "hangar setup checks all of this for you" never ran for the people that
+  sentence was written for. `doctor` reports it and never throws, prints ONE green line rather
+  than a row per tool (a dozen green rows every run is a wall people learn to scroll past), and
+  leaves the recommended tools to `setup`, which is where you are choosing what to install.
+  `lsof` is the one that matters most and looks optional: without it nothing attributes a process
+  to a clone, and every resulting failure looks exactly like an idle machine.
+- **`homebrew` now asks `brew --prefix`** between `HOMEBREW_PREFIX` and the `/opt/homebrew`
+  default, and that was a precondition for the row rather than scope creep. `brew shellenv` is in
+  the Apple-silicon install instructions and was not in the older Intel one, so an Intel Mac with
+  Homebrew at `/usr/local` very often has the variable unset — and `setup` then refused to
+  continue on a machine that has Homebrew. `.envrc.hangar` still has the same two-step fallback
+  and fails the same way; that one is unfixed.
+
+## An editor's `rootPathKeys` with no file to apply them to
+
+`editor.rootPathKeys` is the config half of the only per-clone TEXT transform in this CLI, and
+`reportEditor` now warns when the table is declared and NO clone has the file those keys live in.
+An empty table was already handled (it means "no setting here holds an absolute path", true of
+most repos); this is the opposite case, and it is what a colleague copying a committed example
+config gets. `.vscode/settings.json` is untracked and personal — only `launch.json` and
+`tasks.json` are in git — so a fresh fleet has none of it, `ide vscode sync` answers "no clone has
+this file, nothing to sync" and stops, and the eight declared keys are inert: correctly declared,
+describing a rewrite of a file that does not exist. The config reads configured, `ide vscode sync`
+reads healthy, the editor row is green, and VS Code resolves stylelint, prettier and jest against
+nothing — with every symptom appearing inside the editor, where nothing connects it back.
+
+Gated on the table being DECLARED, exactly as the secrets row is gated on a variable being
+declared, and silent the moment one clone has the file. **There is deliberately no `--fix` and no
+generated default.** That is the same line `defaultSettings` draws between derived and personal:
+emitting editor settings a hangar invented is a config that looks configured and is not.
+
+## The tally, and the line between a problem and a fact
+
+`problems` counted only the per-clone checks, so a hangar with no clones yet printed five
+warnings -- its identity file, its settings, two mode statuslines, its secrets -- and closed with
+`No problems in 0 clone(s).` A summary that contradicts the report immediately above it is worse
+than no summary.
+
+`doctor()` now holds a local `problem()` beside the plain `warn()`, and which one a site uses is
+the whole decision. **Everything about this hangar's own state counts**, including the one-time
+manual steps `--fix` deliberately will not close: those go to zero once somebody does them, which
+is what a setup check is for. **The machine's CAPABILITIES do not** -- a `ps` that will not run, a
+terminal with no `writeToTty`. Those are facts about where the fleet is running and are permanent
+on some platforms, so counting them would leave a correctly configured GNOME Terminal hangar
+permanently non-zero. The dim `optional:` secret rows stay out by construction, since they go
+through `note`. The five `report*` helpers return a count rather than sharing a mutable module
+variable, for the reason `two-hangars.test.ts` exists.
+
+The summary names the two halves separately -- `above the clones` and `in N clone(s)` -- because
+they are fixed in different places: a clone problem is almost always derivable, and a hangar one
+is as often a decision `--fix` will never close.
+
+**The exit code stays 0, and that is the convention rather than an oversight.** A `--check` flag
+is this CLI's gate -- `config schema --check` and `colours sync --check` both exit 1 when stale,
+verified -- and a report is a report. `doctor` has no `--check`, so nothing should read `$?` from
+it; the summary line is the answer.
+
+## The shell-hook check matched a bare filename
+
+`clone-terminal.sh` is written INSIDE the hangar root, so by the naming rule in `app/CLAUDE.md` it
+carries no hangar id -- which makes the name byte-identical in every hangar on the machine. The
+positive half of `reportShellHook` tested `content.includes(hookName)`, so a second hangar
+reported `terminal hook sourced from .zshrc` on the strength of the FIRST hangar's line, and its
+own terminal colours silently did nothing. The stale-path half of the same function was already
+scoped with `startsWith(hangar.root)` and was right.
+
+Both halves now resolve the rc's path-shaped tokens through one `expandHome` and compare against
+`hangar.paths.terminalHookScript`. One normalisation, not two written separately: the note this
+check prints recommends the `$HOME/...` form, so that form has to match, and two copies of that
+rule is how the halves came to disagree in the first place.
+
+## The mode settings rows print the edit, and say what it costs
+
+Still no `--fix`, for the security reason `reference/modes.md` spends its length on. What changed
+is that the row prints the exact shell line rather than prose describing it -- **through a temp
+file, not `sed -i`**, because in-place editing is the one flag GNU and BSD sed spell incompatibly
+and this hangar's own `.envrc` puts GNU sed ahead of BSD on macOS. The obvious `sed -i ''` form is
+correct in a plain terminal and silently wrong inside the hangar, where it reads the script as a
+filename; this line is going to be pasted into a shell nobody here can see.
+
+It also says what the edit costs, which nothing did: both files are tracked, so the change is a
+permanent modification in `git status` and a conflict on every pull that touches them.
 
 ## The install checks report a declaration and never execute it
 

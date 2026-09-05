@@ -19,7 +19,7 @@ Global: `--hangar <path>` (the hangar root to operate on; **only `config show` a
 | `sync` | `[clone]` | `-a, --all` · `-n, --dry-run` · `--no-session-notify` · `--include-busy` · `--onto <ref>` · `--strategy <rebase\|merge>` | **act [user]** |
 | `merge-default`, `rebase-default` | — | aliases of `sync`, identical options | **act [user]** |
 | `checkout-default` (alias `checkout`) | `[clone]` | `-a, --all` · `-n, --dry-run` · `--include-busy` | **act [user]** |
-| `open` | `[clones...]` | `--all` · `--no-claude` · `--no-editor` · `-b, --branch <name>` · `--no-checkout` · `--include-busy` | **act [user]**, no `-n` |
+| `open` | `[clones...]` | `--all` · `--no-claude` · `--no-editor` · `-b, --branch <name>` · `--no-checkout` · `--include-busy` · `-n, --dry-run` | **act [user]** |
 | `resume` | `[clone]` (defaults to the clone you are in) | `-n, --limit <count>` (default `20`, `0` = all) | report **for you** — with no tty it prints the list instead of the picker; at a terminal it launches `claude --resume` |
 | `add-clone` | — | `--no-install` (+ a hidden `--remote <url>`) | **act [user]**, no `-n` |
 | `install` | `[clone]` | `--all` · `-n, --dry-run` | **act [user]** |
@@ -73,8 +73,12 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   branch — and only the strategy differs. `--strategy` outranks the name.
 - **`--onto <ref>` skips the pull-request lookup entirely.** Reach for it only when the user names
   a target; the lookup is usually the right answer and is printed on every run.
-- **`open` has no `-n`.** `--no-claude`, `--no-editor` and `--no-checkout` narrow what it does;
-  there is no way to preview it.
+- **`open` has a `-n` now, and it is worth running.** It prints the branch each clone would land
+  on (or why it would be left alone), the tabs it would create or select, and the editors it
+  would launch — and changes nothing. It also does not ASK: where the real run would prompt about
+  opening a second set of tabs in a window Hangar did not open, the dry run says the real run
+  would ask and moves on. `--no-claude`, `--no-editor` and `--no-checkout` still narrow what the
+  real run does; `-n` is how you see it first.
 - **`remove-clone --force` is the one genuinely unrecoverable flag in this CLI** — its own help says
   uncommitted work is NOT recoverable. Never pass it without the user asking for it in those terms.
 - **`add-clone --no-install` leaves the clone unusable** until someone runs `hangar install

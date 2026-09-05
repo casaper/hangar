@@ -283,6 +283,7 @@ program
   .option('-b, --branch <name>', "check this branch out instead of the repo's default branch")
   .option('--no-checkout', 'open each clone on whatever branch it already has')
   .option('--include-busy', 'check the branch out even in a clone with a live Claude session')
+  .option('-n, --dry-run', 'print every decision — branch, tabs, editors — and change nothing')
   .action((clones: string[], options) => {
     open(requireHangar(), clones, options);
   });

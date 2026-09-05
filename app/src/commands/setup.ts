@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { join } from 'node:path';
 
@@ -29,7 +29,10 @@ import {
   hangarSettingsContent,
   hangarSettingsPath,
 } from '../hangar-files.ts';
+import { usesBitbucket } from '../bitbucket.ts';
 import { pathsFor } from '../hangar.ts';
+import { hangarOwnSecretVariables } from '../secrets.ts';
+import type { SecretVariable } from '../config/schema.ts';
 import { claudeDir, tildify } from '../user-paths.ts';
 import { blank, fail, heading, note, ok, step, warn } from '../ui.ts';
 
@@ -251,7 +254,7 @@ ${
   # namerScript: .claude/skills/jira-scope/jira-cache.mjs
 `;
 
-  const isBitbucket = a.originUrl.includes('bitbucket.org');
+  const isBitbucket = usesBitbucket({ originUrl: a.originUrl });
 
   const roles =
     a.preset.roles.length === 0
@@ -445,7 +448,7 @@ secrets:
 };
 
 /**
- * The secrets file, as `setup` creates it: variable names, commented out, and nothing else.
+ * The secrets file: one commented-out line per variable, and nothing else.
  *
  * A PURE builder, and it exists because `setup` used to NAME a secrets file it never created.
  * On a fresh hangar `.env.shared` is therefore absent, which makes `doctor` red and leaves
@@ -455,11 +458,15 @@ secrets:
  * a set-but-empty variable is indistinguishable from a real one to everything downstream, so
  * `sync` would send an empty bearer token and report a 401 rather than "no token configured".
  * Filling this in is the one manual step, and it says so.
+ *
+ * Takes the VARIABLES and not `Answers`, so `doctor --fix` writes the same file `setup` does.
+ * It used to derive its own names from `originUrl.includes('bitbucket.org')` -- a third
+ * condition, agreeing with `forge.kind` and `forge.tokenEnvKey` only by coincidence. Now the
+ * scaffold and the rows `doctor` prints against it come from one list, so a name can no longer
+ * be written under one spelling and looked for under another.
  */
-export const secretsFileContent = (a: Answers): string => {
-  const names = a.originUrl.includes('bitbucket.org') ? ['BITBUCKET_TOKEN'] : [];
-  if (a.trackerBaseUrl !== '') names.push('ATLASSIAN_USER_EMAIL', 'ATLASSIAN_API_TOKEN');
-  return `# Every credential this hangar needs, in ONE file, outside every clone -- so no clone can
+export const secretsFileContent = (variables: readonly SecretVariable[]): string =>
+  `# Every credential this hangar needs, in ONE file, outside every clone -- so no clone can
 # commit it. Mode 600. Each clone's .envrc.private loads it by ABSOLUTE path; a relative one
 # would resolve against the clone's subdirectory and silently load nothing.
 #
@@ -467,11 +474,14 @@ export const secretsFileContent = (a: Answers): string => {
 # indistinguishable from a real one downstream, so an empty token makes \`sync\` report a 401
 # instead of "no token configured".
 #
-# These are the names HANGAR uses. Whatever your repo's own tooling reads -- a test suite's
-# password, a registry token -- goes here too, and belongs in \`secrets.variables\` in
-# hangar.config.yaml so that \`hangar doctor\` prints a row when one is missing.
-${names.length === 0 ? '#\n# This hangar declared no forge token and no tracker, so it needs nothing yet.\n' : names.map((name) => `#\n# ${name}=\n`).join('')}`;
-};
+# Hangar's own names come from \`forge\` and \`tracker\`. Whatever your repo's own tooling reads --
+# a test suite's password, a registry token -- goes here too, and belongs in \`secrets.variables\`
+# in hangar.config.yaml so that \`hangar doctor\` prints a row when one is missing.
+${
+  variables.length === 0
+    ? '#\n# This hangar declared no forge token and no tracker, so it needs nothing yet.\n'
+    : variables.map((v) => `#\n${wrapComment(v.why, '')}\n# ${v.name}=\n`).join('')
+}`;
 
 const ask = async (
   rl: ReturnType<typeof createInterface>,
@@ -680,8 +690,19 @@ export const setup = async (root: string, opts: SetupOptions): Promise<void> => 
   if (existsSync(secretsPath)) {
     note(`unchanged ${tildify(secretsPath)} (it already exists — never overwritten)`);
   } else {
-    writeFileSync(secretsPath, secretsFileContent(answers));
-    chmodSync(secretsPath, 0o600);
+    // `{ mode }` on the create rather than a following chmod: between the two syscalls a
+    // world-readable file sits where credentials are about to go.
+    writeFileSync(
+      secretsPath,
+      secretsFileContent(
+        hangarOwnSecretVariables({
+          forgeKind: usesBitbucket({ originUrl: answers.originUrl }) ? 'bitbucketCloud' : 'none',
+          forgeTokenEnvKey: undefined,
+          trackerKind: answers.trackerBaseUrl === '' ? 'none' : 'jira',
+        }),
+      ),
+      { mode: 0o600, flag: 'wx' },
+    );
     ok(`created  ${tildify(secretsPath)} (mode 600) — filling it in is your one manual step`);
   }
 

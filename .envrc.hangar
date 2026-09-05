@@ -91,7 +91,21 @@ hangar_use_pnpm() {
 hangar_use_gnu() {
     [[ "$(uname -s)" == "Darwin" ]] || return 0
 
+    # HOMEBREW_PREFIX, then the Apple-silicon default, then `brew` ITSELF.
+    #
+    # `brew shellenv` is what exports HOMEBREW_PREFIX, and it is in the Apple-silicon install
+    # instructions but was not in the older Intel one -- so an Intel Mac with Homebrew at
+    # /usr/local very often has it unset, and the two-step fallback then aborted the whole
+    # .envrc with "requires Homebrew" on a machine that has Homebrew. No `hangar` on PATH, no
+    # pinned Node, no pnpm, and an error naming the one thing that was not actually wrong.
+    #
+    # The probe is LAST and conditional, so the common path still costs nothing: this file runs
+    # on shell entry and is documented as functions-only with no side effects, which an
+    # unconditional subprocess would not honour.
     local brew_prefix="${HOMEBREW_PREFIX:-/opt/homebrew}" f
+    if [[ ! -d "$brew_prefix" ]] && command -v brew >/dev/null 2>&1; then
+        brew_prefix="$(brew --prefix)"
+    fi
     if [[ ! -d "$brew_prefix" ]]; then
         log_error "hangar on macOS requires Homebrew (https://brew.sh)"
         return 1

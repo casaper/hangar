@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 
@@ -233,6 +234,34 @@ export const installHint = (tool: Tool): string =>
     .filter((part) => part !== undefined)
     .join(' — ');
 
+/** The Apple-silicon install location, and the only prefix that needs no probe to find. */
+const DEFAULT_BREW_PREFIX = '/opt/homebrew';
+
+/**
+ * `HOMEBREW_PREFIX`, then the Apple-silicon default, then `brew` itself.
+ *
+ * `brew shellenv` is what exports `HOMEBREW_PREFIX`, and it is in the Apple-silicon install
+ * instructions but was not in the older Intel one -- so an Intel Mac with Homebrew at
+ * `/usr/local` very often has it unset. Stopping at the default then reported `homebrew MISSING`
+ * on a machine that has Homebrew, and made `setup` refuse to continue over it.
+ *
+ * The probe is LAST and conditional, so the overwhelmingly common path -- the variable exported,
+ * or `/opt/homebrew` sitting right there -- spawns nothing. It is timed out rather than trusted
+ * because `brew` is a bash script and this runs inside `hangar doctor`: a health check that can
+ * hang is worse than one that falls back to the default.
+ *
+ * `.envrc.hangar`'s `hangar_use_gnu` resolves it in the same three steps, in the same order.
+ */
+const resolveBrewPrefix = (needed: boolean): string => {
+  const declared = process.env['HOMEBREW_PREFIX'];
+  if (declared !== undefined && declared !== '') return declared;
+  if (!needed || existsSync(DEFAULT_BREW_PREFIX)) return DEFAULT_BREW_PREFIX;
+  if (!onPath('brew')) return DEFAULT_BREW_PREFIX;
+  const out = spawnSync('brew', ['--prefix'], { encoding: 'utf8', timeout: 5000 });
+  const value = out.status === 0 ? out.stdout.trim() : '';
+  return value === '' ? DEFAULT_BREW_PREFIX : value;
+};
+
 export type ToolStatus = { readonly tool: Tool; readonly present: boolean };
 
 export const toolPresent = (root: string, tool: Tool): boolean =>
@@ -272,7 +301,20 @@ export const inspectEnvironment = (root: string): EnvironmentReport => {
   };
 
   const needed = process.platform === 'darwin';
-  const prefix = process.env['HOMEBREW_PREFIX'] ?? '/opt/homebrew';
+  /*
+   * `brew --prefix` between the env var and the Apple-silicon default.
+   *
+   * `HOMEBREW_PREFIX` is exported by `brew shellenv`, which the Apple-silicon install
+   * instructions tell you to put in your profile and the older Intel install did not -- so an
+   * Intel Mac with Homebrew at /usr/local very often has it unset. With only the `/opt/homebrew`
+   * fallback, `setup` then reported `homebrew MISSING` and refused to continue on a machine that
+   * has Homebrew, and `.envrc.hangar` failed the same way for the same reason.
+   *
+   * Asking `brew` itself is the answer that cannot be wrong, and it costs one spawn on a path
+   * that already shells out a dozen times. Guarded by `onPath`, so a machine with no Homebrew
+   * pays nothing and still gets the honest "missing" it should.
+   */
+  const prefix = resolveBrewPrefix(needed);
   const homebrew = {
     needed,
     present: needed ? existsSync(join(prefix, 'bin', 'brew')) : true,

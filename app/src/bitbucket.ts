@@ -43,6 +43,23 @@ export const repoRef = (hangar: Hangar, clonePath: string): RepoRef | undefined 
   );
 };
 
+/**
+ * Does this hangar talk to Bitbucket at all -- the ONE question three callers were each
+ * answering their own way.
+ *
+ * `forge.kind` is optional in the schema and `repoRef` never reads it: what actually decides is
+ * whether the configured origin PARSES as a Bitbucket URL. Meanwhile `setup` keyed its secrets
+ * scaffold off `originUrl.includes('bitbucket.org')`, which is a substring test that a host
+ * like `notbitbucket.org.example.com` satisfies. Three conditions agreeing by coincidence is how
+ * a token gets written under one name and looked for under another.
+ *
+ * An explicit `kind: none` is honoured as the opt-out it reads as, even for a Bitbucket URL.
+ */
+export const usesBitbucket = (forge: {
+  readonly kind?: 'bitbucketCloud' | 'none' | undefined;
+  readonly originUrl: string;
+}): boolean => forge.kind !== 'none' && parseRemote(forge.originUrl) !== undefined;
+
 export const repoUrl = (ref: RepoRef): string =>
   `https://bitbucket.org/${ref.workspace}/${ref.repo}`;
 
@@ -86,11 +103,28 @@ const sharedEnvValue = (hangar: Hangar, key: string): string | undefined => {
   return raw === undefined ? undefined : raw.replace(/^(['"])(.*)\1$/, '$2');
 };
 
+/**
+ * The variable this adapter reads when `forge.tokenEnvKey` says nothing.
+ *
+ * The ONE place that names it, on the `DEFAULT_EDITOR_KIND` precedent: `setup` writes it into
+ * the config template and into the secrets scaffold, `secrets.ts` derives a `doctor` row from
+ * it, and this module reads the value. Four literals would be four things to keep in agreement,
+ * and the failure is silent -- a token under the wrong name is indistinguishable from no token.
+ */
+export const DEFAULT_BITBUCKET_TOKEN_ENV_KEY = 'BITBUCKET_TOKEN';
+
+/**
+ * `forge.tokenEnvKey`, honoured -- it was a config key nothing read.
+ *
+ * The schema has carried it since the config existed and this function ignored it, so a hangar
+ * that named a different variable got a `sync` that looked for `BITBUCKET_TOKEN`, did not find
+ * it, and reported the target branch as a guess. A soft failure with a correct-looking config
+ * above it is the shape of wrong answer this CLI is built against.
+ */
 const bitbucketToken = (hangar: Hangar): string | undefined => {
-  const fromEnv = process.env['BITBUCKET_TOKEN'];
-  return fromEnv !== undefined && fromEnv !== ''
-    ? fromEnv
-    : sharedEnvValue(hangar, 'BITBUCKET_TOKEN');
+  const key = hangar.config.forge.tokenEnvKey ?? DEFAULT_BITBUCKET_TOKEN_ENV_KEY;
+  const fromEnv = process.env[key];
+  return fromEnv !== undefined && fromEnv !== '' ? fromEnv : sharedEnvValue(hangar, key);
 };
 
 /** Bitbucket's query language quotes string literals, so a branch name has to be escaped. */
@@ -152,7 +186,7 @@ export const openPullRequests = async (
   if (token === undefined) {
     return {
       ok: false,
-      reason: `no BITBUCKET_TOKEN in the environment or ${tildify(hangar.paths.envShared)}`,
+      reason: `no ${hangar.config.forge.tokenEnvKey ?? DEFAULT_BITBUCKET_TOKEN_ENV_KEY} in the environment or ${tildify(hangar.paths.envShared)}`,
     };
   }
   const url = new URL(

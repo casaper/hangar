@@ -8,7 +8,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, dirname, join, relative } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 
 import pc from 'picocolors';
 
@@ -57,6 +57,7 @@ import {
   colourAssignmentsSource,
   migrateColourAssignments,
 } from '../colour-assignments.ts';
+import { usesBitbucket } from '../bitbucket.ts';
 import { editors, type EditorDriver } from '../editor/index.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
@@ -73,7 +74,12 @@ import {
 
 import { home, themesDir, tildify } from '../user-paths.ts';
 import { planDirsIn } from '../plans.ts';
-import { secretVariableProblem, secretVariableStatuses } from '../secrets.ts';
+import {
+  expectedSecretVariables,
+  hangarOwnSecretVariables,
+  secretVariableProblem,
+  secretVariableStatuses,
+} from '../secrets.ts';
 import {
   isLinkedIntoStore,
   storeEntries,
@@ -91,7 +97,9 @@ import {
   hangarSettingsContent,
   hangarSettingsPath,
 } from '../hangar-files.ts';
+import { inspectEnvironment, installHint } from '../environment.ts';
 import { installChecks } from '../install.ts';
+import { secretsFileContent } from './setup.ts';
 import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
 
@@ -127,20 +135,41 @@ type Check = {
   readonly unverified?: boolean | undefined;
 };
 
-/** Where a symlink actually lands, or undefined if it is not a link or is dangling. */
-const resolveLink = (path: string): string | undefined => {
-  try {
-    return realpathSync(path);
-  } catch {
-    return undefined;
-  }
-};
-
 const symlinkTarget = (path: string): string | undefined => {
   try {
     return lstatSync(path).isSymbolicLink() ? readlinkSync(path) : undefined;
   } catch {
     return undefined;
+  }
+};
+
+/**
+ * Where a symlink POINTS, which is not the same question as what is at the other end.
+ *
+ * `realpathSync` first, because it is the only one that resolves a symlinked path COMPONENT --
+ * a hangar reached through `/tmp` -> `/private/tmp`, or a clone under a symlinked home. But it
+ * throws on a DANGLING link, and that is the normal state of the one link this fleet declares:
+ * `repo.symlinks[]` points at the shared secrets file, which does not exist until somebody
+ * creates it. So a correct link to an absent file used to answer `undefined` and be reported as
+ * the wrong link entirely -- "expected a symlink resolving to <root>/.env.shared, found
+ * ../../../.env.shared", of a link that lands exactly there.
+ *
+ * Worse than the wrong message: the repair below then refused (`exists and is not the expected
+ * symlink`), and refusing THROWS, which ended the whole `doctor --all --fix` run at the first
+ * clone. Deleting the link and re-running recreated the identical one and reported it broken
+ * again -- a closed loop nothing in the output explained, on the last command the README's
+ * setup walkthrough tells a new hangar to run.
+ *
+ * The lexical fallback answers the same question without touching the target, so a link is
+ * judged on where it points rather than on whether the file it points at has been filled in yet.
+ */
+const resolveLink = (path: string): string | undefined => {
+  try {
+    return realpathSync(path);
+  } catch {
+    // Not a link at all -> undefined, exactly as before. A dangling one -> where it points.
+    const target = symlinkTarget(path);
+    return target === undefined ? undefined : resolve(dirname(path), target);
   }
 };
 
@@ -622,6 +651,14 @@ const CAPABILITY_LABELS = [
 const SHELL_RC_FILES = ['.zshrc', '.zprofile', '.bashrc', '.bash_profile', '.profile'] as const;
 
 /**
+ * The two home-relative forms a shell rc writes, resolved to an absolute path.
+ *
+ * One function, because the positive and the stale halves of `reportShellHook` both need it and
+ * two copies written separately is how they came to disagree in the first place.
+ */
+const expandHome = (token: string): string => token.replace(/^\$HOME/, home).replace(/^~/, home);
+
+/**
  * The platform row: what this operating system can do for Hangar, and what it refuses BY NAME.
  *
  * Printed on every OS, including the one it was written on. A row that only appeared when
@@ -700,9 +737,19 @@ const reportPlatform = (): void => {
  * DELETED artifact does not produce an error -- the colours simply stop happening, with nothing
  * anywhere to say why. So every path under this hangar's root that an rc mentions is checked for
  * existence, which catches that case generically rather than by knowing any particular old name.
+ *
+ * **Both halves match on the RESOLVED PATH, and the positive one used to match on the BASENAME.**
+ * `clone-terminal.sh` is written inside the hangar root, so by this CLI's naming rule it carries
+ * no hangar id -- which makes that name byte-identical in every hangar on the machine. A second
+ * hangar therefore reported `terminal hook sourced from .zshrc` on the strength of the FIRST
+ * hangar's line, and its own colours silently did nothing. The stale-path half was already
+ * scoped with `startsWith(hangar.root)`; this makes the two agree, through one normalisation
+ * rather than two written separately -- an rc that sources the hook as `$HOME/code/.../` has to
+ * match, and that is the exact form the note below tells people to add.
  */
-const reportShellHook = (hangar: Hangar): void => {
-  const hookName = basename(hangar.paths.terminalHookScript);
+const reportShellHook = (hangar: Hangar): number => {
+  const hookPath = hangar.paths.terminalHookScript;
+  const hookName = basename(hookPath);
   const sourcing: string[] = [];
   // A set: the idiomatic guard names the same path twice on one line (`[ -r X ] && . X`), and
   // reporting it twice would read as two separate problems.
@@ -716,24 +763,29 @@ const reportShellHook = (hangar: Hangar): void => {
     } catch {
       continue;
     }
-    if (content.includes(hookName)) sourcing.push(rc);
-    // Any path-shaped token; the `startsWith(hangar.root)` filter below is what makes it this
-    // hangar's business. It used to match the literal `dvb_gn`, which made the comment above --
-    // that this catches a stale path "generically rather than by knowing any particular old
-    // name" -- false for every hangar but one.
+    // Any path-shaped token; the `startsWith(hangar.root)` filter is what makes it this hangar's
+    // business. It used to match the literal `dvb_gn`, which made the comment above -- that this
+    // catches a stale path "generically rather than by knowing any particular old name" -- false
+    // for every hangar but one.
+    let sourced = false;
     for (const match of content.matchAll(/[^\s"'`]*\/[^\s"'`)]*/g)) {
-      const named = match[0].replace(/^\$HOME/, home).replace(/^~/, home);
+      const named = expandHome(match[0]);
+      if (named === hookPath) sourced = true;
       if (!named.startsWith(hangar.root)) continue;
       if (named === hangar.root || existsSync(named)) continue;
       stale.add(`${rc} → ${tildify(named)}`);
     }
+    if (sourced) sourcing.push(rc);
   }
 
+  let problems = 0;
   if (stale.size > 0) {
+    problems += 1;
     warn(`a shell rc sources a file that no longer exists: ${[...stale].join(', ')}`);
     note('Guarded with `[[ -r … ]]`, so this fails SILENTLY — the colours just stop.');
   }
   if (sourcing.length === 0) {
+    problems += 1;
     warn(`no shell rc sources ${hookName}, so no shell colours itself per clone`);
     // `$HOME`, not `~`: a tilde inside double quotes is not expanded, so the `~/…` form
     // `tildify` produces would be a line that silently never matches.
@@ -744,6 +796,49 @@ const reportShellHook = (hangar: Hangar): void => {
   } else {
     ok(`${'terminal hook'.padEnd(22)} ${pc.dim(`sourced from ${sourcing.join(', ')}`)}`);
   }
+  return problems;
+};
+
+/**
+ * The machine's required tooling -- one row, and it speaks up only about what is missing.
+ *
+ * `inspectEnvironment` had exactly ONE caller, `hangar setup`. But README's fastest way into a
+ * fleet somebody has already configured is "copy the example config and stop", which never runs
+ * `setup` -- so the check that README introduces with "hangar setup checks all of this for you"
+ * never ran for the people it was written for. They met the missing tool later, as whatever it
+ * broke: no `lsof` is indistinguishable from an idle machine, because zero live sessions is what
+ * both look like.
+ *
+ * `doctor` is the command someone runs when something is wrong, and the machine's tooling is a
+ * thing that can be wrong, so it belongs here. Unlike `setup` it never throws -- `doctor` reports
+ * -- and unlike `setup` it prints ONE green line when everything is present rather than a row per
+ * tool. A dozen green rows on every run is a wall people learn to scroll past, and the recommended
+ * tools stay out of here entirely: `setup` is where you are choosing what to install.
+ */
+const reportEnvironmentRow = (hangar: Hangar): number => {
+  const report = inspectEnvironment(hangar.root);
+  if (report.missingRequired.length === 0) {
+    const count = report.statuses.filter((s) => s.tool.kind === 'required').length + 1;
+    ok(`${'tooling'.padEnd(22)} ${pc.dim(`${String(count)} required programs present`)}`);
+    return 0;
+  }
+  warn(`missing required tooling: ${report.missingRequired.join(', ')}`);
+  for (const { tool, present } of report.statuses) {
+    if (present || tool.kind !== 'required') continue;
+    note(`${tool.name.padEnd(18)} ${tool.why}\n  ${installHint(tool)}`);
+  }
+  if (report.nodeManager.found === undefined) {
+    note(
+      `${'fnm or nvm'.padEnd(18)} resolves the .nvmrc Node version per directory\n  brew install fnm`,
+    );
+  }
+  if (report.homebrew.needed && !report.homebrew.present) {
+    note(
+      `${'homebrew'.padEnd(18)} the GNU userland and every install hint on macOS\n  https://brew.sh`,
+    );
+  }
+  note('`hangar setup` prints the same list with the recommended tools, and refuses to continue.');
+  return 1;
 };
 
 /**
@@ -762,11 +857,51 @@ const reportShellHook = (hangar: Hangar): void => {
  * A hangar that declares nothing gets NO row at all. Silence beats "0 variables declared" for
  * the majority of hangars that never fill this in, and the empty default is legal.
  */
-const reportSecretVariables = (hangar: Hangar): void => {
-  const declared = hangar.config.secrets.variables;
-  if (declared.length === 0) return;
+const reportSecretVariables = (hangar: Hangar, fix: boolean): number => {
+  const expected = expectedSecretVariables(
+    hangarOwnSecretVariables({
+      forgeKind: usesBitbucket(hangar.config.forge) ? 'bitbucketCloud' : 'none',
+      forgeTokenEnvKey: hangar.config.forge.tokenEnvKey,
+      trackerKind: hangar.config.tracker.kind,
+    }),
+    hangar.config.secrets.variables,
+  );
+  if (expected.length === 0) return 0;
 
   const path = hangar.paths.envShared;
+
+  /*
+   * The FILE, before its contents -- and `--fix` creates it.
+   *
+   * `setup` was the only thing that had ever written this file, and README's fastest way into a
+   * fleet somebody else has already configured is "copy the example config and stop", which never
+   * runs `setup`. Running it afterwards answers "already exists and is valid" and stops, so there
+   * was no route back to the one file every credential lives in. Each clone's `.envrc.private`
+   * loads it with `dotenv_if_exists`, so an absent one loads NOTHING and says NOTHING -- the
+   * silent-failure shape the hangar's own guidance warns about by name, reached by omission.
+   *
+   * Creating it is not deriving a credential, which is why this is a legal repair where filling
+   * it in never will be: what gets written is the same commented-out scaffold `setup` writes,
+   * every line inert. `{ mode: 0o600 }` on the create rather than a following `chmod`, because
+   * between the two syscalls a world-readable file is sitting where credentials are about to go.
+   */
+  let problems = 0;
+  let justCreated = false;
+  if (!existsSync(path)) {
+    if (fix) {
+      writeFileSync(path, secretsFileContent(expected), { mode: 0o600, flag: 'wx' });
+      justCreated = true;
+      ok(`created ${tildify(path)} (mode 600) — every line commented out`);
+    } else {
+      problems += 1;
+      warn(`the shared secrets file ${tildify(path)} does not exist`);
+      note(
+        '`hangar doctor --fix` creates it, commented out. Every clone loads it with ' +
+          '`dotenv_if_exists`, so an absent one loads nothing and reports nothing.',
+      );
+    }
+  }
+
   // A read failure is the same answer as an absent file -- `secretVariableStatuses` takes
   // `undefined` for both. The file is mode 600, so EACCES here is real rather than theoretical.
   let text: string | undefined;
@@ -776,19 +911,31 @@ const reportSecretVariables = (hangar: Hangar): void => {
     text = undefined;
   }
 
-  const statuses = secretVariableStatuses(declared, text);
+  const statuses = secretVariableStatuses(expected, text);
   const unset = statuses.filter((s) => s.state !== 'set');
   if (unset.length === 0) {
-    ok(`${'secrets'.padEnd(22)} ${pc.dim(`${String(declared.length)} declared, all set`)}`);
-    return;
+    ok(`${'secrets'.padEnd(22)} ${pc.dim(`${String(expected.length)} expected, all set`)}`);
+    return problems;
   }
   for (const s of unset) {
     const problem = secretVariableProblem(s);
     if (problem === undefined) continue;
+    // The dim `optional:` rows are notes, not problems, and stay out of the count for the same
+    // reason they are dim: a hangar whose owner never syncs must not be permanently non-zero.
     if (s.optional) note(pc.dim(`optional: ${problem}`));
-    else warn(problem);
+    else {
+      problems += 1;
+      warn(problem);
+    }
   }
-  note(`Fill them in at ${tildify(path)}; nothing derives a credential, so \`--fix\` cannot.`);
+  // A run that just created the file would otherwise report it created and then report every
+  // variable absent, which reads as two contradictory findings rather than one expected state.
+  note(
+    justCreated
+      ? `That scaffold is what is now unset: uncomment and fill in ${tildify(path)}.`
+      : `Fill them in at ${tildify(path)}; nothing derives a credential, so \`--fix\` cannot.`,
+  );
+  return problems;
 };
 
 /**
@@ -800,11 +947,47 @@ const reportSecretVariables = (hangar: Hangar): void => {
  * a tab, not a window -- and Xcode and Eclipse are launch-only, so saying `$PROJECT_DIR$` of
  * them (as this row once did) described a mechanism they do not have.
  */
-const reportEditor = (editor: EditorDriver): void => {
+const reportEditor = (editor: EditorDriver, clones: readonly Clone[]): number => {
   if (!editor.isAvailable()) {
     warn(`${editor.label} cannot be launched`);
     note(editor.unavailableHint());
-    return;
+    return 1;
+  }
+  let problems = 0;
+  /*
+   * A `rootKeys` table with no file in any clone to apply it to.
+   *
+   * `editor.rootPathKeys` is the config half of the only per-clone TEXT transform in this CLI:
+   * a handful of VS Code settings hold an absolute path into the checkout, and each clone's copy
+   * has to name its own root. But the file those keys live in -- `.vscode/settings.json` -- is
+   * untracked and personal, so a fresh fleet has none of it, and `ide vscode sync` answers "no
+   * clone has this file, nothing to sync" and stops. The keys are then INERT: correctly
+   * declared, describing a rewrite of a file that does not exist.
+   *
+   * That is what a colleague copying a committed example config gets. The config reads
+   * configured, `ide vscode sync` reads healthy, `doctor`'s editor row is green -- and their
+   * VS Code resolves stylelint, prettier and jest against nothing. Every other symptom of it
+   * shows up inside the editor, where nothing connects it back to the fleet.
+   *
+   * Gated on the table being DECLARED, exactly as the secrets row is gated on a variable being
+   * declared: a hangar with no such keys gets no row, and this one goes quiet the moment one
+   * clone has the file. Nothing to repair -- the contents are the developer's, and inventing
+   * them is what `defaultSettings` splits derived from personal to avoid.
+   */
+  // No clones is not "no clone has it": there is nothing to be inert yet, and `add-clone` writes
+  // the workspace file itself. Without this guard a hangar before its first clone reported every
+  // untracked artifact as inert, including the one it was about to create.
+  for (const artifact of clones.length === 0 ? [] : editor.artifacts) {
+    if (artifact.tracked || Object.keys(artifact.rootKeys).length === 0) continue;
+    if (clones.some((clone) => artifact.copies(clone).some((path) => existsSync(path)))) continue;
+    problems += 1;
+    warn(
+      `${artifact.id} is in no clone, so ${editor.label}'s ${String(Object.keys(artifact.rootKeys).length)} per-clone path setting(s) are inert`,
+    );
+    note(
+      `Set them up in one clone, then \`hangar ide ${editor.kind} sync\` gives every other clone ` +
+        'the same file with its own root. Nothing generates it: the contents are yours.',
+    );
   }
   const how =
     editor.capabilities.inTerminalTab === true
@@ -818,6 +1001,7 @@ const reportEditor = (editor: EditorDriver): void => {
       ? 'sync, per-clone paths'
       : 'sync';
   ok(`${'editor'.padEnd(22)} ${pc.dim(`${editor.label} — ${how}, ${setup}`)}`);
+  return problems;
 };
 
 /**
@@ -835,11 +1019,11 @@ const reportEditor = (editor: EditorDriver): void => {
  * clone predating the rename keeps the old answer for good and the config may well be the newer
  * one. Naming both and letting the developer decide is the honest report.
  */
-const reportDefaultBranch = (recorded: string | undefined, clones: readonly Clone[]): void => {
+const reportDefaultBranch = (recorded: string | undefined, clones: readonly Clone[]): number => {
   if (recorded === undefined) {
     warn('`forge.defaultBranch` is not recorded yet');
     note('The next command that needs it detects it from git and writes the line itself.');
-    return;
+    return 1;
   }
 
   const disagree = clones
@@ -855,7 +1039,7 @@ const reportDefaultBranch = (recorded: string | undefined, clones: readonly Clon
       `Edit \`forge.defaultBranch\` if the repo renamed it, or refresh a stale clone ` +
         `(\`git -C <clone> remote set-head origin --auto\`). Every command trusts the config.`,
     );
-    return;
+    return 1;
   }
 
   const agree = clones.filter((clone) => defaultBranchFromGit(clone.path) === recorded).length;
@@ -866,12 +1050,40 @@ const reportDefaultBranch = (recorded: string | undefined, clones: readonly Clon
         : `${recorded} — origin/HEAD agrees in ${String(agree)} clone(s)`,
     )}`,
   );
+  return 0;
 };
 
 export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOptions): void => {
   const all = discoverClones(hangar);
+  /*
+   * The hangar-level tally, and the line it draws.
+   *
+   * `problems` used to count only the per-clone checks, so a fresh hangar printed five warnings
+   * about its identity file, its settings, its mode statuslines and its secrets and then said
+   * `No problems in 0 clone(s).` -- a summary contradicting the report immediately above it,
+   * which is worse than no summary at all.
+   *
+   * `problem()` counts; a bare `warn()` does not, and the difference is whether anyone can ACT
+   * on it. Everything about this hangar's own state counts, including the one-time manual steps
+   * (`.claude/modes/*.settings.json`) that `--fix` deliberately will not close: those go to zero
+   * once somebody does them, which is exactly what a setup check should drive. What stays out is
+   * the machine's CAPABILITIES -- a `ps` that will not run, a terminal that cannot be typed
+   * into. Those are facts about where the fleet is running, permanent on some platforms, and
+   * counting them would leave a correctly configured GNOME Terminal hangar permanently non-zero:
+   * a check that is red in normal operation is a check nobody reads.
+   *
+   * The EXIT CODE stays 0 either way, and that is this CLI's convention rather than an
+   * oversight: a `--check` flag is the gate (`config schema --check` and `colours sync --check`
+   * both exit 1), and a report is a report. `doctor` has no `--check`.
+   */
+  let hangarProblems = 0;
+  const problem = (message: string): void => {
+    hangarProblems += 1;
+    warn(message);
+  };
+
   if (!existsSync(hangar.paths.plans)) {
-    warn(`the shared plan archive ${tildify(hangar.paths.plans)} does not exist yet`);
+    problem(`the shared plan archive ${tildify(hangar.paths.plans)} does not exist yet`);
     note("`hangar plans collect` creates it and gathers the clones' plans into it.");
   }
   // Assignments left behind by a clone that no longer exists. Harmless until `add-clone`
@@ -882,7 +1094,7 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
     (index) => !all.some((clone) => clone.index === index),
   );
   if (orphans.length > 0) {
-    warn(
+    problem(
       `${colourAssignmentsLabel(hangar)} assigns a colour to ${orphans
         .map((index) => `index ${String(index)}`)
         .join(', ')}, which no clone has`,
@@ -913,7 +1125,7 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
       writeFile(identityFile, wantIdentity);
       ok(`wrote ${tildify(identityFile)}`);
     } else {
-      warn(
+      problem(
         haveIdentity === undefined
           ? `${tildify(identityFile)} is missing — every clone session loses this hangar's identity`
           : `${tildify(identityFile)} differs from what the generator produces`,
@@ -933,7 +1145,7 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
       ok(`wrote ${tildify(settingsFile)}`);
       note('A fleet-root session reads it at startup, so this one is still on the old values.');
     } else {
-      warn(
+      problem(
         haveHangarSettings === undefined
           ? `${tildify(settingsFile)} is missing — no shared memory, no plan archive, no mode badge`
           : `${tildify(settingsFile)} differs from what the generator produces`,
@@ -957,6 +1169,14 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
    * own permission list through a command it is permitted to run. `setup` does not write them
    * either, for the same reason. Editing one line in two tracked files is the manual step, and it
    * is named here.
+   *
+   * The cost of that decision falls on whoever clones a published hangar, and it is worth saying
+   * out loud rather than leaving them to discover it: the two files are TRACKED, so the hand edit
+   * shows as a permanent modification and conflicts on every `git pull` that touches them -- and
+   * they are the files carrying operator mode's permission list, so those are conflicts nobody
+   * should resolve carelessly. That is the price of the boundary being structural. What this row
+   * can do is stop making them read prose and work out the edit: it prints the `sed` that makes
+   * it, so the manual step is one paste rather than one decision.
    */
   for (const mode of ['ops', 'dev'] as const) {
     const path = join(hangar.root, '.claude', 'modes', `${mode}.settings.json`);
@@ -964,14 +1184,29 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
     const command = readModeStatusLine(path);
     const script = command?.split(' ')[0];
     if (script !== undefined && existsSync(script) && script.startsWith(hangar.root)) continue;
-    warn(
+    problem(
       `${tildify(path)}: statusLine.command ${
         script === undefined ? 'is missing' : `→ ${tildify(script)} does not resolve in this hangar`
       }`,
     );
+    const want = `${join(hangar.root, '.claude', 'modes', 'statusline.sh')} ${mode}`;
+    note(`Set statusLine.command to: ${want}`);
+    /*
+     * A `sed` rather than a repair: `--fix` must never write this file (operator mode can run
+     * `doctor` and this file is what constrains it), but nothing stops us handing over the exact
+     * edit. `|` as the delimiter, because the value is a path.
+     *
+     * Written to a temp file and moved, NOT `sed -i`. In-place editing is the one sed flag the
+     * GNU and BSD versions spell incompatibly (`-i` versus `-i ''`), and this hangar's own
+     * `.envrc` puts GNU sed ahead of BSD on macOS -- so the obvious `sed -i ''` form is correct
+     * in a plain terminal and silently wrong inside the hangar, where it reads the script as a
+     * filename. This line is going to be pasted into a shell nobody here can see.
+     */
+    note(`  sed 's|"command": ".*statusline.sh.*"|"command": "${want}"|' ${path} > ${path}.tmp \\`);
+    note(`    && mv ${path}.tmp ${path}`);
     note(
-      `Point it at ${tildify(join(hangar.root, '.claude', 'modes', 'statusline.sh'))} ${mode}. ` +
-        "Not repairable on purpose: that file is operator mode's permission boundary.",
+      "Not repairable on purpose: that file is operator mode's permission boundary. It is also " +
+        'tracked, so this edit stays modified in `git status` and conflicts on a pull.',
     );
   }
 
@@ -993,7 +1228,7 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
         note('`git rm --cached colour-assignments.json` finishes it: the old path was tracked.');
       }
     } else {
-      warn(`${tildify(assignments.path)} is at the old root-level path`);
+      problem(`${tildify(assignments.path)} is at the old root-level path`);
       note(
         '`hangar doctor --fix` moves it under .hangar/. Tracked there, it conflicts on every pull.',
       );
@@ -1008,22 +1243,22 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
    */
   const configPath = join(hangar.root, CONFIG_FILENAME);
   if (!existsSync(configPath)) {
-    warn(`no ${CONFIG_FILENAME} in ${tildify(hangar.root)}`);
+    problem(`no ${CONFIG_FILENAME} in ${tildify(hangar.root)}`);
     note('`hangar setup` writes one, deriving what it can from the clones that already exist.');
   } else {
     const schemaPath = join(hangar.root, jsonSchemaFileName);
     const rendered = configJsonSchemaText();
     if (!existsSync(schemaPath)) {
-      warn(`${tildify(schemaPath)} is missing, so editors cannot validate the config`);
+      problem(`${tildify(schemaPath)} is missing, so editors cannot validate the config`);
       note('`hangar config schema` writes it.');
     } else if (readFileSync(schemaPath, 'utf8') !== rendered) {
-      warn(`${tildify(schemaPath)} is out of date`);
+      problem(`${tildify(schemaPath)} is out of date`);
       note('`hangar config schema` regenerates it from src/config/schema.ts.');
     }
     try {
-      reportDefaultBranch(loadConfigFile(configPath).forge.defaultBranch, all);
+      hangarProblems += reportDefaultBranch(loadConfigFile(configPath).forge.defaultBranch, all);
     } catch (error) {
-      warn(`${tildify(configPath)} does not validate`);
+      problem(`${tildify(configPath)} does not validate`);
       note(error instanceof CliError ? (error.hint ?? error.message) : String(error));
     }
   }
@@ -1032,7 +1267,7 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
   if (nested.length > 0) {
     // Nearest-wins makes this WORK, but it is never intentional: every path below the inner
     // root has two defensible answers to "which hangar am I in".
-    warn(`this hangar is nested inside ${nested.map((r) => tildify(r)).join(', ')}`);
+    problem(`this hangar is nested inside ${nested.map((r) => tildify(r)).join(', ')}`);
     note('Move it out, or merge the two configs. `hangar setup` refuses to create a nested one.');
   }
 
@@ -1045,7 +1280,8 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
    * nobody sources is a colour scheme that quietly does not exist.
    */
   reportPlatform();
-  reportSecretVariables(hangar);
+  hangarProblems += reportEnvironmentRow(hangar);
+  hangarProblems += reportSecretVariables(hangar, opts.fix === true);
 
   const { driver, source } = terminal(hangar);
   const can = CAPABILITY_LABELS.filter(([key]) => driver.capabilities[key]).map(
@@ -1064,7 +1300,7 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
     warn(refusal.message);
     if (refusal.hint !== undefined) note(refusal.hint);
   }
-  reportShellHook(hangar);
+  hangarProblems += reportShellHook(hangar);
 
   /*
    * The editors, and whether each one can actually be launched.
@@ -1076,16 +1312,16 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
    */
   const editorChoice = editors(hangar);
   for (const bad of editorChoice.broken) {
-    warn(`the ${bad.kind} editor driver would not build: ${bad.reason}`);
+    problem(`the ${bad.kind} editor driver would not build: ${bad.reason}`);
     note('`hangar open` skips it and still opens the others.');
   }
   for (const editor of editorChoice.drivers) {
     try {
-      reportEditor(editor);
+      hangarProblems += reportEditor(editor, all);
     } catch (err) {
       // Same isolation as `open`: an optional editor's probe must not end the health report that
       // the DEFAULT editor's row is in.
-      warn(
+      problem(
         `${editor.label} could not be checked: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
@@ -1093,7 +1329,7 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
 
   const strays = strayPidFilesInStore(hangar);
   if (strays.length > 0) {
-    warn(`PID files in ${tildify(hangar.paths.tmp)}: ${strays.join(', ')}`);
+    problem(`PID files in ${tildify(hangar.paths.tmp)}: ${strays.join(', ')}`);
     note(
       'The store holds shared cache only; PID files are never moved into it. These were written ' +
         'by a clone whose whole tmp/ was the store, and they belong to no clone in particular.',
@@ -1112,9 +1348,30 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
       }
       problems += 1;
       if (opts.fix === true && check.repair) {
-        check.repair();
-        warn(`${check.name.padEnd(22)} ${check.detail}`);
-        note('repaired');
+        /*
+         * One repair that throws must not end the fleet run.
+         *
+         * This was a bare call, inside two loops -- per check, per clone -- so the first repair
+         * that refused took every LATER check in that clone and every later CLONE with it. The
+         * symlink repair refuses by design when something unexpected is already at the path, and
+         * it fired on every clone of a hangar whose secrets file did not exist yet: `--fix`
+         * printed one error and stopped, with the ports, hooks, remotes and theme of three other
+         * clones silently unvisited and nothing saying they had been skipped.
+         *
+         * A refusal is information about ONE artifact. Report it where that artifact's row would
+         * have been and carry on -- `--fix` is the pass people run without reading, so the one
+         * thing it must not do is quietly do less than it says.
+         */
+        try {
+          check.repair();
+          warn(`${check.name.padEnd(22)} ${check.detail}`);
+          note('repaired');
+        } catch (error) {
+          fail(`${check.name.padEnd(22)} ${check.detail}`);
+          note(
+            `could not repair: ${error instanceof CliError ? (error.hint ?? error.message) : String(error)}`,
+          );
+        }
       } else if (check.repair) {
         fail(`${check.name.padEnd(22)} ${check.detail}`);
         note('fixable with `hangar doctor --fix`');
@@ -1125,9 +1382,21 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
   }
 
   console.log('');
-  if (problems === 0) note(`No problems in ${targets.length} clone(s).`);
+  const total = hangarProblems + problems;
+  // The two halves are named separately because they are fixed in different places: a clone
+  // problem is almost always derivable, and a hangar one is as often a decision (a credential to
+  // paste, one line in a tracked settings file) that `--fix` will never close.
+  const where =
+    hangarProblems === 0
+      ? `in ${String(targets.length)} clone(s)`
+      : problems === 0
+        ? 'above the clones'
+        : `${String(hangarProblems)} above the clones, ${String(problems)} in ${String(targets.length)} clone(s)`;
+  if (total === 0) note(`No problems in ${String(targets.length)} clone(s).`);
   else if (opts.fix === true) {
-    note(`${problems} problem(s) seen; the fixable ones were repaired. Re-run to confirm.`);
+    note(`${String(total)} problem(s) seen (${where}); the fixable ones were repaired.`);
     note('A repaired .env.local needs `direnv allow` in that clone; a theme needs a restart.');
-  } else note(`${problems} problem(s). Re-run with --fix to repair the derivable ones.`);
+  } else {
+    note(`${String(total)} problem(s) (${where}). Re-run with --fix to repair the derivable ones.`);
+  }
 };

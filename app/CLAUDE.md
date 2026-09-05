@@ -408,7 +408,11 @@ Five more root files are hand-maintained and belong to this package rather than 
   no side effects**: direnv's `source_env` does a `pushd` into this file's own directory, so a
   relative path written here would resolve against the hangar root instead of the caller, and
   every caller invokes the functions itself. `.envrc` is the only consumer today; `.envrc.clone`
-  becomes the second at B7.
+  becomes the second at B7. `hangar_use_gnu` resolves the Homebrew prefix in three steps —
+  `HOMEBREW_PREFIX`, then `/opt/homebrew`, then `brew --prefix` — and `environment.ts`'s
+  `resolveBrewPrefix` does the same three in the same order, deliberately. The probe is last and
+  conditional in both: an Intel Mac without `brew shellenv` in its profile has the variable unset,
+  and stopping at the default aborted the whole `.envrc` on a machine that has Homebrew.
 - **`bin/hangar-mode` plus `bin/hangar-ops` / `bin/hangar-dev`, and the five files in
   `.claude/modes/`** — `ops.md`, `dev.md`, a `*.settings.json` beside each, and `statusline.sh`.
   A mode is `--settings` + `--append-system-prompt-file` + `-n`, read once at startup, and `dev`'s

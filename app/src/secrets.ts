@@ -1,3 +1,4 @@
+import { DEFAULT_BITBUCKET_TOKEN_ENV_KEY } from './bitbucket.ts';
 import type { SecretVariable } from './config/schema.ts';
 
 /**
@@ -91,4 +92,74 @@ export const secretVariableProblem = (s: SecretVariableStatus): string | undefin
       ? `${s.name} is set but EMPTY in the secrets file, which reads as configured to everything downstream`
       : `${s.name} is not set in the secrets file`;
   return `${what} — ${s.why}`;
+};
+
+/**
+ * The credentials HANGAR ITSELF needs, derived from the config rather than declared.
+ *
+ * `secrets.variables[]` is for what the REPO's tooling reads, which is invisible from up here.
+ * These three are the opposite case: the config already says the forge is Bitbucket and the
+ * tracker is Jira, so what has to be in the secrets file follows, and asking every hangar to
+ * write it down again is asking them to restate their own config.
+ *
+ * That gap was not theoretical. This fleet declared exactly one variable -- the Playwright
+ * password -- so `doctor` was silent about the Bitbucket token and the Atlassian pair, which are
+ * three of the four credentials it actually needs. `sync` names its missing token at the point
+ * of use; nothing named the other two at all, and a colleague copying this hangar's committed
+ * example config inherited that silence along with it.
+ *
+ * Takes the three facts and not a `HangarConfig`, so `setup` -- which is answering questions and
+ * has no config yet -- reaches the same list as `doctor`, and the scaffold `setup` writes cannot
+ * drift from the rows `doctor` prints against it.
+ *
+ * `optional: true` on all three, deliberately. Each degrades rather than breaks: no forge token
+ * makes `sync` guess the target branch and SAY it guessed, and no tracker credentials make a
+ * ticket fetch fail where the person who ran it is watching. A hangar whose owner never syncs
+ * must not have a permanently red `doctor` -- a check that is red in normal operation is a check
+ * nobody reads.
+ */
+export const hangarOwnSecretVariables = (facts: {
+  readonly forgeKind: 'bitbucketCloud' | 'none';
+  /** `forge.tokenEnvKey`. Optional in the schema, so the adapter's own default stands in. */
+  readonly forgeTokenEnvKey: string | undefined;
+  readonly trackerKind: 'jira' | 'none';
+}): readonly SecretVariable[] => [
+  ...(facts.forgeKind === 'bitbucketCloud'
+    ? [
+        {
+          name: facts.forgeTokenEnvKey ?? DEFAULT_BITBUCKET_TOKEN_ENV_KEY,
+          why: 'lets `sync` ask Bitbucket which branch a pull request targets; without it the target is a guess',
+          optional: true,
+        },
+      ]
+    : []),
+  ...(facts.trackerKind === 'jira'
+    ? [
+        {
+          name: 'ATLASSIAN_USER_EMAIL',
+          why: 'the account the Jira API authenticates as; a ticket fetch fails without it',
+          optional: true,
+        },
+        {
+          name: 'ATLASSIAN_API_TOKEN',
+          why: 'the Jira API token; a ticket fetch fails without it',
+          optional: true,
+        },
+      ]
+    : []),
+];
+
+/**
+ * The full list `doctor` reports and `setup` scaffolds: derived first, then declared.
+ *
+ * A declared entry with the same NAME wins outright. That is the escape hatch for the two
+ * judgements the derivation makes for you -- the `why` and `optional` -- so a hangar that cannot
+ * work without its forge token can declare it `optional: false` and get a red row.
+ */
+export const expectedSecretVariables = (
+  derived: readonly SecretVariable[],
+  declared: readonly SecretVariable[],
+): readonly SecretVariable[] => {
+  const overridden = new Set(declared.map((v) => v.name));
+  return [...derived.filter((v) => !overridden.has(v.name)), ...declared];
 };
