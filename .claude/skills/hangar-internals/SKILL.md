@@ -14,13 +14,17 @@ suite, so these paragraphs are the regression record — the only surviving acco
 fixed and must not come back. When you change behaviour, update the note. When you tidy prose, leave
 them alone.
 
-**Those notes name real branches, real tickets and real files, and that is deliberate.** Hangar
-manages any repo, but it was built in one — an Angular app with a Storybook, a Playwright suite and
-Jira keys beginning `DN-` — and the bugs it has actually survived happened there. A worked example
-with the real names is evidence; the same paragraph with `<some file>` in it is a claim. So read
-`angular/`, `ABC-1323` and `storefront_ui` as _this is what happened_, never as _this is what your
-hangar looks like_. Anything that IS universal — a path, a filename pattern, a command — is written
-generically, and where it is not, that is a bug in the note.
+**Those notes are a regression record, and they are worked through to a concrete example on
+purpose.** Hangar manages any repo, but it was built in one — an Angular app with a Storybook, a
+Playwright suite and a Jira project — and the bugs it has actually survived happened there. A
+paragraph that follows one ticket through one cache filename is evidence; the same paragraph with
+`<some file>` in it is a claim. The names are fictional, because Hangar is published and a note
+that named one company's repository and tickets would be telling every other reader about somebody
+else's fleet. So read `ABC-1323` and `storefront_ui` as _a case like this happened_, never as
+_this is what your hangar looks like_. The
+shapes are exact even where the names are not: an example that stopped demonstrating the bug when
+its name changed would be a bug in the note. Anything that IS universal — a path, a filename
+pattern, a command — is written generically.
 
 ## Read the right file, not all of them
 

@@ -34,7 +34,7 @@ const parseRemote = (url: string): RepoRef | undefined => {
  * `undefined` when neither is a Bitbucket URL, which is the honest answer for a hangar on any
  * other forge: no PR link rather than a link into somebody else's workspace. The fallback used
  * to be two module constants naming THIS repo, so a foreign hangar whose clone had no origin
- * remote got a `status` row linking to storefront_ui's pull requests.
+ * remote got a `status` row linking to the maintainer's own repository's pull requests.
  */
 export const repoRef = (hangar: Hangar, clonePath: string): RepoRef | undefined => {
   const url = gitTry(clonePath, ['remote', 'get-url', 'origin']);

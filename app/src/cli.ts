@@ -38,7 +38,7 @@ import { CliError } from './exec.ts';
 import { PALETTE_NAMES } from './palette.ts';
 
 /**
- * `hangar` -- fleet-level orchestration for the storefront_ui clones.
+ * `hangar` -- fleet-level orchestration for a hangar's clones.
  *
  * This is the ONLY place allowed to end the process; every command signals failure by
  * throwing a CliError, which is rendered here as a message rather than a stack trace.

@@ -270,11 +270,11 @@ export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
   /*
    * The two hangar-ROOT generated files, captured like the shell artifacts.
    *
-   * Both were tracked with `/Users/someone` in them, and both reach a reader who cannot see where
-   * they came from: `.claude/settings.json` is read once at session start (Claude Code failing
-   * silently on all three of its values), and `CLAUDE.local.md` is prepended to every clone
-   * session through the ancestor walk. A wrong value in either is invisible until somebody
-   * notices a badge missing or a session naming the wrong ports.
+   * Both were tracked with one machine's home directory in them, and both reach a reader who
+   * cannot see where they came from: `.claude/settings.json` is read once at session start
+   * (Claude Code failing silently on all three of its values), and `CLAUDE.local.md` is prepended
+   * to every clone session through the ancestor walk. A wrong value in either is invisible until
+   * somebody notices a badge missing or a session naming the wrong ports.
    */
   for (const [name, path, content] of [
     [

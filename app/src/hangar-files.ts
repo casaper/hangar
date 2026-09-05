@@ -6,7 +6,7 @@ import type { Hangar } from './hangar.ts';
  * The files a hangar generates into its OWN root, as pure builders.
  *
  * `clone-config.ts` holds the per-clone equivalents and this is the hangar-level half, split out
- * for one reason: these were **tracked, with `/Users/someone` in them.**
+ * for one reason: these were **tracked, with one machine's home directory in them.**
  *
  * That is not a tidy-up. A tracked file naming one machine's home directory is a merge conflict on
  * every `git pull` from a published upstream, and worse than that on a colleague's machine the

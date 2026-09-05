@@ -89,7 +89,7 @@ export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
    * `forge.originUrl`, with NO literal fallback.
    *
    * It fell back to a module constant naming this fleet's own Bitbucket repo, which in another
-   * hangar means `add-clone` cheerfully clones storefront_ui into somebody else's fleet and wires
+   * hangar means `add-clone` cheerfully clones the WRONG repository into somebody else's fleet and wires
    * it in completely -- ports, identity file, hooks and all. The config field is required by the
    * schema, so there is nothing to fall back FROM.
    */
