@@ -156,6 +156,16 @@ and both `CLAUDE.local.md` builders. **The wiring did not.** `withJiraHook` read
 hangar with no tracker got the hook in every clone anyway, `doctor` reported it *missing* when it
 was correctly absent, and `--fix` installed it.
 
+`status`'s issue row had the same shape of bug and is fixed with it: its own header claimed it
+distinguished "no key in this branch" from "this hangar has no tracker", while the no-key arm
+returned before anything read the config. So a tracker-less clone was told its BRANCH was named
+wrong — a complaint about a convention that hangar never adopted — and a branch carrying a
+key-shaped token was told `tracker.baseUrl` was missing, which names the one key that is not the
+reason. The `kind` check now comes first, and `statusOf` skips `inferTicket` entirely when there
+is no tracker: a branch with no key in its name sends it to `git merge-base` and `git log`, so
+`status --all` was spending two subprocesses per clone deriving a key for a row that could only
+ever say there is no tracker.
+
 That is the same defect as the four literals below, one level up: obeyed in the one hangar that
 happens to want it, and imposed on every other. It is not dangerous — the decline above is the
 first thing this hook does, before any filesystem walk — but a `PreToolUse` matcher on `Bash`

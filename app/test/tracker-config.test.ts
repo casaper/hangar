@@ -11,6 +11,7 @@ import {
   type SettingsJson,
 } from '../src/clone-config.ts';
 import { parseSyncCommand, scriptTail } from '../src/commands/jira.ts';
+import { issueRow } from '../src/commands/status.ts';
 import { cloneAt } from '../src/fleet.ts';
 import { fixtureConfigText, fixtureVscodeConfigText, syntheticHangar } from './fixture.ts';
 
@@ -224,4 +225,52 @@ test('a hook belonging to ANOTHER tool is left alone', () => {
   };
   const result = withJiraHook(off, { hooks: { PreToolUse: [foreign] } });
   assert.deepEqual(result.hooks?.['PreToolUse'], [foreign]);
+});
+
+/**
+ * `status`'s issue row, whose three silences used to collapse into one wrong answer.
+ *
+ * The builder's own header claimed it distinguished "no key in this branch" from "this hangar
+ * has no tracker", and the ordering defeated it: the no-key arm returned before anything read
+ * the config. So a tracker-less clone was told its BRANCH was named wrong -- advice about a
+ * convention that hangar never adopted -- and a branch that happened to carry a key-shaped
+ * token was told `tracker.baseUrl` was missing instead. One cause, two wrong answers, neither
+ * actionable.
+ *
+ * Asserted WITHOUT stripping ANSI, and that is a property of what is asserted rather than an
+ * assumption about the tty `picocolors` looks for: an escape sequence is `[`, digits, `;` and
+ * `m`, so it can never contain one of the words matched below, and the one exact comparison is
+ * on the arm that does not call `picocolors` at all. `NO_COLOR` is how `dev/golden.sh`
+ * neutralises colour where it genuinely must; a test that needed it here would be pinning bytes
+ * it has no business pinning.
+ */
+
+test('a tracker-less clone is told there is no tracker, not that its branch is misnamed', () => {
+  for (const hangar of [disabledHangar(), noTrackerHangar()]) {
+    const said = issueRow(cloneAt(hangar, 1), undefined);
+    assert.match(said, /no tracker/);
+    assert.doesNotMatch(said, /branch/, 'a hangar with no tracker was blamed for its branch name');
+  }
+});
+
+test('and it is told that even when a key WAS inferred from the branch', () => {
+  /*
+   * The arm that used to blame a missing `tracker.baseUrl`. `inferTicket` reads any key-shaped
+   * token, so a tracker-less hangar whose branch is `BE-7-something` reached it -- naming the
+   * one config key that is NOT the reason, since `kind: none` is.
+   */
+  const said = issueRow(cloneAt(disabledHangar(), 1), { key: 'BE-7', source: 'branch' });
+  assert.match(said, /no tracker/);
+  assert.doesNotMatch(said, /baseUrl/, 'blamed baseUrl for what tracker.kind decides');
+});
+
+test('an enabled hangar still links the key, and still reports a branch with none', () => {
+  // Guard on the guard: a gate answering "no tracker" unconditionally would satisfy both tests
+  // above and silence the row in the one hangar that wants it.
+  const clone = cloneAt(syntheticHangar(), 1);
+  assert.equal(
+    issueRow(clone, { key: 'BE-7', source: 'branch' }),
+    'https://example.invalid/browse/BE-7',
+  );
+  assert.match(issueRow(clone, undefined), /none inferred/);
 });

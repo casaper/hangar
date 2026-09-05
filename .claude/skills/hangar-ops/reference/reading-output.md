@@ -21,12 +21,16 @@ Rows that need care when you relay them:
   report `in sync` as authoritative unless you passed `--fetch`; the command prints
   `Remote state was not refreshed. Add --fetch for an authoritative sync answer.` for the same
   reason. `no upstream` means the branch has never been pushed — not that it is behind.
-- **`issue`** has three outcomes, and they are not the same answer. A URL; or the bare key with
-  `(no link — this hangar has no tracker.baseUrl)`, meaning the branch names a ticket and the
-  hangar has nowhere to link it; or `none inferred`, meaning no key was found in the branch name or
-  in this branch's commits. Telling the middle one from the last matters: a missing config would
-  otherwise read as a branch naming convention. A URL may carry `(from a commit on this branch, not
-  from the branch name)` — that parenthesis is a weaker signal than a branch name.
+- **`issue`** has three outcomes, and they are not the same answer. `no tracker configured for
+  this hangar` means the config says `tracker.kind: none` and nothing was looked for — there is no
+  branch to rename and no key to add, and relaying it as "no ticket found" invents a problem. Or a
+  URL. Or `none inferred`, which appears ONLY on a hangar that has a tracker and means no key was
+  found in the branch name or in this branch's commits — that one is actionable, and telling it
+  from the first is the whole point of the row: a hangar with no tracker used to print it, so a
+  missing config read as a branch naming convention. A URL may carry `(from a commit on this
+  branch, not from the branch name)` — that parenthesis is a weaker signal than a branch name.
+  (A fourth, `(no link — this hangar has no tracker.baseUrl)`, is defensive: the schema requires
+  `baseUrl` whenever the kind is not `none`, so a config that loaded cannot produce it.)
 - **`pull request`** is a **search URL**, not a link to a specific PR. It does not mean a PR exists.
   It says `no link — forge.originUrl is not a Bitbucket repository` on a hangar hosted elsewhere.
 - **`claude`** distinguishes `on <tty>` from `(no tty — IDE session)`. A session with no tty cannot

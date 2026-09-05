@@ -100,20 +100,33 @@ export const strandedStashRow = (entries: readonly StashEntry[]): string[][] =>
       ];
 
 /**
- * The tracker row: a link, why there is no link, or that no key was inferred.
+ * The tracker row: no tracker at all, no key inferred, a key with no link, or the link.
  *
- * Its own PURE builder for the reason the other two rows are, and because there are now three
- * outcomes rather than two. `issueUrl` returns undefined for a hangar with `tracker.kind: none`,
- * and the row has to say WHICH of the two silences it is -- "no key in this branch" and "this
- * hangar has no tracker" call for completely different actions, and printing the same dim line
- * for both is how a missing config reads as a branch naming convention.
+ * Its own PURE builder for the reason the other two rows are, and because the silences have to
+ * be told apart: "no key in this branch" and "this hangar has no tracker" call for completely
+ * different actions, and printing one dim line for both is how a missing config reads as a
+ * branch naming convention.
+ *
+ * **The no-tracker case has to come FIRST, and it did not.** The comment above claimed the
+ * distinction while the `ticket === undefined` arm returned before anything consulted the
+ * config, so every clone of a hangar with `tracker.kind: none` was told "no issue key in the
+ * branch name or in this branch's commits" -- a complaint about a convention that hangar never
+ * adopted, and advice that cannot be acted on. A branch that happened to carry a key-shaped
+ * token fell into the arm below instead and blamed a missing `tracker.baseUrl`, which is a
+ * third wrong answer for the same one cause.
  */
 export const issueRow = (clone: Clone, ticket: TicketGuess | undefined): string => {
+  if (clone.hangar.config.tracker.kind === 'none') {
+    return pc.dim('no tracker configured for this hangar');
+  }
   if (ticket === undefined) {
     return pc.dim("none inferred (no issue key in the branch name or in this branch's commits)");
   }
   const url = issueUrl(clone.hangar, ticket.key);
   if (url === undefined) {
+    // Defensive rather than reachable: `kind: none` is handled above, and the schema's
+    // cross-check requires `baseUrl` whenever the kind is anything else, so a config that
+    // parsed cannot get here. Kept because `issueUrl` is typed to allow it.
     return `${ticket.key} ${pc.dim('(no link — this hangar has no tracker.baseUrl)')}`;
   }
   const from =
@@ -125,7 +138,14 @@ export const issueRow = (clone: Clone, ticket: TicketGuess | undefined): string 
 
 export const statusOf = (clone: Clone, fetched: boolean): void => {
   const branch = currentBranch(clone.path);
-  const ticket = inferTicket(clone, branch);
+  /*
+   * Not inferred at all when there is no tracker, which is a saving and not only tidiness:
+   * a branch whose name carries no key sends `inferTicket` to `git merge-base` and `git log`,
+   * so `status --all` on a tracker-less fleet spent two subprocesses per clone deriving a key
+   * for a row that can only ever say there is no tracker.
+   */
+  const ticket =
+    clone.hangar.config.tracker.kind === 'none' ? undefined : inferTicket(clone, branch);
   const ref = repoRef(clone.hangar, clone.path);
   const sessions = claudeSessionsIn(clone.path);
   const scan = runningServersIn(clone);
