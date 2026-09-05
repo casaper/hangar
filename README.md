@@ -78,8 +78,10 @@ Two consequences worth knowing up front:
 `hangar setup` checks all of this for you and refuses to continue if something required is missing.
 
 **Required:** `git`, `direnv`, `jq`, `yq`, `lsof`, and either `fnm` or `nvm` (to resolve the
-`.nvmrc` Node version per directory). On macOS, Homebrew as well — it is where the GNU userland and
-every install hint come from. Node 24 (`.nvmrc`), and `pnpm`, which direnv activates for you.
+`.nvmrc` Node version per directory — both are honoured, by direnv at the hangar root and by
+`hangar install` inside a clone; fnm is preferred only because it is a real binary and answers
+faster). On macOS, Homebrew as well — it is where the GNU userland and every install hint come
+from. Node 24 (`.nvmrc`), and `pnpm`, which direnv activates for you.
 
 `lsof` is the one that looks optional and is not: it is how a running process is attributed to a
 clone at all — a live Claude Code session by its working directory, a dev server by its listening
@@ -112,11 +114,16 @@ The hangar root is itself a small git repo — branch `main` — tracking the CL
 shell helpers and the config example. The clones, the secrets and `node_modules` are gitignored, so
 what you copy is small.
 
-**There is no published remote yet.** Copy it from wherever this one is reachable:
+```bash
+git clone git@github.com:casaper/hangar.git ~/code/my_fleet
+```
+
+That is the published remote. If you cannot reach it — it is a personal account rather than an
+org one, so access is not automatic — copy the repo from any hangar you can reach instead:
 
 ```bash
 git clone /path/to/existing/hangar ~/code/my_fleet     # over a filesystem or ssh path
-# or, to move it without a reachable path:
+# or, with no reachable path at all:
 git -C /path/to/existing/hangar bundle create /tmp/hangar.bundle --all
 git clone /tmp/hangar.bundle ~/code/my_fleet
 ```
@@ -154,7 +161,24 @@ rather than failing with a Node stack trace. The one exception is `hangar jira h
 silent and exits zero even unbootstrapped: it runs as a Claude Code `PreToolUse` hook, where a
 non-zero exit would block the tool call it was only meant to observe.
 
-### 3. `hangar setup`
+### 3. The config: copy it, or answer for it
+
+**Joining a fleet for a repo somebody has already configured? Copy the example and stop.**
+
+```bash
+cp hangar.config.example.yaml hangar.config.yaml
+hangar config validate
+```
+
+`hangar.config.example.yaml` is committed and is kept a faithful superset of the live file, so
+for the repo it was written against it is already the complete, correct answer — including the
+things `setup` cannot observe and therefore leaves out: the symlinks a clone needs, the command
+that reports the repo's ports, the tracker's cache scripts. Change `id` only if another hangar on
+your machine already uses it. `hangar config validate` compares the two files whenever they share
+an `id` and reports any line that has drifted, which is what keeps the copy trustworthy.
+
+**Setting up a hangar for a repo nobody has configured yet?** Then `setup` is the way in, and the
+rest of this section is about it.
 
 ```bash
 hangar setup                                   # interactive
@@ -168,6 +192,13 @@ Three jobs, in this order: prove the machine has the tooling, then write `hangar
 `hangar.schema.json`, then create the secrets file it names (mode 600, every variable commented
 out — filling it in is your one manual step). It is re-runnable against a hangar that already has
 clones and running servers, so every question arrives with an answer already derived from disk.
+
+**What it derives, it derives from an existing clone — so on a fresh machine it derives nothing.**
+That is not a defect but it is worth knowing before you read the result: in an empty directory
+`appDir`, the port roles, the install steps, the symlinks and the VS Code path keys all come out
+empty or absent, because there is no checkout to read them off. Either fill them in by hand
+against `hangar.config.example.yaml`, or add your first clone and use that as the reference. Do
+not reach for `setup --force` to re-derive: it rewrites the live config, hand edits included.
 
 **It writes only what it could observe in your repository, or was told.** `appDir`, the package
 manager, the directories that get a direnv file, the default branch, the issue-key prefix and the
@@ -299,11 +330,21 @@ is narrower than it was:
 
 What *is* wired, and worth knowing because that list used to have six entries: ports, port roles
 and their env keys, the per-hangar port offset, clone directory naming, the per-clone dotenv and
-its extra variables, symlinks, the secrets file, the install steps (any of fourteen package
-managers or an explicit command, in any directory, Node or not), workspace naming and directories,
-VS Code's per-clone path keys in both directions, theme and statusline naming, the forge and
-tracker identity, the first clone of a fresh hangar, and which hangar a command acts on
-(`--hangar`, then the walk up from your working directory, then `HANGAR_ROOT`).
+its extra variables, symlinks, the secrets file **and the variables a repo needs out of it**, the
+install steps (any of fourteen package managers or an explicit command, in any directory, Node or
+not, under either version manager), workspace naming and directories, VS Code's per-clone path
+keys in both directions, theme and statusline naming, the forge and tracker identity, the first
+clone of a fresh hangar, and which hangar a command acts on (`--hangar`, then the walk up from
+your working directory, then `HANGAR_ROOT`).
+
+Two things that were true of the *documentation* rather than the code have also been closed, and
+both were found by walking a colleague's first day end to end. The example config had drifted
+from the live one by one line — `forge.defaultBranch`, `main` against `master` — which pointed
+`checkout-default`, `open`'s fast-forward and `sync`'s fallback at a branch this repo does not
+have; that invariant is now checked by `hangar config validate` whenever the two files share an
+`id`, rather than only asserted in a skill. And `repo.install[].nodeVersionFile` was honoured
+under fnm only, silently, while this file promised either manager — so an nvm user's first
+`add-clone` built the app under whatever Node happened to be first on PATH.
 
 The repository itself is now yours rather than this hangar's. `CLAUDE.md` is generic and the
 machine-specific half is a generated, gitignored `CLAUDE.local.md` beside it; `.claude/settings.json`
@@ -375,7 +416,15 @@ After any change, from `app/`:
 ```bash
 pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 hangar config schema --check     # only if you touched config/schema.ts
+pnpm golden && git diff --exit-code dev/golden/gated
 ```
+
+**In a hangar that is not the one this baseline was recorded in, that last line fails on the
+first run, and it is supposed to.** `dev/golden/gated/` has two halves: `fixture/` derives from a
+checked-in config with `%HANGAR%`/`%HOME%` normalised away and renders identically anywhere,
+while `hangar/` is a capture of *this* hangar's real config and real clones. Regenerate once,
+read the diff to confirm it is only your own paths and clones, and commit it as your baseline.
+From then on it is a gate. `dev/golden/README.md` has the rest.
 
 **The test suite is a seed, not a safety net**, and knowing what it does and does not cover is the
 point of saying so. `app/test/` holds the things a capture structurally cannot express — two
@@ -508,6 +557,31 @@ anything locally. Nothing is duplicated per clone, so rotating a token is one ed
 
 The config never holds a token, only the **name of the variable** that does (`forge.tokenEnvKey`).
 The config example is committed; the secrets file is not.
+
+**Declare what your repo needs, in `secrets.variables`.** `setup` scaffolds the names Hangar
+itself uses — the forge token, the tracker pair — because those come from keys it already has.
+Everything your own tooling reads is invisible from up here, and an undeclared credential fails
+in the worst available way:
+
+```yaml
+secrets:
+  variables:
+    - name: USER_READWRITE_PASSWORD
+      why: the tracked tests/.env sets it empty; Playwright logs in with no password without it
+      optional: false # true renders doctor's row dim rather than red
+```
+
+`hangar doctor` then prints a row per declared variable and tells **absent** apart from the worse
+**set but empty**, which reads as configured to everything downstream. It never repairs one — a
+credential is the one thing in the fleet that cannot be derived from a clone index, which is
+exactly why it is worth a row of its own. The `why` is required, for the same reason
+`repo.symlinks[].why` is: a variable name explains what breaks without it no better than a
+symlink does.
+
+This is the gap that used to swallow a new hangar whole. The Playwright symlink above exists
+*because* the tracked test `.env` blanks that password — its `why` says so — but nothing told a
+fresh hangar to put the variable in the shared file at all. So the symlink got created, `doctor`
+went green, and the suite logged in with an empty password.
 
 ## The two shared directories
 

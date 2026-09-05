@@ -1,0 +1,4 @@
+ok  ~/code/dvb_gn/hangar.config.yaml is valid
+    3 port role(s): ng, storybook, playwrightReport
+    profile storefront-ui, forge bitbucketCloud, tracker jira
+ok  hangar.config.example.yaml matches this config

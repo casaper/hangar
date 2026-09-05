@@ -387,6 +387,25 @@ export const editorSchema = z.strictObject({
   rootPathKeys: z.record(z.string(), z.string()).default({}),
 });
 
+const secretVariableSchema = z.strictObject({
+  /** The environment variable name, as it appears in the secrets file. */
+  name: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'must be a legal environment variable name'),
+  /**
+   * REQUIRED, for the same reason `repo.symlinks[].why` is: nothing in the filesystem explains
+   * what breaks without this variable, and this string is what `setup` writes into the scaffold
+   * and `doctor` prints when it is unset.
+   */
+  why: z.string().min(1),
+  /**
+   * `false` means "this hangar cannot work without it" -- an unset one is a `doctor` warning.
+   * `true` downgrades that to a dim row, for a credential only some of the fleet's work needs.
+   *
+   * The default is required, because a variable nobody had to declare is one nobody had to
+   * justify, and the `why` above is the price of the row.
+   */
+  optional: z.boolean().default(false),
+});
+
 const secretsSchema = z.strictObject({
   /** Hangar-root-relative. Lives outside every clone so no clone can commit it. */
   file: containedPath('secrets.file').default('.env.shared'),
@@ -394,6 +413,23 @@ const secretsSchema = z.strictObject({
     .string()
     .regex(/^[0-7]{3,4}$/, 'must be an octal file mode like "600"')
     .default('600'),
+  /**
+   * What the REPO's own tooling needs out of that file -- the half no hangar can derive.
+   *
+   * `forge.tokenEnvKey` and the tracker credentials are Hangar's own, so `setup` already
+   * scaffolds those. Everything else a checkout needs is invisible from here: this fleet's
+   * Playwright suite reads `USER_READWRITE_PASSWORD`, and the tracked
+   * `tests/playwright-regression-tests/.env` sets it EMPTY and is loaded after the shared
+   * secrets -- which is why a symlink reloads them, and the symlink's `why` says so. But
+   * nothing told a new hangar to put the variable in the file at all, so the symlink was
+   * created, `doctor` was green, and Playwright logged in with an empty password: exactly the
+   * failure the symlink exists to prevent, reproduced by omission.
+   *
+   * Named `variables` and not `vars` on purpose -- `repo.cloneEnv.vars` is a MAP of values to
+   * write, and this is a LIST of names to check. Two keys spelled the same with different
+   * shapes is how a config gets edited into the wrong one.
+   */
+  variables: z.array(secretVariableSchema).default([]),
 });
 
 const paletteSchema = z.strictObject({
@@ -569,3 +605,4 @@ export const installCommandFor = (step: InstallStep): readonly string[] => {
   if (canonical === undefined) throw new Error(`install step has neither manager nor command`);
   return canonical;
 };
+export type SecretVariable = HangarConfig['secrets']['variables'][number];

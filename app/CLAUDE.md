@@ -68,6 +68,11 @@ Both exist because they caught something, and both apply to every edit under `ap
   - **`gated/` is a gate and `advisory/` is not.** Advisory output moves with what the clones are
     doing, and that includes `doctor --all`, `status --all` and the `tmp`/`plans` dry runs, so a
     green command diff proves less than it looks like it does. The builder trees are the net.
+  - **In a hangar this baseline was not recorded in, `gated/hangar/` diffs on the first run.**
+    That half is a capture of THIS config and THESE clones, so a fresh clone of a published
+    hangar regenerates it once and commits it as its own baseline; only `gated/fixture/` is
+    portable. Say so before handing anyone the gate line, or the first thing they meet is a
+    136-file diff that looks like a broken tool.
   - **`gated/fixture/` is the half that certifies anything.** `dev/fixture.config.yaml` disagrees
     with this hangar's config _and_ with every schema default on purpose. While a config agrees
     with the defaults, "read the config file" and "fell into a catch and used the defaults"
@@ -116,7 +121,7 @@ stale on the next commit and nothing checks it, so run `wc -l` when you want one
 | entry point           | `cli.ts` — every command, option and alias is registered here, plus the `preAction` config gate and the `configureHelp` that prints all of a command's aliases                                                                                                                                                                                                                                                                       |
 | maintainer            | `commands/dev.ts` — `hangar dev golden`, the capture behind `pnpm golden`. **Hidden in `cli.ts`, and that is its interface contract**: nothing about it is promised to an operator, so it gets no row in `hangar-ops/reference/commands.md`. It is deliberately NOT in `NEEDS_NO_CONFIG` — a capture of a hangar with no config would be a capture of the schema defaults, the one output this net must never mistake for a real one |
 | commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`, `install`                                                                                                                                                                                              |
-| config                | `config/schema.ts` (the zod authority), `default-branch.ts`, `load.ts` (discovery + precedence), `derive.ts`, `json-schema.ts`                                                                                                                                                                                                                                                                                                       |
+| config                | `config/schema.ts` (the zod authority), `default-branch.ts`, `load.ts` (discovery + precedence), `derive.ts`, `json-schema.ts`, `drift.ts` (the example-vs-live comparison `config validate` runs)                                                                                                                                                                                                                                   |
 | per-clone artifacts   | `clone-config.ts` — the byte-compared builders `doctor` holds every clone to; `colour-assignments.ts`; `ports.ts`                                                                                                                                                                                                                                                                                                                    |
 | generators            | `generate/` — `terminal-sh.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                                                                                                                                                                                                                          |
 | editor drivers        | `editor/` — `vscode.ts`, `jetbrains.ts`, `index.ts`, `kinds.ts`, `types.ts`, `launch-only.ts`, `emacs.ts`, `vim.ts`, `zed.ts`                                                                                                                                                                                                                                                                                                        |
@@ -125,7 +130,7 @@ stale on the next commit and nothing checks it, so run `wc -l` when you want one
 | git / forge / tracker | `git.ts`, `bitbucket.ts`, `jira-records.ts`, `jira.ts`                                                                                                                                                                                                                                                                                                                                                                               |
 | fleet                 | `fleet.ts` — clone discovery, and everything per-clone derived from the index                                                                                                                                                                                                                                                                                                                                                        |
 | tests                 | `test/**/*.test.ts` — run by `pnpm test`; `test/fixture.ts` builds the synthetic hangar they all use                                                                                                                                                                                                                                                                                                                                 |
-| shared                | `dedupe.ts`, `claude-sessions.ts`, `resolve-conflicts.ts`, `procs.ts`, `plans.ts`, `environment.ts`, `install.ts`, `tui.ts`, `palette.ts`, `tmp.ts`, `sessions.ts`, `adopt.ts`, `ui.ts`, `hangar.ts`, `user-paths.ts`, `template.ts`, `exec.ts`                                                                                                                                                                                      |
+| shared                | `dedupe.ts`, `claude-sessions.ts`, `resolve-conflicts.ts`, `procs.ts`, `plans.ts`, `environment.ts`, `install.ts`, `secrets.ts`, `tui.ts`, `palette.ts`, `tmp.ts`, `sessions.ts`, `adopt.ts`, `ui.ts`, `hangar.ts`, `user-paths.ts`, `template.ts`, `exec.ts`                                                                                                                                                                        |
 
 **Five seams**, each a capability record plus a driver interface rather than a pretence that the
 implementations are equivalent. Adding a kind means implementing the interface and registering it;
@@ -362,6 +367,13 @@ its content is the same in every hangar; the two shell helpers do not, because `
 rewrites them from the palette, the hangar id and the clone list. `git rm --cached` left both on
 disk, so no shell rc that sources `clone-terminal.sh` broke.
 
+- **`hangar config validate` now also compares `hangar.config.example.yaml` with the live file**,
+  whenever the two declare the same `id`. The invariant was stated in
+  `hangar-internals/reference/config.md` from the start and run by nothing, and the pair had
+  drifted by the worst available line: `forge.defaultBranch`, `main` in the committed example
+  against `master` live. A colleague adopting this fleet by copying the example — which is the
+  fastest and most correct way in — got a config naming a branch the repo does not have. The
+  `id` gate is what keeps the check quiet in a hangar the example is only a template for.
 - **`hangar config schema --check` fails instead of writing**, which makes it the fourth thing to
   run after touching `config/schema.ts`. Both YAML files open with
   `# yaml-language-server: $schema=./hangar.schema.json`, so a stale committed schema silently

@@ -4,7 +4,15 @@ import { join } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 
 import { configJsonSchemaText } from '../config/json-schema.ts';
-import { CONFIG_FILENAME, jsonSchemaFileName, loadHangarConfig } from '../config/load.ts';
+import {
+  CONFIG_FILENAME,
+  EXAMPLE_CONFIG_FILENAME,
+  jsonSchemaFileName,
+  loadConfigFile,
+  loadHangarConfig,
+} from '../config/load.ts';
+import { configDrift, exampleIsOwnRecord } from '../config/drift.ts';
+import type { HangarConfig } from '../config/schema.ts';
 import { CliError } from '../exec.ts';
 
 import { tildify } from '../user-paths.ts';
@@ -31,7 +39,7 @@ export const configShow = (hangarFlag: string | undefined): void => {
 
 /** Validate without doing anything else. Exits non-zero with every problem listed. */
 export const configValidate = (hangarFlag: string | undefined): void => {
-  const { configPath, config } = loadHangarConfig({
+  const { configPath, config, root } = loadHangarConfig({
     cwd: process.cwd(),
     flag: hangarFlag,
     env: process.env['HANGAR_ROOT'],
@@ -45,6 +53,55 @@ export const configValidate = (hangarFlag: string | undefined): void => {
   );
   note(
     `profile ${config.profile}, forge ${config.forge.kind ?? 'inferred'}, tracker ${config.tracker.kind}`,
+  );
+  reportExampleDrift(root, config);
+};
+
+/**
+ * The committed example against the live file, when the example is this hangar's own record.
+ *
+ * Lives in `config validate` rather than in `doctor` for one reason: `doctor` is the net for
+ * things that live outside git, and this is the opposite -- a file that IS in git having
+ * drifted from the one that is not. It is also the command whose whole contract is "every
+ * problem at once", and a lost config is a problem.
+ *
+ * Never fatal, and deliberately: the example being stale does not stop anything working today.
+ * It is what stops the config being recoverable tomorrow.
+ */
+const reportExampleDrift = (root: string, live: HangarConfig): void => {
+  const examplePath = join(root, EXAMPLE_CONFIG_FILENAME);
+  if (!existsSync(examplePath)) return;
+
+  let example: HangarConfig;
+  try {
+    example = loadConfigFile(examplePath);
+  } catch {
+    // A committed example that will not parse is worth saying, but it is not this check's
+    // finding -- `config validate --hangar <copy>` is how you diagnose that one.
+    warn(`${tildify(examplePath)} does not parse — it cannot be a record of anything`);
+    return;
+  }
+
+  if (!exampleIsOwnRecord(live, example)) {
+    note(
+      `${EXAMPLE_CONFIG_FILENAME} declares id "${example.id}", not "${live.id}" — treated as the ` +
+        'shipped template, so it is not compared.',
+    );
+    return;
+  }
+
+  const drift = configDrift(live, example);
+  if (drift.length === 0) {
+    ok(`${EXAMPLE_CONFIG_FILENAME} matches this config`);
+    return;
+  }
+  warn(
+    `${EXAMPLE_CONFIG_FILENAME} has drifted from this config in ${String(drift.length)} place(s)`,
+  );
+  for (const d of drift) note(`  ${d.path}: live ${d.live} — example ${d.example}`);
+  note(
+    'The example is the only COMMITTED record of this hangar, and the file a colleague copies ' +
+      'to join the fleet. Bring it back in step.',
   );
 };
 

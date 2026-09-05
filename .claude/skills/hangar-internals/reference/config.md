@@ -12,9 +12,32 @@ its default, and every alternative that the cross-field checks will not let stan
 
 Three properties hold that pair together, and each is a decision:
 
-- **The example is a faithful SUPERSET of the live file, and that is checkable.** `hangar config
-  show` on each must differ only in the free-text `_` note. It is the only committed record of
-  how this hangar is configured, so a drifting example is a lost config.
+- **The example is a faithful SUPERSET of the live file, and `hangar config validate` now checks
+  it.** `hangar config show` on each must differ only in the free-text `_` note. It is the only
+  committed record of how this hangar is configured, so a drifting example is a lost config.
+
+  For a long time that was asserted here and run by nothing, and the two had duly drifted — by
+  the single worst line available. `forge.defaultBranch` read `main` in the committed example and
+  `master` live. The example is not just documentation: it is what a colleague copies to join a
+  fleet for a repo somebody has already configured, which is the fastest and most complete way in
+  (`setup` derives from an existing clone, so on a fresh machine it derives nothing and leaves out
+  the symlinks, the port-check command and the tracker scripts). So the copy came up naming a
+  branch the repo does not have, and `checkout-default`, `open`'s fast-forward and `sync`'s
+  no-forge fallback all aimed at it. `doctor` catches that eventually — it compares the recorded
+  branch with each clone's `origin/HEAD` — but only after the first `add-clone`.
+
+  `config/drift.ts` compares the two as PARSED configs rather than as file text, which is what
+  makes it a real check instead of a formatting one: both sides have every default applied, so a
+  key written out on one side and left to its default on the other is correctly reported as
+  agreement. That is exactly why the invariant was phrased over `config show` and not over the
+  files.
+
+  **The `id` gate is the load-bearing part.** Comparing unconditionally would make the check red
+  in every hangar except the one that shipped the example — the failure this skill names three
+  times over. `exampleIsOwnRecord` compares the two ids, and the gate has a property worth
+  keeping: a peer who copies the example inherits its `id`, so the check stays live through
+  exactly the window where it is useful, and goes quiet by itself the moment they run `setup` and
+  name their own hangar. No flag to remember, and nothing to turn off.
 - **It is not a second marker.** `isHangarRoot` tests `CONFIG_FILENAME` exactly, so the example
   can sit in a hangar root without being mistaken for one — and `hangar --hangar <dir>` on a
   copy is how you validate it (nothing loads the example's own filename).

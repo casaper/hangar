@@ -33,7 +33,7 @@ Global: `--hangar <path>` (the hangar root to operate on; **only `config show` a
 | Command | Args | Options | |
 | --- | --- | --- | --- |
 | `config show` | — | — | report |
-| `config validate` | — | — | report |
+| `config validate` | — | — | report (also compares `hangar.config.example.yaml` with the live file when both declare the same `id`) |
 | `config schema` | — | `--check` · `--out <path>` | act (writes `hangar.schema.json`; `--check` is the read-only form) |
 | `jira hook` | — | `--ttl <minutes>` (default `60`) · `-n, --dry-run` · `--explain` | act (a `PreToolUse` hook; you do not call this by hand) |
 | `plans collect` | — | `-n, --dry-run` · `-q, --quiet` · `--no-transcript-scan` · `--in-use-window <minutes>` | act (runs from each clone's `SessionEnd` hook) |
@@ -126,3 +126,18 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
 - **`-q, --quiet` on `plans collect` and `tmp merge` exists for the `SessionEnd` hooks.** They flush
   on opposite criteria — `plans collect` prints when something MOVED, `tmp merge` when something
   WARNED — so silence from either is the normal outcome, not a failure.
+
+## `config validate` also checks the committed example
+
+The live `hangar.config.yaml` is gitignored; `hangar.config.example.yaml` is the only committed
+record of it, and the file a colleague copies to join the fleet. So `config validate` compares
+the two — as parsed configs with every default applied, not as text — and reports each line that
+has drifted, by dotted path with both values.
+
+It only compares when the two files declare the **same `id`**. A different id means the example
+is the shipped template for some other repo, where drift is expected and a permanent warning
+would be noise; you get one dim line saying it was skipped.
+
+Drift is never fatal and never blocks anything. What it costs is recoverability: a stale example
+is a config nobody can rebuild. If you see it, the fix is a hand edit to the example — nothing
+generates it.

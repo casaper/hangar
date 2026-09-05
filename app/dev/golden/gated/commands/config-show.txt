@@ -119,5 +119,12 @@ editor:
 secrets:
   file: .env.shared
   mode: "600"
+  variables:
+    - name: USER_READWRITE_PASSWORD
+      why: the Playwright suite's login. The tracked tests/playwright-regression-tests/.env sets it EMPTY
+        and direnv loads that AFTER the shared secrets, which is what the symlink above exists to
+        undo -- but the symlink only reloads this file, so an unset variable here means Playwright
+        logs in with an empty password and says nothing about why
+      optional: false
 palette:
   rotate: 0

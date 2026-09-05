@@ -70,3 +70,18 @@ export const syntheticHangar = (opts: SyntheticOptions = {}): Hangar => {
  */
 export const namesNoMachinePath = (text: string): boolean =>
   !text.includes('/Users/') && !text.includes('/home/');
+
+/**
+ * The first element of an array, narrowed.
+ *
+ * Exists because `tsc` and `eslint` disagree about indexed access in this package: `tsc` runs
+ * with `noUncheckedIndexedAccess`, so `arr[0]` and `const [x] = arr` are both `T | undefined`,
+ * while `@typescript-eslint`'s type service reports the resulting `?.` and `!` as unnecessary.
+ * Satisfying either one directly fails the other. Inside a function whose PARAMETER is declared
+ * nullable both agree, so the check happens once here instead of at every call site.
+ */
+export const first = <T>(items: readonly T[], what: string): T => {
+  const [head] = items;
+  if (head === undefined) throw new Error(`expected at least one ${what}`);
+  return head;
+};

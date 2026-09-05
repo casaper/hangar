@@ -26,13 +26,55 @@ the clone's own directory, the three hooks in `settings.local.json` (plan collec
 merge and the ticket record hook — each repair re-reads the file, so a clone missing two of them
 gets both in one `--fix` pass), the sibling remotes in both directions, and the
 `checkout.defaultRemote=origin` those remotes make necessary. Above the clones it also holds the
-hangar's own generated `CLAUDE.local.md` and `.claude/settings.json` to their renders, reports the
-two mode settings files without repairing them, and migrates a legacy `colour-assignments.json`.
+hangar's own generated `CLAUDE.local.md` and `.claude/settings.json` to their renders, reports
+`secrets.variables[]` against the shared secrets file, reports the two mode settings files
+without repairing them, and migrates a legacy `colour-assignments.json`.
 Run it after any re-clone. **How much of the shared cache a clone links is deliberately not a
 check** — a ticket fetched here reaches the others at the next `tmp merge`, which is what linking
 per entry means, and a check that is red in normal operation is a check nobody reads.
 (`hangar-ops/reference/reading-output.md` says the same to whoever reads the report — change one
 and change both.)
+
+## The `secrets` row, and the one gap `--fix` structurally cannot close
+
+`secrets.variables[]` is a list of `{name, why, optional}`, and `doctor` reports each declared
+name against what the shared secrets file actually sets. `src/secrets.ts` holds the pure half:
+`secretVariableStatuses` takes the declaration and the file's TEXT — never a path — so every
+state can be asserted without a mode-600 file full of live credentials on disk, which is the only
+way this is testable at all. The value never leaves that module; callers get a three-state enum,
+so no report, log or golden capture can grow a credential in it by accident.
+
+**Why the key exists.** `secrets` used to be `file` + `mode`, so a hangar could say WHERE the
+credentials live and never what has to be in them. `setup` scaffolds the names Hangar itself uses
+— `forge.tokenEnvKey`, the tracker pair — because those come from keys it already has; everything
+the REPO's own tooling reads is invisible from up here. This fleet's Playwright suite reads
+`USER_READWRITE_PASSWORD`, the tracked `tests/playwright-regression-tests/.env` sets it EMPTY, and
+direnv loads that file AFTER the shared secrets. That is the entire reason `repo.symlinks[]`
+reloads them, and the entire content of that symlink's `why`. But nothing ever told a NEW hangar
+to put the variable in the file, so a colleague's first fleet came up with the symlink created,
+`doctor` green, and Playwright logging in with an empty password — the exact failure the symlink
+exists to prevent, reproduced by leaving the declaration out.
+
+Three decisions in it:
+
+- **`empty` is a distinct state from `absent`, and that distinction is why `setup` writes its
+  scaffold commented out** rather than as `NAME=`. A set-but-empty variable is indistinguishable
+  from a real one to everything downstream: an empty `BITBUCKET_TOKEN` makes `sync` send an empty
+  bearer token and report a 401, and an empty password makes Playwright fail a login rather than
+  say it was never given one. Folding the two together would hide the worse of them.
+- **`why` is required**, for the reason `repo.symlinks[].why` and `repo.install[].why` are: a
+  variable name explains what breaks without it no better than a symlink does, and that string is
+  the whole content of the row.
+- **`optional: true` renders dim rather than red**, because a hangar whose owner never runs the
+  Playwright suite must not have a permanently red `doctor`. A hangar declaring nothing gets no
+  row at all — silence beats `0 variables declared` for the majority that never fill this in.
+
+There is no `repair`, and it is the one check here where that is structural rather than a
+choice: a credential cannot be derived from the clone index the way a port, a theme or an
+identity file can. Everything else `doctor` reports outside git is recoverable from the formula;
+this is the only thing a human has to supply. Which makes it worth a row precisely because it is
+the row `--fix` will never close. (`hangar-ops/reference/reading-output.md` says the same to
+whoever relays the report — change one and change both.)
 
 ## The install checks report a declaration and never execute it
 
@@ -60,6 +102,33 @@ installed clone.
 Executing a step is `hangar install <clone>`, which a human types, and deliberately NOT a
 `doctor --fix` repair: one entry point to a package manager in a live clone is safer than two, and
 `--fix` is the pass people run without reading. `doctor` names the command instead.
+
+**`nodeVersionFile` is honoured under either version manager, and the fallback says so.** It used
+to call `fnm exec --using=<v>` when fnm was on PATH and otherwise run the command bare, silently
+— while the README promised "either `fnm` or `nvm`" and `setup`'s environment row printed
+`found (of fnm / nvm)` for an nvm-only machine. So an nvm user's first `add-clone` ran `npm ci`
+under whatever `node` was first on PATH, which at a hangar root is the HANGAR's pinned Node and
+not the app's. Nothing said a word, and this fleet's two pins agreeing (`24` and `24.20`) was
+luck rather than design.
+
+`nodeBinDirFor` asks fnm first, because it is a binary and answers in one spawn, then nvm — which
+is a shell FUNCTION and so has to be sourced in a subshell before `nvm which` can be asked
+anything, the same trap `.envrc.hangar` documents beside `hangar_use_node`. The resolved directory
+is PREPENDED to `PATH` rather than going through `fnm exec`, because that is the one form both
+managers can express: nvm has no `exec`. Nothing here INSTALLS a Node version — unlike
+`hangar_use_node`, which does — because an install step is not the place to spend four minutes
+fetching a toolchain nobody asked for. And with neither manager present the command still runs on
+whatever Node is there, because a missing version manager is a worse reason to refuse an install
+than a version mismatch is. It now warns first, which is the whole change: the fallback was
+always defensible, and being silent about it was not.
+
+**The nvm branch is written from nvm's documented interface and has not been run against a live
+nvm** -- the same caveat the Konsole and GNOME Terminal drivers carry, and for the same reason:
+this machine has fnm, so that branch is only ever reached on a machine that does not. What is
+verified is that the probe fails silently and cleanly with nvm absent (exit 1, nothing on either
+stream), so an fnm-only machine pays nothing for it. If you have nvm, `hangar install <clone> -n`
+will not tell you -- the dry run never spawns -- so the thing to check is that a real
+`hangar install` reports the app's pinned version and not the hangar's.
 
 ## The plan archive, and why sharing it is a command rather than a setting
 

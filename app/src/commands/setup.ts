@@ -334,8 +334,13 @@ _: >-
 
 # Namespaces everything this hangar writes OUTSIDE its own root: the theme filenames, the
 # statusline script and the shell function in the generated colour table. No dashes -- it has
-# to be a legal shell identifier. Never derived from the directory name, because ~/work/${a.id}
-# and ~/code/${a.id} would collide in that shared state.
+# to be a legal shell identifier.
+#
+# ASKED FOR, not derived -- ~/work/${a.id} and ~/code/${a.id} would collide in that shared
+# state, where the symptom is "the other hangar's clones changed colour". The one exception is
+# \`setup --yes\` with no \`--id\`, which falls back to the directory basename because an
+# unattended run has nothing else to go on; check the line above if that is how this file was
+# written.
 id: ${a.id}
 displayName: ${yq(a.displayName)}
 # The setup preset this config was written from. A LABEL: no code reads it, and changing it
@@ -421,6 +426,21 @@ secrets:
   # Hangar-root-relative, so it sits OUTSIDE every clone and no clone can commit it.
   file: .env.shared
   mode: '600'
+  # What YOUR repo's tooling needs out of that file, each with a required \`why\`. Left empty
+  # because nothing in a checkout declares its own credentials: setup scaffolds the names
+  # Hangar itself uses (the forge token, the tracker pair) and cannot know the rest.
+  #
+  # Declare them and \`hangar doctor\` prints a row per unset one, telling "absent" apart from
+  # the worse "set but EMPTY". Skip it and the failure is silent in the worst way: the fleet
+  # this tool was built in has a Playwright suite whose password its own tracked .env sets
+  # EMPTY, so leaving the variable undeclared meant a green doctor and a login that failed
+  # with no reason given.
+  #
+  #   variables:
+  #     - name: USER_READWRITE_PASSWORD
+  #       why: the tracked tests/.env sets it empty; Playwright logs in with no password without it
+  #       optional: false   # true renders the row dim instead of red
+  variables: []
 `;
 };
 
@@ -446,6 +466,10 @@ export const secretsFileContent = (a: Answers): string => {
 # UNCOMMENT AND FILL IN what you use. Left commented on purpose: a set-but-empty variable is
 # indistinguishable from a real one downstream, so an empty token makes \`sync\` report a 401
 # instead of "no token configured".
+#
+# These are the names HANGAR uses. Whatever your repo's own tooling reads -- a test suite's
+# password, a registry token -- goes here too, and belongs in \`secrets.variables\` in
+# hangar.config.yaml so that \`hangar doctor\` prints a row when one is missing.
 ${names.length === 0 ? '#\n# This hangar declared no forge token and no tracker, so it needs nothing yet.\n' : names.map((name) => `#\n# ${name}=\n`).join('')}`;
 };
 

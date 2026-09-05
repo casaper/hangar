@@ -60,7 +60,8 @@ it prints beside each number). Never read a clone's ports from a parent session;
 
 Hangar-level rows come first (the detected terminal driver and its capabilities, one row per
 configured editor and whether it can actually be launched, the recorded default branch versus each
-clone's `origin/HEAD`, any stray PID files in the shared store), then one section per clone.
+clone's `origin/HEAD`, the declared secret variables, any stray PID files in the shared store),
+then one section per clone.
 
 Each per-clone check is a **green `ok` line** or a **red failure**. A failure whose cause is
 derivable from the clone index adds `` fixable with `hangar doctor --fix` ``; a failure without that
@@ -81,6 +82,16 @@ Three things to say correctly when you relay a report:
   in one clone reaches the others at the next `tmp merge`; a check that is red in normal operation
   is a check nobody reads. (`hangar-internals/reference/doctor.md` says the same — change one and
   change both.)
+- **The `secrets` row has no `--fix` and never will.** It reports `secrets.variables[]` — what the
+  repo's own tooling needs out of the shared secrets file — against what that file actually sets,
+  and a credential is the one thing in the fleet that cannot be derived from a clone index. So
+  relay it as a job for the human, with the variable's `why`, and never as something you can
+  repair. It distinguishes two states worth keeping apart when you report them: **not set** is a
+  gap, while **set but EMPTY** is worse, because an empty value reads as configured to everything
+  downstream — an empty token produces a 401 rather than "no token configured". A row printed dim
+  and prefixed `optional:` is a variable declared `optional: true`; mention it, do not chase it.
+  A hangar that declares nothing gets no row at all, which is not the same as being fully
+  configured.
 
 ## `hangar list`
 

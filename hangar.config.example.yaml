@@ -134,7 +134,14 @@ forge:
   # confidently wrong, and a rebase onto the wrong base is the expensive thing to undo. Edit
   # the line if the repo renames its default branch -- `hangar doctor` compares it with each
   # clone's own `origin/HEAD` and says so when they disagree.
-  defaultBranch: main
+  #
+  # `master` here is THIS repo's actual default, not a shipped fallback -- and it is the one
+  # line of this file a colleague adopting the fleet by `cp`-ing it must not inherit blindly.
+  # `hangar config validate` compares the two files whenever they share an `id` for exactly
+  # this reason: the pair had drifted to `main` here and `master` live, which pointed
+  # `checkout-default`, `open`'s fast-forward and `sync`'s fallback at a branch that does not
+  # exist.
+  defaultBranch: master
 
   # Which environment variable holds the API token, read from `secrets.file`. Never the token
   # itself: this file is committed, and that one is mode 600 and outside every clone.
@@ -489,6 +496,28 @@ secrets:
   file: .env.shared
   # Octal, 3 or 4 digits. `doctor` checks it. Default '600'.
   mode: '600'
+  # What the REPO's own tooling needs out of that file. Default `[]`.
+  #
+  # The half no hangar can derive. `setup` scaffolds the names HANGAR uses -- the forge token,
+  # the tracker pair -- because those come from keys in this file; everything a checkout reads
+  # is invisible from up here. Declare them and `hangar doctor` prints a row per unset one,
+  # distinguishing "absent" from the worse "set but EMPTY", which reads as configured to
+  # everything downstream.
+  #
+  # `why` is REQUIRED, for the same reason `repo.symlinks[].why` is: a variable name explains
+  # what breaks without it no better than a symlink does. `optional: true` renders the row dim
+  # rather than red, for a credential only part of the fleet's work needs -- a permanently red
+  # `doctor` is a `doctor` nobody reads.
+  #
+  # Nothing here is repaired by `--fix`, and it is the only fleet gap that structurally cannot
+  # be: a credential is not derivable from a clone index the way a port is.
+  variables:
+    - name: USER_READWRITE_PASSWORD
+      why: >-
+        the Playwright suite's login. The tracked tests/playwright-regression-tests/.env sets it
+        EMPTY and direnv loads that AFTER the shared secrets, which is what the symlink above
+        exists to undo -- but the symlink only reloads this file, so an unset variable here
+        means Playwright logs in with an empty password and says nothing about why
 
 # --------------------------------------------------------------------------------------------
 # Palette -- the per-clone hues

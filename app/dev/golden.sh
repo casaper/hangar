@@ -68,6 +68,10 @@ capture() {
 
 capture gated ports ports --json
 capture gated config-show config show
+# `config validate` is gated because it now carries the example-vs-live comparison, which is the
+# one check whose whole job is to notice that a COMMITTED file drifted from a gitignored one.
+# Byte-stable: both files are read from disk and neither moves on its own.
+capture gated config-validate config validate
 capture gated colours-sync-dry colours sync -n
 
 # --- 3b. `setup -n` in an EMPTY directory ---------------------------------------------------

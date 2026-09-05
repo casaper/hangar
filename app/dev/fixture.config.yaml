@@ -114,6 +114,15 @@ editor:
 secrets:
   file: .env.fixture-shared
   mode: '640'
+  # Non-empty, because the schema default is `[]` -- and while a config agrees with a default,
+  # "read the file" and "fell into a catch and used the defaults" render identically. Both
+  # severities appear, so neither branch of doctor's row can be the only one exercised.
+  variables:
+    - name: FIXTURE_REQUIRED_TOKEN
+      why: the fixture's required credential, so the red branch of doctor's row has an input
+    - name: FIXTURE_OPTIONAL_TOKEN
+      why: the fixture's optional credential, so the dim branch has one too
+      optional: true
 
 palette:
   rotate: 5

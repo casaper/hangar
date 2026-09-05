@@ -581,6 +581,32 @@
           "default": "600",
           "type": "string",
           "pattern": "^[0-7]{3,4}$"
+        },
+        "variables": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "why": {
+                "type": "string",
+                "minLength": 1
+              },
+              "optional": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "why"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false

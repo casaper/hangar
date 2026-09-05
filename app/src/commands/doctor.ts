@@ -73,6 +73,7 @@ import {
 
 import { home, themesDir, tildify } from '../user-paths.ts';
 import { planDirsIn } from '../plans.ts';
+import { secretVariableProblem, secretVariableStatuses } from '../secrets.ts';
 import {
   isLinkedIntoStore,
   storeEntries,
@@ -746,6 +747,51 @@ const reportShellHook = (hangar: Hangar): void => {
 };
 
 /**
+ * `secrets.variables[]` against what the shared secrets file actually sets.
+ *
+ * A HANGAR-level row, not a per-clone one: there is one secrets file for the whole fleet, so
+ * four clones would print the same lines four times.
+ *
+ * Reported and never repaired, because there is nothing to repair. A credential cannot be
+ * derived from the clone index the way a port can, which makes this the one gap in the fleet
+ * that `doctor --fix` structurally cannot close -- and so the one most worth naming out loud.
+ * Declared and unset is a warning; declared `optional: true` and unset is dim, because a hangar
+ * whose owner never runs the Playwright suite should not have a permanently red `doctor`: a
+ * check that is red in normal operation is a check nobody reads.
+ *
+ * A hangar that declares nothing gets NO row at all. Silence beats "0 variables declared" for
+ * the majority of hangars that never fill this in, and the empty default is legal.
+ */
+const reportSecretVariables = (hangar: Hangar): void => {
+  const declared = hangar.config.secrets.variables;
+  if (declared.length === 0) return;
+
+  const path = hangar.paths.envShared;
+  // A read failure is the same answer as an absent file -- `secretVariableStatuses` takes
+  // `undefined` for both. The file is mode 600, so EACCES here is real rather than theoretical.
+  let text: string | undefined;
+  try {
+    text = existsSync(path) ? readFileSync(path, 'utf8') : undefined;
+  } catch {
+    text = undefined;
+  }
+
+  const statuses = secretVariableStatuses(declared, text);
+  const unset = statuses.filter((s) => s.state !== 'set');
+  if (unset.length === 0) {
+    ok(`${'secrets'.padEnd(22)} ${pc.dim(`${String(declared.length)} declared, all set`)}`);
+    return;
+  }
+  for (const s of unset) {
+    const problem = secretVariableProblem(s);
+    if (problem === undefined) continue;
+    if (s.optional) note(pc.dim(`optional: ${problem}`));
+    else warn(problem);
+  }
+  note(`Fill them in at ${tildify(path)}; nothing derives a credential, so \`--fix\` cannot.`);
+};
+
+/**
  * One editor's row: whether it can be launched, and what Hangar does for it.
  *
  * The two facts worth printing are the two that differ between these editors, and both are the
@@ -999,6 +1045,7 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
    * nobody sources is a colour scheme that quietly does not exist.
    */
   reportPlatform();
+  reportSecretVariables(hangar);
 
   const { driver, source } = terminal(hangar);
   const can = CAPABILITY_LABELS.filter(([key]) => driver.capabilities[key]).map(
