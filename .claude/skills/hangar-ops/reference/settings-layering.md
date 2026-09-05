@@ -14,10 +14,10 @@ every clone (verify with `jq -S 'del(.theme)|del(.permissions.allow)' … | shas
   `enabledMcpjsonServers` would leak the fleet onto them.
 - `<clone>/.claude/settings.local.json` (untracked) holds the fleet-scoped keys, identical in
   every clone: the shared memory directory, the two `SessionEnd` hooks (one runs `plans collect`;
-  the other runs `tmp merge --quiet` so this clone's new Jira cache entries reach the store),
-  the `PreToolUse` hook that serves a cached Jira ticket from the record store (additive — Claude
-  Code merges it with the repo's own tracked `PreToolUse` guard rather than replacing it), the
-  shared statusline, the six MCP servers
+  the other runs `tmp merge --quiet` so this clone's new `tmp/` entries reach the store — every
+  entry, not only tickets), the `PreToolUse` hook that serves a cached Jira ticket from the record
+  store (additive — Claude Code merges it with the repo's own tracked `PreToolUse` guard rather
+  than replacing it), the shared statusline, the six MCP servers
   (`playwright`, `jira`, `yfiles-api`, `angular-cli`, `primeng`, `ag-mcp`), the `frontend-design`
   plugin off, the `.env.shared` deny, and the two iTerm2 keys (`terminal.explorerKind`,
   `terminal.external.osxExec`).

@@ -19,6 +19,7 @@ const unsupportedPlatform = (id: string): PlatformDriver => ({
   machineConfigDir: '',
   vscodeWindowState: () => undefined,
   openExternally: () => false,
+  applicationExists: () => false,
   installHint: (pkg) => `install ${pkg} however this platform installs software`,
 });
 

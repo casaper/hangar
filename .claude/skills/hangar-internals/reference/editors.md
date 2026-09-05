@@ -94,3 +94,79 @@ Hangar must, `self-deduping` when the editor does, `a terminal tab` for terminal
 a window at all), and whether there is a setup to keep in step (`sync` / `sync, per-clone paths` /
 `launch only`). It used to print `$PROJECT_DIR$` for Xcode and vim, describing a mechanism neither
 has.
+
+## The `*.code-workspace` artifact is gated on the configured editors, and the gate is one predicate
+
+`wantsWorkspaceFiles(hangar)` in `clone-config.ts` asks the same question the schema's
+`rootPathKeys` cross-check asks — "is there a kind that CONSUMES it" — through the same
+`isVscodeFork` predicate, rather than a second list that could disagree with the first.
+
+**It gates the three callers that are not the driver**, and nothing else: `add-clone` writing the
+file, `doctor` checking and repairing it, and `dev.ts`'s golden capture recording it.
+`workspacePath`/`workspacePaths`/`workspaceContent` stay pure and ungated — they are called from
+inside `editor/vscode.ts`, which only exists when a VS Code kind is configured, so gating the
+builder would make the driver re-ask a question it has already answered and leave
+`hangar ide vscode sync` unable to name the file it syncs.
+
+Without it, a hangar configured `kinds: ['jetbrains']` got a `*.code-workspace` per clone for an
+editor whose project IS the directory, `doctor` reported the file **missing** when you deleted it,
+and `--fix` put it back. That was not a hypothetical: the gated golden baseline carried three
+rendered workspace files for the `kinds: [zed]` fixture, so the net had pinned the bug as correct.
+Removing those three files and their three manifest lines was the whole gated diff.
+
+Two decisions inside it:
+
+- **No row at all in `doctor`, rather than a green "not applicable" one.** The `editor` row
+  already says what Hangar does per configured editor; a second row saying it does nothing is
+  noise in the common case.
+- **A workspace file left behind by a hangar that USED to list VS Code is left alone and
+  unreported.** The tracker hook went the other way — `doctor` removes a stale one — and the
+  difference is the cost, not consistency: a stale hook starts a Node process on every Bash tool
+  call, while a stale workspace file is an inert gitignored file that nothing reads.
+
+A hangar whose config will not parse gets `['vscode']` from the schema default and so keeps the
+file. That is the recoverable answer: with the editors unknown, a typo in an unrelated line of
+YAML must not start deleting an artifact from every clone. `test/editor-config.test.ts` asserts
+the default is still a kind that wants one, because that is what the choice rests on.
+
+## `isAvailable` has to be as wide as `launch`, and for JetBrains it was not
+
+`open.ts` checks `driver.isAvailable()` and returns before it reaches `driver.launch(clone)`. So a
+driver whose availability probe is **narrower** than its launch path has a launch path that cannot
+be reached — and `editor/jetbrains.ts` had exactly that. `launch` falls back to
+`openExternally(clone.path, app)` — `open -a "IntelliJ IDEA"` — with a comment saying why:
+"Toolbox may not have installed a shell script, and then the application BUNDLE is the only handle
+left." `isAvailable` modelled that same fallback as `existsSync('/Applications/<app>.app')`.
+
+Toolbox does not install under `/Applications`. So the bundle fallback was unreachable through
+`hangar open` in precisely its motivating case, and the answer was `IntelliJ IDEA is not
+available` for an IDE that was installed and would have opened.
+
+The fix is not more paths in the `existsSync` list — that is the same guess again. It is
+`PlatformDriver.applicationExists`, the read-only twin of `openExternally`'s `app` argument,
+gated by the **existing** `openApplicationByName` capability so the two answers have the same
+reach by construction. On macOS it is `osascript -e 'id of app "<name>"'`, which is LaunchServices'
+own lookup — the same resolution `open -a` performs, so it finds `~/Applications` too. On Linux it
+is `false`, for the same reason `openApplicationByName` is: there is no lookup from a display name
+to a `.desktop` entry.
+
+**No new capability key**, deliberately: each fixture's `manifest.txt` captures the capability
+record key by key (`platform-caps openExternally=true openApplicationByName=true …`), so a new
+boolean would have moved both fixtures' gated manifests for a fact neither fixture is about.
+
+**Still unverified, and the one thing a machine here cannot answer:** whether LaunchServices
+resolves the literal `IntelliJ IDEA` for a Toolbox install (named *IntelliJ IDEA Ultimate*) or for
+the Community edition (*IntelliJ IDEA CE*). The probe is strictly wider than the path check in
+every case, so this is not a regression risk; if a product turns out to need alternate names,
+`JETBRAINS_PRODUCTS` is where they go and `editor.jetbrains.launcher` is the escape hatch until
+then.
+
+## `doctor` says when its editor rows are the fallback's
+
+With a config that will not parse, `editors()` resolves `kinds` to the schema default — so a
+hangar configured `kinds: ['jetbrains']` printed a green `editor  VS Code — …` row naming an
+editor its own config does not list, seven lines below the warning that the config does not
+validate, with nothing connecting the two. `editor/index.ts` already warns about this shape ("VS
+Code opened at it and no hint as to why"); `doctor` is where the hint belongs, because it is the
+command you run when something is wrong and it was the one confirming the wrong answer.
+`editorChoice.fellBack` was already returned and unused.

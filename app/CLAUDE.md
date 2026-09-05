@@ -217,6 +217,10 @@ Four things in that table are decisions rather than gaps:
   clone — which is what makes `ide vscode sync` a text transform. Everyone else escapes it:
   JetBrains has `$PROJECT_DIR$`, Zed resolves from the project root itself. So the config's
   cross-check asks "is there a kind that CONSUMES these keys", not "is an editor configured".
+  **The `*.code-workspace` pair follows the same rule and through the same predicate**
+  (`wantsWorkspaceFiles` in `clone-config.ts`): `add-clone`, `doctor` and the golden capture write,
+  check and record it only where a configured kind reads one. It was unconditional, so a
+  JetBrains-only hangar got the file anyway and `doctor --fix` put it back after you deleted it.
 - **Only the VS Code family needs deduplicating.** It identifies a workspace by its config
   file's URI, so a clone's two byte-identical `*.code-workspace` twins are two different
   workspaces to it and it has to be handed the copy it already has open. Every other editor here

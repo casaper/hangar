@@ -450,10 +450,15 @@ editor:
   # does not list the kind -- they configure nothing.
   # jetbrains:
   #   # idea webstorm pycharm phpstorm goland rubymine clion rider datagrip rustrover aqua
-  #   # android-studio. Default: idea.
+  #   # android-studio. Default: idea, which is IntelliJ IDEA.
   #   product: webstorm
   #   # An explicit launcher path, for a Toolbox install that generated no shell scripts.
   #   # Empty (the default) means "find `<product>` on PATH", with a macOS `open -a` fallback.
+  #   #
+  #   # The launcher on PATH is the normal route, so in JetBrains Toolbox enable "Generate
+  #   # shell scripts"; `hangar doctor` prints which of the two answered. Hangar never creates
+  #   # `.idea/` -- open a clone in the IDE once and it appears, and `hangar ide jetbrains sync`
+  #   # keeps the shareable half of it identical across the fleet from then on.
   #   launcher: ''
   # vim:
   #   # Empty (the default) prefers a GUI vim (mvim, gvim) and falls back to nvim/vim in a
@@ -492,6 +497,11 @@ editor:
   # Only the VS Code family reads these. JetBrains has `$PROJECT_DIR$` and Zed resolves from the
   # project root, so setting them with no VS Code-family kind in `kinds` is rejected rather than
   # ignored. Default: {}.
+  #
+  # So DELETE this whole block if you take the VS Code family out of `kinds` above -- it is a
+  # hard validation error otherwise, and it fails in the gate every command runs. The three
+  # `workspace*` keys above are then inert as well (nothing writes a `*.code-workspace` for an
+  # editor that does not read one) and can go with it.
   rootPathKeys:
     stylelint.configBasedir: angular
     stylelint.configFile: angular/stylelint.config.mjs

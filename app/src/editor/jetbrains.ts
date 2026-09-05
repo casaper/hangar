@@ -143,10 +143,23 @@ export const jetbrainsDriver = (
     // `$PROJECT_DIR$` -- nothing clone-specific to rewrite.
     rewritesRootPaths: false,
   },
-  isAvailable: () =>
-    resolveLauncher(product, launcherOverride) !== undefined ||
-    (process.platform === 'darwin' &&
-      existsSync(`/Applications/${JETBRAINS_PRODUCTS[product].app}.app`)),
+  /*
+   * Exactly the two routes `launchJetbrains` has, in the same order and behind the same guard.
+   *
+   * It used to answer the second one with `existsSync('/Applications/<name>.app')` while `launch`
+   * answered it with `open -a <name>`, and `open.ts` checks this before calling that -- so the
+   * bundle fallback was unreachable through `hangar open` in its own motivating case. Toolbox
+   * installs under `~/Applications`, which is exactly where that path does not look, and the
+   * colleague got "IntelliJ IDEA is not available" for an IDE that was installed and would have
+   * opened. Asking the platform keeps the two answers the same by construction.
+   */
+  isAvailable: () => {
+    if (resolveLauncher(product, launcherOverride) !== undefined) return true;
+    const os = platform();
+    return (
+      os.capabilities.openApplicationByName && os.applicationExists(JETBRAINS_PRODUCTS[product].app)
+    );
+  },
   unavailableHint: () =>
     `no \`${JETBRAINS_PRODUCTS[product].launcher}\` on PATH — in JetBrains Toolbox, enable "Generate shell scripts", or set editor.jetbrains.launcher in hangar.config.yaml.`,
   launch: (clone) => launchJetbrains(product, launcherOverride, clone),

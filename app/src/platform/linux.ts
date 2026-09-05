@@ -32,6 +32,9 @@ export const linuxPlatform = (): PlatformDriver => {
     // `app` is ignored rather than approximated: there is no lookup from a display name to a
     // desktop entry, and passing the name as a path would open a file that is not there.
     openExternally: (target, app) => (app === undefined ? run('xdg-open', [target]).ok : false),
+    // False for the same reason `openApplicationByName` is: with no lookup from a display name
+    // to a desktop entry, there is nothing to ask.
+    applicationExists: () => false,
     installHint: (pkg) =>
       `your package manager, e.g. \`apt install ${pkg}\`, \`dnf install ${pkg}\` or \`pacman -S ${pkg}\``,
   };

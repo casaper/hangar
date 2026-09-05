@@ -21,8 +21,9 @@ import { portSummary } from '../ports.ts';
 /**
  * `hangar open <clone>…` -- the clones' whole working set in one command.
  *
- * Three terminal tabs per clone (Claude in the clone root, a shell in the clone root, a shell in
- * `angular/`) plus its VS Code workspace.
+ * One terminal tab per `terminal.tabs` entry (Claude in the clone root, a shell in the clone
+ * root, a shell in the app directory) plus every editor `editor.kinds` lists -- which for most
+ * hangars is VS Code and its workspace file, and for a JetBrains one is the clone directory.
  *
  * ## One window, and what "sorted" can mean
  *

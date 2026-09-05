@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 
 import type { Clone } from './fleet.ts';
 import { themeName } from './generate/theme-json.ts';
+import { isVscodeFork } from './editor/kinds.ts';
 import type { Hangar } from './hangar.ts';
 import { tildify } from './user-paths.ts';
 import { roleUrl, type ClonePort } from './ports.ts';
@@ -47,6 +48,28 @@ const workspaceName = (clone: Clone): string =>
     cloneTokens(clone),
     'editor.workspaceFileName',
   );
+
+/**
+ * Whether any configured editor reads a `*.code-workspace` file at all.
+ *
+ * The workspace file is a VS Code artifact in the same way `editor.rootPathKeys` is, so it asks
+ * the same question the schema's cross-check does -- "is there a kind that CONSUMES it", not "is
+ * an editor configured" -- and reuses the same predicate rather than a second list that could
+ * disagree with it.
+ *
+ * **The builders below stay ungated on purpose.** They are pure functions of the clone and are
+ * called from inside the VS Code driver, which only exists when a VS Code kind is configured.
+ * This is the gate for the three callers that are NOT the driver: `add-clone` writing the file,
+ * `doctor` checking and repairing it, and the golden capture recording it. Without it a
+ * JetBrains-only or Zed-only hangar got a workspace file per clone for an editor its config says
+ * it does not use -- and `doctor --fix` put it back after you deleted it.
+ *
+ * A hangar whose config will not parse gets `['vscode']` from the schema default and so keeps
+ * the file, which is the same fallback `editor/index.ts` documents: with the editors unknown,
+ * writing the default editor's artifact is the recoverable answer.
+ */
+export const wantsWorkspaceFiles = (hangar: Hangar): boolean =>
+  hangar.config.editor.kinds.some(isVscodeFork);
 
 /**
  * Every directory of this clone a `*.code-workspace` copy belongs in, from `editor.workspaceDirs`.

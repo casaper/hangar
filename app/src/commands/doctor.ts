@@ -45,6 +45,7 @@ import {
   workspacePaths,
   workspaceContent,
   workspacePath,
+  wantsWorkspaceFiles,
 } from '../clone-config.ts';
 import { configJsonSchemaText } from '../config/json-schema.ts';
 import {
@@ -649,27 +650,42 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
       : `a symlink to ${tildify(hangar.paths.tmp)} — its PID files are the whole fleet's; run \`hangar tmp merge\``,
   });
 
-  // Both copies: VS Code only offers a `*.code-workspace` from the directory you opened, and
-  // this repo is opened at its root and at `angular/`. `workspaceContent` is the fallback for
-  // a clone that has neither -- `hangar ide vscode sync` is what keeps existing ones in step.
-  const wsPaths = workspacePaths(clone);
-  const wsMissing = wsPaths.filter((p) => !existsSync(p));
-  checks.push({
-    name: 'code-workspace',
-    ok: wsMissing.length === 0,
-    detail:
-      wsMissing.length === 0
-        ? `${workspacePath(clone).split('/').pop() ?? ''} (${workspacePaths(clone)
-            .map((path) => relative(clone.path, dirname(path)) || 'root')
-            .join(' and ')})`
-        : `missing: ${wsMissing.map((p) => relative(clone.path, p)).join(', ')}`,
-    repair: () => {
-      const template = wsPaths.find((p) => existsSync(p));
-      const content =
-        template === undefined ? workspaceContent(clone) : readFileSync(template, 'utf8');
-      for (const path of wsMissing) writeFile(path, content);
-    },
-  });
+  /*
+   * Both copies: VS Code only offers a `*.code-workspace` from the directory you opened, and
+   * this repo is opened at its root and at `angular/`. `workspaceContent` is the fallback for
+   * a clone that has neither -- `hangar ide vscode sync` is what keeps existing ones in step.
+   *
+   * **No row at all when no configured editor reads one**, rather than a green "not applicable":
+   * the `editor` row below already says what Hangar does per configured editor, and this check
+   * was unconditional -- so a hangar declaring `kinds: ['jetbrains']` was told a VS Code file was
+   * missing, and `--fix` created it. That is worse than a stale row, because the repair is what
+   * put the file there.
+   *
+   * A workspace file left behind by a hangar that USED to list VS Code is deliberately left
+   * alone and unreported. The tracker hook went the other way -- `doctor` removes a stale one --
+   * and the difference is the cost: a stale hook starts a process on every Bash tool call, while
+   * a stale workspace file is an inert gitignored file that nothing reads.
+   */
+  if (wantsWorkspaceFiles(hangar)) {
+    const wsPaths = workspacePaths(clone);
+    const wsMissing = wsPaths.filter((p) => !existsSync(p));
+    checks.push({
+      name: 'code-workspace',
+      ok: wsMissing.length === 0,
+      detail:
+        wsMissing.length === 0
+          ? `${workspacePath(clone).split('/').pop() ?? ''} (${workspacePaths(clone)
+              .map((path) => relative(clone.path, dirname(path)) || 'root')
+              .join(' and ')})`
+          : `missing: ${wsMissing.map((p) => relative(clone.path, p)).join(', ')}`,
+      repair: () => {
+        const template = wsPaths.find((p) => existsSync(p));
+        const content =
+          template === undefined ? workspaceContent(clone) : readFileSync(template, 'utf8');
+        for (const path of wsMissing) writeFile(path, content);
+      },
+    });
+  }
 
   // Two clones one colour, however it happened: the palette wrapped (more clones than hues) or
   // someone forced an assignment onto a hue a sibling already had. Either way the hue has
@@ -1383,6 +1399,25 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
    * mean `hangar open` silently opens no editor at all.
    */
   const editorChoice = editors(hangar);
+  /*
+   * Say when the rows below are the FALLBACK's editors rather than this hangar's.
+   *
+   * With a config that will not parse, `editor.kinds` resolves to the schema default -- so a
+   * hangar configured `kinds: ['jetbrains']` printed a green `editor  VS Code — …` row naming
+   * an editor its own config does not list, seven lines under the warning that says the config
+   * does not validate, with nothing connecting the two. That is the exact case `editor/index.ts`
+   * warns about ("VS Code opened at it and no hint as to why"), and `doctor` is where the hint
+   * belongs: it is the command you run when something is wrong, and it was the one confirming
+   * the wrong answer.
+   */
+  if (editorChoice.fellBack) {
+    // `warn`, not `problem`: the fault itself -- a config that does not parse -- is already a
+    // counted problem above, and counting it twice would put a number on the footer that no
+    // amount of repair can bring down. What this adds is PLACE: the same fact, next to the rows
+    // it makes untrustworthy.
+    warn('the editor row(s) below are the DEFAULT, not this hangar’s — the config did not parse');
+    note('`hangar config validate` says what is wrong; until it does, `hangar open` uses these.');
+  }
   for (const bad of editorChoice.broken) {
     problem(`the ${bad.kind} editor driver would not build: ${bad.reason}`);
     note('`hangar open` skips it and still opens the others.');

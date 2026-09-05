@@ -19,6 +19,7 @@ import {
   settingsPath,
   workspacePaths,
   workspaceContent,
+  wantsWorkspaceFiles,
   type SettingsJson,
 } from '../clone-config.ts';
 import { clearColourAssignment } from '../colour-assignments.ts';
@@ -180,14 +181,21 @@ export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
   //       `*.code-workspace` from the directory you opened, and this repo is opened at its
   //       root and at `angular/`. One of the two is the same silent gap as a missing
   //       `.envrc` -- `doctor` reports it, but only if someone runs `doctor`.
-  const workspace = workspaceContent(clone);
-  for (const path of workspacePaths(clone)) {
-    if (!existsSync(dirname(path))) {
-      warn(`${relative(clone.path, path)} skipped — no ${relative(clone.path, dirname(path))}/`);
-      continue;
+  //
+  //       Only where an editor actually reads one. This used to be unconditional, so a hangar
+  //       configured `kinds: ['jetbrains']` got a VS Code workspace file per clone for an editor
+  //       its own config says it does not use -- and JetBrains needs none, because its project
+  //       IS the directory.
+  if (wantsWorkspaceFiles(hangar)) {
+    const workspace = workspaceContent(clone);
+    for (const path of workspacePaths(clone)) {
+      if (!existsSync(dirname(path))) {
+        warn(`${relative(clone.path, path)} skipped — no ${relative(clone.path, dirname(path))}/`);
+        continue;
+      }
+      writeFile(path, workspace);
+      ok(relative(clone.path, path));
     }
-    writeFile(path, workspace);
-    ok(relative(clone.path, path));
   }
 
   // 10. regenerate everything derived from the palette, now that the fleet is bigger. A

@@ -24,6 +24,7 @@ import {
   withTmpHook,
   workspacePaths,
   workspaceContent,
+  wantsWorkspaceFiles,
   type SettingsJson,
 } from '../clone-config.ts';
 import { CONFIG_FILENAME } from '../config/load.ts';
@@ -154,12 +155,18 @@ const cloneCaptures = (
       settingsContentFor(clone, defaultSettings(clone)),
     ],
 
-    // Every configured workspace copy, so a change to `editor.workspaceDirs` shows up here.
-    ...workspacePaths(clone).map((path, i): [string, string, string] => [
-      `workspace-${String(i + 1)}.json`,
-      path,
-      workspaceContent(clone),
-    ]),
+    /*
+     * Every configured workspace copy, so a change to `editor.workspaceDirs` shows up here --
+     * and none at all when no configured editor reads one, so the capture keeps recording what
+     * `add-clone` would actually write rather than what the builder can render.
+     */
+    ...(wantsWorkspaceFiles(hangar)
+      ? workspacePaths(clone).map((path, i): [string, string, string] => [
+          `workspace-${String(i + 1)}.json`,
+          path,
+          workspaceContent(clone),
+        ])
+      : []),
     ['theme.json', themePath(clone), theme.content],
     ['git-info-exclude', excludePath(clone), excludeBlock(hangar)],
     ['direnv-snippet', envrcPrivatePath(clone), direnvSnippet(clone)],

@@ -271,6 +271,35 @@ Keep a value that pins state already on disk or already running (clone directory
 arithmetic under live servers) even when it equals the default — a future change to a default must
 not move them. Delete anything that only configures a feature you do not use.
 
+#### If you do not use VS Code
+
+VS Code is the default and the only kind that is exercised, but `editor.kinds` is a list and
+`hangar open` opens every entry in it. Two shapes work, and the difference matters:
+
+```yaml
+editor:
+  kinds: ['vscode', 'jetbrains']   # both — nothing else to change
+  kinds: ['jetbrains']             # JetBrains only — then also DELETE `rootPathKeys`
+```
+
+**Dropping the VS Code family means deleting `editor.rootPathKeys`.** Only that family resolves a
+settings path against nothing and so needs one rewritten per clone; JetBrains has `$PROJECT_DIR$`
+and Zed resolves from the project root. Leaving the table behind is a hard validation error, not a
+no-op — deliberately, because silently ignoring it is the same bug — and it fails in the gate every
+command runs, so nothing works until it goes. `hangar doctor` still runs and still says what is
+wrong. The three `workspace*` keys are then inert too, and can go with it.
+
+**JetBrains, specifically.** `editor.jetbrains.product` picks the IDE (`idea` is the default, and
+is IntelliJ IDEA). Hangar finds it by its launcher on PATH, so in **JetBrains Toolbox enable
+"Generate shell scripts"** — failing that it asks macOS for the application by name, and
+`editor.jetbrains.launcher` names one explicitly. `hangar doctor` prints which of those answered.
+
+**Hangar never creates `.idea/` — the IDE does.** Open a clone in it once and the directory
+appears; from then on `hangar ide jetbrains sync` keeps the nine shareable files identical across
+the fleet (code styles, inspections, linters, `modules.xml`, `vcs.xml`) and never touches
+`workspace.xml`, which is per-user window state. Run before any clone has been opened, it says so
+rather than inventing files.
+
 ### 5. The first clone, and every one after
 
 ```bash

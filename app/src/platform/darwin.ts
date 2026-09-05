@@ -22,6 +22,12 @@ export const darwinPlatform = (): PlatformDriver => {
       join(machineConfigDir, stateDir, 'User', 'globalStorage', 'storage.json'),
     openExternally: (target, app) =>
       run('open', app === undefined ? [target] : ['-a', app, target]).ok,
+    /*
+     * LaunchServices' own lookup, which is the same resolution `open -a` performs -- so this
+     * answers for an app wherever it was installed, `~/Applications` (where JetBrains Toolbox
+     * puts them) included. Exits 0 with the bundle id, or 1 with `-1728` when nothing matches.
+     */
+    applicationExists: (app) => run('osascript', ['-e', `id of app "${app}"`]).ok,
     installHint: (pkg) => `brew install ${pkg}`,
   };
 };

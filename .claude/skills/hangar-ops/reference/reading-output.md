@@ -96,6 +96,19 @@ Four things to say correctly when you relay a report:
   hook GONE, reports `correctly absent`, and goes red only when a stale one is still there from
   before the tracker was switched off. Both directions are `hangar doctor --fix`. Never relay a
   red row here as "the Jira cache is broken" without saying which of the two it is.
+- **`code-workspace` is absent, not missing, on a hangar with no VS Code-family editor.** The row
+  is written only where a configured `editor.kinds` entry actually reads a `*.code-workspace` — so
+  a JetBrains-only or Zed-only hangar has no such row, and that is the correct reading rather than
+  a check that stopped running. It used to appear everywhere: those hangars were told the file was
+  missing and `--fix` created one for an editor that has no use for it. A file left behind by a
+  hangar that used to list VS Code is deliberately left alone and unreported (it is inert and
+  gitignored) — unlike a stale `jira record hook`, which costs a process per Bash call and IS
+  removed.
+- **A warning that the editor rows are the DEFAULT means the config did not parse.** With
+  `hangar.config.yaml` invalid, the editor list falls back to the schema default, so the rows
+  below it can name VS Code on a hangar whose config says JetBrains. Fix the config first —
+  `hangar config validate` says what is wrong — and re-read; until then `hangar open` uses those
+  same fallback editors.
 - **How much of the shared cache a clone has linked is deliberately not checked.** A ticket fetched
   in one clone reaches the others at the next `tmp merge`; a check that is red in normal operation
   is a check nobody reads. (`hangar-internals/reference/doctor.md` says the same — change one and

@@ -74,6 +74,21 @@ export type PlatformDriver = {
    */
   readonly openExternally: (target: string, app?: string) => boolean;
   /**
+   * Whether an application of that DISPLAY NAME is installed, without launching it.
+   *
+   * The read-only twin of `openExternally`'s `app` argument, and gated by the same
+   * `openApplicationByName` capability -- so it has exactly the reach that call does. That is the
+   * whole point of it existing: `editor/jetbrains.ts` answered "is it installed?" with
+   * `existsSync('/Applications/<name>.app')` while answering "open it" with `open -a <name>`,
+   * and `hangar open` checks the first before doing the second. The narrow answer therefore
+   * gated the wide one, and it did so in precisely the case the wide one was written for -- a
+   * Toolbox install with no shell launcher, which Toolbox does not put under `/Applications`.
+   *
+   * Returns false when the capability is false, like `openExternally`, so a caller that forgot
+   * to check gets a refusal rather than an exception.
+   */
+  readonly applicationExists: (app: string) => boolean;
+  /**
    * How to tell someone to install `pkg`, as one line.
    *
    * A hint, deliberately, and not a command this CLI runs: Linux has no single package manager
