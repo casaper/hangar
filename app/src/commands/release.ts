@@ -128,6 +128,69 @@ const runGates = (root: string, from: string | undefined): void => {
 };
 
 /**
+ * Can the token in this shell actually SEE the repository semantic-release is about to release?
+ *
+ * Checked here rather than left to `@semantic-release/github`'s own `verifyConditions`, because
+ * that runs after the whole gate suite -- so the answer arrives several minutes late, as a forty-
+ * line AggregateError. It is also the failure most likely to happen: GitHub answers **404 for a
+ * repository a token cannot see**, so a missing scope, a fine-grained PAT that does not list this
+ * repo, and a token belonging to another account all surface as "the repository does not exist"
+ * even while `git push` over SSH works perfectly. That happened here the first time, on a repo
+ * that had been deleted and recreated after the token was issued.
+ *
+ * `gh` is used because it reads the same GH_TOKEN/GITHUB_TOKEN semantic-release does, so it tests
+ * the credential that will actually be used. It is a per-machine developer tool, so its ABSENCE
+ * is not a failure -- the check is skipped with a note and semantic-release still does its own.
+ */
+const githubReachable = (root: string): void => {
+  if ((process.env['GH_TOKEN'] ?? process.env['GITHUB_TOKEN'] ?? '') === '') {
+    throw new CliError(
+      'neither GH_TOKEN nor GITHUB_TOKEN is set in this shell',
+      '@semantic-release/github needs one to create the release. If it is in your shell\n' +
+        '       profile, this shell predates it: `source ~/.zshrc`.',
+    );
+  }
+
+  const origin = gitTry(root, ['remote', 'get-url', 'origin']);
+  const slug =
+    origin === undefined ? undefined : /github\.com[:/](.+?)(?:\.git)?$/.exec(origin)?.[1];
+  if (slug === undefined) return; // not GitHub, or an origin shape we do not parse
+
+  if (!run('gh', ['--version']).ok) {
+    note('gh is not installed, so the token was not checked against GitHub');
+    return;
+  }
+
+  /*
+   * Two failures that look alike and are not, which is the whole reason this asks twice. A token
+   * that does not authenticate at all fails BOTH calls; a token that authenticates but cannot see
+   * this repository fails only the second, because GitHub answers 404 rather than 403 for a
+   * repository you may not know exists. Both have happened here -- a stale shell for the first,
+   * and a repo deleted and recreated AFTER the token was issued for the second.
+   */
+  const who = run('gh', ['api', 'user', '-q', '.login'], { cwd: root });
+  if (!who.ok) {
+    throw new CliError(
+      'the token in this shell does not authenticate with GitHub',
+      'If the working one is in your shell profile, this shell predates it:\n' +
+        '       `source ~/.zshrc`. Otherwise the token has expired or been revoked.\n' +
+        '       Check with: gh api user',
+    );
+  }
+
+  if (run('gh', ['api', `repos/${slug}`, '-q', '.full_name'], { cwd: root }).ok) return;
+
+  throw new CliError(
+    `the token authenticates as ${who.stdout.trim()}, but cannot see ${slug}`,
+    "GitHub answers 404 for a repository a token cannot see, so this is the token's access\n" +
+      '       rather than a missing repo -- git over SSH is a different credential and keeps\n' +
+      `       working. A fine-grained PAT needs ${slug} in its repository list, and a repo\n` +
+      '       recreated after the token was issued is NOT in it; a classic PAT needs `repo`.\n' +
+      `       Check with: gh api repos/${slug}`,
+  );
+};
+
+/**
  * Refuse everything that would make semantic-release answer wrongly, and say why in a sentence.
  *
  * Each of these is something it would otherwise hit halfway through, as a stack trace. The tag
@@ -135,7 +198,7 @@ const runGates = (root: string, from: string | undefined): void => {
  * means two readers of the same commits compute different versions -- which is how this repo's
  * releases were going to become 1.0.0 the moment CI ran them.
  */
-const preflight = (root: string, dryRun: boolean): string | undefined => {
+const preflight = (root: string): string | undefined => {
   const branch = currentBranch(root);
   if (branch !== 'main') {
     throw new CliError(
@@ -145,13 +208,7 @@ const preflight = (root: string, dryRun: boolean): string | undefined => {
   }
   if (isDirty(root)) throw new CliError('the working tree has uncommitted changes');
 
-  if (!dryRun && (process.env['GH_TOKEN'] ?? process.env['GITHUB_TOKEN'] ?? '') === '') {
-    throw new CliError(
-      'neither GH_TOKEN nor GITHUB_TOKEN is set in this shell',
-      '@semantic-release/github needs one to create the release. If it is in your shell\n' +
-        '       profile, this shell predates it: `source ~/.zshrc`, or run with -n to rehearse.',
-    );
-  }
+  githubReachable(root);
 
   step('fetching origin');
   const fetched = run('git', ['fetch', '--tags', 'origin'], { cwd: root });
@@ -230,7 +287,7 @@ export const release = (hangar: Hangar, opts: ReleaseOptions): void => {
     );
   }
 
-  const from = preflight(root, dryRun);
+  const from = preflight(root);
   const commits = commitsSince(root, from);
 
   heading(dryRun ? 'Release (dry run)' : 'Release');

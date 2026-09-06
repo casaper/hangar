@@ -84,11 +84,28 @@ Run before the design settled, because most of it reads as obviously-fine and on
 The third one changed the design: the guard is `dev/scrub-check.sh` asserting the root
 `package.json`'s shape instead, and `app/CLAUDE.md`'s package blockquote carries the reasoning.
 
-One thing about the token is worth knowing before debugging it. `@semantic-release/github` reads
-`GH_TOKEN` or `GITHUB_TOKEN` and fails `verifyConditions` with `EINVALIDGHTOKEN` when neither is
-valid. A shell opened before the token was put in the profile has the old value, so the preflight
-checks for one being set and names `source ~/.zshrc` — a stale shell is the likelier cause than a
-bad token.
+## The token, and the two failures that look alike
+
+`@semantic-release/github` reads `GH_TOKEN` or `GITHUB_TOKEN`, and both of its failures were hit
+here in turn. They need different fixes and the messages are not interchangeable, so the preflight
+asks GitHub twice — once about the account, once about the repository — before running any gate.
+
+| `gh api user` | `gh api repos/<slug>` | What it is |
+| --- | --- | --- |
+| fails | fails | the token does not authenticate: expired, revoked, or a shell older than the profile that sets it (`source ~/.zshrc`) |
+| works | fails | the token authenticates but **cannot see this repository** |
+
+The second row is the one that misleads. **GitHub answers 404, not 403, for a repository a token
+cannot see** — so `@semantic-release/github` reports "The repository casaper/hangar doesn't exist"
+for what is really a permissions problem, while `git push` over SSH keeps working perfectly because
+it is a different credential entirely. It happened here on a repo that had been **deleted and
+recreated after the token was issued**: a fine-grained PAT names the repositories it may touch, and
+the new repo was not among them.
+
+Checked in the preflight rather than left to `verifyConditions`, because that step runs after the
+whole gate suite — so the answer arrived several minutes late, as a forty-line `AggregateError`,
+for a question `gh api user` answers in a second. `gh` is a per-machine developer tool, so its
+absence is a note and a skip, not a failure; semantic-release still does its own check.
 
 ## Two things to know before the first real run
 
