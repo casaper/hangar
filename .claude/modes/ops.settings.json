@@ -3,7 +3,9 @@
     "deny": [
       "Edit(./app/**)",
       "Edit(./.claude/skills/**)",
-      "Edit(./.claude/modes/**)"
+      "Edit(./.claude/modes/**)",
+      "Bash(hangar dev)",
+      "Bash(hangar dev:*)"
     ],
     "ask": [
       "Bash(hangar sync)",

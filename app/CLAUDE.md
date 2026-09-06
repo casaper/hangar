@@ -19,15 +19,29 @@ The fleet is orchestrated by one TypeScript commander CLI. The executable is `bi
 package it runs is `app/` (`app/src/**`, `app/package.json`, `app/node_modules`), kept out of the
 hangar root for the reason below.
 
-> **Never put a `package.json` (or `node_modules`) in the hangar root itself.** That directory is
-> an ancestor of every clone, and Node resolves a file's module type from the nearest
-> `package.json` walking up. A clone has no `package.json` at its own root — only in `angular/` —
-> so a package there becomes the nearest one for every clone file outside `angular/`. It has
-> already broken things once: `"type": "module"` at this level flipped
-> `clone_NN/.claude/hooks/*.js` to ESM, so every one of them died with
+> **Never put `node_modules`, or anything that would create it, in the hangar root.** That
+> directory is an ancestor of every clone, and Node resolves both a file's module type and its
+> imports from the nearest `package.json` and `node_modules` walking up. A clone has no
+> `package.json` at its own root — only in `angular/` — so whatever is at this level is what every
+> clone file outside `angular/` reads. It has already broken things once: `"type": "module"` here
+> flipped `clone_NN/.claude/hooks/*.js` to ESM, so every one of them died with
 > `ReferenceError: require is not defined in ES module scope` at session start, and
-> `npm pkg get name` run at a clone root answered `dvb-gn-fleet`, meaning an `npm install` there
-> would have written to the fleet's package. That is why the CLI is in `app/`.
+> `npm pkg get name` run at a clone root answered the fleet's package. That is why the CLI is in
+> `app/`.
+>
+> **There is now one file at that level, and it is scripts and nothing else.** The root
+> `package.json` exists so `pnpm release` and the other gates can be run from the hangar root
+> instead of `cd app` first, and it declares **no `dependencies`, no `devDependencies`, no
+> `"type"`, no `workspaces` and no `packageManager`** — which is what keeps the paragraph above
+> true rather than merely historical. `app/pnpm-workspace.yaml` stays the workspace root and
+> `app/pnpm-lock.yaml` stays the lockfile.
+>
+> **`dev/scrub-check.sh` enforces that shape, because the obvious guard does not work.** A
+> `preinstall` script exiting 1 was written and then measured: **pnpm 10 does not run it** — not
+> even with a dependency present to install (probed both ways; `pnpm run preinstall` fires,
+> `pnpm install` does not), and npm skipped it too. So a stray `pnpm install` here still leaves an
+> empty `node_modules`, which resolves nothing and harms nothing. What must never happen is this
+> file growing something to put in it, and that is the line the gate holds.
 
 **There is no build step.** Node strips the types and runs `src/cli.ts` directly, so an edit is
 live the moment it is saved and there is nothing to rebuild before trying it.
@@ -42,6 +56,7 @@ cd app && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 pnpm golden && git diff --exit-code dev/golden/gated   # the regression net; see below
 pnpm scan     # both hygiene gates; see **Nothing in here names one organisation**
 pnpm hooks    # ONCE per clone of this repo: installs the two git hooks. See Commit messages
+pnpm release -n   # what the next release would be. See Releasing
 ```
 
 **`pnpm scan` is two gates and they are not interchangeable.** `scan:secrets` is gitleaks over the
@@ -222,10 +237,13 @@ the record to silence a warning that blocks nothing.
 
 **No `!` and no `BREAKING CHANGE:` footer while the CLI is 0.x.** Several changes here are
 breaking by content — the `orch-util` → `hangar` rename, untracking files a command rewrites — and
-marking them would make semantic-release cut a 1.0.0. Versions move by patch and minor only until
-somebody decides otherwise, and that is a decision, not a commit message.
+marking them would cut a 1.0.0. Versions move by patch and minor only until somebody decides
+otherwise, and that is a decision, not a commit message. **`hangar dev release` refuses rather
+than escalating**: `conventional-changelog`'s own `preMajor` option bumps one level instead, which
+would turn a stray `!` into a version silently and differently depending on what else was in the
+range. The release stops and names the commit.
 
-### The hooks, and why CI is the thing that actually enforces this
+### The hooks, and where this is actually enforced
 
 `pnpm hooks` installs **both**, once per clone of this repo, **by hand**. It cannot be automatic:
 `pnpm-workspace.yaml` sets `ignoreScripts: true`, so husky's `prepare` never runs on install.
@@ -238,11 +256,18 @@ somebody decides otherwise, and that is a decision, not a commit message.
   NAME, and **skips with a message rather than failing when it is absent**: gitleaks is a per-
   machine developer tool (`brew install gitleaks`), not a dependency of this package, and a
   missing scanner must not block a commit. `scrub-check.sh` has no such dependency and always
-  runs. The workflow's `scan` job is where neither can be skipped.
+  runs.
 
-So the hooks are fast feedback for whoever installed them, and **`.github/workflows/release.yml`'s
-`commitlint` and `scan` jobs are the enforcement**, because they do not depend on anyone having
-read this. `release` needs both.
+So the hooks are fast feedback for whoever installed them, and **`hangar dev release` is where
+none of it can be skipped**: it runs typecheck, lint, format, the suite, both scans, the golden
+gate and `commitlint` over the whole range being released, before it will move a version. There
+was a `.github/workflows/release.yml` doing the last part; it is gone, along with the release job
+that never worked. `hangar-internals/reference/release.md` says why.
+
+**A missing gitleaks is an error there, not a skip.** The hook's leniency is deliberate and stays
+— a per-machine developer tool must not block a commit — but a release cut without a history scan
+is a release nobody scanned, so `dev/scan-secrets.sh` exits 1 with `brew install gitleaks` and the
+preflight stops.
 
 **`hangar doctor` deliberately gets no row for `core.hooksPath`.** Every hangar root is a clone of
 this repo, but only a CLI developer ever commits in one — an operator's hangar would carry that
@@ -250,29 +275,52 @@ row red forever, which is the check nobody reads.
 
 ### Releasing
 
-`.releaserc.json` at the hangar root drives semantic-release from the `release` job: it derives
-the version from the commit types, prepends to `CHANGELOG.md`, bumps `app/package.json`
-(`npmPublish: false`, `pkgRoot: app` — the package is `private` and has never been on a registry)
-and cuts a GitHub release. `docs`, `refactor`, `test` and `build` are given `patch` there rather
-than the default of no release, because in this repo a documentation commit is a real change.
+**`hangar dev release` cuts a release, from a terminal.** It works out the version from the commit
+types since the last tag, bumps `app/package.json`, regenerates `CHANGELOG.md`, commits both as
+`chore(release): <version>`, makes the annotated tag, pushes `main` and the tag, and creates the
+GitHub release with `gh`. `pnpm release` from `app/` or from the hangar root is the same thing.
 
-Two things about that pair are load-bearing:
+`-n` prints the plan and changes nothing, and it is the first thing to run. `--skip-checks`,
+`--no-push` and `--no-github` exist for rehearsals.
 
-- **`.releaserc.json` is the single source of the CHANGELOG's section list.**
-  `app/changelog.preset.ts` — the preset behind `pnpm changelog` — reads `presetConfig.types` out
-  of it rather than declaring its own. Two copies of an eleven-entry table that must agree is the
-  drift this repo keeps finding, and the symptom would be sections with different titles in one
-  file with nothing saying why.
-- **The list exists at all because the preset's defaults hide everything but `feat`, `fix` and
-  `perf`.** With them, v0.11.0 — the release that added the whole `node:test` suite — rendered as
-  a heading with nothing under it.
+**It is under the hidden `dev` group on purpose.** A release is only meaningful in a checkout of
+_this_ repo, never in an operator's hangar — the same contract `dev golden` has, and the reason
+neither gets a row in `hangar-ops/reference/commands.md`. `dev` is also not in `NEEDS_NO_CONFIG`,
+so a fresh clone of this repo has to run `hangar setup` before it can release; a capture or a
+release derived from the schema defaults is the one output neither may be mistaken for.
+
+Four things about it are load-bearing:
+
+- **`src/release/rules.ts` holds both tables and is the single source for each.**
+  `CHANGELOG_TYPES` is the section list; `RELEASE_RULES` is which type moves which number.
+  `changelog.preset.ts` — the preset behind `pnpm changelog` — imports the first rather than
+  declaring its own, so the sections rendered by hand and the sections the release believes in
+  cannot disagree. Both lived in `.releaserc.json` while semantic-release cut the releases; the
+  file moved, the argument did not. `docs`, `refactor`, `test` and `build` are `patch` there
+  rather than the default of no release, because in this repo a documentation commit is a real
+  change — and `revert` is `patch`, which a casual "everything else is no release" would drop.
+- **The section list exists at all because the preset's defaults hide everything but `feat`,
+  `fix` and `perf`.** With them, v0.11.0 — the release that added the whole `node:test` suite —
+  rendered as a heading with nothing under it.
+- **The CHANGELOG is written BEFORE the tag, and that is what makes the heading right.**
+  `dev/changelog.sh` passes `-k app/package.json`, so the section it has no tag for takes its
+  version from the file that was just bumped — heading, date and `compare/v0.13.0...v0.14.0` link
+  all correct from a tag that does not exist yet. Reversing the two would need a second commit
+  after the tag.
+- **`chore(release)` is hidden from its own changelog, and the SCOPE is the join.** The release
+  commit is made before its tag, so it falls inside that tag's range: regenerate the file
+  afterwards and a `Chores` line nobody wrote appears, which is precisely the unexplainable diff
+  `changelog.sh` exists to prevent. `CHANGELOG_TYPES` carries
+  `{ type: 'chore', scope: 'release', hidden: true }` — and the preset matches with `Array.find`,
+  so it only works while that entry precedes the bare `chore` one and while the commit really is
+  scoped `release`. `test/release-version.test.ts` asserts the ordering; `commands/release.ts`
+  writes the subject. The three move together.
 
 `pnpm changelog` is `dev/changelog.sh` rather than a one-line script entry, for the same reason
 `pnpm golden` is: **it has to be reproducible.** The bare `conventional-changelog` invocation
 regenerates every section and drops the `# Changelog` heading, so running it would show the next
-developer a one-line diff they did not make. The script puts the heading back. That heading is
-load-bearing — `.releaserc.json` sets `changelogTitle` to it, and semantic-release prepends
-_under_ it.
+developer a one-line diff they did not make. The script puts the heading back. `pnpm changelog`
+producing no diff at a released state is the check that the hidden entry above is doing its job.
 
 `hangar --version` reads `app/package.json` rather than repeating it, so a release bump moves one
 file. It used to be a literal, which is the kind of duplicate nothing notices until a tool starts
@@ -298,21 +346,21 @@ worth reading in full before changing either** — they are also the two whose m
 working tree. The rest of the table names files without sizing them on purpose: a count here goes
 stale on the next commit and nothing checks it, so run `wc -l` when you want one.
 
-| Role                  | Files                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| entry point           | `cli.ts` — every command, option and alias is registered here, plus the `preAction` config gate and the `configureHelp` that prints all of a command's aliases                                                                                                                                                                                                                                                                       |
-| maintainer            | `commands/dev.ts` — `hangar dev golden`, the capture behind `pnpm golden`. **Hidden in `cli.ts`, and that is its interface contract**: nothing about it is promised to an operator, so it gets no row in `hangar-ops/reference/commands.md`. It is deliberately NOT in `NEEDS_NO_CONFIG` — a capture of a hangar with no config would be a capture of the schema defaults, the one output this net must never mistake for a real one |
-| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`, `install`                                                                                                                                                                                              |
-| config                | `config/schema.ts` (the zod authority), `default-branch.ts`, `load.ts` (discovery + precedence), `derive.ts`, `json-schema.ts`, `drift.ts` (the example-vs-live comparison `config validate` runs)                                                                                                                                                                                                                                   |
-| per-clone artifacts   | `clone-config.ts` — the byte-compared builders `doctor` holds every clone to; `colour-assignments.ts`; `ports.ts`                                                                                                                                                                                                                                                                                                                    |
-| generators            | `generate/` — `terminal-sh.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                                                                                                                                                                                                                          |
-| editor drivers        | `editor/` — `vscode.ts`, `jetbrains.ts`, `index.ts`, `kinds.ts`, `types.ts`, `launch-only.ts`, `emacs.ts`, `vim.ts`, `zed.ts`                                                                                                                                                                                                                                                                                                        |
-| terminal drivers      | `terminal/` — `apple-terminal.ts`, `konsole.ts`, `iterm2.ts`, `index.ts`, `types.ts`, `gnome-terminal.ts`, `applescript.ts`, `none.ts`                                                                                                                                                                                                                                                                                               |
-| platform              | `platform/` — `darwin.ts`, `linux.ts`, `index.ts`, `types.ts`                                                                                                                                                                                                                                                                                                                                                                        |
-| git / forge / tracker | `git.ts`, `bitbucket.ts`, `jira-records.ts`, `jira.ts`                                                                                                                                                                                                                                                                                                                                                                               |
-| fleet                 | `fleet.ts` — clone discovery, and everything per-clone derived from the index                                                                                                                                                                                                                                                                                                                                                        |
-| tests                 | `test/**/*.test.ts` — run by `pnpm test`; `test/fixture.ts` builds the synthetic hangar they all use                                                                                                                                                                                                                                                                                                                                 |
-| shared                | `dedupe.ts`, `claude-sessions.ts`, `resolve-conflicts.ts`, `procs.ts`, `plans.ts`, `environment.ts`, `install.ts`, `secrets.ts`, `tui.ts`, `palette.ts`, `tmp.ts`, `sessions.ts`, `adopt.ts`, `ui.ts`, `hangar.ts`, `user-paths.ts`, `template.ts`, `exec.ts`                                                                                                                                                                        |
+| Role                  | Files                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| entry point           | `cli.ts` — every command, option and alias is registered here, plus the `preAction` config gate and the `configureHelp` that prints all of a command's aliases                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| maintainer            | `commands/dev.ts` — `hangar dev golden`, the capture behind `pnpm golden`; `commands/release.ts` — `hangar dev release`, and `release/{rules,version}.ts` beside it, the tables and the pure version logic. **Both are hidden in `cli.ts`, and that is their interface contract**: nothing about either is promised to an operator, so neither gets a row in `hangar-ops/reference/commands.md`. `dev` is deliberately NOT in `NEEDS_NO_CONFIG` — a capture, or a release, derived from a hangar with no config would be derived from the schema defaults, the one output neither may be mistaken for |
+| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`, `install`                                                                                                                                                                                                                                                                                                                                                               |
+| config                | `config/schema.ts` (the zod authority), `default-branch.ts`, `load.ts` (discovery + precedence), `derive.ts`, `json-schema.ts`, `drift.ts` (the example-vs-live comparison `config validate` runs)                                                                                                                                                                                                                                                                                                                                                                                                    |
+| per-clone artifacts   | `clone-config.ts` — the byte-compared builders `doctor` holds every clone to; `colour-assignments.ts`; `ports.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| generators            | `generate/` — `terminal-sh.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| editor drivers        | `editor/` — `vscode.ts`, `jetbrains.ts`, `index.ts`, `kinds.ts`, `types.ts`, `launch-only.ts`, `emacs.ts`, `vim.ts`, `zed.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| terminal drivers      | `terminal/` — `apple-terminal.ts`, `konsole.ts`, `iterm2.ts`, `index.ts`, `types.ts`, `gnome-terminal.ts`, `applescript.ts`, `none.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| platform              | `platform/` — `darwin.ts`, `linux.ts`, `index.ts`, `types.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| git / forge / tracker | `git.ts`, `bitbucket.ts`, `jira-records.ts`, `jira.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| fleet                 | `fleet.ts` — clone discovery, and everything per-clone derived from the index                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| tests                 | `test/**/*.test.ts` — run by `pnpm test`; `test/fixture.ts` builds the synthetic hangar they all use                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| shared                | `dedupe.ts`, `claude-sessions.ts`, `resolve-conflicts.ts`, `procs.ts`, `plans.ts`, `environment.ts`, `install.ts`, `secrets.ts`, `tui.ts`, `palette.ts`, `tmp.ts`, `sessions.ts`, `adopt.ts`, `ui.ts`, `hangar.ts`, `user-paths.ts`, `template.ts`, `exec.ts`                                                                                                                                                                                                                                                                                                                                         |
 
 **Five seams**, each a capability record plus a driver interface rather than a pretence that the
 implementations are equivalent. Adding a kind means implementing the interface and registering it;
@@ -516,8 +564,9 @@ on every `git pull` from a published upstream._
 
 Tracked: this file, the root `CLAUDE.md`, `bin/**`, `app/**`, `.envrc`, `.envrc.hangar`, `.nvmrc`,
 `.editorconfig`, `hangar.config.example.yaml`, `hangar.schema.json`, `.gitignore`, `CHANGELOG.md`,
-`.releaserc.json`, `.github/**`, `.claude/**` except the generated `settings.json`, and the two
-`.gitkeep` files under `plans/` and `tmp/`. Never the application.
+`package.json` (scripts and nothing else — see the top of this file), `.claude/**` except the
+generated `settings.json`, and the two `.gitkeep` files under `plans/` and `tmp/`. Never the
+application.
 
 Four of those rows are worth a sentence each:
 
