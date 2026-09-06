@@ -11,6 +11,7 @@ import { configSchema, configShow, configValidate } from './commands/config.ts';
 import { doctor } from './commands/doctor.ts';
 import { jiraHook } from './commands/jira.ts';
 import { golden } from './commands/dev.ts';
+import { release } from './commands/release.ts';
 import { list } from './commands/list.ts';
 import { open } from './commands/open.ts';
 import { plansCollect, plansStamp } from './commands/plans.ts';
@@ -586,15 +587,16 @@ colours
   });
 
 /**
- * `dev` is HIDDEN, and that is the whole of its interface contract: it exists for this
- * repository's own regression net and nothing about it is promised to an operator. It is not
- * in `NEEDS_NO_CONFIG` -- a capture of a hangar with no config would be a capture of the
- * schema defaults, which is the one output this net must never be able to mistake for a real
- * one.
+ * `dev` is HIDDEN, and that is the whole of its interface contract: it exists for work on this
+ * repository itself and nothing about it is promised to an operator -- which is why neither
+ * subcommand has a row in `hangar-ops/reference/commands.md`. It is not in `NEEDS_NO_CONFIG`:
+ * a capture of a hangar with no config would be a capture of the schema defaults, the one
+ * output the regression net must never be able to mistake for a real one, and a release cut
+ * from an unconfigured checkout would be cut from the same fiction.
  */
 const dev = program
   .command('dev', { hidden: true })
-  .description("Maintainer tools for this repository's own regression net");
+  .description('Maintainer tools for this repository itself');
 
 dev
   .command('golden')
@@ -606,6 +608,17 @@ dev
   )
   .action((options: { out: string; indices?: string }) => {
     golden(requireHangar(), options);
+  });
+
+dev
+  .command('release')
+  .description('Cut a release: derive the version from the commits, changelog, tag and push')
+  .option('-n, --dry-run', 'work out the release and print it, change nothing')
+  .option('--skip-checks', 'skip the gates, having just run them by hand')
+  .option('--no-push', 'commit and tag here, push nothing')
+  .option('--no-github', 'skip `gh release create`')
+  .action((options) => {
+    release(requireHangar(), options);
   });
 
 /**
