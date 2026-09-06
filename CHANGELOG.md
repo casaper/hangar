@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.14.0](https://github.com/casaper/hangar/compare/v0.13.0...v0.14.0) (2026-09-06)
+
+### Features
+
+* **cli:** Cut releases from a local command instead of a workflow ([c440afe](https://github.com/casaper/hangar/commit/c440afe2c2b95528ee0927d6485dfa3597244a15))
+* **test:** Gate the tree against organisation names, machine paths and credentials ([121dc79](https://github.com/casaper/hangar/commit/121dc793244934e3c45415b7eb66beccdaa42e34))
+
+### Bug Fixes
+
+* **cli:** Ask GitHub about the token before running the gates, not after ([59aa982](https://github.com/casaper/hangar/commit/59aa98294dda317398a49e0e281b6ca43e63c64b))
+* **cli:** Make `pnpm changelog` reproduce the file it generated ([7d0b75a](https://github.com/casaper/hangar/commit/7d0b75a257edacade27438417591aa84c308afc1))
+* **cli:** Read the version from package.json instead of repeating it ([a68cfde](https://github.com/casaper/hangar/commit/a68cfde674f808bbbf49fed8f33afe60212fe910))
+* **config:** Keep site-specific values out of the committed example ([01c7f50](https://github.com/casaper/hangar/commit/01c7f50b0b16408e44d91b252188b7e19af01c5a))
+* **modes:** Resolve the mode status line on PATH instead of an absolute path ([cd1c9ee](https://github.com/casaper/hangar/commit/cd1c9ee02a0c4f58447b56217d419f8ec4a65520))
+
+### Refactoring
+
+* **cli:** Let semantic-release do the release, behind this repo's gates ([94024fa](https://github.com/casaper/hangar/commit/94024fa66bd849a0c29a18aeb1aa300645290e98))
+* **editor:** Name the VS Code template placeholders after the tool ([26f4896](https://github.com/casaper/hangar/commit/26f489699de3f9b09c3aca4e2471a38adf9734f7))
+
+### Documentation
+
+* **cli:** Let the comments and the skills name no fleet in particular ([d0509db](https://github.com/casaper/hangar/commit/d0509dba9b36b60ea20cf6f4de984f4c10b9e509))
+* **cli:** Say how a release is cut now, and why the root may hold a package.json ([d293dbf](https://github.com/casaper/hangar/commit/d293dbf8492e2287467e2eac4fd87eea92325a1a))
+* Write down the commit convention, the hook, and how a release is cut ([f59d46d](https://github.com/casaper/hangar/commit/f59d46d29273f52632f6559c97d96e65fbd4b468))
+
+### Build & Dependencies
+
+* Adopt Conventional Commits, and make the rules this repo's own ([0406c3c](https://github.com/casaper/hangar/commit/0406c3cb42ef231624cf8b8915a33fcd19fff561))
+* **cli:** Drop semantic-release, and let the hangar root run its own scripts ([424961e](https://github.com/casaper/hangar/commit/424961edbd53aa2d474d645364a3f9f3c313dd73))
+
+### Continuous Integration
+
+* Cut releases from main with semantic-release, and lint every pushed commit ([1e9373c](https://github.com/casaper/hangar/commit/1e9373cb6a5d608d875ddf94ed317d081d948c96))
+* **release:** Run the hygiene gates, and harden the commitlint range ([6b0b40b](https://github.com/casaper/hangar/commit/6b0b40b9c924b03b6013fd973ae3f18f20fcdefa))
+
+### Chores
+
+* **cli:** Regenerate the changelog ([77381f4](https://github.com/casaper/hangar/commit/77381f43e2e45af206cffea7d9d995cbc8d88665))
+
 ## [0.13.0](https://github.com/casaper/hangar/compare/v0.12.0...v0.13.0) (2026-09-05)
 
 ### Bug Fixes
