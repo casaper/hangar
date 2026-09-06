@@ -30,6 +30,7 @@ import { breakingCommits, parseCommit, type ParsedCommit } from '../release/comm
 export type ReleaseOptions = {
   readonly dryRun?: boolean | undefined;
   readonly skipChecks?: boolean | undefined;
+  readonly yes?: boolean | undefined;
 };
 
 /*
@@ -333,12 +334,23 @@ export const release = (hangar: Hangar, opts: ReleaseOptions): void => {
   if (opts.skipChecks === true) warn('gates skipped');
   else runGates(root, from);
 
-  if (!dryRun) {
+  /*
+   * `confirm` reads /dev/tty and FAILS CLOSED where there is none, so an unattended run declines
+   * rather than releasing. `--yes` is the only way past that, and it has to be TYPED: inferring
+   * consent from the absence of a terminal is the same bug the other way round, and it is the
+   * one that would fire in a cron job or a hook nobody remembers writing.
+   *
+   * It skips the question and nothing else -- the preflight and every gate still run, because
+   * those are what the answer would have been based on.
+   */
+  if (!dryRun && opts.yes !== true) {
     blank();
     if (!confirm('Hand over to semantic-release? It commits, tags, pushes and releases.')) {
       note('nothing was changed');
       return;
     }
+  } else if (!dryRun) {
+    warn('--yes: releasing without asking');
   }
 
   /*

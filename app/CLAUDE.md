@@ -279,7 +279,7 @@ row red forever, which is the check nobody reads.
 gates and then hands over to **semantic-release**, which does the release itself: the version from
 the commit types, the CHANGELOG, the version bump, the release commit, the tag, the push and the
 GitHub release, all from `.releaserc.json`. `-n` runs the gates and `semantic-release --dry-run`,
-changing nothing, and it is the first thing to run.
+changing nothing, and it is the first thing to run. `-y` releases without asking.
 
 That used to be a GitHub workflow and it never successfully cut anything: **no tag had ever been
 pushed to origin**, so in CI semantic-release found zero releases, would have treated the next one
@@ -298,7 +298,10 @@ the right answer — moving it here is what fixed it, and the tag check below is
   `!`, because missing one IS the failure.
 - **Every gate**, since there is no CI to run them: typecheck, lint, format, the suite, both
   scans, the golden gate, and `commitlint` over the whole range being released.
-- **A confirmation**, because the next thing that happens is a push.
+- **A confirmation**, because the next thing that happens is a push. It reads `/dev/tty` and
+  **fails closed where there is none**, so an unattended run declines rather than releasing;
+  `-y` is the only way past it, and it has to be typed. Inferring consent from the absence of a
+  terminal is the same bug the other way round — it skips the question and nothing else.
 
 **`--no-ci` is what makes a local run legal**, not a weakening: without it semantic-release detects
 no CI environment and refuses outright. The branch check, the up-to-date check and the whole

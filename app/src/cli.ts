@@ -615,6 +615,7 @@ dev
   .description("Run this repo's gates, then hand over to semantic-release")
   .option('-n, --dry-run', 'run the gates and semantic-release --dry-run, change nothing')
   .option('--skip-checks', 'skip the gates, having just run them by hand')
+  .option('-y, --yes', 'do not ask before releasing, for a run with no terminal to ask at')
   .action((options) => {
     release(requireHangar(), options);
   });

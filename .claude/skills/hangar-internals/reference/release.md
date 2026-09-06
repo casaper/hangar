@@ -46,6 +46,11 @@ readers of the same commits compute different versions, which is the whole failu
 - **The gates.** There is no CI. This is the only place typecheck, lint, format, the suite, both
   scans, the golden gate and `commitlint` all have to pass.
 - **The confirmation.** The next thing that happens is a push to a published repository.
+  `confirm` reads `/dev/tty` and returns false when there is none, so a run nobody is watching
+  declines instead of releasing. **`-y` is the only way past it, and it is a flag rather than a
+  tty probe on purpose**: "no terminal, so assume yes" is the same mistake inverted, and it is the
+  one that fires in a cron job or a forgotten hook. It skips the question and nothing else — the
+  preflight and the gates are what the answer would have rested on, so they still run.
 
 **`--no-ci` is not a weakening.** Without it semantic-release detects no CI environment and
 refuses to run at all; with it, the branch check, the up-to-date check and the whole
