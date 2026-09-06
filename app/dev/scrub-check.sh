@@ -76,6 +76,26 @@ PASSWORDS='[A-Z_]*(PASSWORD|PASSWD|SECRET)[A-Z_]*=["'"'"']?[A-Za-z0-9._/+-]{6,}'
 pw=$(git grep -n -I -E "$PASSWORDS" -- . "$SKIP1" "$SKIP2" || true)
 [ -z "$pw" ] || report 'a password or secret with a literal value:' "$pw"
 
+# --------------------------------------------------------------------------------------------
+# The hangar root's package.json stays SCRIPTS-ONLY.
+#
+# That file is an ancestor of every clone, and a clone root has no package.json of its own -- so
+# whatever is declared here is what Node reads for every clone file outside the app subdirectory.
+# `"type": "module"` at this level has already flipped `clone_NN/.claude/hooks/*.js` to ESM and
+# killed every one of them at session start; a dependency here would put a `node_modules` above
+# every clone, so a require that should fail loudly would instead resolve into the fleet's tree.
+#
+# This is the check because the obvious guard does not work: a `preinstall` script that exits 1
+# was tried and MEASURED, and pnpm 10 does not run it -- not even when there is a dependency to
+# install (probed with one, `pnpm run preinstall` fires, `pnpm install` does not). npm skipped it
+# too. So an empty `node_modules` can still appear here; what must never happen is this file
+# growing something to put in it.
+# --------------------------------------------------------------------------------------------
+if [ -f package.json ]; then
+  pkg=$(grep -n -E '"(dependencies|devDependencies|type|workspaces|packageManager)"[[:space:]]*:' package.json || true)
+  [ -z "$pkg" ] || report 'the hangar root package.json must declare scripts and nothing else:' "$pkg"
+fi
+
 if [ "$status" -eq 0 ]; then
   echo 'scan:literals ok -- no identifier, machine path or pasted password in the tracked tree'
 fi

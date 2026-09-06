@@ -1,0 +1,13 @@
+{
+  "name": "hangar-fleet",
+  "private": true,
+  "description": "Script entry points for the hangar root. The package itself is in app/ -- see app/CLAUDE.md.",
+  "scripts": {
+    "release": "bin/hangar dev release",
+    "changelog": "pnpm --dir app changelog",
+    "test": "pnpm --dir app test",
+    "golden": "pnpm --dir app golden",
+    "scan": "pnpm --dir app scan",
+    "hooks": "pnpm --dir app hooks"
+  }
+}
