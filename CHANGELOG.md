@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.14.1](https://github.com/casaper/hangar/compare/v0.14.0...v0.14.1) (2026-09-06)
+
+### Bug Fixes
+
+* **cli:** Say what a failed release actually left behind, having watched one ([8132dd5](https://github.com/casaper/hangar/commit/8132dd54786a833d7471530244c8276fa640792c))
+
+### Chores
+
+* make hangar own repo secrets via .env.local available ([67ebf03](https://github.com/casaper/hangar/commit/67ebf038ed60d1aee8e38a3020cec8ba9fcbf1f2))
+
 ## [0.14.0](https://github.com/casaper/hangar/compare/v0.13.0...v0.14.0) (2026-09-06)
 
 ### Features
