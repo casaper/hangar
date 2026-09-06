@@ -612,11 +612,9 @@ dev
 
 dev
   .command('release')
-  .description('Cut a release: derive the version from the commits, changelog, tag and push')
-  .option('-n, --dry-run', 'work out the release and print it, change nothing')
+  .description("Run this repo's gates, then hand over to semantic-release")
+  .option('-n, --dry-run', 'run the gates and semantic-release --dry-run, change nothing')
   .option('--skip-checks', 'skip the gates, having just run them by hand')
-  .option('--no-push', 'commit and tag here, push nothing')
-  .option('--no-github', 'skip `gh release create`')
   .action((options) => {
     release(requireHangar(), options);
   });

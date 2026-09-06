@@ -1,39 +1,35 @@
 /**
- * `hangar dev release` -- cut a release of this CLI from a terminal instead of a workflow.
+ * `hangar dev release` -- run semantic-release from a terminal, behind this repo's own gates.
  *
- * It replaces a semantic-release job that had never successfully cut anything, and the reason it
- * had not is worth keeping: no tag had ever been pushed to `origin`, so semantic-release found
- * zero releases, treated the next one as the first, and would have published **1.0.0** -- the
- * exact outcome this repo's "no `!` while the CLI is 0.x" rule exists to prevent. That failure
- * is now a preflight check rather than a workflow to repair.
+ * semantic-release does the release: the version from the commit types, the CHANGELOG, the
+ * version bump, the release commit, the tag, the push and the GitHub release, all from
+ * `.releaserc.json`. It used to run from a GitHub workflow, which never successfully cut
+ * anything -- **no tag had ever been pushed to origin**, so in CI it found zero releases, would
+ * have treated the next one as the first and published 1.0.0. Run from a developer's machine it
+ * sees the local tags and gets the right answer, which is why moving it here fixed it.
  *
- * The shape is deliberately the same as the tool it replaces, because that behaviour was never
- * the problem: the version comes from the commit types, the CHANGELOG is rendered from the same
- * conventional-changelog preset, and the release commit carries both files. What changed is who
- * runs it and what happens before it: every gate in this repo runs first, and a human confirms.
+ * What this command adds is everything semantic-release will not do for itself:
+ *
+ * - the preflight, including the tag check that would have caught the failure above;
+ * - a refusal on a breaking marker while the CLI is 0.x, which semantic-release has no setting
+ *   for and would answer by cutting 1.0.0;
+ * - every gate this repo has, since there is no CI to run them;
+ * - a confirmation, because the next thing that happens is a push.
  *
  * `hangar-internals/reference/release.md` has the rest of the why.
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CliError, run, runOrThrow } from '../exec.ts';
-import { currentBranch, gitOut, gitTry, isDirty, refExists } from '../git.ts';
+import { currentBranch, gitOut, gitTry, isDirty } from '../git.ts';
 import type { Hangar } from '../hangar.ts';
 import { blank, confirm, heading, note, ok, step, warn } from '../ui.ts';
-import {
-  nextVersion,
-  parseCommit,
-  releasePlanText,
-  type ParsedCommit,
-} from '../release/version.ts';
+import { breakingCommits, parseCommit, type ParsedCommit } from '../release/commits.ts';
 
 export type ReleaseOptions = {
   readonly dryRun?: boolean | undefined;
   readonly skipChecks?: boolean | undefined;
-  /** commander's `--no-push` / `--no-github` give these as `false`; the default is `true`. */
-  readonly push: boolean;
-  readonly github: boolean;
 };
 
 /*
@@ -46,9 +42,7 @@ const RECORD = '\x1e';
 
 const commitsSince = (root: string, from: string | undefined): ParsedCommit[] => {
   const range = from === undefined ? 'HEAD' : `${from}..HEAD`;
-  const raw = gitOut(root, ['log', range, `--format=%h${FIELD}%s${FIELD}%b${RECORD}`]);
-
-  return raw
+  return gitOut(root, ['log', range, `--format=%h${FIELD}%s${FIELD}%b${RECORD}`])
     .split(RECORD)
     .map((r) => r.trim())
     .filter((r) => r !== '')
@@ -67,21 +61,6 @@ const commitsSince = (root: string, from: string | undefined): ParsedCommit[] =>
 const lastReleaseTag = (root: string): string | undefined =>
   gitTry(root, ['describe', '--tags', '--abbrev=0', '--match=v*']);
 
-/**
- * The section `changelog.sh` just wrote, lifted back out to become the tag's message.
- *
- * From the first `## ` heading to the next one -- the file opens with `# Changelog`, and the
- * release being cut is always the topmost section because it is the only one not yet tagged.
- */
-const topSection = (changelog: string): string => {
-  const lines = changelog.split('\n');
-  const first = lines.findIndex((l) => l.startsWith('## '));
-  if (first === -1) throw new CliError('CHANGELOG.md has no release section to tag with');
-  const rest = lines.slice(first + 1).findIndex((l) => l.startsWith('## '));
-  const end = rest === -1 ? lines.length : first + 1 + rest;
-  return lines.slice(first, end).join('\n').trim();
-};
-
 type Gate = {
   readonly name: string;
   readonly cmd: string;
@@ -90,7 +69,7 @@ type Gate = {
 };
 
 /**
- * Every gate this repo has, run before a version is cut.
+ * Every gate this repo has, run before anything is released.
  *
  * The binaries are reached BY PATH rather than through `pnpm run`, for the reason `bin/hangar`
  * and `app/.husky/commit-msg` both do it: pnpm lives inside an fnm multishell and moves with the
@@ -149,20 +128,29 @@ const runGates = (root: string, from: string | undefined): void => {
 };
 
 /**
- * Refuse everything that would make the computed version wrong.
+ * Refuse everything that would make semantic-release answer wrongly, and say why in a sentence.
  *
- * The tag check is the one that matters most and the one no previous version of this had: if a
- * local tag is missing from `origin`, then whatever reads the remote -- a colleague's clone, a
- * fresh checkout, anything -- computes a different version from the same commits. That is not a
- * tidiness problem; it is how this repo's releases were going to become 1.0.0.
+ * Each of these is something it would otherwise hit halfway through, as a stack trace. The tag
+ * check is the one that matters most and the one nothing had: a local tag missing from origin
+ * means two readers of the same commits compute different versions -- which is how this repo's
+ * releases were going to become 1.0.0 the moment CI ran them.
  */
-const preflight = (root: string): void => {
+const preflight = (root: string, dryRun: boolean): string | undefined => {
   const branch = currentBranch(root);
   if (branch !== 'main') {
-    throw new CliError(`releases are cut from main, and this is ${branch}`);
+    throw new CliError(
+      `releases are cut from main, and this is ${branch}`,
+      '`.releaserc.json` names main as the only release branch.',
+    );
   }
-  if (isDirty(root)) {
-    throw new CliError('the working tree has uncommitted changes');
+  if (isDirty(root)) throw new CliError('the working tree has uncommitted changes');
+
+  if (!dryRun && (process.env['GH_TOKEN'] ?? process.env['GITHUB_TOKEN'] ?? '') === '') {
+    throw new CliError(
+      'neither GH_TOKEN nor GITHUB_TOKEN is set in this shell',
+      '@semantic-release/github needs one to create the release. If it is in your shell\n' +
+        '       profile, this shell predates it: `source ~/.zshrc`, or run with -n to rehearse.',
+    );
   }
 
   step('fetching origin');
@@ -196,11 +184,37 @@ const preflight = (root: string): void => {
         '         git push origin --tags',
     );
   }
+
+  const from = lastReleaseTag(root);
+
+  /*
+   * The one policy semantic-release cannot be told. Its answer to a breaking marker below 1.0.0
+   * is to cut 1.0.0, and `app/CLAUDE.md` says that is a decision somebody makes rather than a
+   * side effect of a commit message. So it is refused here, before the pipeline starts.
+   */
+  const pkg = JSON.parse(readFileSync(join(root, 'app', 'package.json'), 'utf8')) as {
+    version: string;
+  };
+  if (pkg.version.startsWith('0.')) {
+    const breaking = breakingCommits(commitsSince(root, from));
+    if (breaking.length > 0) {
+      throw new CliError(
+        `${breaking.length === 1 ? 'a commit is' : `${String(breaking.length)} commits are`} ` +
+          `marked as breaking, and this CLI is ${pkg.version}: ` +
+          breaking.map((c) => c.sha).join(', '),
+        'semantic-release would cut 1.0.0, and that is a decision rather than a commit message.\n' +
+          '       Reword the commit to drop the `!` and any `BREAKING CHANGE:` footer.',
+      );
+    }
+  }
+
+  return from;
 };
 
 export const release = (hangar: Hangar, opts: ReleaseOptions): void => {
   const root = hangar.root;
   const pkgPath = join(root, 'app', 'package.json');
+  const dryRun = opts.dryRun === true;
 
   if (!existsSync(pkgPath)) {
     throw new CliError(
@@ -208,8 +222,7 @@ export const release = (hangar: Hangar, opts: ReleaseOptions): void => {
       '`hangar dev release` cuts a release of the CLI itself; there is nothing to release here.',
     );
   }
-  const pkgText = readFileSync(pkgPath, 'utf8');
-  const pkg = JSON.parse(pkgText) as { name: string; version: string };
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { name: string };
   if (pkg.name !== 'hangar') {
     throw new CliError(
       `app/package.json here is \`${pkg.name}\`, not the hangar CLI`,
@@ -217,88 +230,52 @@ export const release = (hangar: Hangar, opts: ReleaseOptions): void => {
     );
   }
 
-  preflight(root);
-
-  const from = lastReleaseTag(root);
+  const from = preflight(root, dryRun);
   const commits = commitsSince(root, from);
-  const next = nextVersion(pkg.version, commits);
 
-  if (next === undefined) {
-    ok(`nothing to release since ${from ?? 'the first commit'}`);
-    note(`${String(commits.length)} commit(s), none of which move the version`);
-    return;
-  }
-
-  const tag = `v${next.version}`;
-  if (refExists(root, tag)) throw new CliError(`${tag} already exists here`);
-
-  heading(`Release ${tag}`);
-  console.log(releasePlanText({ from, current: pkg.version, next, tag, commits }));
-  blank();
-
-  if (opts.dryRun === true) {
-    note('dry run -- nothing was changed');
-    return;
-  }
+  heading(dryRun ? 'Release (dry run)' : 'Release');
+  note(`${String(commits.length)} commit(s) since ${from ?? 'the first commit'}`);
 
   if (opts.skipChecks === true) warn('gates skipped');
   else runGates(root, from);
 
-  blank();
-  if (!confirm(`Cut ${tag}${opts.push ? ' and push it' : ' locally'}?`)) {
-    note('nothing was changed');
-    return;
+  if (!dryRun) {
+    blank();
+    if (!confirm('Hand over to semantic-release? It commits, tags, pushes and releases.')) {
+      note('nothing was changed');
+      return;
+    }
   }
 
-  heading('Cutting');
-
-  // A targeted replace, not JSON.stringify: rewriting the file would reformat every line of it
-  // and put the whole package into the release diff.
-  const bumped = pkgText.replace(/("version":\s*)"[^"]+"/, `$1"${next.version}"`);
-  if (bumped === pkgText) {
-    throw new CliError('could not find the version field in app/package.json');
-  }
-  writeFileSync(pkgPath, bumped);
-  ok(`app/package.json  ${pkg.version} -> ${next.version}`);
-
-  // BEFORE the tag, deliberately: `changelog.sh` reads the version from app/package.json for the
-  // section it has no tag for yet, which is how the heading and the compare link come out right.
-  runOrThrow('sh', ['dev/changelog.sh'], { cwd: join(root, 'app') });
-  ok('CHANGELOG.md regenerated');
-
-  const notes = topSection(readFileSync(join(root, 'CHANGELOG.md'), 'utf8'));
-
-  runOrThrow('git', ['add', '--', 'app/package.json', 'CHANGELOG.md'], { cwd: root });
-  // The `release` scope is not decoration: CHANGELOG_TYPES hides `chore(release)` so this commit
-  // stays out of the section it is committing. Renaming the scope brings it back in.
-  runOrThrow('git', ['commit', '-m', `chore(release): ${next.version}`], { cwd: root });
-  ok(`committed  chore(release): ${next.version}`);
-
-  runOrThrow('git', ['tag', '-a', tag, '-m', notes], { cwd: root });
-  ok(`tagged     ${tag}`);
-
-  if (!opts.push) {
-    note('not pushed (--no-push)');
-    return;
-  }
-  runOrThrow('git', ['push', 'origin', 'main'], { cwd: root });
-  runOrThrow('git', ['push', 'origin', tag], { cwd: root });
-  ok(`pushed     main and ${tag}`);
-
-  if (!opts.github) {
-    note('no GitHub release (--no-github)');
-    return;
-  }
-  // A missing or unauthenticated `gh` WARNS rather than fails: the tag is pushed by now and is
-  // the durable artifact. A GitHub release is a rendering of it and can be made later by hand.
-  const created = run('gh', ['release', 'create', tag, '--title', tag, '--notes', notes], {
+  /*
+   * From the HANGAR ROOT, not from app/: `.releaserc.json` is there, and semantic-release takes
+   * the repository and its remote from the working directory. The binary is reached by path
+   * because there is no package.json at that level with a dependency to resolve it from.
+   *
+   * `--no-ci` is what makes a local run legal: without it semantic-release detects no CI
+   * environment and refuses. It is not a weakening -- the branch check, the up-to-date check and
+   * the whole verifyConditions pipeline still run.
+   */
+  const args = ['--no-ci', ...(dryRun ? ['--dry-run'] : [])];
+  const res = run(join(root, 'app', 'node_modules', '.bin', 'semantic-release'), args, {
     cwd: root,
+    inherit: true,
   });
-  if (created.ok) {
-    ok(`released   ${tag} on GitHub`);
-  } else {
-    warn('could not create the GitHub release; the tag is pushed and it can be made by hand');
-    note(created.stderr.trim() || `gh exited ${String(created.code)}`);
-    note(`gh release create ${tag} --title ${tag} --notes-file <notes>`);
+  if (!res.ok) {
+    /*
+     * `prepare` (changelog, bump, commit, tag) runs BEFORE `publish` (push, GitHub release), so
+     * the failure worth naming is the one in between: a token that verifies and then fails on
+     * publish leaves a local release commit and tag with nothing on origin. Saying so is cheaper
+     * than the ten minutes of `git log` it otherwise costs.
+     */
+    throw new CliError(
+      `semantic-release exited ${String(res.code)}`,
+      dryRun
+        ? undefined
+        : 'If it got as far as committing, the release commit and tag are HERE and not on\n' +
+            '       origin. Check `git log -1` and `git tag --points-at HEAD`; to undo:\n' +
+            '         git reset --hard HEAD~1 && git tag -d <the tag>',
+    );
   }
+  ok(dryRun ? 'dry run complete -- nothing was changed' : 'released');
 };
