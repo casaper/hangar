@@ -146,8 +146,9 @@ const githubReachable = (root: string): void => {
   if ((process.env['GH_TOKEN'] ?? process.env['GITHUB_TOKEN'] ?? '') === '') {
     throw new CliError(
       'neither GH_TOKEN nor GITHUB_TOKEN is set in this shell',
-      '@semantic-release/github needs one to create the release. If it is in your shell\n' +
-        '       profile, this shell predates it: `source ~/.zshrc`.',
+      '@semantic-release/github needs one to create the release. It comes from the\n' +
+        '       hangar root `.env.local` via direnv, or from your shell profile -- so either\n' +
+        '       `direnv allow` here, or this shell predates the profile that sets it.',
     );
   }
 
@@ -172,9 +173,9 @@ const githubReachable = (root: string): void => {
   if (!who.ok) {
     throw new CliError(
       'the token in this shell does not authenticate with GitHub',
-      'If the working one is in your shell profile, this shell predates it:\n' +
-        '       `source ~/.zshrc`. Otherwise the token has expired or been revoked.\n' +
-        '       Check with: gh api user',
+      'The value comes from the hangar root `.env.local` via direnv, or from your shell\n' +
+        '       profile. Either this shell predates it, or the token has expired or been\n' +
+        '       revoked. Check with: gh api user',
     );
   }
 

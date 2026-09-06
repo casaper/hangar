@@ -92,7 +92,7 @@ asks GitHub twice — once about the account, once about the repository — befo
 
 | `gh api user` | `gh api repos/<slug>` | What it is |
 | --- | --- | --- |
-| fails | fails | the token does not authenticate: expired, revoked, or a shell older than the profile that sets it (`source ~/.zshrc`) |
+| fails | fails | the token does not authenticate: expired, revoked, or a shell that never loaded it |
 | works | fails | the token authenticates but **cannot see this repository** |
 
 The second row is the one that misleads. **GitHub answers 404, not 403, for a repository a token
@@ -101,6 +101,17 @@ for what is really a permissions problem, while `git push` over SSH keeps workin
 it is a different credential entirely. It happened here on a repo that had been **deleted and
 recreated after the token was issued**: a fine-grained PAT names the repositories it may touch, and
 the new repo was not among them.
+
+**Where the token comes from is the hangar root's `.env.local`, loaded by `.envrc` through
+direnv** — so an unset one usually means `direnv allow` has not been run here, not that the
+profile is wrong, and the hint says both. `.gitignore` covers `.env.local` and also `/.env`,
+which has no file today: `.envrc` carries a `dotenv_if_exists .env` line, and an ignore entry is
+cheaper than noticing a committed one later.
+
+The permission that failed at v0.14.0 is worth naming, because the message does not: GitHub put it
+in a response header, `x-accepted-github-permissions: contents=write`. A fine-grained PAT needs
+**Contents: Read and write** to create a release, and **Issues** and **Pull requests** write as
+well, because `@semantic-release/github` comments on the issues and PRs a release closes.
 
 Checked in the preflight rather than left to `verifyConditions`, because that step runs after the
 whole gate suite — so the answer arrived several minutes late, as a forty-line `AggregateError`,

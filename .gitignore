@@ -80,4 +80,10 @@ hangar.config.yaml
 # every `git status` and make the one diff that matters harder to see. A dirty
 # app/dev/golden/ therefore always means the GATE moved.
 app/dev/golden/advisory/
+
+# `.envrc` loads BOTH of these, so both must be here. `.env.local` carries this machine's
+# GH_TOKEN for `hangar dev release`; `.env` has no file today and is listed anyway, because the
+# `dotenv_if_exists .env` line above is an open invitation to create one and nothing would have
+# stopped it being committed.
 .env.local
+/.env
