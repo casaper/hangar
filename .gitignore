@@ -80,3 +80,4 @@ hangar.config.yaml
 # every `git status` and make the one diff that matters harder to see. A dirty
 # app/dev/golden/ therefore always means the GATE moved.
 app/dev/golden/advisory/
+.env.local
