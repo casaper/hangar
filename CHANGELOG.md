@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.15.0](https://github.com/casaper/hangar/compare/v0.14.2...v0.15.0) (2026-09-06)
+
+### Features
+
+* **cli:** Add --yes to hangar dev release, for a run with no terminal ([8ea873e](https://github.com/casaper/hangar/commit/8ea873e27658e485275b058e6d999b7607d6e258))
+
 ## [0.14.2](https://github.com/casaper/hangar/compare/v0.14.1...v0.14.2) (2026-09-06)
 
 ### Bug Fixes
