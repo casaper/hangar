@@ -268,6 +268,42 @@ const preflight = (root: string): string | undefined => {
   return from;
 };
 
+/**
+ * What a failed release actually left behind, which is three different states and one message
+ * each.
+ *
+ * semantic-release runs `prepare` (changelog, version bump, release commit), then tags, then
+ * **pushes**, and only then `publish` (the GitHub release). So the most likely failure -- a token
+ * that can read the repo but not write a release -- leaves everything already on origin, and the
+ * first version of this hint said the opposite and told the reader to `git reset --hard`. On a
+ * pushed release that is wrong and needs a force-push to carry out. Hence: ask git, do not guess.
+ */
+const failureHint = (root: string, dryRun: boolean): string | undefined => {
+  if (dryRun) return undefined;
+
+  const tag = (gitTry(root, ['tag', '--points-at', 'HEAD']) ?? '')
+    .split('\n')
+    .find((t) => t.startsWith('v'));
+  if (tag === undefined) return 'Nothing was committed or tagged; the tree is as it was.';
+
+  const pushed = run('git', ['ls-remote', '--exit-code', 'origin', `refs/tags/${tag}`], {
+    cwd: root,
+  }).ok;
+
+  if (pushed) {
+    return (
+      `${tag} is committed, tagged AND PUSHED -- do not reset. Only the GitHub release\n` +
+      '       is missing, and it can be made from the top section of CHANGELOG.md:\n' +
+      `         gh release create ${tag} --title ${tag} --notes-file <notes>\n` +
+      '       Running this command again would find nothing to release, which is correct.'
+    );
+  }
+  return (
+    `${tag} is committed and tagged HERE and is not on origin. To undo:\n` +
+    `         git reset --hard HEAD~1 && git tag -d ${tag}`
+  );
+};
+
 export const release = (hangar: Hangar, opts: ReleaseOptions): void => {
   const root = hangar.root;
   const pkgPath = join(root, 'app', 'package.json');
@@ -319,20 +355,7 @@ export const release = (hangar: Hangar, opts: ReleaseOptions): void => {
     inherit: true,
   });
   if (!res.ok) {
-    /*
-     * `prepare` (changelog, bump, commit, tag) runs BEFORE `publish` (push, GitHub release), so
-     * the failure worth naming is the one in between: a token that verifies and then fails on
-     * publish leaves a local release commit and tag with nothing on origin. Saying so is cheaper
-     * than the ten minutes of `git log` it otherwise costs.
-     */
-    throw new CliError(
-      `semantic-release exited ${String(res.code)}`,
-      dryRun
-        ? undefined
-        : 'If it got as far as committing, the release commit and tag are HERE and not on\n' +
-            '       origin. Check `git log -1` and `git tag --points-at HEAD`; to undo:\n' +
-            '         git reset --hard HEAD~1 && git tag -d <the tag>',
-    );
+    throw new CliError(`semantic-release exited ${String(res.code)}`, failureHint(root, dryRun));
   }
   ok(dryRun ? 'dry run complete -- nothing was changed' : 'released');
 };

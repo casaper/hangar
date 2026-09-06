@@ -109,7 +109,7 @@ absence is a note and a skip, not a failure; semantic-release still does its own
 
 ## Two things to know before the first real run
 
-**The tag will be lightweight.** `@semantic-release/git` tags with `git tag <name> <sha>` — no
+**The tag is lightweight.** Confirmed at v0.14.0: `git cat-file -t v0.14.0` answers `commit`. `@semantic-release/git` tags with `git tag <name> <sha>` — no
 `-a`, no message — while the fourteen historical tags are annotated and carry hand-written
 milestone prose (`v0.13.0` is "the IntelliJ colleague: an editor that is not VS Code"). So from
 `v0.14.0` on, `git cat-file -t <tag>` answers `commit` rather than `tag`. Nothing breaks:
@@ -118,11 +118,24 @@ either. But it is a visible change in a repo that clearly cared about those mess
 `.releaserc.json` has no option for it — the only way back is a `git tag -f -a` after the fact,
 which needs a force-push.
 
-**An interrupted release leaves the commit here and nothing on origin.** semantic-release runs
-`prepare` — changelog, version bump, release commit, tag — before `publish`, which pushes and
-creates the GitHub release. A token that passes `verifyConditions` and then fails on publish
-leaves a local `chore(release)` commit and its tag with the remote untouched. The command's error
-says so and names the undo: `git reset --hard HEAD~1 && git tag -d <the tag>`.
+**A failed release usually leaves everything ALREADY PUSHED.** The order is `prepare` (changelog,
+version bump, release commit), then tag, then **push**, and only then `publish` — the GitHub
+release. So the likeliest failure of all, a token that can read the repository but not create a
+release, fails after the push, and the only missing artifact is the GitHub release object.
+
+The first version of this note said the opposite, and `commands/release.ts`'s hint told the reader
+to `git reset --hard HEAD~1`. That is wrong on a pushed release and needs a force-push to carry
+out — it was written from reading the plugin order rather than from watching one fail, and v0.14.0
+failed exactly this way an hour later. `failureHint` now asks git which of three states it is in:
+
+| State | What to do |
+| --- | --- |
+| no tag at HEAD | nothing happened; the tree is as it was |
+| tag at HEAD, **on origin** | do not reset. `gh release create <tag> --notes-file <notes>`, taking the notes from the top section of `CHANGELOG.md` |
+| tag at HEAD, not on origin | `git reset --hard HEAD~1 && git tag -d <tag>` |
+
+Re-running the command after a pushed-but-unpublished release correctly finds nothing to release:
+the tag is the last release, and there are no commits after it.
 
 ## What enforcement looks like without CI
 
