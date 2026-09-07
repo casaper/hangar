@@ -358,9 +358,8 @@ is narrower than it was:
      command line, and each is one command line plus, for Konsole, a D-Bus call to bring a window
      forward. Everything inside the window is tmux, which is the same program here and was
      exercised here — so what is unverified on Linux is which emulator comes up, not what happens
-     in it. GNOME Terminal structurally cannot —
-     VTE has no API for it and `TIOCSTI` has been off by default since Linux 6.2 — and `doctor`
-     says so by name rather than leaving a capability quietly false.
+     in it. GNOME Terminal cannot bring a window it opened to the front, and `doctor` says so by
+     name rather than leaving a capability quietly false.
 
    Everything else that was on this list is done: the VS Code window-state path, `open -a` and the
    install hints all go through a platform seam with a `darwin` and a `linux` implementation, and
@@ -622,8 +621,8 @@ hangar config validate
 
 Most of these take `-n` / `--dry-run`, and running it first is the habit — it prints every decision
 the real run would make. The three that have no dry run are `add-clone`, `remove-clone` and
-`colours change`; each asks before it acts instead. `open` used to be a fourth and is not any
-more — worth knowing, because it moves a branch in every clone it touches.
+`colours change`; each asks before it acts instead. `open` has one, and it is worth running,
+because it moves a branch in every clone it touches.
 
 ```bash
 hangar sync 2 -n            # resolved target branch and chosen strategy, no changes

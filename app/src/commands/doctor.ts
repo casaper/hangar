@@ -1291,10 +1291,10 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
    * on it. Everything about this hangar's own state counts, including the one-time manual steps
    * (`.claude/modes/*.settings.json`) that `--fix` deliberately will not close: those go to zero
    * once somebody does them, which is exactly what a setup check should drive. What stays out is
-   * the machine's CAPABILITIES -- a `ps` that will not run, a terminal that cannot be typed
-   * into. Those are facts about where the fleet is running, permanent on some platforms, and
-   * counting them would leave a correctly configured GNOME Terminal hangar permanently non-zero:
-   * a check that is red in normal operation is a check nobody reads.
+   * the machine's CAPABILITIES -- a `ps` that will not run, an emulator that cannot raise a
+   * window it opened. Those are facts about where the fleet is running, permanent on some
+   * platforms, and counting them would leave a correctly configured GNOME Terminal hangar
+   * permanently non-zero: a check that is red in normal operation is a check nobody reads.
    *
    * The EXIT CODE stays 0 either way, and that is this CLI's convention rather than an
    * oversight: a `--check` flag is the gate (`config schema --check` and `colours sync --check`

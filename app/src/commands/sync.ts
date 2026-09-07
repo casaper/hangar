@@ -30,10 +30,10 @@ import type { Hangar } from '../hangar.ts';
  * Three things here are not mechanical, and all of them are deliberate choices rather than
  * defaults:
  *
- * 1. A live Claude Code session in the clone is TOLD to pause, by typing into its terminal
- *    tab. There is no other mechanism: the `claude` CLI has no subcommand that messages a
- *    running interactive session. If the tab cannot be found -- or the terminal cannot be
- *    typed into at all, which is true of GNOME Terminal -- the command asks the human
+ * 1. A live Claude Code session in the clone is TOLD to pause, by `send-keys` into the tmux
+ *    pane on its tty. There is no other mechanism: the `claude` CLI has no subcommand that
+ *    messages a running interactive session. If that session has no pane on this hangar's
+ *    socket -- started by hand, or in the developer's own tmux -- the command asks the human
  *    instead of rewriting the branch under an agent that is mid-edit. It is also always told
  *    how the sync ended: exactly one `SYNC FINISHED` or `SYNC ABORTED` follows every
  *    `SYNC PAUSE`, sent from a `finally` (see `closeSessions`), because an agent waiting for

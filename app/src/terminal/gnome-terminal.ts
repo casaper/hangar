@@ -13,10 +13,7 @@ import type { EmulatorDriver, WindowSpec } from './types.ts';
  * What that costs is one line of output: the clone's window is open and simply not in front, and
  * `open` prints the `tmux -L hangar-<id> attach` line that finishes the job. Everything else --
  * the roles, their names, their order, and a `SYNC PAUSE` delivered into a live session -- is
- * tmux, so a GNOME Terminal hangar is not short of anything that matters. That was not true of a
- * design where the emulator had to be typed into: VTE has no API for writing into a running
- * terminal, and the generic POSIX route (the `TIOCSTI` ioctl) has been disabled by default since
- * Linux 6.2.
+ * tmux, so a GNOME Terminal hangar is not short of anything that matters.
  *
  * ## Not verified against a live gnome-terminal
  *
