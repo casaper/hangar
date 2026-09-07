@@ -96,7 +96,9 @@ import { paletteEntry } from '../palette.ts';
 import { portSummary } from '../ports.ts';
 import { platform } from '../platform/index.ts';
 import { claudeSessionDiagnostic } from '../procs.ts';
-import { syncPauseUnsupported, terminal, type TerminalCapabilities } from '../terminal/index.ts';
+import { terminal, type EmulatorCapabilities } from '../terminal/index.ts';
+import { TMUX_SETTINGS, tmuxConfArtifact } from '../generate/tmux-conf.ts';
+import { tmuxServer, tmuxSocketName, type TmuxSessionRow } from '../tmux.ts';
 import {
   hangarClaudeLocalMdContent,
   hangarClaudeLocalMdPath,
@@ -723,19 +725,108 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
 const PLANS_DIRECTORY = '.claude/plans';
 
 /**
- * The capability names as `doctor` prints them: short, and in the order they matter.
+ * The capability names as `doctor` prints them.
  *
- * `paint` is last because it is the odd one out -- it is true only for the driver that CANNOT be
- * coloured from the shell, so it reads as a capability while really marking a limitation.
+ * Two, because the emulator is asked for two things. `raise` is the one a caller has to degrade
+ * around, so a `false` there is worth reading off a row rather than discovering when a clone that
+ * is already open stays where it is.
  */
 const CAPABILITY_LABELS = [
-  ['openTabs', 'tabs'],
-  ['inspect', 'list'],
-  ['tag', 'tag'],
-  ['writeToTty', 'type'],
-  ['select', 'select'],
-  ['paintOnCreate', 'paint'],
-] as const satisfies readonly (readonly [keyof TerminalCapabilities, string])[];
+  ['openTab', 'tab'],
+  ['openWindow', 'window'],
+  ['raiseByTty', 'raise'],
+] as const satisfies readonly (readonly [keyof EmulatorCapabilities, string])[];
+
+/**
+ * tmux: is it installed, is the generated conf current, and is the RUNNING server using it?
+ *
+ * The third question is the one nothing else asks and the one that will actually bite. `-f` is
+ * read once, when the server starts, so regenerating `clone-tmux.conf` reaches nothing already
+ * running -- a developer who ran `colours sync` after opening a clone has a correct file on disk
+ * and a server that never saw it. The symptom is Shift+Enter submitting in Claude Code instead of
+ * inserting a newline, in a terminal nobody suspects.
+ *
+ * So each `TMUX_SETTINGS` entry is read back off the live server and compared per its own
+ * `match` -- `contains` for `terminal-features`, because `-a` appends and the live value is a
+ * superset of what was written.
+ *
+ * **`--fix` deliberately does nothing here, and must not.** The repair is `kill-server`, which
+ * would take every live Claude Code session in the fleet with it. So this names the command and
+ * stops, exactly as the shell-hook row names the rc line and stops.
+ */
+const reportTmux = (hangar: Hangar): readonly string[] => {
+  const problems: string[] = [];
+  const server = tmuxServer(hangar);
+  const socket = tmuxSocketName(hangar.id);
+
+  if (!server.installed()) {
+    const text = 'tmux is not on PATH, so `hangar open` has no window to put a clone in';
+    problems.push(text);
+    warn(text);
+    note('Install it: `brew install tmux`, or your package manager.');
+    return problems;
+  }
+
+  const wanted = tmuxConfArtifact(hangar);
+  let onDisk: string | undefined;
+  try {
+    onDisk = readFileSync(wanted.path, 'utf8');
+  } catch {
+    onDisk = undefined;
+  }
+  if (onDisk === undefined) {
+    const text = `no ${basename(wanted.path)}, so the tmux server would start unconfigured`;
+    problems.push(text);
+    warn(text);
+    // tmux ignores a missing `-f` file silently -- measured -- so nothing but this row would say.
+    note('Run `hangar colours sync`. tmux ignores a missing -f file without a word.');
+  } else if (onDisk !== wanted.content) {
+    const text = `${basename(wanted.path)} is not what the builder renders`;
+    problems.push(text);
+    warn(text);
+    note('Run `hangar colours sync`; it is generated, so hand edits are reverted anyway.');
+  }
+
+  if (!server.running()) {
+    ok(`${'tmux'.padEnd(22)} ${pc.dim(`${socket} — no server running yet`)}`);
+    return problems;
+  }
+
+  const rows = server.sessions();
+  const mine = rows.filter((row) => row.clone !== undefined);
+  ok(
+    `${'tmux'.padEnd(22)} ${pc.dim(
+      `${socket} — ${String(mine.length)} clone session(s), ${String(rows.length - mine.length)} other`,
+    )}`,
+  );
+
+  const stale: readonly TmuxSessionRow[] = server.staleSessions(discoverClones(hangar));
+  for (const row of stale) {
+    const text = `tmux session ${row.name} names a clone that is gone`;
+    problems.push(text);
+    warn(text);
+    note(
+      `Nothing kills it automatically -- it may hold a live agent. \`tmux -L ${socket} kill-session -t '=${row.name}:'\``,
+    );
+  }
+
+  const behind = TMUX_SETTINGS.filter((setting) => {
+    const live = server.setting(setting.show, setting.name);
+    if (live === undefined) return true;
+    return setting.match === 'contains' ? !live.includes(setting.value) : live !== setting.value;
+  });
+  if (behind.length > 0) {
+    const text = `the running tmux server is missing ${String(behind.length)} setting(s) Claude Code needs`;
+    problems.push(text);
+    warn(text);
+    for (const setting of behind) note(`${setting.name}: ${setting.why}`);
+    note(
+      `The config is read once at server start. Close the clone windows, then ` +
+        `\`tmux -L ${socket} kill-server\` -- \`--fix\` will not, because that would end every live agent.`,
+    );
+  }
+  return problems;
+};
 
 /** The rc files a login or interactive shell reads, in the order a developer would edit them. */
 const SHELL_RC_FILES = ['.zshrc', '.zprofile', '.bashrc', '.bash_profile', '.profile'] as const;
@@ -1423,10 +1514,12 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
   /*
    * The terminal, and whether the colour hook is actually reaching a shell.
    *
-   * Reported rather than repaired: which emulator to drive is a fact about the machine, and the
-   * one place Hangar cannot write is the developer's shell rc. Both halves are worth a row --
-   * a detected driver with no `type` capability silently changes what `sync` can do, and a hook
-   * nobody sources is a colour scheme that quietly does not exist.
+   * Reported rather than repaired: which emulator is installed is a fact about the machine, and
+   * the one place Hangar cannot write is the developer's shell rc. All three halves are worth a
+   * row -- an emulator that cannot raise a window changes what `open` can do for a clone that is
+   * already open, a tmux server running under a stale config drops settings Claude Code needs
+   * with nothing to say so, and a hook nobody sources is a colour scheme that quietly does not
+   * exist.
    */
   reportPlatform();
   hangarWarnings.push(...reportEnvironmentRow(hangar));
@@ -1437,18 +1530,16 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
     ([, label]) => label,
   );
   if (driver.kind === 'none') {
-    warn(`no terminal automation: ${driver.label}`);
+    // Not a problem, and deliberately not counted as one: `terminal.kind: none` is a mode. `open`
+    // still builds every clone's session and prints the line that attaches to it.
+    ok(
+      `${'emulator'.padEnd(22)} ${pc.dim(`${driver.label} — sessions are built, no window opens`)}`,
+    );
     note(driver.unavailableHint());
   } else {
-    ok(`${'terminal'.padEnd(22)} ${pc.dim(`${driver.label} (${source}) — ${can.join(', ')}`)}`);
+    ok(`${'emulator'.padEnd(22)} ${pc.dim(`${driver.label} (${source}) — ${can.join(', ')}`)}`);
   }
-  if (!driver.capabilities.writeToTty) {
-    // Named, not noted: see `syncPauseUnsupported`. A permanent limitation printed as a passing
-    // capability record is the silent degradation this whole section exists to end.
-    const refusal = syncPauseUnsupported(driver);
-    warn(refusal.message);
-    if (refusal.hint !== undefined) note(refusal.hint);
-  }
+  hangarWarnings.push(...reportTmux(hangar));
   hangarWarnings.push(...reportShellHook(hangar));
 
   /*

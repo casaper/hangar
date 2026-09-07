@@ -127,7 +127,12 @@ ports:
       label: Playwright report
 
 terminal:
-  kind: tmux
+  # The other fixture sets `none`, so between them the pair covers both branches of "is there an
+  # emulator to open a window in at all", and neither agrees with the `auto` default.
+  kind: iterm2
+  # The other fixture leaves this at its `tab` default, so this is the only capture of a hangar
+  # that asks for a window of its own.
+  placement: window
   colour:
     # The other fixture sets all three false; between them the pair covers both values of each.
     chrome: true

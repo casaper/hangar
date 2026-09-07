@@ -14,11 +14,11 @@ import type { EditorDriver, LaunchResult } from './types.ts';
  *   there is none, so it self-dedupes and needs nothing worked out in advance.
  * - **Terminal vim** (`nvim`, `vim`) has no window to send a path to. Launching it as a
  *   subprocess would attach it to the tty `hangar` itself is running on and hold the command
- *   hostage -- for `open --all`, on the first clone. The honest translation is a terminal TAB
- *   running vim in the clone, which is why this driver reports `inTerminalTab` and lets `open`
- *   add that tab through the terminal driver it is already using. That way the tab lands in the
- *   fleet window, in clone order, beside the clone's other tabs -- which a tab opened from here
- *   could not manage, since this driver knows nothing about which window is the fleet's.
+ *   hostage -- for `open --all`, on the first clone. The honest translation is one more window in
+ *   the clone's tmux session, running vim in the clone, which is why this driver reports
+ *   `inTerminalTab` and lets `open` add it alongside the configured roles. It lands beside them
+ *   in the same session -- which a window opened from here could not manage, since this driver
+ *   knows nothing about the clone's session.
  *
  * ## Nothing is synced
  *
@@ -62,7 +62,7 @@ export const vimDriver = (commandOverride?: string): EditorDriver => {
 
   return {
     kind: 'vim',
-    label: gui !== undefined ? `vim (${gui})` : `vim (${term ?? 'not found'}, in a terminal tab)`,
+    label: gui !== undefined ? `vim (${gui})` : `vim (${term ?? 'not found'}, in a tmux window)`,
     capabilities: {
       launch: gui !== undefined,
       focusExisting: false,
@@ -75,7 +75,7 @@ export const vimDriver = (commandOverride?: string): EditorDriver => {
     unavailableHint: () =>
       `none of ${[...VIM_GUI_BINARIES, ...VIM_TERMINAL_BINARIES].join(', ')} is on PATH — install one, or set editor.vim.command in hangar.config.yaml.`,
     launch: (clone) => (gui === undefined ? undefined : launchGuiVim(gui, clone)),
-    /** The command `open` runs in the extra terminal tab. Only read when `inTerminalTab`. */
+    /** The command `open` runs in the extra tmux window. Only read when `inTerminalTab`. */
     terminalCommand: term === undefined ? undefined : `${term} .`,
     artifacts: [],
   };

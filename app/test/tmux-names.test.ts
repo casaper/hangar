@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import {
   attachHint,
-  attachShellLine,
+  attachCommand,
   tmuxArgv,
   tmuxSessionName,
   tmuxSocketName,
@@ -102,28 +102,35 @@ test('the socket in the argv is this hangar’s, and the conf is under its root'
   assert.ok(argv[1]?.startsWith(h.root), 'the conf belongs to the hangar it configures');
 });
 
-test('the attach line never lets a shell alias decide what tmux means', () => {
-  const line = attachShellLine(hangar(), cloneAt(hangar(), 1));
-  // `env` with `tmux` as an ARGUMENT: this string is typed into an interactive shell, where an
-  // `alias tmux=` would otherwise rewrite it. `command` would do, but cannot follow `env` -- and
-  // `env` is here for `-u TMUX` anyway.
-  assert.ok(line.startsWith('exec /usr/bin/env -u TMUX -u TMUX_PANE tmux '), line);
-  assert.doesNotMatch(line, /(^|[;&|]\s*)tmux /, 'tmux must never be in command position');
+test('the attach command names tmux by absolute path, and runs no shell', () => {
+  const line = attachCommand(hangar(), cloneAt(hangar(), 1));
+  // iTerm2 starts this process directly rather than through a shell, so PATH is the
+  // application's -- measured: a bare `tmux` was not found, the tab opened empty, and nothing
+  // said so. An absolute path also settles the shell-alias question: there is no shell.
+  assert.match(line, /^\/usr\/bin\/env /, line);
+  assert.ok(!line.startsWith('exec '), 'there is no shell to run a builtin in');
+  assert.doesNotMatch(line, /(^|\s)tmux(\s|$)/, `tmux must be an absolute path: ${line}`);
+  assert.match(line, /\/tmux\s/, line);
 });
 
-test('the attach line unsets $TMUX, or new-session refuses to nest on Linux', () => {
-  const line = attachShellLine(hangar(), cloneAt(hangar(), 1));
+test('the attach command unsets $TMUX, or new-session refuses to nest on Linux', () => {
+  const line = attachCommand(hangar(), cloneAt(hangar(), 1));
   assert.ok(line.includes('-u TMUX '), line);
   assert.ok(line.includes('-u TMUX_PANE'), line);
 });
 
-test('the attach line creates or attaches with one spelling, and it execs', () => {
-  const line = attachShellLine(hangar(), cloneAt(hangar(), 1));
-  // `-A` so a first open and a reattach are the same string; `exec` so detaching closes the tab
-  // rather than leaving an untagged shell standing in a clone.
+test('the attach command creates or attaches with one spelling', () => {
+  const line = attachCommand(hangar(), cloneAt(hangar(), 1));
+  // `-A` so a first open and a reattach are the same string. `open` builds the session first and
+  // then waits for the client, so the create branch is only reachable if the server died between
+  // the two -- and it is what stops a closed tab from needing a different command.
   assert.ok(line.includes('new-session'), line);
-  assert.ok(line.includes("'-A'"), line);
-  assert.ok(line.startsWith('exec '), line);
+  assert.ok(line.includes('-A'), line);
+  const clone = cloneAt(hangar(), 1);
+  assert.ok(line.includes(`-s ${tmuxSessionName(clone)}`), line);
+  // No quoting at all in the common case, which is what keeps the string safe to hand to an
+  // emulator that tokenizes it itself rather than running it through a shell.
+  assert.doesNotMatch(line, /'/, line);
 });
 
 test('the hint a developer types by hand names the socket, since a bare tmux ls cannot see it', () => {

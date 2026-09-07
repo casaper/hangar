@@ -1,33 +1,23 @@
-import type { TerminalDriver } from './types.ts';
+import type { EmulatorDriver } from './types.ts';
 
 /**
- * No terminal automation at all.
+ * No emulator at all -- `terminal.kind: none`, or a terminal Hangar does not recognise.
  *
- * Reached two ways: `terminal.kind: none` in the config, for a hangar whose developer does not
- * want windows opened for them, and detection finding nothing it recognises -- a tmux-only
- * setup, a plain xterm, an SSH session, CI.
- *
- * It is a real driver rather than an `undefined` special case so that every caller keeps one
- * code path and asks the same capability questions. What it must never do is pretend: `open`
- * refuses with a message naming the config key, and `sync` reports that no Claude session can be
- * paused, which is what makes it ask before touching a clone that has one.
+ * Every capability false, so `open` builds the clone's tmux session and prints the `tmux attach`
+ * line instead of guessing at a window. That is a real mode rather than a failure: a hangar
+ * driven from a terminal nobody wrote a driver for still gets its sessions, its per-clone hues
+ * and its `SYNC PAUSE`, because all three are tmux's. What it does not get is a window opening by
+ * itself.
  */
-export const noneDriver = (detected: string | undefined): TerminalDriver => ({
+export const noneDriver = (envSaid: string | undefined): EmulatorDriver => ({
   kind: 'none',
-  label: detected === undefined ? 'no supported terminal' : `unsupported terminal (${detected})`,
-  capabilities: {
-    openTabs: false,
-    inspect: false,
-    tag: false,
-    writeToTty: false,
-    select: false,
-    paintOnCreate: false,
-  },
+  label: envSaid === undefined ? 'no terminal automation' : `unrecognised terminal (${envSaid})`,
+  capabilities: { openTab: false, openWindow: false, raiseByTty: false },
   isAvailable: () => false,
   unavailableHint: () =>
-    'Set `terminal.kind` in hangar.config.yaml to iterm2, apple-terminal, konsole or gnome-terminal.',
-  windows: () => [],
-  openTabs: () => undefined,
-  select: () => false,
-  writeToTty: () => false,
+    'Set `terminal.kind` in hangar.config.yaml to the emulator you use, or leave it `none` and ' +
+    'attach to the session `hangar open` prints.',
+  open: () => false,
+  lastNote: () => undefined,
+  raiseByTty: () => false,
 });

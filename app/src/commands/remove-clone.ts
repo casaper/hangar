@@ -9,6 +9,7 @@ import { tildify } from '../user-paths.ts';
 import { claudeSessionsIn, runningServersIn } from '../procs.ts';
 import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
 import { coloursSync } from './colours.ts';
+import { tmuxServer, tmuxSocketName } from '../tmux.ts';
 import type { Hangar } from '../hangar.ts';
 
 /**
@@ -136,13 +137,21 @@ export const removeClone = (hangar: Hangar, ref: string, opts: RemoveCloneOption
     ok(`deleted ${tildify(theme)}`);
   }
 
-  // 4. its colour assignment, if a human chose one. `nextFreeIndex(hangar)` reuses this index, so
+  // 4. its tmux session, which outlives the window that was attached to it. `doctor` reports a
+  //    session naming a clone that is gone and refuses to kill it, because a detached session may
+  //    hold a live agent -- here the clone is being removed on purpose, so this is the one place
+  //    killing it IS the command rather than a side effect of a check.
+  if (tmuxServer(hangar).killSession(clone)) {
+    ok(`killed its tmux session on ${tmuxSocketName(hangar.id)}`);
+  }
+
+  // 5. its colour assignment, if a human chose one. `nextFreeIndex(hangar)` reuses this index, so
   //    leaving it behind would hand the next clone this one's hue.
   if (clearColourAssignment(hangar, clone.index)) {
     ok(`dropped its ${clone.colour.name} assignment from ${colourAssignmentsLabel(hangar)}`);
   }
 
-  // 5. the generated artifacts no longer mention it
+  // 6. the generated artifacts no longer mention it
   heading('Regenerating colour artifacts');
   coloursSync(hangar, {});
 

@@ -44,6 +44,20 @@ import { orUndefined } from './terminal/types.ts';
 export const tmuxSocketName = (hangarId: string): string => `hangar-${hangarId}`;
 
 /**
+ * The socket a `$TMUX` value names, or undefined when the variable is absent or malformed.
+ *
+ * `$TMUX` is `<socket path>,<server pid>,<session id>`, and the socket's BASENAME is what `-L`
+ * takes -- so this is how a run inside a tmux tells whether it is inside THIS hangar's server or
+ * the developer's own. That distinction is the whole reason a private socket is worth having:
+ * being inside some tmux is not a fact about which clone, or even which fleet, is on screen.
+ */
+export const tmuxSocketOf = (tmuxEnv: string | undefined): string | undefined => {
+  const path = (tmuxEnv ?? '').split(',')[0];
+  if (path === undefined || path === '') return undefined;
+  return path.split('/').pop();
+};
+
+/**
  * A clone's session name.
  *
  * `.` and `:` are replaced because they are tmux's own target separators -- `clone:1` as a target
@@ -100,32 +114,75 @@ export const tmuxArgv = (
   ...args,
 ];
 
-/** POSIX single quoting, for the one string here that reaches an interactive shell. */
-const shellQuote = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+/**
+ * tmux's ABSOLUTE path, because the command line below is run with no shell.
+ *
+ * Measured, and this was the whole bug: iTerm2's `command` parameter starts the process directly
+ * rather than through a shell, so it gets the application's inherited PATH -- which on this
+ * machine does not include `/opt/homebrew/bin`, where tmux lives. A bare `tmux` was silently not
+ * found, the tab opened empty, and nothing anywhere said so. With the absolute path a client is
+ * attached before the first 100ms poll.
+ *
+ * `command -v` through `sh` rather than a hardcoded prefix list: tmux is at `/opt/homebrew/bin`
+ * on Apple silicon, `/usr/local/bin` on Intel, `/usr/bin` on most Linux, and somewhere else
+ * entirely under Nix. Cached per process -- this runs once per `open`, not once per clone.
+ */
+let cachedBinary: string | undefined;
+export const tmuxBinary = (): string => {
+  if (cachedBinary !== undefined) return cachedBinary;
+  const res = run('sh', ['-c', 'command -v tmux 2>/dev/null']);
+  cachedBinary = res.ok && res.stdout.trim() !== '' ? res.stdout.trim() : 'tmux';
+  return cachedBinary;
+};
+
+/** Quote only what needs it, so the common line carries no quotes at all. */
+/** A synchronous pause, which Node offers no other way to do. */
+const sleepSync = (ms: number): void => {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    // Intentionally empty: see `awaitClient`.
+  }
+};
+
+const shellQuote = (value: string): string =>
+  /^[A-Za-z0-9_./:=-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`;
 
 /**
- * What the emulator's new tab runs, and the four decisions in it.
+ * The command an emulator runs to put a clone's session on screen.
  *
- * - **`/usr/bin/env` as the command word**, so `tmux` is an ARGUMENT and no alias expansion can
- *   reach it. `command tmux` is the shell-native spelling, but `command` is a builtin and cannot
- *   follow `env` -- and `env` is needed anyway, for the next point.
- * - **`-u TMUX -u TMUX_PANE`**, because on Linux the emulator child inherits this process's
- *   environment, and a set `$TMUX` makes `new-session` refuse to nest. It is invisible on macOS,
- *   where the emulator is launched through the window server rather than as a child, which makes
- *   it exactly the kind of Linux-only failure the platform seam exists for.
- * - **`new-session -A`**, which attaches an existing session and creates one otherwise, so the
- *   same line is right for a first open and for reattaching after the tab was closed. Measured:
- *   `-s` takes a NAME and not a target, and `-A -s yy` beside a session `y` created `yy` -- the
- *   match is exact, with none of the prefix behaviour `-t` has.
- * - **`exec`**, so detaching closes the tab instead of dropping the developer into an untagged
- *   shell standing in a clone.
+ * One rendering for every driver, and it is an ARGV line rather than a shell script, because the
+ * emulators consume it differently and only the least capable of them gets a shell:
+ *
+ * - **No `exec`.** iTerm2 runs this without a shell at all, so a builtin is simply not available
+ *   -- measured: a `command` beginning with `exec` starts nothing and reports success. It is not
+ *   needed either, since with no shell the tmux client IS the session's process and the tab
+ *   closes when it detaches. Konsole and GNOME Terminal, which do wrap this in `sh -c`, append
+ *   their own `; exec $SHELL` so that a tmux that refuses to start leaves something to read.
+ * - **The absolute tmux path**, for the reason `tmuxBinary` records. It also settles the shell
+ *   alias question by construction: there is no shell to expand an alias in.
+ * - **`env -u TMUX -u TMUX_PANE`**, because on Linux the emulator child inherits this process's
+ *   environment, and a set `$TMUX` makes `new-session` refuse to nest. Invisible on macOS, where
+ *   the emulator comes up through the window server rather than as a child -- so exactly the kind
+ *   of Linux-only failure the platform seam exists for.
+ * - **`new-session -A`**, which attaches an existing session and creates one otherwise, so one
+ *   string is right for a first open and for reattaching after the tab was closed. `open` always
+ *   creates the session first, so the create branch is only reachable if the server died in
+ *   between -- and what it produces then is a session with one unnamed window and no roles, which
+ *   is why `open` waits for the client and checks the roles are still there rather than trusting
+ *   this to have attached to what it built.
  */
-export const attachShellLine = (hangar: Hangar, clone: Clone): string => {
-  const args = tmuxArgv(hangar, ['new-session', '-A', '-s', tmuxSessionName(clone)], {
-    withConf: true,
-  });
-  return `exec /usr/bin/env -u TMUX -u TMUX_PANE tmux ${args.map(shellQuote).join(' ')}`;
-};
+export const attachCommand = (hangar: Hangar, clone: Clone): string =>
+  [
+    '/usr/bin/env',
+    '-u',
+    'TMUX',
+    '-u',
+    'TMUX_PANE',
+    tmuxBinary(),
+    ...tmuxArgv(hangar, ['new-session', '-A', '-s', tmuxSessionName(clone)], { withConf: true }),
+  ]
+    .map(shellQuote)
+    .join(' ');
 
 /** The line to print for a developer who has to get back in by hand. */
 export const attachHint = (hangar: Hangar, clone: Clone): string =>
@@ -165,10 +222,38 @@ export type TmuxServer = {
   readonly installed: () => boolean;
   /** A server is up on OUR socket. Never starts one. */
   readonly running: () => boolean;
+  /**
+   * The session this process is running inside, when that is a session on OUR socket.
+   *
+   * Undefined outside tmux, and undefined inside the developer's own tmux -- which is the answer
+   * that matters. `open` uses it for one thing: not opening a second window onto the clone the
+   * developer is already looking at.
+   */
+  readonly currentSession: () => string | undefined;
   readonly hasSession: (clone: Clone) => boolean;
   readonly sessions: () => TmuxSessionRow[];
+  /**
+   * Sessions naming a clone that no longer exists, with nobody attached.
+   *
+   * Reported, never killed: a detached session can still hold a live agent, and `remove-clone`
+   * is where killing one is the point of the command rather than a side effect of a check.
+   */
+  readonly staleSessions: (clones: readonly Clone[]) => TmuxSessionRow[];
   /** The ttys of every client attached to this clone. Empty means nobody is looking at it. */
   readonly clientTtys: (clone: Clone) => string[];
+  /**
+   * Wait for a client to attach to this clone, up to `timeoutMs`. The tty, or undefined.
+   *
+   * `open` needs this for two reasons, and the first one is a bug it found. An emulator returns
+   * as soon as it has CREATED a tab, well before the process in it has attached -- so a second
+   * `hangar open` moments later saw no client, could not tell that from a genuinely detached
+   * session, and opened a second tab onto the same clone. Measured: with tmux named by absolute
+   * path a client appears in under 100ms, so waiting costs nothing when it works.
+   *
+   * The second is honesty. An emulator that opened a tab and then failed to run the line reports
+   * success, and without this `open` would repeat that claim.
+   */
+  readonly awaitClient: (clone: Clone, timeoutMs: number) => string | undefined;
   /** The roles that already have a window in this clone's session. */
   readonly roles: (clone: Clone) => string[];
   /** Create the session on its first role's window, tagged and painted. False if tmux refused. */
@@ -193,6 +278,20 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
   };
 
   const lines = (out: string): string[] => (out === '' ? [] : out.split('\n'));
+
+  const readSessions = (): TmuxSessionRow[] => {
+    const res = tmux([
+      'list-sessions',
+      '-F',
+      ['#{session_name}', '#{@hangar_clone}', '#{session_attached}'].join(SEP),
+    ]);
+    if (!res.ok) return [];
+    return lines(res.out).flatMap((line) => {
+      const [name, clone, attached] = line.split(SEP);
+      if (name === undefined) return [];
+      return [{ name, clone: orUndefined(clone), attached: attached !== '0' }];
+    });
+  };
 
   /**
    * Run a window's command with `send-keys` rather than `new-window -- <command>`.
@@ -242,19 +341,30 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
   return {
     installed: () => run('sh', ['-c', 'command -v tmux >/dev/null 2>&1']).ok,
     running: () => tmux(['list-sessions']).ok,
+    currentSession: () => {
+      if (tmuxSocketOf(process.env['TMUX']) !== tmuxSocketName(hangar.id)) return undefined;
+      const res = tmux(['display-message', '-p', '#{session_name}']);
+      return res.ok ? orUndefined(res.out) : undefined;
+    },
     hasSession: (clone) => tmux(['has-session', '-t', tmuxTarget(clone)]).ok,
-    sessions: () => {
-      const res = tmux([
-        'list-sessions',
-        '-F',
-        ['#{session_name}', '#{@hangar_clone}', '#{session_attached}'].join(SEP),
-      ]);
-      if (!res.ok) return [];
-      return lines(res.out).flatMap((line) => {
-        const [name, clone, attached] = line.split(SEP);
-        if (name === undefined) return [];
-        return [{ name, clone: orUndefined(clone), attached: attached !== '0' }];
-      });
+    sessions: readSessions,
+    staleSessions: (clones) => {
+      const alive = new Set(clones.map((clone) => clone.name));
+      return readSessions().filter(
+        (row) => row.clone !== undefined && !alive.has(row.clone) && !row.attached,
+      );
+    },
+    awaitClient: (clone, timeoutMs) => {
+      const deadline = Date.now() + timeoutMs;
+      for (;;) {
+        const res = tmux(['list-clients', '-t', tmuxTarget(clone), '-F', '#{client_tty}']);
+        const [tty] = res.ok ? lines(res.out) : [];
+        if (tty !== undefined) return tty;
+        if (Date.now() >= deadline) return undefined;
+        // A busy wait, deliberately: this is a synchronous CLI and 60ms of `spawnSync` latency
+        // per poll is the sleep. Node has no sync sleep that is not worse than this.
+        sleepSync(60);
+      }
     },
     clientTtys: (clone) => {
       const res = tmux(['list-clients', '-t', tmuxTarget(clone), '-F', '#{client_tty}']);

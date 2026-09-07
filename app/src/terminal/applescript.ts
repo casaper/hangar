@@ -33,10 +33,3 @@ export const isAccessibilityDenial = (err: string): boolean =>
 
 export const ACCESSIBILITY_HINT =
   'System Settings → Privacy & Security → Accessibility: allow the terminal you run `hangar` from.';
-
-/** AppleScript wants 16-bit colour channels, so each 0-255 byte is scaled by 257. */
-export const asColour = (hex: string): string => {
-  const n = Number.parseInt(hex.replace('#', ''), 16);
-  const chan = [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff].map((c) => String(c * 257));
-  return `{${chan.join(', ')}}`;
-};

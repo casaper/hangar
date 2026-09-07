@@ -288,31 +288,47 @@ const portsSchema = z.strictObject({
 
 export const terminalSchema = z.strictObject({
   /**
-   * Which emulator to drive. `auto` detects it from the environment, then from what is running.
+   * Which emulator hosts a clone's window. `auto` detects it from the environment, then from what
+   * is running.
    *
-   * Set it explicitly when detection picks the wrong one -- a machine with both iTerm2 and
-   * Terminal.app installed, or both Konsole and GNOME Terminal, has no correct answer available
-   * from the filesystem. `none` switches terminal automation off entirely: `hangar open` then
-   * refuses instead of guessing, and `hangar sync` asks before touching a clone that has a live
-   * Claude Code session rather than claiming to have paused it.
+   * Set it explicitly when detection has no correct answer available -- a machine with both
+   * iTerm2 and Terminal.app installed, or both Konsole and GNOME Terminal. The emulator is asked
+   * for two things: open one tab or window running one command, and bring one it opened to the
+   * front. Everything inside that window is tmux.
+   *
+   * `none` means Hangar opens no window: it still builds the clone's tmux session, with its
+   * roles and its hue, and prints the `tmux attach` line. So a hangar driven from a terminal
+   * nobody wrote a driver for keeps its sessions, its colours and its `SYNC PAUSE`.
    */
   kind: z
-    .enum(['auto', 'iterm2', 'apple-terminal', 'konsole', 'gnome-terminal', 'tmux', 'none'])
+    .enum(['auto', 'iterm2', 'apple-terminal', 'konsole', 'gnome-terminal', 'none'])
     .default('auto'),
+  /**
+   * Where a clone's window goes: a `tab` in the emulator's current window, or a `window` of its
+   * own. `--tab` and `--window` override it for one run.
+   *
+   * A tab by default because every emulator here can open one from a command or a script, so it
+   * is a real default rather than a nicety on one platform -- and because a clone per tab is how
+   * a developer with four of them keeps one window. Terminal.app is the one place it costs
+   * something: its `tab` element is read-only in AppleScript, so a tab needs Accessibility
+   * permission and a refusal falls back to a window with a note saying what to allow.
+   */
+  placement: z.enum(['tab', 'window']).default('tab'),
   /**
    * What the generated shell hook paints when a shell moves into a clone.
    *
    * Three independent layers, because the emulators support wildly different amounts and the
    * bottom one always works:
    *
-   * - `chrome` -- the tab or window colour, through whichever escape sequence the emulator
-   *   understands (iTerm2's tab colour, everyone else's background colour). Under tmux it is
-   *   tmux's own window options instead, since tmux swallows the sequences. Terminal.app
-   *   understands neither, so there it is painted by AppleScript when the tab is created.
+   * - `chrome` -- the window colour. Inside tmux, which is where every window `hangar open`
+   *   creates lives, these are tmux window options at full hue on the window-status entry and
+   *   both pane borders. In a shell outside tmux it is iTerm2's tab colour or everyone else's
+   *   background tint; Terminal.app understands neither sequence, so a plain shell there gets
+   *   the two layers below and a Hangar window there gets its chrome from the tmux inside it.
    * - `title` -- the window/tab title, which every terminal since the 1980s supports.
-   * - `env` -- `HANGAR_CLONE*` variables, which need no terminal support at all and are what a
-   *   prompt or a starship config can colour itself from. This was once the only thing a tmux
-   *   user got; it is now the floor under tmux too, not the whole of it.
+   * - `env` -- `HANGAR_CLONE*` variables, which need no terminal support at all and are the
+   *   floor under everything else: a prompt, a starship config or a hand-written tmux status
+   *   line can colour itself from `HANGAR_CLONE_SGR` with no co-operation from anything.
    */
   colour: z
     .strictObject({
@@ -330,6 +346,13 @@ export const terminalSchema = z.strictObject({
       tint: z.number().min(0).max(1).default(0.16),
     })
     .prefault({}),
+  /**
+   * One tmux window per entry, in this order, in each clone's session -- each named for the clone
+   * and the role.
+   *
+   * The key is `tabs` because that is what they are on screen: tmux's window list IS the tab bar,
+   * and a key named after the implementation would need a sentence of explanation on every read.
+   */
   tabs: z
     .array(
       z.strictObject({

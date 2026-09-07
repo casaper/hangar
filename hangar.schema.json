@@ -391,8 +391,15 @@
             "apple-terminal",
             "konsole",
             "gnome-terminal",
-            "tmux",
             "none"
+          ]
+        },
+        "placement": {
+          "default": "tab",
+          "type": "string",
+          "enum": [
+            "tab",
+            "window"
           ]
         },
         "colour": {

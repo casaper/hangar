@@ -287,23 +287,33 @@ program
 
 program
   .command('open')
-  .summary('Open clones in one shared terminal window, on a current default branch')
+  .summary('Open clones in their own tmux sessions, on a current default branch')
   .description(
     [
-      'Open clones in one shared terminal window: the tabs `terminal.tabs[]` declares, plus every configured editor.',
+      "Open each clone in one terminal tab of its own, attached to that clone's tmux session — one tmux window per `terminal.tabs[]` role — plus every configured editor. A clone that is already open is brought forward rather than opened twice, and a clone whose tab was closed reattaches to the session it still has, with whatever was running in it.",
       "Each clone is first fetched and put on its repo's default branch, up to date — a clone you are opening is one you are starting work in, and starting on last week's branch is never what was wanted. `--branch <name>` names another branch, `--no-checkout` leaves each clone as it is, and a clone whose tree cannot be moved (uncommitted work, a half-applied rebase, a live Claude session) is opened as it is with a warning.",
+      "The sessions live on this hangar's own tmux socket, so nothing here touches the tmux you run for your own work. `hangar doctor` prints the socket name.",
     ].join('\n\n'),
   )
   .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2) — opened in ascending order')
   .option('--all', 'open every clone in the fleet')
-  .option('--no-claude', 'do not start Claude Code in the first tab')
+  .option('--no-claude', 'do not start Claude Code in any of the clone’s windows')
   .option('--no-editor', 'do not open the clone in any configured editor')
+  .option('--tab', "a tab in the terminal's current window (the default)")
+  .option('--window', 'a window of its own instead of a tab')
   .option('-b, --branch <name>', "check this branch out instead of the repo's default branch")
   .option('--no-checkout', 'open each clone on whatever branch it already has')
   .option('--include-busy', 'check the branch out even in a clone with a live Claude session')
-  .option('-n, --dry-run', 'print every decision — branch, tabs, editors — and change nothing')
-  .action((clones: string[], options) => {
-    open(requireHangar(), clones, options);
+  .option('-n, --dry-run', 'print every decision — branch, windows, editors — and change nothing')
+  .action((clones: string[], options: { tab?: boolean; window?: boolean }) => {
+    if (options.tab === true && options.window === true) {
+      throw new CliError('--tab and --window are the two answers to one question, so pick one');
+    }
+    const placement = options.window === true ? 'window' : options.tab === true ? 'tab' : undefined;
+    open(requireHangar(), clones, {
+      ...options,
+      ...(placement === undefined ? {} : { placement }),
+    });
   });
 
 program
@@ -559,7 +569,7 @@ const colours = program
 
 colours
   .command('sync')
-  .description('Regenerate the shell and theme artifacts derived from the clone palette')
+  .description('Regenerate the shell, theme and tmux artifacts this hangar generates')
   .option('-n, --dry-run', 'show what would change, write nothing')
   .option('--check', 'exit non-zero if any artifact is out of date (writes nothing)')
   .action((options) => {

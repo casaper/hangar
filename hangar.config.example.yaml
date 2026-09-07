@@ -353,70 +353,78 @@ ports:
     #   url: null
 
 # --------------------------------------------------------------------------------------------
-# The terminal -- which emulator `open` drives, and what the shell hook paints
+# The terminal -- which emulator hosts a clone's window, and what the shell hook paints
 # --------------------------------------------------------------------------------------------
 terminal:
+  # `hangar open <n>` opens ONE tab per clone in this emulator, attached to that clone's session
+  # on Hangar's own tmux socket (`tmux -L hangar-<id>`), with one tmux window inside it per
+  # `tabs[]` entry below. tmux does everything that happens inside that window -- creating the
+  # roles, naming them, ordering them, bringing one forward, and delivering a `SYNC PAUSE` into
+  # the pane on a session's tty -- so it behaves identically on macOS and on Linux. The socket is
+  # private: nothing Hangar does can reach or disturb the tmux you run for your own work.
+  #
   # `auto` (the default) detects the emulator from the environment, then from what is running.
   # Set it explicitly when detection has no correct answer available -- a machine with both
-  # iTerm2 and Terminal.app, or both Konsole and GNOME Terminal.
+  # iTerm2 and Terminal.app, or both Konsole and GNOME Terminal. There is no system setting to
+  # consult: macOS has no default-terminal preference at all.
   #
-  # `none` switches terminal automation off entirely: `open` refuses instead of guessing, and
-  # `sync` ASKS before touching a clone with a live Claude Code session rather than claiming to
-  # have paused it.
+  # The emulator is asked for three things, and only the third can be missing:
   #
-  # Capabilities differ, and every caller degrades one at a time rather than pretending they are
-  # equivalent:
+  #   iterm2          tab, window, raise      AppleScript
+  #   apple-terminal  tab, window, raise      AppleScript. A WINDOW is `do script`, which needs
+  #                                           nothing; a TAB needs Accessibility permission,
+  #                                           because Terminal.app's tab element is read-only in
+  #                                           AppleScript and Cmd-T through System Events is the
+  #                                           only way to make one. A refusal falls back to a
+  #                                           window and says what to allow.
+  #   konsole         tab, window; raise with qdbus installed
+  #   gnome-terminal  tab, window only -- VTE exposes no way to bring a window forward, so the
+  #                   window is there and simply not in front, and `open` prints the
+  #                   `tmux -L hangar-<id> attach` line that finishes the job
   #
-  #   iterm2          tabs, list, tag, type   the reference driver: scriptable per-session user
-  #                                           variables are what make tagging a tab possible
-  #   apple-terminal  tabs, list, type        tag via `custom title`; needs Accessibility
-  #                                           permission, because a new tab can only be made by
-  #                                           sending Cmd-T through System Events
-  #   tmux            tabs, list, tag, type   a tmux SESSION is the window and a tmux WINDOW is
-  #                                           the tab; the tag lives in `@hangar_*` window
-  #                                           options, tmux's real analogue of iTerm2's user
-  #                                           variables -- which is why it reaches the full set
-  #   konsole         tabs; the rest with qdbus
-  #   gnome-terminal  tabs only -- VTE exposes no way to type into a live tab, and the generic
-  #                   POSIX route (TIOCSTI) has been off by default since Linux 6.2, so `sync`
-  #                   reports every session as missed and asks first
-  #
-  # `auto` tests $TMUX FIRST, before any emulator signal: inside tmux inside iTerm2 both are set,
-  # and driving the emulator there opens a tab BESIDE the multiplexer and types a `SYNC PAUSE`
-  # into whichever pane happens to be showing. On Linux without KDE, tmux is the only route that
-  # carries `writeToTty` at all.
+  # `none` means Hangar opens no window at all: it still builds each clone's session, with its
+  # roles and its hue, and prints the attach line. So a hangar driven from a terminal nobody
+  # wrote a driver for keeps its sessions, its colours and its `SYNC PAUSE`.
   #
   # Konsole and gnome-terminal are written from Konsole's documented D-Bus interface and
-  # gnome-terminal's documented command line and have NOT been exercised against live ones; tmux
-  # HAS been, on macOS, where it is the same program. `hangar doctor` prints the detected driver
-  # and its capabilities.
+  # gnome-terminal's documented command line and have NOT been exercised against live ones; what
+  # each is trusted with is one command line. tmux HAS been exercised, on macOS, where it is the
+  # same program -- so what is unverified on Linux is which window comes up, not what happens
+  # inside it. `hangar doctor` prints the detected emulator and the state of the tmux server.
   # kind: auto
-  # kind: tmux
   # kind: iterm2
+
+  # Where a clone's window goes: a `tab` in the emulator's current window, or a `window` of its
+  # own. `hangar open --tab` / `--window` overrides it for one run. A tab by default because
+  # every emulator above can open one, and because a clone per tab is how a developer with four
+  # of them keeps one window.
+  placement: tab
 
   # What the generated `clone-terminal.sh` paints when a shell moves into a clone. Three
   # independent layers, because the emulators support wildly different amounts:
   colour:
-    # The tab or window colour, through whichever escape sequence the emulator understands
-    # (iTerm2's OSC 6 tab colour; everyone else's OSC 11 background). Terminal.app understands
-    # neither, so there `hangar open` paints the tab over AppleScript at creation instead --
-    # which is why a Terminal.app tab opened by hand stays uncoloured.
+    # The window colour. Inside tmux -- which is where every window `hangar open` creates lives
+    # -- these are tmux window options at full hue, on the window-status entry and both pane
+    # borders. In a shell OUTSIDE tmux it is iTerm2's OSC 6 tab colour, or everyone else's
+    # OSC 11 background tint. Terminal.app understands neither sequence, so a plain shell there
+    # gets the title and env layers only -- and a Hangar window there is not a plain shell, it is
+    # a tmux client, where the chrome comes from tmux like everywhere else.
     chrome: true
     # The window/tab title (OSC 0, plus OSC 30 for Konsole's tab label).
     title: true
     # The HANGAR_CLONE* variables. THE FLOOR, and the reason this works on terminals nobody has
-    # thought about: a prompt, a starship config or a tmux status line can colour itself from
-    # HANGAR_CLONE_SGR with no emulator co-operation at all.
+    # thought about: a prompt, a starship config or a hand-written tmux status line can colour
+    # itself from HANGAR_CLONE_SGR with no emulator co-operation at all.
     env: true
     # How much of the hue reaches a BACKGROUND tint, 0-1. Default 0.16. A saturated hue behind
     # text is unreadable, so the background gets a dark fraction of it -- enough to tell four
-    # windows apart at a glance, not enough to fight the theme. iTerm2 is unaffected: it colours
-    # the tab itself, where full strength is exactly right.
+    # windows apart at a glance, not enough to fight the theme. iTerm2 and tmux are unaffected:
+    # a tab colour and a window-status entry want the full hue.
     tint: 0.16
 
-  # The tabs `hangar open` creates per clone, in order. Order is creation order and nothing
-  # else -- iTerm2's AppleScript interface accepts `move` on a tab and silently does nothing.
-  # Default: one `claude` tab.
+  # One tmux window per entry, in this order, in each clone's session -- each named for the clone
+  # and the role. The key is `tabs` because that is what they are on screen: tmux's window list
+  # IS the tab bar. Default: one `claude` window.
   tabs:
     - { role: claude, dir: '.', command: claude }
     - { role: shell, dir: '.' } # omit `command` for a plain shell

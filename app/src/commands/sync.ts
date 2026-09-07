@@ -18,7 +18,7 @@ import {
   SYNC_STASH_LABEL,
   type StashEntry,
 } from '../git.ts';
-import { terminal } from '../terminal/index.ts';
+import { tmuxServer, tmuxSocketName } from '../tmux.ts';
 import { claudeSessionsIn, type ClaudeSession } from '../procs.ts';
 import { resolveWithClaude } from '../resolve-conflicts.ts';
 import { cloneLabel, confirm, fail, heading, note, ok, step, warn } from '../ui.ts';
@@ -498,28 +498,43 @@ export const closingMessage = (kind: Closing, strategy: Strategy, state: TreeAft
 /**
  * The sessions that actually got the message; the rest are reported and counted as missed.
  *
- * ## When the terminal cannot be typed into at all
+ * ## The pause goes into a tmux pane, keyed on the session's tty
  *
- * Typing into a live tab is a terminal capability, not something every emulator has. iTerm2,
- * Terminal.app and Konsole-with-qdbus can do it; GNOME Terminal cannot, and there is no generic
- * POSIX substitute -- the `TIOCSTI` ioctl that used to serve as one has been disabled by default
- * since Linux 6.2, because injecting keystrokes into another process's terminal is a
- * privilege-escalation primitive.
+ * Every window `hangar open` creates is a tmux window on this hangar's own socket, so delivering
+ * a line is `send-keys` into the pane sitting on that tty -- the same mechanism on every platform,
+ * needing nothing from the emulator around it. That is what makes the protocol available on a
+ * Linux box with no KDE, where typing into the emulator itself is not possible at all: VTE
+ * exposes no API for writing into a running terminal, and the generic POSIX substitute (the
+ * `TIOCSTI` ioctl) has been disabled by default since Linux 6.2 because injecting keystrokes into
+ * another process's terminal is a privilege-escalation primitive.
  *
- * So this reports every session as missed and says why ONCE, rather than per session. That is
- * not a soft failure: `integrate` asks before syncing a clone whose sessions could not all be
- * reached, which is the right question here -- a live agent is about to have its working tree
- * rebased under it and cannot be told.
+ * ## A miss is attributed, because the two kinds have different fixes
+ *
+ * A session Hangar did not open -- started by hand in a bare tab, or inside the developer's OWN
+ * tmux on the default socket -- has no pane on our socket and cannot be reached. `procs` finds it
+ * by its tty all the same, so it appears here and would otherwise read as a bug rather than as a
+ * session in a place this protocol does not reach.
+ *
+ * None of that is a soft failure: `integrate` asks before syncing a clone whose sessions could
+ * not all be reached, which is the right question -- a live agent is about to have its working
+ * tree rebased under it and cannot be told.
  */
 const notifySessions = (
   hangar: Hangar,
   sessions: readonly ClaudeSession[],
   message: string,
 ): readonly ClaudeSession[] => {
-  const { driver } = terminal(hangar);
-  if (!driver.capabilities.writeToTty) {
-    warn(`${driver.label} cannot be typed into — no session can be told to pause`);
-    note('Pause them yourself, or set `terminal.kind` in hangar.config.yaml if this is wrong.');
+  const server = tmuxServer(hangar);
+  if (!server.installed()) {
+    warn('tmux is not on PATH, so no session can be told to pause');
+    note('Pause them yourself. `hangar open` needs tmux too — `brew install tmux`.');
+    return [];
+  }
+  if (!server.running()) {
+    warn('no tmux server for this hangar, so nothing it opened is running');
+    note(
+      `Sessions outside \`tmux -L ${tmuxSocketName(hangar.id)}\` cannot be reached; pause them yourself.`,
+    );
     return [];
   }
 
@@ -529,11 +544,12 @@ const notifySessions = (
       warn(`session pid ${session.pid} has no terminal (IDE-hosted) — cannot reach it`);
       continue;
     }
-    if (driver.writeToTty(session.tty, message)) {
+    if (server.sendLine(session.tty, message)) {
       ok(`messaged the session on ${session.tty}`);
       reached.push(session);
     } else {
-      warn(`could not find a ${driver.label} tab for ${session.tty} (pid ${session.pid})`);
+      warn(`the session on ${session.tty} (pid ${session.pid}) is not in this hangar's tmux`);
+      note('Started by hand, or in your own tmux — `hangar open <n>` starts one that can be told.');
     }
   }
   return reached;
