@@ -147,7 +147,7 @@ const report = (actions: readonly AdoptAction[], counts: Counts): void => {
  * Returns whether anything reached the store, because a dry run moves nothing and pass 2b still
  * has to be able to say the link would be made.
  */
-const foldCloneStore = (hangar: Hangar, clone: Clone, dryRun: boolean): boolean => {
+export const foldCloneStore = (hangar: Hangar, clone: Clone, dryRun: boolean): boolean => {
   const storeName = jiraTicketsDirname(hangar);
   const local = join(cloneTmpPath(clone), storeName);
   // A link -- the normal case, and pass 2a's business rather than this one's.
@@ -160,6 +160,8 @@ const foldCloneStore = (hangar: Hangar, clone: Clone, dryRun: boolean): boolean 
   }
 
   let folded = 0;
+  /** Entries this pass will not decide -- the directory cannot go while any of them is there. */
+  let left = 0;
   for (const entry of entries) {
     if (entry.startsWith('.')) continue;
     const from = join(local, entry);
@@ -187,6 +189,7 @@ const foldCloneStore = (hangar: Hangar, clone: Clone, dryRun: boolean): boolean 
     // preferring either could keep a truncated file. Same rule as the freshest-wins collapse.
     if (!entry.endsWith('.md')) {
       warn(`${label}: differs from the store — left in place`);
+      left += 1;
       continue;
     }
 
@@ -198,14 +201,24 @@ const foldCloneStore = (hangar: Hangar, clone: Clone, dryRun: boolean): boolean 
     else rmSync(from);
   }
 
-  if (folded > 0 && !dryRun) {
+  // Removed whenever nothing is left to decide, and NOT only when something was folded: an
+  // already-empty private store is the state a previous run leaves behind after a human resolves
+  // the one entry it could not, and leaving the directory there would make the link pass report
+  // a real directory in the way of a link -- for ever, on every run.
+  if (left === 0 && !dryRun) {
     try {
       rmdirSync(local);
     } catch {
-      warn(`${clone.name}/${storeName}: not empty after folding — left in place`);
+      warn(`${clone.name}/${storeName}: could not be removed — left in place`);
     }
   }
-  return folded > 0;
+  if (left > 0) {
+    note(pc.dim(`${storeName}/ stays until those ${String(left)} are resolved by hand`));
+  }
+
+  // The link pass can only be told about a store that exists, or a dry run would have it point
+  // a clone at a directory nothing created.
+  return left === 0 && (existsSync(hangar.paths.jiraTickets) || folded > 0);
 };
 
 /**
@@ -599,8 +612,7 @@ const syncJiraStore = (hangar: Hangar, dryRun: boolean): void => {
       note(pc.dim(`${copy.rel} → link${dryRun ? ' would be made' : 'ed'}`));
       if (dryRun) continue;
       try {
-        if (linkToStore(hangar, group.key, copy.path) === 'copy')
-          warn(`${copy.rel}: no symlink support here — copied, so this name is not shared`);
+        linkToStore(hangar, group.key, copy.path);
       } catch (error) {
         warn(`${copy.rel}: could not link — ${(error as Error).message}`);
       }
