@@ -13,6 +13,8 @@ memory-dir         %HOME%/.claude/vsfix-memory
 platform           darwin — %HOME%/Library/Application Support
 platform-caps      openExternally=true openApplicationByName=true vscodeWindowState=true
 vscode-state       %HOME%/Library/Application Support/Code/User/globalStorage/storage.json
+tmux-socket        hangar-vsfix
+tmux-conf          %HANGAR%/clone-tmux.conf
 port-roles         web(VSFIX_WEB_PORT)=4200 storybook(VSFIX_STORYBOOK_PORT)=6006 e2eReport(VSFIX_E2E_REPORT_PORT)=9323
 port-step/offset   50 / 0
 

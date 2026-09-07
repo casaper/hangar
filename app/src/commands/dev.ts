@@ -43,6 +43,7 @@ import { type Artifact } from '../generate/index.ts';
 import { statuslineArtifact } from '../generate/statusline-sh.ts';
 import { terminalHookArtifact } from '../generate/terminal-sh.ts';
 import { tmuxConfArtifact } from '../generate/tmux-conf.ts';
+import { tmuxSocketName } from '../tmux.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
 
 import { platform } from '../platform/index.ts';
@@ -251,6 +252,14 @@ export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
       .map(([name, on]) => `${name}=${String(on)}`)
       .join(' ')}`,
     `vscode-state       ${os.vscodeWindowState('Code') ?? '(unlocatable)'}`,
+    /*
+     * The tmux socket, captured for the same reason `colour-assignments` and `memory-dir` are:
+     * a destination with no content of its own. It is a pure function of the hangar id, so it is
+     * portable -- unlike the resolved EMULATOR, which reads $TERM_PROGRAM at capture time and
+     * would differ between two machines and between two terminals on one machine.
+     */
+    `tmux-socket        ${tmuxSocketName(hangar.id)}`,
+    `tmux-conf          ${hangar.paths.tmuxConf}`,
     `port-roles         ${hangar.config.ports.roles.map((r) => `${r.id}(${r.envKey})=${String(r.base)}`).join(' ')}`,
     `port-step/offset   ${String(hangar.config.ports.step)} / ${String(hangar.config.ports.offset)}`,
     '',
