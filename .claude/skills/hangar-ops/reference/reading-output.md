@@ -26,8 +26,8 @@ Rows that need care when you relay them:
   branch to rename and no key to add, and relaying it as "no ticket found" invents a problem. Or a
   URL. Or `none inferred`, which appears ONLY on a hangar that has a tracker and means no key was
   found in the branch name or in this branch's commits — that one is actionable, and telling it
-  from the first is the whole point of the row: a hangar with no tracker used to print it, so a
-  missing config read as a branch naming convention. A URL may carry `(from a commit on this
+  from the first is the whole point of the row: `none inferred` is written ONLY where a tracker is
+  configured, so it never means a missing config. A URL may carry `(from a commit on this
   branch, not from the branch name)` — that parenthesis is a weaker signal than a branch name.
   (A fourth, `(no link — this hangar has no tracker.baseUrl)`, is defensive: the schema requires
   `baseUrl` whenever the kind is not `none`, so a config that loaded cannot produce it.)
@@ -107,11 +107,11 @@ Four things to say correctly when you relay a report:
 - **`code-workspace` is absent, not missing, on a hangar with no VS Code-family editor.** The row
   is written only where a configured `editor.kinds` entry actually reads a `*.code-workspace` — so
   a JetBrains-only or Zed-only hangar has no such row, and that is the correct reading rather than
-  a check that stopped running. It used to appear everywhere: those hangars were told the file was
-  missing and `--fix` created one for an editor that has no use for it. A file left behind by a
-  hangar that used to list VS Code is deliberately left alone and unreported (it is inert and
-  gitignored) — unlike a stale `jira record hook`, which costs a process per Bash call and IS
-  removed.
+  a check that stopped running — without that gate such a hangar would be told the file was
+  missing, and `--fix` would create one for an editor that has no use for it. A file left behind
+  after VS Code was dropped from `editor.kinds` is deliberately left alone and unreported (it is
+  inert and gitignored) — unlike a stale `jira record hook`, which costs a process per Bash call
+  and IS removed.
 - **A warning that the editor rows are the DEFAULT means the config did not parse.** With
   `hangar.config.yaml` invalid, the editor list falls back to the schema default, so the rows
   below it can name VS Code on a hangar whose config says JetBrains. Fix the config first —
@@ -125,20 +125,20 @@ Four things to say correctly when you relay a report:
   `N problem(s)` and says where they are — `above the clones`, `in N clone(s)`, or both — because
   the two are fixed in different places: a clone problem is almost always derivable and `--fix`
   closes it, while a hangar one is as often a decision (a credential to paste, one line in a
-  tracked settings file). It used to count only the clone half, so a fresh hangar printed five
-  warnings and then `No problems in 0 clone(s).` What it deliberately does NOT count is the
-  machine's capabilities — a `ps` that will not run, an emulator that cannot raise a window — since
-  those are facts about where the fleet runs, permanent on some platforms, and a check red in
-  normal operation is a check nobody reads. **Never read exit 0 as "healthy": in this CLI a
-  `--check` flag is the gate (`config schema --check`, `colours sync --check` both exit 1) and a
-  report is a report. Read the summary line, not `$?`.**
+  tracked settings file). Counting only the clone half is what would let a fresh hangar print
+  five warnings and then close with `No problems in 0 clone(s).` What it deliberately does NOT
+  count is the machine's capabilities — a `ps` that will not run, an emulator that cannot raise
+  a window — since those are facts about where the fleet runs, permanent on some platforms, and
+  a check red in normal operation is a check nobody reads. **Never read exit 0 as "healthy": in
+  this CLI a `--check` flag is the gate (`config schema --check`, `colours sync --check` both
+  exit 1) and a report is a report. Read the summary line, not `$?`.**
 - **The `secrets` row reports two sources and repairs neither.** What it checks is
   `secrets.variables[]` — what the repo's own tooling needs — **plus the credentials Hangar
   itself needs, derived from the config**: the forge token named by `forge.tokenEnvKey` when the
   origin is a Bitbucket URL, and the Atlassian pair when `tracker.kind` is `jira`. Those three
-  need no declaration, and they used to need one nobody wrote: this fleet declared only its
-  Playwright password, so `doctor` was silent about three of the four credentials it actually
-  uses. A declared entry with the same NAME overrides the derived one, which is how you make a
+  need no declaration, and that is the point: a config declaring only the variables the REPO needs
+  — this fleet's is one Playwright password — would otherwise leave three of the four credentials
+  unchecked. A declared entry with the same NAME overrides the derived one, which is how you make a
   forge token red rather than dim. A credential is the one thing in the fleet that cannot be
   derived from a clone index, so relay it as a job for the human, with the variable's `why`, and
   never as something you can repair. It distinguishes two states worth keeping apart when you report them: **not set** is a
@@ -157,9 +157,9 @@ Four things to say correctly when you relay a report:
   reports every variable unset, that is one finding, not two.
 - **`terminal hook` matches the hook's full PATH, not its filename.** `clone-terminal.sh` is
   written inside the hangar root, so by the naming rule it carries no hangar id and every hangar's
-  copy has the same name — a second hangar used to report the hook as sourced on the strength of
-  the FIRST one's line in `.zshrc`, while its own colours did nothing. A green row now means this
-  hangar's own file.
+  copy has the same name, so a filename match would let a second hangar report the hook sourced on
+  the strength of the FIRST one's line in `.zshrc` while its own colours did nothing. A green row
+  means this hangar's own file.
 - **A `tooling` row names missing required programs.** Green is one line; anything missing is
   named with its install hint. It is the same check `hangar setup` runs and refuses on — `doctor`
   only reports — and it is here because copying a config skips `setup` entirely. `lsof` is the one
