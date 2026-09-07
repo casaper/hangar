@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.16.0](https://github.com/casaper/hangar/compare/v0.15.0...v0.16.0) (2026-09-07)
+
+### Features
+
+* **terminal:** Colour a tmux window per clone, from the hook every emulator uses ([68dc3c2](https://github.com/casaper/hangar/commit/68dc3c25b4881af197a07edafc6749d71bdf683a))
+* **terminal:** Generate the hangar's own tmux config from colours sync ([4a946d3](https://github.com/casaper/hangar/commit/4a946d3bbcc624843c956eee2098dc2c03712882))
+* **terminal:** Give the hangar its own tmux server on a private socket ([24d12b8](https://github.com/casaper/hangar/commit/24d12b8388e3e916c8ead8dab9bfbe604c69ffa1))
+
+### Bug Fixes
+
+* **doctor:** Repeat the warnings in the closing summary, not just their count ([b194b3a](https://github.com/casaper/hangar/commit/b194b3a5c86a2128cfdcecf058f06f1514a9ac78))
+
+### Refactoring
+
+* **colours:** Reach tmux by name in the generated hook, not through the shell's alias ([ad712ef](https://github.com/casaper/hangar/commit/ad712eff3ad33a36eb08b6f421376743ed397ad0))
+* **terminal:** One tab per clone, attached to that clone's own tmux session ([b00bb72](https://github.com/casaper/hangar/commit/b00bb725b15593a7872cbb0a759f406f194750a1))
+
+### Documentation
+
+* **terminal:** Say how a clone's window is built, and what tmux owns ([c6b7b8d](https://github.com/casaper/hangar/commit/c6b7b8d2811c35998568623ddd7ec0fa2316844d))
+
+### Chores
+
+* update pnpm to 12 ([66eb87c](https://github.com/casaper/hangar/commit/66eb87c942e6dfe389dcabcee383aa5b449ea6e4))
+
 ## [0.15.0](https://github.com/casaper/hangar/compare/v0.14.2...v0.15.0) (2026-09-06)
 
 ### Features
