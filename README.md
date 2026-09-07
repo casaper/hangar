@@ -735,8 +735,8 @@ server block the others and let a kill reach into a sibling. `hangar tmp merge` 
 hook) pools the rest, is idempotent, and **never overwrites** — anything that differs is kept beside
 the winner as `<name>.from-clone_NN`, so you run it again rather than forcing it.
 
-**Never hand-edit a file under `tmp/`.** Each cached ticket is normally a hard link to one file the
-whole fleet shares, so an in-place edit can rewrite every clone's copy of it, and nothing inside the
+**Never hand-edit a file under `tmp/`.** Each cached ticket is a symlink into one record store the
+whole fleet shares, so an in-place edit writes every clone's copy of it, and nothing inside the
 clone shows you that.
 
 ## Colours

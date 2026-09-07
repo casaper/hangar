@@ -32,8 +32,8 @@ the machine's required tooling, reports the shared secrets file and the variable
 `editor.rootPathKeys` table has no file in any clone to apply it to, reports the two mode settings
 files without repairing them, and migrates a legacy `colour-assignments.json`.
 Run it after any re-clone. **How much of the shared cache a clone links is deliberately not a
-check** — a ticket fetched here reaches the others at the next `tmp merge`, which is what linking
-per entry means, and a check that is red in normal operation is a check nobody reads.
+check** — a clone's `tmp/` entries settle at the next `tmp merge`, which is what linking per entry
+means, and a check that is red in normal operation is a check nobody reads.
 (`hangar-ops/reference/reading-output.md` says the same to whoever reads the report — change one
 and change both.)
 

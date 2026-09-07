@@ -117,9 +117,9 @@ Four things to say correctly when you relay a report:
   below it can name VS Code on a hangar whose config says JetBrains. Fix the config first —
   `hangar config validate` says what is wrong — and re-read; until then `hangar open` uses those
   same fallback editors.
-- **How much of the shared cache a clone has linked is deliberately not checked.** A ticket fetched
-  in one clone reaches the others at the next `tmp merge`; a check that is red in normal operation
-  is a check nobody reads. (`hangar-internals/reference/doctor.md` says the same — change one and
+- **How much of the shared cache a clone has linked is deliberately not checked.** A clone's
+  `tmp/` entries settle at the next `tmp merge`, which every clone runs from a `SessionEnd` hook;
+  a check that is red in normal operation is a check nobody reads. (`hangar-internals/reference/doctor.md` says the same — change one and
   change both.)
 - **The summary counts BOTH halves, and the exit code is always 0.** The closing line names
   `N problem(s)` and says where they are — `above the clones`, `in N clone(s)`, or both — because

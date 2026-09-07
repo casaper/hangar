@@ -50,11 +50,10 @@ up with no pause before it, tell the user rather than picking up where you left 
 Every `tmp/<name>` entry is a symlink into `%HANGAR%/tmp/`, so anything
 you write there is written for the whole fleet.
 
-Each cached issue record is normally a **hard link** to one file the whole fleet shares — so
-editing `tmp/BE-1234/ticket_BE-1234.md` in place may rewrite every clone's copy of it, and
-you cannot tell from inside the clone (a re-sync detaches that one file until the next
-`tmp merge`). Read those files and regenerate them with the skill; never hand-edit one.
-The links are not damage, so leave them alone.
+Each cached issue record is a **symlink** into one record store the whole fleet shares, so
+editing `tmp/BE-1234/ticket.md` in place writes every clone's copy of it, and nothing
+inside the clone shows you that. Read those files and regenerate them with the skill;
+never hand-edit one. The links are not damage, so leave them alone.
 
 Dev-server PID files are the exception: they are real files, they stay in this clone, and
 they are why `tmp/` itself is never a symlink.

@@ -218,18 +218,21 @@ the first clone to start a dev server block the others and let a kill reach into
 the links one level down, **`tmp merge` never moves, links or even reads a PID file** — a running
 dev server is no obstacle to sharing.
 
-**Never hand-edit a file under `tmp/`.** Each cached issue record is normally a **hard link** to
-one file the whole fleet shares, so an in-place edit can rewrite every clone's copy of it, and
-nothing inside the clone shows you that. Read them, regenerate them with the skill, and leave the
-links alone. **A ticket fetched within the cache TTL is not fetched again**: `hangar jira hook` is
+**Never hand-edit a file under `tmp/`.** Each cached issue record is a **symlink** into one record
+store the whole fleet shares, so an in-place edit writes every clone's copy of it, and nothing
+inside the clone shows you that. Read them, regenerate them with the skill, and leave the links
+alone. **A ticket fetched within the cache TTL is not fetched again**: `hangar jira hook` is
 a `PreToolUse` hook that links the cached records into place and **denies** the fetch, telling you
 what it gave you instead. The config's `tracker.cache.bypassEnvKey`, set in front of the command,
 bypasses it — an env var and not a flag, because the repo's own sync script dies on an unknown
 flag.
 
-**The last issue key in a cached filename is what the file contains**; the keys before it only say
-how it was reached. `<KEY-A>/ticket_<KEY-A>_relates_to_<KEY-B>.md` **is KEY-B**, and an attachment
-named `..._relates_to_<KEY-B>_shot.png` is KEY-B's attachment.
+**A cached filename names the ticket the FILE holds, never the one you asked about.**
+`<KEY-A>/ticket.md` is KEY-A's own record, and `<KEY-A>/ticket_<kind>_<KEY-B>.md` **is KEY-B**,
+reached from KEY-A -- the `<kind>` says how, and the direction is in the record rather than the
+name. A branch whose skill writes the older flat names is read too, and there the LAST key is the
+one that counts: `<KEY-A>/ticket_<KEY-A>_relates_to_<KEY-B>.md` is also KEY-B. Either way an
+attachment belongs to the key immediately before `_asset_` in its name.
 
 Cached ticket records, their relation variants and issue attachments are clone- and
 branch-independent, which is the point. **A PR description is not** — it is derived from the

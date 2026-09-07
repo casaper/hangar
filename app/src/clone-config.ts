@@ -345,9 +345,10 @@ export const claudeLocalMdContent = (clone: Clone): string => {
     `Every \`tmp/<name>\` entry is a symlink into \`${tildify(clone.hangar.root)}/tmp/\`, so anything`,
     'you write there is written for the whole fleet.',
     '',
-    // The hard-link warning is about the TRACKER's record store, so a hangar with no tracker
-    // must not be shown a cached filename it will never have. The rule above it holds either
-    // way, and is what stays.
+    // The record-store warning is about the TRACKER's cache, so a hangar with no tracker must
+    // not be shown a cached filename it will never have. The rule above it holds either way,
+    // and is what stays -- as does the hard-link half, which is `jdupes -L` collapsing
+    // byte-identical files and happens in any hangar.
     ...(clone.hangar.config.tracker.kind === 'none'
       ? [
           'Files under it may also be **hard links** to one shared inode, so editing one in place',
@@ -355,11 +356,10 @@ export const claudeLocalMdContent = (clone: Clone): string => {
           'them rather than hand-editing them; the links are not damage, so leave them alone.',
         ]
       : [
-          `Each cached issue record is normally a **hard link** to one file the whole fleet shares — so`,
-          `editing \`tmp/${exampleIssueKey(clone.hangar)}/ticket_${exampleIssueKey(clone.hangar)}.md\` in place may rewrite every clone's copy of it, and`,
-          'you cannot tell from inside the clone (a re-sync detaches that one file until the next',
-          '`tmp merge`). Read those files and regenerate them with the skill; never hand-edit one.',
-          'The links are not damage, so leave them alone.',
+          `Each cached issue record is a **symlink** into one record store the whole fleet shares, so`,
+          `editing \`tmp/${exampleIssueKey(clone.hangar)}/ticket.md\` in place writes every clone's copy of it, and nothing`,
+          'inside the clone shows you that. Read those files and regenerate them with the skill;',
+          'never hand-edit one. The links are not damage, so leave them alone.',
         ]),
     '',
     'Dev-server PID files are the exception: they are real files, they stay in this clone, and',

@@ -7,21 +7,23 @@
   Both are idempotent and neither ever overwrites: byte-identical copies collapse to one, anything
   that differs is kept beside the winner as `<name>.from-<clone>`, and anything a live session may
   still be writing is left where it is and reported. Run them again rather than forcing them.
-  It also makes **one record per ticket** in `tmp/jira-tickets/`, with every cached name a hard
-  link to it — see **Shared `tmp/`** below, and note that a relation copy loses its
-  `relation:`/`relatedTo:` frontmatter when it is linked, because one inode cannot name two
-  trunks.
+  It also keeps **one record per ticket** in `tmp/jira-tickets/`, with every cached name a
+  relative symlink to it — see **Shared `tmp/`** below, and note that a record carries no
+  `relation:`/`relatedTo:` frontmatter, because one record cannot name one trunk.
   **`tmp merge` never touches a PID file — it does not move, link or even read one** — so every
   clone keeps its own `tmp/` directory and its own PID files in it, and a running dev server is no
   obstacle to running the command. Only the cache entries inside `tmp/` are shared, one symlink
   each. It moves every clone's cache into the store BEFORE it links any of it back, so a conflict
   copy created for the last clone still reaches the first. See **Shared `tmp/`** below.
-  **Each clone runs `tmp merge --quiet` from a `SessionEnd` hook**, so a ticket first fetched in
-  one clone reaches the others when that session ends. It is `SessionEnd` and not a trigger on
-  the write itself for a reason that cannot be tuned away: the store pass deliberately leaves
-  alone any copy written in the last two minutes, so a hook firing BECAUSE a ticket was just
-  written would arrive inside its own exclusion window every time and do nothing. Nothing
-  watches `tmp/` — the run happens once, at the end of a session, when nothing is mid-write.
+  **Each clone runs `tmp merge --quiet` from a `SessionEnd` hook.** A clone that can reach the
+  record store writes into it, so a ticket fetched there is already the fleet's one copy and
+  needs no delivering; what the run does is converge what a flat-layout clone wrote and repair
+  the names that should point at the store. It is `SessionEnd` and not a trigger on the write
+  itself for a reason that cannot be tuned away: the pass leaves alone any copy written in the
+  last two minutes, because it REPLACES content and a session may be mid-refresh — so a hook
+  firing BECAUSE a ticket was just written would arrive inside its own exclusion window every
+  time and do nothing. Nothing watches `tmp/` — the run happens once, at the end of a session,
+  when nothing is mid-write.
   Quiet mode holds the whole narration and prints it only if something needs a human (a
   conflict copy, a name it could not link, a record whose frontmatter disagrees with its
   filename, a stray PID file); the two-minute guard is explicitly not one of those, because the
@@ -59,42 +61,109 @@ and dotfiles — a **blocklist**, so a file a skill starts caching tomorrow is s
 anyone editing a table. `-n` previews, and names any entry two clones both offer, since which of
 the two wins is decided from what is on disk and a dry run has moved nothing.
 
-**One ticket lands in the store under several names, and `tmp merge` collapses them onto one
-file.** The `jira-scope` skill gives a directory only to the ticket the user asked about, so a
-ticket fetched as a relation is written into the asking ticket's directory:
-`ABC-1325/ticket_ABC-1325_relates_to_ABC-1323.md` **is ABC-1323**. The **last** issue key in a
-filename is what the file contains; the keys before it only say how it was reached (and the same
-holds for an attachment — `ticket_ABC-1323_relates_to_ABC-1191_asset_shot.png` is ABC-1191's
-attachment). Three things follow:
+**One ticket is reached under several names, and every one of them points at one file.** The
+tracker skill gives a directory only to the ticket the user asked about, so a ticket reached as a
+neighbour is named inside the asking ticket's directory. A cached name therefore says which
+ticket the FILE holds, never which one was asked about.
+
+**Two namings are live at once, and that is structural rather than transitional.** The skill is
+tracked and branch-versioned, so a clone on an older branch writes the flat naming while its
+siblings write the store one:
+
+    store   ABC-1349/ticket.md              ABC-1349/ticket_relation_ABC-1343.md
+    flat    ABC-1349/ticket_ABC-1349.md     ABC-1349/ticket_ABC-1349_relates_to_ABC-1343.md
+
+In the store naming the trunk key is not in the filename at all — `ticket.md` takes its key from
+the DIRECTORY — and a neighbour carries the KIND (`parent`, `subtask`, `sibling`, `relation`)
+rather than Jira's own label, because the direction belongs in the record and a filename can
+contradict it. In the flat naming the **last** key is what the file holds and the keys before it
+only say how it was reached. Either way an attachment belongs to the key immediately before
+`_asset_`.
+
+**`ticketNameOf` in `jira-records.ts` is the one owner of that question, and it takes the
+containing directory as well as the name.** Three callers ask it — the record walk, the grouping,
+and the freshest-wins collapse that must leave records alone — and it is one function rather than
+a test each of them applies, because a miss here is SILENT. When the skill moved the key out of
+the filename nothing matched, the walk returned nothing, and the store pass returned **before
+printing its own heading**: not doing less, doing nothing, while the command reported success and
+every gate stayed green. The absence of that heading in `tmp merge -n` is what tells a dark pass
+from an idle one. Change the predicate without changing the collapse's copy of it and records
+fall into the freshest-wins rule the store exists to override — quietly, and in the other
+direction.
+
+**A name is never rewritten from one naming to the other, only re-pointed.** The older skill asks
+for its own spelling back, so a renamed file would send it fetching for ever. Both names
+coexisting in one directory, pointing at one record, is the correct state.
+
+Four things follow:
 
 - **Every ticket has ONE record: `tmp/jira-tickets/ABC-1234.md`**, and every cached name for that
-  ticket is a **hard link** to it — its own `tmp/ABC-1234/ticket_ABC-1234.md` and every
-  `tmp/<TRUNK>/ticket_<TRUNK>_<relation>_ABC-1234.md`. One ticket is one inode however many
-  investigations reached it. This directory is deliberately **not** linked into the clones like
-  every other store entry: no skill owns that path, and a symlink in `<clone>/tmp/` would
-  invite an agent to write into it.
+  ticket is a **relative symlink** to it — `../jira-tickets/ABC-1234.md`, from whichever trunk
+  directory reached it.
+
+  **That directory IS linked into every clone, and writing through the link is the mechanism.**
+  The skill resolves the record store beside the per-ticket directories and writes every record
+  there, so a record written in a clone already is the fleet's one copy rather than something a
+  later merge has to collect. A clone that cannot reach it keeps a private store instead, whose
+  records are then the only copies of themselves — `foldCloneStore` folds one back, and does so
+  itself rather than through `adoptInto`, whose hash compare would keep a difference as
+  `ABC-1234.from-clone_NN.md` **inside** the canonical store, under a name no pass reads as a
+  record and no later merge would ever find.
+
+  **`storeLinkTarget` is deliberately not `relative()` of the two absolute paths.** A cached name
+  always sits one level under a `tmp/` holding the store beside it, so `../jira-tickets/<KEY>.md`
+  is the answer from any trunk directory — and it is the only answer that survives how a clone
+  reaches one. `<clone>/tmp/ABC-1349` is an absolute symlink into the hangar's own `tmp/`, so the
+  link is created in the hangar's directory whatever path named it, and `..` there is the
+  hangar's `tmp/`. Computed from the clone's absolute path it would answer
+  `../../../tmp/jira-tickets/ABC-1349.md`, which from where the link actually sits climbs out to
+  the filesystem root. `linkToStore` resolves the staged link and compares it with the record
+  before putting it in place, so a broken assumption is a refusal rather than a cache of links
+  that quietly reach nothing.
+
+  **A symlink also makes a rewrite reach every name by itself.** `writeStoreRecord` replaces the
+  store record's inode, and a symlink names a path — so nothing needs re-pointing when the
+  record changes. A hard link would have to be remade after every write, and asking whether one
+  is still in place is a question about two inodes rather than about the name itself.
 
   **The record cannot carry `relation:`/`relatedTo:`, and that is a proof rather than a taste.**
-  Those keys name the trunk a copy was reached from, and a ticket reachable from two trunks
-  would need one inode holding two different `relatedTo:` values. So the record is the winning
-  copy with those two lines removed, and each relation copy loses them when it is linked. The
-  filename still says `_relates_to_`, and the trunk's own `relations:` / `parent:` /
-  `subtasks:` frontmatter still states the relation and its label, so nothing is unrecoverable —
-  it is printed every time it happens. Nothing in the skill reads a cached record (`sync.mjs`
-  has no `readFileSync` at all), so the stripped keys change what a reader sees and nothing else.
+  Those keys name the trunk a copy was reached from, and a ticket reachable from two trunks would
+  need one record holding two different `relatedTo:` values. So the record is the winning copy
+  with those two lines removed. The skill writes them whenever it fetches a ticket AS a
+  neighbour, naming whichever trunk happened to reach it first, so the strip is a normalisation
+  this pass performs rather than a disagreement with the skill: the clone side documents the
+  record as carrying neither. How a trunk reached a ticket is in the link's NAME, and the trunk's
+  own `relations:` / `parent:` / `subtasks:` frontmatter still states the relation and its label,
+  so nothing is unrecoverable — and it is printed every time it happens. Nothing in the skill
+  reads a cached record (`sync.mjs` has no `readFileSync` at all), so the stripped keys change
+  what a reader sees and nothing else.
 
-  **A ticket's OWN record wins over a relation copy regardless of age**; `fetched_at:` only ranks
-  peers. That is the rule the old freshest-wins collapse lacked, and its absence is what put
-  ABC-1259's and ABC-1323's own records into a state where they read as though they hung off
-  another ticket. The store makes it unreachable rather than merely warned about. A copy written
-  in the last two minutes is left alone — a session may be mid-refresh, and this pass replaces
-  content — and a copy whose `id:` disagrees with its filename is reported and never linked.
+  **A ticket's OWN record wins over a neighbour regardless of age**; `fetched_at:` only ranks
+  peers. That is the rule the old freshest-wins collapse lacked, and its absence is what put two
+  tickets' own records into a state where they read as though they hung off another ticket. The
+  store makes it unreachable rather than merely warned about.
 
-  The one thing that does **not** collapse: **a ticket with attachments, cached under two
-  different trunks.** Asset references in the body are trunk-specific
+  Which of the two says so depends on the naming, and they never both apply to one file: in the
+  store naming the NAME is authoritative, because a neighbour link resolves to that ticket's own
+  record and carries no `relation:` key at all; in the flat naming the FRONTMATTER is, because a
+  flat neighbour is a distinct file with its own. Reading only the frontmatter would call every
+  store neighbour an own record and hand the winner rule the wrong pool. A copy written in the
+  last two minutes is left alone — a session may be mid-refresh, and this pass replaces content —
+  a copy whose `id:` disagrees with its filename is reported and never linked, and a link that
+  reaches no record at all is reported too: reading through one throws, so it falls out of the
+  grouping and would otherwise be repaired by nothing and mentioned by nobody.
+
+  The one thing that does **not** collapse: **a FLAT copy of a ticket with attachments, cached
+  under two different trunks.** There an asset is named after the path it was reached by
   (`ticket_ABC-1323_relates_to_ABC-1191_asset_shot.png`), so one shared record cannot carry
   correct references for both; the copy whose references differ is kept as its own file and
-  reported. Tickets with no attachments — most of them — link freely.
+  reported. The store names an asset after the ticket that OWNS it
+  (`ABC-1191_asset_shot.png`, beside that ticket's own record), which is what makes those
+  references correct from either trunk and lets the record collapse like any other.
+
+  `assetRefsIn` reads both spellings, and missing one is not a quiet loss of precision: the cache
+  hook checks that every reference resolves beside the destination before it denies a fetch, so a
+  pattern matching nothing would let it deny one having linked no attachments at all.
 
 - **Byte-identical files elsewhere in the store are hard-linked**, by `jdupes -L` (`-A` skips
   dotfiles, `-X noext:pid` keeps PID files out, and it treats already-linked files as
@@ -108,17 +177,31 @@ attachment). Three things follow:
   the whole of the right answer. Freshness is `fetched_at:` / `fetched:` frontmatter (Jira's
   `updated_at:` is only a fallback — it is written on a ticket's own file and left off the
   relation copies, so it cannot rank the two against each other). **Both spellings are read:**
-  `jira-scope` wrote the bare names, the newer `jira-ticket-sync` contract writes the `_at` ones,
-  and matching only one sent every synced file to the file-mtime fallback. Markdown only: a
+  the bare names and the `_at` ones, since both generations of the cache are on disk at once, and
+  matching only one sent every synced file to the file-mtime fallback. Markdown only: a
   differing pair of _assets_ under one name is a download that went wrong, not a newer
   rendering, so neither is preferred. `-n` prints every choice before any of it happens.
+
+  **The whole frontmatter block is read, and no fixed window will do.** A record's block is a
+  neighbourhood listing, so its length is a function of how many parents, sub-tasks, siblings and
+  relations the ticket has — which is data this repo does not own. A window ending inside the
+  block finds no closing delimiter, nothing matches, and freshness silently becomes the file's
+  mtime. That is not a slightly worse answer:
+  **the cache hook REFUSES to serve a record whose timestamp came from mtime**, since an mtime is
+  not evidence about when the tracker was asked — so a window one line too small turns the whole
+  ticket cache off, with the hook wired, present, reported green by `doctor`, and declining every
+  time. Measured against a 4096-character window on a live store: the closing delimiter sat at
+  character 4398 of a 6515-character record, and **every** record in the store missed it. A
+  bigger number only moves the bug to the first ticket with enough relations, and a window buys
+  no I/O anyway — the whole file is read either way and a slice would only shorten what the regex
+  sees.
 
 **A ticket fetched in the last hour is not fetched again.** `hangar jira hook` is a
 `PreToolUse` hook, wired into each clone's untracked `.claude/settings.local.json` by absolute
 path — **but only where `tracker.kind` is not `none`** (see below). It reads the Bash command Claude Code is about to
 run; when every file a `tracker.syncScript` run would write is already on disk and inside the TTL,
-it hard-links from the record store whatever is missing and **denies** the command, telling the
-agent what it got instead. Five properties are the whole design:
+it points whatever is missing at the record store and **denies** the command, telling the agent
+what it got instead. Five properties are the whole design:
 
 - **It fails open.** A flag it does not know, a frontmatter shape it cannot read, a record with
   no parsable timestamp, a shell construct in the tail — all exit silently and let the fetch
@@ -135,8 +218,8 @@ agent what it got instead. Five properties are the whole design:
   `jira-scope/jira-cache.mjs name`; `paths.mjs` calls itself the single owner of every filename
   in that directory, it is tracked and branch-versioned, and an untracked copy of `stemFor` here
   would drift the first time a branch changed a relation slug.
-- **It never hands back a worse copy than the clone already has.** This is the case immediately
-  after any real fetch: `sync.mjs` replaces the inode, so the clone holds the fresh copy while
+- **It never hands back a worse copy than the clone already has.** This is the case after a fetch
+  a flat-layout clone made: the write replaces the inode, so the clone holds the fresh copy while
   the store still holds the previous one until the next `tmp merge`. Linking then would put the
   OLDER record over the newer file and report it as cached. So a destination whose own
   `fetched_at:` is at least as fresh as the store record's is left exactly where it is and
@@ -218,10 +301,12 @@ into this one. The store is the hangar's own `tmp/`, and `tmp merge` links every
 only the `DN-####` directories (which left `pr-*.md` and `author-aliases.md` unshared in whichever
 clone made them).
 
-This needs **no change to the tracked skill tooling**:
-`.claude/skills/jira-scope/jira-cache.mjs` hardcodes `<git toplevel>/tmp/<KEY>` with no
-configuration, but only ever does `mkdirSync(..., {recursive: true})` on it, which follows a
-symlink.
+**Whether a destination is already pointing at the store is asked as a link TARGET, not by
+comparing two inodes.** The inode compare answered `undefined` for a path it could not stat, so
+two failures compared equal — a store record that vanished between the plan and the link made
+every destination look linked, and the hook denied the fetch while naming files that were not
+there. That is the one outcome a cache must never produce, since an agent then cannot read a
+ticket for a reason invisible from inside the clone.
 
 `ticket_<KEY>.md`, its relation variants and Jira attachments are clone- and branch-independent,
 which is the point. **A PR description is not** — it is derived from the working-tree diff, so it

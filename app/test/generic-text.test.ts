@@ -109,16 +109,18 @@ test('the port hint names the repo’s own resolver, and degrades to one that al
 test('the example issue key follows the tracker, and a hangar without one is shown no cache filename', () => {
   const jira = foreign({ top: `${JIRA}  keyPrefixes: [ZZ, QQ]\n` });
   assert.equal(exampleIssueKey(jira), 'ZZ-1234');
-  assert.match(claudeLocalMdContent(cloneAt(jira, 1)), /tmp\/ZZ-1234\/ticket_ZZ-1234\.md/);
+  assert.match(claudeLocalMdContent(cloneAt(jira, 1)), /tmp\/ZZ-1234\/ticket\.md/);
 
   // `keyPrefixes` is optional even with a tracker: an example still has to be key-SHAPED and
   // must not be a real key borrowed from somebody else's project.
   const open = foreign({ top: JIRA });
   assert.equal(exampleIssueKey(open), 'ABC-1234');
 
-  // No tracker: the hard-link warning is true, the cached-record example is not.
+  // No tracker: the hard-link warning is true -- `jdupes -L` runs in any hangar -- and the
+  // cached-record example is not. Matched as a PATH rather than by the `ticket_` prefix the
+  // store layout dropped, which would now pass while guarding nothing.
   const text = claudeLocalMdContent(cloneAt(foreign(), 1));
-  assert.ok(!text.includes('ticket_'), 'a trackerless hangar was shown a cache filename');
+  assert.doesNotMatch(text, /tmp\/[A-Z]+-\d+\/ticket/, 'a trackerless hangar saw a cache path');
   assert.match(text, /hard link/);
 });
 
