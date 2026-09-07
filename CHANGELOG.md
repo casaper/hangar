@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.1](https://github.com/casaper/hangar/compare/v0.16.0...v0.16.1) (2026-09-07)
+
+### Documentation
+
+* **doctor:** Say what each doctor row means, not what it once failed to ([f8f8166](https://github.com/casaper/hangar/commit/f8f81668be0d2967c867bd6223977129f6901f0a))
+* State what doctor checks, instead of narrating how it learnt to ([115b7b2](https://github.com/casaper/hangar/commit/115b7b2a41e0234b05fda9b78c862d80d73b0144))
+* **terminal:** Say what GNOME Terminal cannot do, which is raise a window ([51d0a5e](https://github.com/casaper/hangar/commit/51d0a5e7b81630586ade694e4b31141a2eb3f3eb))
+
 ## [0.16.0](https://github.com/casaper/hangar/compare/v0.15.0...v0.16.0) (2026-09-07)
 
 ### Features
