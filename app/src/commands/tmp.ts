@@ -3,6 +3,8 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
+  rmdirSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -16,6 +18,7 @@ import { adoptInto, type AdoptAction } from '../adopt.ts';
 import { excludePath, excludeBlock, missingExcludeLines } from '../clone-config.ts';
 import {
   duplicateSets,
+  freshnessOf,
   hardLinkDuplicates,
   hasJdupes,
   linkToWinner,
@@ -37,6 +40,7 @@ import { tildify } from '../user-paths.ts';
 import {
   cloneTmpPath,
   isPrivateTmpEntry,
+  jiraTicketsDirname,
   linkTargetOf,
   shareableStoreEntries,
   strayPidFilesInStore,
@@ -125,6 +129,86 @@ const report = (actions: readonly AdoptAction[], counts: Counts): void => {
 };
 
 /**
+ * Fold a clone's OWN record store into the fleet's, before anything else looks at it.
+ *
+ * A clone normally REACHES the store rather than holding one: the tracker skill resolves it
+ * beside the per-ticket directories, and pass 2b links it there too. So a real `jira-tickets/`
+ * directory inside a clone means that link could not be made when the skill first needed it --
+ * a checkout that belonged to no fleet yet, or a filesystem that refused one -- and its records
+ * are the only copies of themselves.
+ *
+ * **Folded here rather than left to `adoptInto`, which would make this worse than not sharing.**
+ * That helper decides identical-or-conflicting by hashing, and keeps a difference beside the
+ * winner as `<KEY>.from-clone_NN.md` -- which inside the canonical store is a file under a name
+ * no pass recognises as a record, so no later merge would find it, link it, or ever mention it
+ * again. Two store records for one ticket are two renderings of that ticket's OWN record, so
+ * the freshest is the whole of the right answer; there is no trunk to prefer between them.
+ *
+ * Returns whether anything reached the store, because a dry run moves nothing and pass 2b still
+ * has to be able to say the link would be made.
+ */
+const foldCloneStore = (hangar: Hangar, clone: Clone, dryRun: boolean): boolean => {
+  const storeName = jiraTicketsDirname(hangar);
+  const local = join(cloneTmpPath(clone), storeName);
+  // A link -- the normal case, and pass 2a's business rather than this one's.
+  if (linkTargetOf(local) !== undefined) return false;
+  let entries: string[];
+  try {
+    entries = readdirSync(local);
+  } catch {
+    return false;
+  }
+
+  let folded = 0;
+  for (const entry of entries) {
+    if (entry.startsWith('.')) continue;
+    const from = join(local, entry);
+    const to = join(hangar.paths.jiraTickets, entry);
+    const label = `${clone.name}/${storeName}/${entry}`;
+
+    if (!existsSync(to)) {
+      note(pc.dim(`${label} → the store`));
+      folded += 1;
+      if (!dryRun) {
+        mkdirSync(hangar.paths.jiraTickets, { recursive: true });
+        renameSync(from, to);
+      }
+      continue;
+    }
+
+    if (sameBytes(from, to)) {
+      note(pc.dim(`${label}: identical to the store`));
+      folded += 1;
+      if (!dryRun) rmSync(from);
+      continue;
+    }
+
+    // An asset is not a rendering: a differing download under one name is a bad download, and
+    // preferring either could keep a truncated file. Same rule as the freshest-wins collapse.
+    if (!entry.endsWith('.md')) {
+      warn(`${label}: differs from the store — left in place`);
+      continue;
+    }
+
+    const mineIsFresher = freshnessOf(from).at > freshnessOf(to).at;
+    note(pc.dim(`${label}: ${mineIsFresher ? 'fresher than' : 'older than'} the store`));
+    folded += 1;
+    if (dryRun) continue;
+    if (mineIsFresher) renameSync(from, to);
+    else rmSync(from);
+  }
+
+  if (folded > 0 && !dryRun) {
+    try {
+      rmdirSync(local);
+    } catch {
+      warn(`${clone.name}/${storeName}: not empty after folding — left in place`);
+    }
+  }
+  return folded > 0;
+};
+
+/**
  * Pass 2a: move a clone's own cache into the store.
  *
  * Returns the entry names it contributed, so a DRY RUN can still say what would be linked
@@ -170,6 +254,11 @@ const adoptCloneEntries = (
       else if (!dryRun) rmSync(path);
       continue;
     }
+
+    // A real record store left here is `foldCloneStore`'s, and it already said why it could
+    // not empty it. `adoptInto` would merge it by hashes and write any difference into the
+    // canonical store under a name no pass reads as a record.
+    if (entry === jiraTicketsDirname(hangar)) continue;
 
     report(adoptInto(path, hangar.paths.tmp, { label: clone.name, dryRun }), counts);
     contributed.push(entry);
@@ -294,6 +383,13 @@ const runMerge = (hangar: Hangar, dryRun: boolean): void => {
     if (!existsSync(tmp) && !dryRun) mkdirSync(tmp, { recursive: true });
     const mine = new Set<string>();
     if (!restored && existsSync(tmp)) {
+      // Before the generic pass, so the store is never offered to `adoptInto`. Its name joins
+      // `mine` as well as `projected`: on a dry run the directory is still there, and pass 2b
+      // would otherwise report a real directory in the way of a link it is about to make.
+      if (foldCloneStore(hangar, clone, dryRun)) {
+        mine.add(jiraTicketsDirname(hangar));
+        projected.add(jiraTicketsDirname(hangar));
+      }
       for (const entry of adoptCloneEntries(hangar, clone, dryRun, counts)) {
         mine.add(entry);
         projected.add(entry);
@@ -364,6 +460,14 @@ const runMerge = (hangar: Hangar, dryRun: boolean): void => {
 };
 
 const MAX_LISTED = 8;
+
+const sameBytes = (a: string, b: string): boolean => {
+  try {
+    return readFileSync(a).equals(readFileSync(b));
+  } catch {
+    return false;
+  }
+};
 
 const kb = (hangar: Hangar, bytes: number): string =>
   bytes >= 1024 * 1024

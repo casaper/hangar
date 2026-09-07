@@ -10,6 +10,7 @@ import {
   type TicketGroup,
   type TicketRecord,
 } from '../src/jira-records.ts';
+import { shareableStoreEntries } from '../src/tmp.ts';
 import { syntheticHangar } from './fixture.ts';
 
 /**
@@ -197,4 +198,23 @@ test('the store link target is relative to the trunk directory, not to the path 
   const naive = relative('/wt/clone_01/tmp/ABC-1349', store);
   assert.notEqual(naive, target);
   assert.notEqual(resolve('/wt/tmp/ABC-1349', naive), store);
+});
+
+test('the record store is linked into every clone like any other shared entry', () => {
+  const entries = shareableStoreEntries(hangar, [
+    'jira-tickets',
+    'ABC-1349',
+    'author-aliases.md',
+    '.gitkeep',
+    'dev-server.pid',
+  ]);
+  // Writing THROUGH that link is the mechanism: the tracker skill resolves the record store
+  // beside the per-ticket directories and writes every record there, so a clone that cannot
+  // reach it by that path keeps a private store instead and its records become the only copies
+  // of themselves. Excluding it here is what used to leave that to chance.
+  assert.deepEqual(entries, ['ABC-1349', 'author-aliases.md', 'jira-tickets']);
+
+  // PID files and dotfiles stay out, which is the rest of the rule and is unchanged.
+  assert.ok(!entries.includes('dev-server.pid'));
+  assert.ok(!entries.includes('.gitkeep'));
 });

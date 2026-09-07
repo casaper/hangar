@@ -31,7 +31,8 @@ import type { Hangar } from './hangar.ts';
 export const cloneTmpPath = (clone: Clone): string => join(clone.path, 'tmp');
 
 /** Named from the path itself, so the two can never say different things. */
-const jiraTicketsDirname = (hangar: Hangar): string => basename(hangar.paths.jiraTickets);
+/** Derived from the path, so the name and the place it names cannot disagree. */
+export const jiraTicketsDirname = (hangar: Hangar): string => basename(hangar.paths.jiraTickets);
 
 const lstatOrUndefined = (path: string): ReturnType<typeof lstatSync> | undefined => {
   try {
@@ -86,16 +87,15 @@ export const isPrivateTmpEntry = (clone: Clone, name: string): boolean => {
 /**
  * The store's entries worth linking into a clone -- everything except dotfiles and PID files.
  *
- * And `jira-tickets`, the one-record-per-ticket store: the per-ticket directories a clone
- * links already CONTAIN that content, as hard links, under the names the skills own. A symlink
- * to the record store on top of that would be a second way in, to a path no skill owns.
+ * **`jira-tickets` is one of them, and writing through that link is the point.** The tracker
+ * skill resolves the record store by looking for it beside the per-ticket directories, writes
+ * every record there, and points each cached name at it with a relative link -- so a clone that
+ * cannot reach the store by that path keeps a private store of its own instead, and its records
+ * become the only copies of themselves. The link is what makes a record written in a clone
+ * already be the fleet's one copy, rather than something a later merge has to go and collect.
  */
 export const shareableStoreEntries = (hangar: Hangar, names: readonly string[]): string[] =>
-  names
-    .filter(
-      (name) => !name.startsWith('.') && !isPidFile(name) && name !== jiraTicketsDirname(hangar),
-    )
-    .sort();
+  names.filter((name) => !name.startsWith('.') && !isPidFile(name)).sort();
 
 export const storeEntries = (hangar: Hangar): string[] => {
   try {
