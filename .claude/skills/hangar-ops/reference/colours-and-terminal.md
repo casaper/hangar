@@ -53,10 +53,10 @@ It paints **three independent layers**, because the emulators support wildly dif
 
 | layer  | how                                    | where                                        |
 | ------ | -------------------------------------- | -------------------------------------------- |
-| chrome | iTerm2's OSC 6 tab colour, at full hue | iTerm2                                       |
-| chrome | `tmux set -w` window options, full hue | tmux, which swallows the escape sequences    |
+| chrome | `tmux set -w` window options, full hue | every window `hangar open` creates           |
+| chrome | iTerm2's OSC 6 tab colour, at full hue | iTerm2, in a shell outside tmux              |
 | chrome | OSC 11 background, darkened to a tint  | Konsole, GNOME Terminal/VTE, xterm, kitty, … |
-| chrome | nothing — `hangar open` paints the tab | Terminal.app, which ignores OSC 11           |
+| chrome | nothing at all                         | Terminal.app, which ignores OSC 11           |
 | title  | OSC 0 (plus OSC 30 for Konsole's tab)  | everywhere recognised                        |
 | env    | `HANGAR_CLONE*` variables              | everywhere, with no terminal support at all  |
 
@@ -70,16 +70,30 @@ colour behind text is unreadable. iTerm2 and tmux escape this because they colou
 window-status entry, where full strength is exactly right. On an **unrecognised** terminal the
 chrome and title layers are skipped entirely — a stray escape in someone's output is corruption,
 not colour. If your terminal ignores the OSC 111 reset, set `HANGAR_TERM_BG` to your real
-background and the hook restores that instead.
+background and the hook restores that instead. **Terminal.app understands neither sequence**, so
+a plain shell there gets the title and env layers only -- and a Hangar window there is not a plain
+shell, it is a tmux client, where the chrome comes from tmux's window options like everywhere
+else.
 
 **Under tmux the hook sets five window options** rather than emitting escapes, which tmux would
 swallow: `@hangar_colour` plus `window-status-style`, `window-status-current-style` and both pane
 border styles. So a clone shows up in tmux's own status line and on its pane borders, and it
 works for a window you made yourself with `C-b c`, not only one `hangar open` created. They are
-**window**-scoped and cleared with `set -u`, so two hangars can share one tmux server and a
-window you `cd` out of restores what it had. `tmux show -w` is how to see what painted a window.
+**window**-scoped and cleared with `set -u`, so a window you `cd` out of restores what it had and
+nothing leaks into a sibling. `tmux show -w` is how to see what painted a window.
 
-`hangar doctor` reports the detected driver and its capabilities, whether an rc actually sources
+The status line's own left segment is the one piece `hangar open` paints, at SESSION scope when it
+creates a clone's session: the bar has to be right the instant the window attaches, which is
+before any shell has printed a prompt. So a clone's tmux status bar carries its name in its hue
+from the first frame, and the windows inside it get theirs from the hook on the first `cd`.
+
+The windows `hangar open` creates live on Hangar's own tmux socket, `tmux -L hangar-<id>`, one
+session per clone. That is where to look when a window is open but not in front, or when the
+emulator was closed and the session is still running: `tmux -L hangar-<id> ls`, then
+`tmux -L hangar-<id> attach -t '=<clone>:'`. The socket is private, so the tmux you run for your
+own work never sees any of it -- and a bare `tmux ls` will not find these.
+
+`hangar doctor` reports which emulator was detected and what the tmux server is doing, whether an rc actually sources
 the hook, and — the trap worth knowing — **whether an rc names a file under this hangar that no
 longer exists.** The idiomatic `[ -r X ] && . X` guard means a renamed artifact fails _silently_:
 the colours simply stop, with nothing anywhere to say why.

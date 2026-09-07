@@ -90,7 +90,7 @@ answers about a different application's windows.
 
 `doctor`'s editor row names the two things that differ **between** these editors, both the
 editor's doing: who works out which window already has the clone open (`focus-existing` when
-Hangar must, `self-deduping` when the editor does, `a terminal tab` for terminal vim, which is not
+Hangar must, `self-deduping` when the editor does, `a tmux window` for terminal vim, which is not
 a window at all), and whether there is a setup to keep in step (`sync` / `sync, per-clone paths` /
 `launch only`). It used to print `$PROJECT_DIR$` for Xcode and vim, describing a mechanism neither
 has.

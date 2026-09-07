@@ -1,29 +1,36 @@
-# One window, and finding a clone's past sessions
+# One window per clone, and finding a clone's past sessions
 
-`app/src/commands/open.ts` (394), `resume.ts` (235), `app/src/claude-sessions.ts` (310) and
-`sessions.ts` (164). The terminal-driver capability table is in `app/CLAUDE.md`; this is what the
-two commands do with those capabilities.
+`app/src/commands/open.ts`, `app/src/tmux.ts`, `resume.ts`, `app/src/claude-sessions.ts` and
+`sessions.ts`. The emulator capability table -- who can open a window and who can raise one -- is
+in `app/CLAUDE.md`; this is what the two commands do with it.
 
-- **`hangar open` puts every clone in ONE terminal window and reuses whatever is already
-  open.** Every part of that is gated on the driver's capabilities (`open.ts:184` `inspect`,
-  `:201` `select`, `:370` `openTabs`), and iTerm2 is simply the only driver that has all of
-  them — on GNOME Terminal `open` says so once and only appends.
-  It finds that window by the user variables it stamps on the sessions it creates, so a
-  clone that already has tabs there is selected rather than opened a second time, and a clone
-  whose VS Code workspace is already open gets that window focused — the workspace file exists
-  twice per clone and VS Code counts the two copies as two different workspaces, so it is handed
-  back the exact path it already has. A window it does NOT recognise — opened by hand, or before
-  this change, and already sitting in that clone — makes it stop and ask, because that window may
-  hold a live Claude session and a second one in the same clone is the fleet's worst failure.
-  **Tab order is creation order and nothing else:** iTerm2's AppleScript interface cannot move a
-  tab — `move` is accepted and silently does nothing — so `open` sorts the clones it was given
-  and appends them, then says so when the window ends up out of clone order. Sorting one that
-  already is means dragging the tabs by hand, or closing the window and running `open --all`.
+- **`hangar open` gives a clone ONE window and reuses the one it already has.** The emulator tab
+  it opens is a client attached to that clone's session on this hangar's own tmux socket
+  (`tmux -L hangar-<id>`), and the session holds one tmux window per `terminal.tabs[]` role. So
+  "is this clone already open" is a question with an exact answer -- does the session exist --
+  rather than an inference from what some window's shell happens to be standing in, and a clone
+  that is already open is raised instead of opened a second time. That is not tidiness: a second
+  window in a clone that already has a live Claude session is the fleet's worst failure, and the
+  session name is what makes creating one by accident impossible. A clone whose VS Code workspace
+  is already open gets that window focused too, for a reason that has nothing to do with
+  terminals -- the workspace file exists twice per clone and VS Code counts the two copies as two
+  different workspaces, so it is handed back the exact path it already has.
+
+- **A session outlives the tab attached to it, and that is the point.** Closing the window leaves
+  the clone's session running with whatever was in it, so `hangar open 1` reattaches rather than
+  starting over -- verified by detaching with a marker on screen and finding it again afterwards.
+  `tmux -L hangar-<id> attach -t '=<clone>:'` does the same by hand, and is also the answer on an
+  emulator that cannot bring a window forward.
+
+- **Window order is the order of `terminal.tabs[]`**, because each one is created in turn and tmux
+  numbers them as they arrive. The config's key is `tabs` rather than `windows` for the reason
+  worth keeping: what the developer sees is a tab bar, and a key named after the implementation
+  would need a sentence of explanation on every read.
 
 - **`hangar resume` is the only picker that sees all of a clone's sessions.** Claude Code's
   own `--resume` list is scoped to the directory it was started in, so a session started in
   `clone_01/angular/` is invisible from `clone_01/` — this one reads every transcript directory
-  the clone owns and runs `claude --resume` with the right `cd` baked in, in the tab you typed
+  the clone owns and runs `claude --resume` with the right `cd` baked in, in the window you typed
   it in. Each row is the session's own generated title (its opening request when it never got
   one), and the pane under the list shows what it was asked first and last. The headless
   `claude -p` runs `sync` leaves behind are filtered out by their `sdk-cli` entrypoint. A
@@ -117,12 +124,15 @@ a caller gets a nullable it must handle.
 then `open -a "WebStorm" <dir>` is the only handle left. Linux has no equivalent, and
 `doctor`'s platform row says so rather than letting the fallback vanish.
 
-**GNOME Terminal's `SYNC PAUSE` refusal is a named `CliError`** (`syncPauseUnsupported` in
-`terminal/index.ts`), constructed and printed by `doctor` rather than left as a `false` in a
-capability record nobody prints. It is permanent, not an omission: VTE exposes no API for writing
-into a running tab and `TIOCSTI` has been off by default since Linux 6.2. `sync` still degrades
-correctly — every live session is reported unreachable and it asks before touching the clone —
-but the developer learns that at the moment of the sync, which is the wrong moment.
+**A session Hangar cannot reach is reported, never assumed.** The pause goes into the tmux pane
+on the session's tty, so a `claude` started by hand in a bare emulator tab -- or inside the
+developer's OWN tmux, on the default socket -- has no pane on this socket and gets nothing.
+`procs` finds it by its tty all the same, so it appears in the list and would otherwise read as a
+bug rather than as a session in a place this protocol does not reach; `sync` names which kind of
+miss it is. It still degrades correctly: every unreachable session is reported and `integrate`
+asks before touching the clone. There is no fallback worth having -- VTE exposes no API for
+writing into a running terminal and `TIOCSTI` has been off by default since Linux 6.2, so "type
+at the tty directly" is not a route on the platform that would need it most.
 
 **Two other Linux fixes with no seam of their own.** The `/opt/homebrew/bin/jq` fallback in the
 status line was Homebrew on Apple Silicon and nowhere else; when it misses, every `jq` query
@@ -134,72 +144,88 @@ from the seam (`Tool.pkg` carries the package name, which is almost never platfo
 `installHint` is a function rather than a field because `TOOLS` is a module constant, and a hint
 baked in at import is the trap `hangar.ts` records.
 
-## The tmux driver
+## The tmux layer
 
-`app/src/terminal/tmux.ts`. The fifth terminal driver, and the only one on Linux that carries
-`writeToTty` — which is to say the only one that makes the `SYNC PAUSE` protocol above possible
-on a box without KDE. GNOME Terminal cannot be typed into at all, and Konsole needs `qdbus`
-installed for anything past opening a tab.
+`app/src/tmux.ts`. Every window `hangar open` creates is a tmux window, so everything that could
+ever have differed between emulators happens here instead -- identically on both platforms,
+because it is the same program on both.
 
-| Hangar           | tmux           | why                                                    |
-| ---------------- | -------------- | ------------------------------------------------------ |
-| `TerminalWindow` | a **session**  | a session is what a developer looks at and attaches to |
-| `TerminalTab`    | a **window**   | tmux windows are the tab bar                           |
-| the tag          | window options | `@hangar_*`, tmux's own user-option namespace          |
+**The server is Hangar's, on a private socket.** `tmux -L hangar-<id>`, started with a config
+this CLI generates, and that is what makes the layer safe to be opinionated in: no session of the
+developer's own lives on that server, so status-line format, window naming and -- the reason it
+has to be private -- SERVER options are Hangar's to set. `extended-keys`, which is what makes
+Shift+Enter a newline in Claude Code, is a server option. Two hangars are two sockets, which is
+the same rule the rest of the fleet follows: what a hangar writes where another could reach it
+carries the id, and nothing INSIDE a per-hangar server needs one.
 
-**The tag is a WINDOW option, not a pane option.** A pane inherits its window's options in a
-format lookup, so `list-panes -a -F '#{@hangar_clone}'` reads either — but a tab the developer
-*splits* keeps its tag on every pane only if the option lives on the window. Pane options would
-leave the new pane untagged, and an untagged pane sitting in a clone is exactly what makes `open`
-stop and ask whether some other window is already there.
+| Hangar          | tmux           | why                                                     |
+| --------------- | -------------- | ------------------------------------------------------- |
+| a clone         | a **session**  | a session is what a developer attaches to               |
+| a `tabs[]` role | a **window**   | tmux's window list is the tab bar                       |
+| which hangar    | the **socket** | `-L hangar-<id>`; nothing inside it has to carry the id |
 
-**`$TMUX` is tested before every emulator signal, and that ordering is the point.** Inside tmux
-inside iTerm2, `ITERM_SESSION_ID` is still set — tmux passes the outer environment through — so a
-scan that reached iTerm2 first would drive the wrong layer: a new iTerm2 *tab* beside the
-multiplexer, and a `SYNC PAUSE` typed into whichever pane happened to be showing rather than the
-one holding the session. tmux is also first in `PROBE_ORDER` on both platforms, kept honest by an
-`isAvailable` that demands a running **server** and not just the binary: windows in a session
-nobody is attached to are `open` succeeding while the developer sees nothing.
+**The session NAME is the identity, which is why there is nothing to stamp and read back.** A
+window can be split, renamed or `cd`'d clean out of the clone and still be that clone's window,
+because the session it sits in says so. `open` asks `has-session`: absent, it creates the session
+with a window per role and hands it to an emulator tab; present, it raises. `@hangar_clone` is set
+per session anyway, so a session made by hand on this socket -- it carries the conf's global
+`@hangar_id` and no `@hangar_clone` -- reads as foreign on a fact rather than on a heuristic.
+`@hangar_clone` needs exactly one write at session scope: measured on tmux 3.7c, a session-scope
+user option is visible from a pane-context format too, so a split pane stays attributed without a
+second write.
 
-**`isAvailable` demands an ATTACHED CLIENT, not just a running server**, and that distinction is
-the whole check. A leftover detached session — started for something else and abandoned — makes a
-server-only test answer "available", and this driver is probed first on both platforms. `hangar
-open` from somewhere the environment cannot identify (VS Code's integrated terminal, a hook, a
-`claude -p` child) would then create a session nobody is looking at, `switch-client` would fail
-with `no current client`, and `open` would report success while the developer saw nothing —
-precisely the failure the check exists to prevent, through the one condition an earlier version of
-it did not test. `list-clients` exits 0 with **empty output** when nothing is attached, so the
-output is the answer and not the exit code; both directions were verified here. Tightening it
-cannot break the case tmux exists for: running inside tmux sets `$TMUX`, which `resolveTerminal`
-answers from the environment and never consults `isAvailable` for.
+**Six things tmux enforces silently, each measured before the code was written.** They are the
+reason the argv is a pure builder with a test rather than a call site that got it right once:
 
-**No fleet session yet means a DETACHED one plus `switch-client`.** Detached is the only kind a
-subprocess can create — tmux attaches *clients*, and `hangar` is not one — and `switch-client`
-works precisely when `hangar` was run from inside tmux, which is when this driver gets chosen.
-Outside it, tmux reports `no current client` and the call is a no-op: the windows exist, they are
-just not brought forward, and `tmux attach -t hangar-<id>` finishes the job. The window
-`new-session` unavoidably creates *becomes* the first tab rather than being left beside it — a
-spare untagged window sitting in a clone is the foreign window `open` is built to be suspicious
-of.
+- **`-f` and `-L` are PRE-COMMAND globals.** The SYNOPSIS is `tmux [-f file] [-L socket-name]
+  [command ...]`, while `new-session`'s own `-f` is "a comma-separated list of client flags" --
+  so the config flag written after the subcommand typechecks, runs, and loads nothing.
+- **A missing `-f` file is ignored in silence.** `tmux -f /nonexistent new-session -d -s x` exits
+  0, prints nothing, and creates the session unconfigured. So `hangar open` checks the conf exists
+  itself; nothing downstream could notice.
+- **`-f` rides only on `new-session`**, because the reads cannot start a server: `has-session` and
+  `list-sessions` on a dead socket exit 1 and leave no socket file behind. That is also what makes
+  `hangar open -n` genuinely side-effect free.
+- **A session target is `=name:` and both characters matter.** Targets fall through exact name,
+  then name PREFIX, then glob. With sessions `clone_01` and `clone_1` on one socket,
+  `set -t 'clone_0:' @q v` SUCCEEDED on a prefix match while `set -t '=clone_0:'` answered
+  `no such session`. The trailing colon is needed because `set-option` and `new-window` take a
+  target-pane, where the session part is only recognised before a `:` -- `set -t '=clone_01'`
+  fails with `no such session: =clone_01` while `'=clone_01:'` works.
+- **`.` and `:` in a session name are ACCEPTED.** `new-session -s 'a.b'` and `-s 'c:d'` both
+  succeed and produce a session that can never be addressed afterwards, so the sanitiser is a
+  rewrite rather than a refusal.
+- **`new-session -A -s <name>` matches exactly** -- `-s` takes a name, not a target, and `-A -s yy`
+  beside a session `y` created `yy`. So one string is right for a first open and for reattaching
+  after the tab was closed. What it does on the branch that cannot normally be reached is worth
+  knowing: kill the server between building the session and attaching to it, and `-A` creates a
+  bare session with one unnamed window, no roles and no hue. `open` waits for the client rather
+  than trusting the attach to have found what it built.
+
+**The emulator returns before the client attaches, and that gap is a duplicate waiting to
+happen.** An emulator reports success as soon as it has CREATED a tab, so a second `hangar open`
+moments later sees no client, cannot tell that from a genuinely detached session, and opens
+another tab onto the same clone -- the one direction from which a session name cannot rule out a
+duplicate. `open` waits up to three seconds for the client and treats its absence as a failure,
+which also stops it repeating an emulator's claim to have run a line it dropped. A client appears
+in under 100ms when it works, so the wait is only ever paid when something is wrong.
+
+**`send-keys` and not `new-window -- <command>`.** A window whose command IS its process exits the
+moment that process does, so a `claude` window would vanish on `/exit` instead of leaving the
+shell the developer expects. Confirmed: the command runs and a live shell holds its output.
 
 ### The colour lives in the shell hook, and every `set -w` names `$TMUX_PANE`
 
-**tmux had no colour at all until it was asked about.** `generate/terminal-sh.ts` sent `$TMUX`
-down its `title` family, on the reasoning that the emulator sequences would need DCS passthrough
-and that pane colour is tmux's own business -- so the one driver with the full capability set on
-Linux offered the `env` layer and nothing else, which needs the developer to write their own
-status-line format before anything is visible.
+The hue is painted by `generate/terminal-sh.ts`'s hook rather than from here, and the reason is
+the one that governs every emulator: anything on the opening side paints only what `hangar open`
+created, and the hook paints whatever `$PWD` is in -- so a window made with `C-b c` inside a
+clone's session is coloured too, and so is a shell in a clone that is not in tmux at all.
 
-It is fixed in the **hook**, not here, and the driver still declares `paintOnCreate: false`. That
-is now a positive statement rather than a gap. Two reasons, and the second is the one that
-decides it:
-
-- A driver only paints tabs `hangar open` created; the hook paints whatever `$PWD` is in, so a
-  window made with `C-b c` is coloured too. That is the same argument `TerminalCapabilities`
-  already makes for every emulator except Terminal.app.
-- The value a `paintOnCreate` driver receives is the **tinted background** (`commands/open.ts`),
-  because that is the surface Terminal.app paints. A tmux window-status entry wants the full hue,
-  so routing tmux through the seam would mean carrying two colours through it for one consumer.
+The one piece `open` paints itself is `status-left`, at SESSION scope when it creates the
+session. Two reasons, and the second decides it: the status bar has to be right the instant the
+client attaches, which is before any shell has printed a prompt and so before the hook has run
+once, and `status-left` IS a session option -- the hook could only reach it with `-g`, which would
+have whichever clone was entered last recolour the bar of every other session on the socket.
 
 The hook sets five window options -- `@hangar_colour`, `window-status-style`,
 `window-status-current-style`, and both pane border styles. All five were confirmed settable per
@@ -209,12 +235,13 @@ each other's values instead of flattening them; never `-g`, which would have the
 entered recolour every window of both.
 
 **`-t "$TMUX_PANE"` on every call, and it is load-bearing.** `set -w` with no target is the
-session's ACTIVE window, not the window the calling shell is in. Without it, two clone windows in
-one session got this: entering `clone_02` in window 1 put `clone_02`'s hue on **window 0** and
-left window 1 with none. A pane id is a legal target for a window option and resolves to that
+session's ACTIVE window, not the window the calling shell is in. Without it, two windows in one session
+got this: entering a clone's directory from window 1 put its hue on **window 0** and left window 1
+with none. It still happens inside one clone's session -- a `cd` into a sibling clone's directory
+is a second hue in one session, and a window made with `C-b c` is a second window to get wrong. A pane id is a legal target for a window option and resolves to that
 pane's own window, so the fix costs no extra exec -- tmux sets `TMUX_PANE` in every pane, and it
-keeps working from a split, which is the same property that put the `@hangar_*` tags at window
-scope above. This was found by opening two windows in one session and reading the options back,
+keeps working from a split, which is the same property that makes a split pane keep its
+clone. This was found by opening two windows in one session and reading the options back,
 which is the only way it shows up: with a single window the wrong target and the right one are
 the same window.
 
@@ -228,13 +255,19 @@ message beginning with a dash. The newline has to be its own call for the same r
 used: without it the line sits unsent on the agent's input, which is the worst of the three
 outcomes — delivered, and not read.
 
-### Exercised, unlike its two Linux neighbours
+### Exercised, unlike two of the four window-openers
 
 Konsole and GNOME Terminal ship on documentation alone and their headers say so. tmux does not,
-because it is the same program on macOS: against tmux 3.7c here, `openTabs` created a detached
-session and tagged its windows, `pickFleetWindow` found it and a later tab appended to it,
-`windows()` read the tags back and reported a bystander session as untagged, re-tagging one
-window `@hangar_id other_hangar` made it read as foreign, `select` moved the active window to the
-named clone's `claude` tab and returned false for a clone with no tabs, and a real `SYNC PAUSE`
-line landed in the pane on the named tty and — confirmed with `capture-pane` — in **no** other.
-A tty nothing owns returns false, so `sync` reports a miss rather than claiming a pause.
+because it is the same program on macOS. Against tmux 3.7c here: a session created per clone with
+a window per role, the roles read back in `tabs[]` order, `has-session` answering correctly for a
+clone with a session and one without, a second `open` of the same clone raising the existing
+session and creating nothing, a detached clone reattached with its shell's scrollback intact, four
+sessions carrying four distinct `status-left` hues with no global leak, and a real `SYNC PAUSE`
+line landed in the pane on a named tty and -- confirmed with `capture-pane` -- in **no** other of
+four. A tty nothing owns returns false, so `sync` reports a miss rather than claiming a pause.
+
+iTerm2 is exercised on this machine, and three of its behaviours are recorded in `iterm2.ts`
+rather than here because they are that driver's own: `write text` into a session that was just
+created is accepted and dropped, a bare `create tab with default profile` returns `missing
+value`, and `command` is argv rather than a shell line -- so `exec` starts nothing and PATH is the
+application's, which is why the attach command names tmux by absolute path.

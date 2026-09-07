@@ -35,11 +35,18 @@ browser test run — that isolation is the entire reason the fleet exists.
   that clone and then verified mechanically; if that fails the whole thing is rolled back rather
   than left half-merged.
 - **It talks to the session in the clone.** There is no API for messaging a running interactive
-  Claude Code session, so `sync` finds its terminal and types a `SYNC PAUSE` line into it, then
-  exactly one `SYNC FINISHED` or `SYNC ABORTED`. An agent in that clone knows to stand still.
-- **One window for the whole fleet.** `hangar open` puts every clone's tabs in a single terminal
-  window, on a freshly fast-forwarded default branch, with the editor opened alongside — and reuses
-  whatever is already open instead of starting a second session in a clone.
+  Claude Code session, so `sync` finds its tty, maps it to the tmux pane on that tty and puts a
+  `SYNC PAUSE` line on its input, then exactly one `SYNC FINISHED` or `SYNC ABORTED`. An agent in
+  that clone knows to stand still. It goes through tmux because typing at a raw tty is not a
+  portable option — VTE exposes no API for it and the generic POSIX route (`TIOCSTI`) has been off
+  by default on Linux since 6.2 — and a session in no such pane is reported unreachable rather
+  than assumed paused.
+- **One window per clone.** `hangar open 1` opens a tab in your terminal attached to clone 1's own
+  tmux session — one tmux window per configured role — on a freshly fast-forwarded default branch,
+  with the editor opened alongside. Run it again and that window comes to the front; you never get
+  a second one, and a clone whose tab you closed reattaches with whatever was still running in it.
+  The tmux server is Hangar's own, on a private socket, so none of it disturbs the tmux you
+  already run.
 - **Colour identity.** Near-identical terminal windows are the fleet's usability problem, so every
   clone gets a hue that shows up in its Claude Code status line, its prompt border, and the
   terminal window itself.
@@ -98,11 +105,12 @@ under whatever Node comes first on PATH, and a shell where direnv has not loaded
 
 **Recommended:** `ripgrep`, `ripgrep-all`, `tree`, `git-lfs`, `git-extras`, `git-filter-repo`.
 
-**Platform:** macOS is the platform this has actually been run on. On Linux, **run the fleet under
-tmux** — Hangar has a tmux driver that was exercised here (tmux is the same program on both), and
-it is the only route that can deliver a `SYNC PAUSE` into a live session on a machine without KDE.
-The Konsole and GNOME Terminal drivers are written from documentation and have not been exercised
-against live ones, and GNOME Terminal cannot be typed into at all. VS Code is the only editor that
+**Platform:** macOS is the platform this has actually been run on. What builds a clone's windows
+is tmux on a private socket — the same program on Linux, and what carries a `SYNC PAUSE` into a
+live session — so the only thing that differs between the two platforms is which emulator hosts
+the window. The iTerm2 and Terminal.app window-openers are exercised here; the Konsole and GNOME
+Terminal ones are written from documentation and have not been run against live terminals, and
+GNOME Terminal cannot bring a window it opened to the front. VS Code is the only editor that
 is exercised; the other eight kinds are best effort. `hangar doctor` prints a platform row and a
 session-detection row on every OS — read those first.
 
@@ -257,7 +265,7 @@ it is worth reading once, straight through. The groups that matter when you are 
 | `tracker`  | `kind` (`jira` or `none`), `baseUrl`, key prefixes, cache scripts                 |
 | `repo`     | `appDir`, which directories get a direnv file, the clone's own env file, symlinks it needs, the install step, the command that reports its ports |
 | `ports`    | `step`, `offset`, and one `roles` entry per server your repo runs                 |
-| `terminal` | which tabs `hangar open` creates per clone, and where each one starts             |
+| `terminal` | which tmux windows `hangar open` creates per clone, where each starts, and which emulator hosts them |
 | `editor`   | `kinds` (a list — a clone can be open in several at once), workspace file naming, and `rootPathKeys` for the VS Code settings that take an absolute path into the checkout |
 | `secrets`  | the shared secrets file and its mode                                              |
 
@@ -345,11 +353,12 @@ is narrower than it was:
      `claude sessions` row saying how many processes it looked at, how many matched, and when none
      did, which command names mention `claude` anyway. Your first `doctor` answers this in a line;
      please report what it says.
-   - **The Konsole and GNOME Terminal drivers have never run against a live terminal.** They are
-     written from Konsole's documented D-Bus interface and gnome-terminal's documented command
-     line. **tmux is the exception** and is the recommended answer on Linux: it is the same program
-     on macOS, where all five of its capabilities were exercised, and it is the only route that can
-     deliver a `SYNC PAUSE` at all on a machine without KDE. GNOME Terminal structurally cannot —
+   - **The Konsole and GNOME Terminal window-openers have never run against a live terminal.**
+     They are written from Konsole's documented D-Bus interface and gnome-terminal's documented
+     command line, and each is one command line plus, for Konsole, a D-Bus call to bring a window
+     forward. Everything inside the window is tmux, which is the same program here and was
+     exercised here — so what is unverified on Linux is which emulator comes up, not what happens
+     in it. GNOME Terminal structurally cannot —
      VTE has no API for it and `TIOCSTI` has been off by default since Linux 6.2 — and `doctor`
      says so by name rather than leaving a capability quietly false.
 
@@ -399,9 +408,9 @@ configured fleet ("copy the example and stop") routes around `setup` entirely.
   and closed with `No problems in 0 clone(s).` It now counts both halves and says which is which.
   The exit code is still 0 — in this CLI a `--check` flag is the gate and a report is a report —
   so read the summary line, never `$?`.
-- **`open` had no `-n` while this file said three commands lacked one.** It has one now, which
-  matters more than the omission looked: `open --all` fetches and moves a branch in every clone,
-  and `--no-checkout` is a way to not do that rather than a way to see it first.
+- **`open` had no `-n` while this file said three commands lacked one.** It matters more than
+  the omission looked: `open --all` fetches and moves a branch in every clone, and
+  `--no-checkout` is a way to not do that rather than a way to see it first.
 - **`.envrc.hangar` could not find Homebrew on an Intel Mac.** `brew shellenv` exports
   `HOMEBREW_PREFIX` and is in the Apple-silicon install instructions but not the older Intel one,
   so a machine with Homebrew at `/usr/local` aborted `direnv allow` with "requires Homebrew". It
@@ -629,8 +638,8 @@ hangar rebase-default 2
 hangar checkout-default 2   # fetch, check out the repo's default branch, fast-forward it
 hangar checkout 2           # alias
 
-hangar open 1 -n            # the branch, tabs and editors it would touch, changing nothing
-hangar open 1               # a terminal window with this clone's tabs, plus its editor
+hangar open 1 -n            # the branch, windows and editors it would touch, changing nothing
+hangar open 1               # a tab attached to this clone's tmux session, plus its editor
 hangar open --all
 hangar open 2 -b feature/x  # check out this branch instead of the default one
 hangar open 2 --no-checkout --no-claude --no-editor
@@ -805,7 +814,8 @@ echo 'source ~/code/my_fleet/clone-terminal.sh' >> ~/.zshrc
 | `git checkout <branch>` refuses, "matched multiple remote tracking branches" | The sibling remotes all have that branch. `hangar doctor --fix` restores the `checkout.defaultRemote=origin` that resolves it. |
 | `hangar sync` refuses to start                                 | The clone is mid-rebase or mid-merge. Finish or abort that first — step one is a stash, and it would bury the half-applied state. |
 | An editor never opens                                          | `hangar doctor` prints a row per configured editor with whether it can actually be launched. A `code` command that was never installed into PATH means `hangar open` silently opens no editor. |
-| `hangar open` created no new tab (Terminal.app)                | Terminal.app needs Accessibility permission for the terminal you ran `hangar` from. `open` checks and says what to allow. |
+| `hangar open` opened a window where you asked for a tab (Terminal.app) | A Terminal.app TAB can only be made by sending Cmd-T through System Events, which needs Accessibility permission for the terminal you ran `hangar` from. `open` checks the tab count actually grew, falls back to a window, and says what to allow. |
+| `hangar open` opened a window but it is not in front | GNOME Terminal cannot raise a window it opened. The window is there — `tmux -L hangar-<id> attach -t '=<clone>:'` from any shell, or `tmux -L hangar-<id> ls` to see the fleet's sessions. |
 
 **Known gap, stated plainly:** the mode badge is new. It takes the mode from three independent
 channels — the status line's own arguments, an environment variable set only by the launcher, and
@@ -819,7 +829,7 @@ answer. If `hangar-ops` gives you `NO MODE`, that is the bug.
 | Read this                                    | For                                                                       |
 | -------------------------------------------- | ------------------------------------------------------------------------- |
 | `CLAUDE.md` (hangar root)                    | the fleet map — who is who, the ports, how the clones exchange commits. Loaded into every session in every clone, which is why it is short |
-| `app/CLAUDE.md`                              | changing the CLI: package layout, conventions, the code map, the four seams |
+| `app/CLAUDE.md`                              | changing the CLI: package layout, conventions, the code map, the five seams |
 | `hangar.config.example.yaml`                 | every config key, every alternative, and why each exists                  |
 | `.claude/skills/hangar-ops/`                 | the full command surface — every flag and default                         |
 | `.claude/skills/hangar-internals/`           | why each command is built the way it is. Six reference files, one subsystem each |

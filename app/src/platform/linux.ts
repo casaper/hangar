@@ -6,7 +6,7 @@ import type { PlatformDriver } from './types.ts';
 
 /**
  * Linux. **Written from the specifications, not exercised** -- the same standing this CLI's
- * Konsole and GNOME Terminal drivers have, and for the same reason: nothing here runs Linux.
+ * Konsole and GNOME Terminal window-openers have, and for the same reason: nothing here runs Linux.
  * Each claim below names where it comes from so a first run on Linux can check it rather than
  * trust it.
  *

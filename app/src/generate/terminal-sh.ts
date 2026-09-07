@@ -14,11 +14,12 @@ export type TerminalColourSettings = {
  *
  * ## Why the shell does the colouring and not the CLI
  *
- * The colour has to be right for a tab the developer opened BY HAND, not only for the three
- * `hangar open` created, and it has to follow them when they `cd` from one clone to another in
- * the same tab. Only the shell knows when that happens. `hangar open` paints just one case the
- * shell cannot reach: Terminal.app, which ignores the escape sequence entirely -- see the
- * `paintOnCreate` capability.
+ * The colour has to be right for a window the developer opened BY HAND -- a `C-b c` inside a
+ * clone's session, or a shell in a clone that is not in tmux at all -- and not only for the ones
+ * `hangar open` created. It also has to follow them when they `cd` from one clone into another in
+ * the same window. Only the shell knows when either happens. The one thing `hangar open` paints
+ * itself is the session's `status-left`, which has to be right before any shell has printed a
+ * prompt.
  *
  * ## Why a chpwd hook rather than direnv
  *
@@ -32,10 +33,10 @@ export type TerminalColourSettings = {
  *
  * | layer  | how                                        | works in                                  |
  * | ------ | ------------------------------------------ | ----------------------------------------- |
- * | chrome | iTerm2's OSC 6 tab colour                  | iTerm2 -- the full hue, on the tab itself |
- * |        | `tmux set -w` window options               | tmux -- the full hue, on its own chrome   |
+ * | chrome | `tmux set -w` window options               | every window `hangar open` creates        |
+ * |        | iTerm2's OSC 6 tab colour                  | iTerm2, in a shell outside tmux           |
  * |        | OSC 11 background, darkened to a tint      | Konsole, VTE (GNOME Terminal), xterm, …   |
- * |        | nothing; `hangar open` uses AppleScript    | Terminal.app                              |
+ * |        | nothing at all                             | Terminal.app, which understands neither   |
  * | title  | OSC 0 (and OSC 30 for Konsole's tab)       | everywhere                                |
  * | env    | `HANGAR_CLONE*` variables                  | everywhere, with no terminal support at all |
  *
@@ -43,22 +44,17 @@ export type TerminalColourSettings = {
  * prompt, a starship config or a tmux status line can colour itself from `HANGAR_CLONE_SGR`
  * without the emulator co-operating in any way.
  *
- * ## tmux is coloured HERE and not by the terminal driver
+ * ## tmux is coloured HERE, on every `cd`, and not where the window was opened
  *
- * tmux swallows the emulator's escape sequences, so under it this hook used to fall through to
- * `title` and a tmux user got no colour at all -- the one full-capability driver on Linux, and
- * the only layer it had was `env`, which needs the developer to write their own status-line
- * format. The driver looks like the obvious place to fix that, and is not, for two reasons.
+ * tmux swallows the emulator's escape sequences, so under it the chrome layer is tmux's own
+ * window options instead. Doing that here rather than where `hangar open` creates a window is
+ * what makes it cover a window the developer made themselves with `C-b c`, or a `cd` from one
+ * clone's directory into another's -- neither of which anything on the opening side ever sees.
  *
- * A driver only ever paints tabs `hangar open` created, whereas this hook paints whatever `$PWD`
- * is in -- so a window made with `C-b c` gets its colour too, which is the same argument
- * `TerminalCapabilities.paintOnCreate` already makes for every other emulator. And the value a
- * `paintOnCreate` driver is handed is the TINTED background (`commands/open.ts`), which is the
- * wrong colour for a status-line entry; routing tmux through the seam would mean carrying two
- * colours through it for one consumer.
- *
- * So `tmux.ts` keeps `paintOnCreate: false`, and that is now a positive statement -- the hook
- * covers it -- rather than the gap it was.
+ * The one piece `open` does paint is the session's `status-left`, at session scope when it
+ * creates the session: the status bar has to be right the instant the client attaches, which is
+ * before any shell has printed a prompt, and it is a session option this hook could only reach
+ * with `-g` -- which would have the last clone entered recolour every other session's bar.
  *
  * ## Why the background is a TINT and not the hue
  *

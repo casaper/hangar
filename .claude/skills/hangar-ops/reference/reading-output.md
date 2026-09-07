@@ -62,7 +62,7 @@ it prints beside each number). Never read a clone's ports from a parent session;
 
 ## `hangar doctor`
 
-Hangar-level rows come first (the detected terminal driver and its capabilities, one row per
+Hangar-level rows come first (the detected emulator, the tmux server, one row per
 configured editor and whether it can actually be launched, the recorded default branch versus each
 clone's `origin/HEAD`, the declared secret variables, any stray PID files in the shared store),
 then one section per clone.
@@ -127,7 +127,7 @@ Four things to say correctly when you relay a report:
   closes it, while a hangar one is as often a decision (a credential to paste, one line in a
   tracked settings file). It used to count only the clone half, so a fresh hangar printed five
   warnings and then `No problems in 0 clone(s).` What it deliberately does NOT count is the
-  machine's capabilities — a `ps` that will not run, a terminal that cannot be typed into — since
+  machine's capabilities — a `ps` that will not run, an emulator that cannot raise a window — since
   those are facts about where the fleet runs, permanent on some platforms, and a check red in
   normal operation is a check nobody reads. **Never read exit 0 as "healthy": in this CLI a
   `--check` flag is the gate (`config schema --check`, `colours sync --check` both exit 1) and a

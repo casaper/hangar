@@ -122,69 +122,6 @@ const cwdsOf = (pids: readonly number[]): Map<number, string> => {
 const isInside = (child: string, parent: string): boolean =>
   child === parent || child.startsWith(`${parent}/`);
 
-/** The short form `ps` prints: `ttys004` from `/dev/ttys004`, `pts/3` from `/dev/pts/3`. */
-const shortTty = (tty: string): string => tty.replace(/^\/dev\//, '');
-
-/**
- * Where the SHELL on each of these ttys is standing.
- *
- * This exists for the terminal drivers that can list their tabs but cannot label them --
- * Terminal.app and Konsole, which have no equivalent of iTerm2's per-session user variables. A
- * tab Hangar did not open is only interesting for one question ("is some window already sitting
- * in this clone?"), and answering it needs the tab's directory; the emulators hand out a tty and
- * nothing else, so the mapping is done here from the process table.
- *
- * Which process on the tty? The TOPMOST one -- the row whose parent is not itself on this tty,
- * which is the login shell. Not the deepest: the shell's cwd is what a `cd` moves and what the
- * developer means by "where that tab is", whereas the frontmost child is as likely to be a pager
- * standing wherever it was launched. A tty with no such row (unusual, but a reparented process
- * would do it) falls back to its lowest pid, which is the oldest process on it.
- *
- * One `ps` and one `lsof` for every tty asked about, because `open` asks about all of them at
- * once and a call per tab would be slower than the AppleScript that produced the list.
- */
-export const cwdByTty = (ttys: readonly string[]): Map<string, string> => {
-  const out = new Map<string, string>();
-  if (ttys.length === 0) return out;
-  const wanted = new Set(ttys.map(shortTty));
-  const res = run('ps', ['-axo', 'pid=,ppid=,tty=']);
-  if (!res.ok) return out;
-
-  const rows: { pid: number; ppid: number; tty: string }[] = [];
-  for (const line of res.stdout.split('\n')) {
-    const match = /^\s*(\d+)\s+(\d+)\s+(\S+)\s*$/.exec(line);
-    if (!match?.[1] || !match[2] || !match[3]) continue;
-    if (!wanted.has(match[3])) continue;
-    rows.push({
-      pid: Number.parseInt(match[1], 10),
-      ppid: Number.parseInt(match[2], 10),
-      tty: match[3],
-    });
-  }
-
-  const onTty = new Map<string, typeof rows>();
-  for (const row of rows) {
-    const list = onTty.get(row.tty) ?? [];
-    list.push(row);
-    onTty.set(row.tty, list);
-  }
-
-  const chosen = new Map<number, string>();
-  for (const [tty, list] of onTty) {
-    const pids = new Set(list.map((r) => r.pid));
-    const tops = list.filter((r) => !pids.has(r.ppid));
-    const pick = (tops.length > 0 ? tops : list).reduce((a, b) => (a.pid <= b.pid ? a : b));
-    chosen.set(pick.pid, tty);
-  }
-
-  const cwds = cwdsOf([...chosen.keys()]);
-  for (const [pid, tty] of chosen) {
-    const cwd = cwds.get(pid);
-    if (cwd !== undefined) out.set(tty, cwd);
-  }
-  return out;
-};
-
 /**
  * How a Claude Code process is recognised in the process table.
  *

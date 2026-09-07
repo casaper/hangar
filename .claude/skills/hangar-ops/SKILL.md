@@ -1,6 +1,6 @@
 ---
 name: hangar-ops
-description: How to drive the hangar CLI on the user's behalf — addressing clones by index, which commands only report and which move git state or open windows, running -n first, the five commands that ask a human a yes/no question on /dev/tty and skip when there is no terminal, and the Bash timeout that will kill a sync mid-rebase. Load when the user asks what the fleet is doing, to sync or check out or open a clone, to add or remove one, to recolour one, why doctor is red, or for any hangar command's flags. This is the operator's manual; hangar-internals is why the commands are built the way they are.
+description: How to drive the hangar CLI on the user's behalf — addressing clones by index, which commands only report and which move git state or open windows, running -n first, the four commands that ask a human a yes/no question on /dev/tty and skip when there is no terminal, and the Bash timeout that will kill a sync mid-rebase. Load when the user asks what the fleet is doing, to sync or check out or open a clone, to add or remove one, to recolour one, why doctor is red, or for any hangar command's flags. This is the operator's manual; hangar-internals is why the commands are built the way they are.
 ---
 
 # Driving `hangar`
@@ -59,7 +59,7 @@ pre-approve one without the other.
 
 - **`-n` first, always, on anything that acts** — it prints every decision the real run would make
   and changes nothing. Report the dry run before proposing the real thing.
-- **Four acting commands have no `-n`:** `open`, `add-clone`, `remove-clone`, `colours change`. For
+- **Three acting commands have no `-n`:** `add-clone`, `remove-clone`, `colours change`. For
   those, the report is `hangar list` / `hangar status <n>` / `hangar colours list` beforehand. For
   `doctor`, the bare command *is* the dry run. For `config schema`, `--check` is.
 - **`hangar resume -n <count>` is `--limit`, not `--dry-run`.** The only place in this CLI where
@@ -95,7 +95,7 @@ Run it with `run_in_background: true`, or `timeout: 600000`. **Never bare.** The
 
 While the resolver runs it streams a dim line per tool call. That is progress, not a hang.
 
-## Five commands ask a human, and you are not one
+## Four commands ask a human, and you are not one
 
 `confirm()` reads from `/dev/tty`, so with no terminal — your situation — it returns **false**. Each
 of these then **skips and prints why**. Nothing destructive happens; the risk is reading
@@ -105,7 +105,7 @@ Only two have a clean escape:
 
 - **`teach-rg -y`** and **`setup -y`** — the confirmation is the only gate, and `-y` answers it.
 
-The other three do not, and naming a flag for them would be wrong:
+The other two do not, and naming a flag for them would be wrong:
 
 - **`checkout-default`, live session in the clone.** `--include-busy` skips the question, but the
   question *is* the protection — this command switches a branch under a working agent and, unlike
@@ -115,12 +115,11 @@ The other three do not, and naming a flag for them would be wrong:
   gate — it skips notification entirely, so no live session is ever paused. That converts the gate
   into exactly the failure `SYNC PAUSE` exists to prevent: two agents editing one file. If sessions
   cannot be reached, hand the command to the user.
-- **`open`, a foreign window already sits in the clone.** No flag exists. Hand it over.
 
 **`resume` with no terminal degrades usefully:** instead of the interactive picker it prints the
 session list, which you can read and relay. You cannot pick from it — which is also why it counts as
 a report in your hands and not in the user's: at a real terminal, picking a row runs
-`claude --resume` in that tab.
+`claude --resume` in that window.
 
 ## Reading the output
 

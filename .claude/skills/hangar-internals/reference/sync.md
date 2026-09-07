@@ -5,7 +5,7 @@ The most dangerous command in the CLI and the two that share its machinery.
 `landOnBranch`.
 
 - **`hangar sync` types into a live Claude session.** There is no CLI mechanism to message a
-  running interactive session, so it finds the session's tty, maps it to an iTerm2 tab and writes
+  running interactive session, so it finds the session's tty, maps it to the tmux pane on that tty and writes
   a pause message, then a closing message afterwards. Each one leads with a marker —
   `SYNC PAUSE`, then **exactly one** `SYNC FINISHED` or `SYNC ABORTED`, which the pause promises
   and a `finally` delivers. That guarantee is the point: six paths lead out of a sync between
@@ -82,9 +82,9 @@ The most dangerous command in the CLI and the two that share its machinery.
   hand while it is working.** It is aborted after 10 minutes
   (`ORCH_UTIL_RESOLVE_TIMEOUT_MS` overrides), and the headless session id it prints is the
   transcript to read afterwards.
-- **`hangar open` lands each clone on a branch before it opens a single tab**, through the same
+- **`hangar open` lands each clone on a branch before it opens a single window**, through the same
   `landOnBranch` that `checkout-default` is built on — one implementation, so the two cannot end
-  up with different ideas of which trees are safe to move. Order matters: one of those tabs runs
+  up with different ideas of which trees are safe to move. Order matters: one of those windows runs
   `claude`, and a session that starts before the checkout reads one tree while the developer
   looks at another. Severity is where they differ: a `CliError` from the landing is the ANSWER to
   `checkout-default` and only a warning here, after which the clone is opened on whatever branch

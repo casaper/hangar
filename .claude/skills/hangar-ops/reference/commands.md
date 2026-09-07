@@ -73,12 +73,11 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   branch — and only the strategy differs. `--strategy` outranks the name.
 - **`--onto <ref>` skips the pull-request lookup entirely.** Reach for it only when the user names
   a target; the lookup is usually the right answer and is printed on every run.
-- **`open` has a `-n` now, and it is worth running.** It prints the branch each clone would land
-  on (or why it would be left alone), the tabs it would create or select, and the editors it
-  would launch — and changes nothing. It also does not ASK: where the real run would prompt about
-  opening a second set of tabs in a window Hangar did not open, the dry run says the real run
-  would ask and moves on. `--no-claude`, `--no-editor` and `--no-checkout` still narrow what the
-  real run does; `-n` is how you see it first.
+- **`open -n` is worth running before the real thing.** It prints the branch each clone would
+  land on (or why it would be left alone), the tmux session and windows it would create or the
+  window it would bring forward, the attach line verbatim, and the editors it would launch — and
+  changes nothing. `--no-claude`, `--no-editor` and `--no-checkout` still narrow what the real run
+  does; `-n` is how you see it first.
 - **`remove-clone --force` is the one genuinely unrecoverable flag in this CLI** — its own help says
   uncommitted work is NOT recoverable. Never pass it without the user asking for it in those terms.
 - **`add-clone --no-install` leaves the clone unusable** until someone runs `hangar install
@@ -94,11 +93,21 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   finding, not a quiet nothing** — it means `sync --all` will not skip busy clones and no
   `SYNC PAUSE` can be delivered. When that happens the row names the command names that mention
   `claude` anyway; report those, they are the whole diagnosis.
-- **Inside tmux, Hangar drives tmux and not the emulator around it** — `$TMUX` beats every other
-  signal, so `open` makes tmux *windows* in one tmux *session* rather than tabs in iTerm2. If a
-  new fleet session is created while you are not attached to tmux, the windows are there but not
-  in front: `tmux attach -t hangar-<id>`. `terminal.kind` in `hangar.config.yaml` overrides the
-  detection, and `doctor`'s `terminal` row is where to check what it picked.
+- **Every window Hangar opens is a tmux window, on Hangar's own socket.** `hangar open <n>` opens
+  one emulator tab per clone attached to that clone's session, with one tmux window inside it per
+  `terminal.tabs[]` role; `--window` puts it in a window of its own. A clone that is already open
+  is brought forward and nothing is written to its session, and a clone whose tab was closed
+  reattaches to the session it still has — with whatever was running in it. **`--all` is one tab
+  per clone, so on a four-clone fleet it opens four**, each with its own session and its own hue;
+  name the clones you want if that is not what you meant.
+  `tmux -L hangar-<id> ls` lists the fleet's sessions from any shell and
+  `tmux -L hangar-<id> attach -t '=<clone>:'` gets you back into one by hand, which is also the
+  answer when the emulator cannot bring a window forward (GNOME Terminal). That socket is
+  private, so none of this touches the tmux the user runs for their own work — and a bare
+  `tmux ls` will not see it. `terminal.kind` names which emulator hosts the window and overrides
+  the detection; `terminal.kind: none` opens no window at all and prints the attach line instead,
+  which is a mode rather than a failure. `doctor`'s `emulator` and `tmux` rows are where to check
+  what it picked and what the server is doing.
 - **`status`'s `servers` row now finds a server two ways** — a `*.pid` file, or something
   listening on one of the clone's ports. A port-found server is shown as
   `<role> (pid N, listening on P)`. `no pid file — ports not checked (no lsof)` is **not** "nothing

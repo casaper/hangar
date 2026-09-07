@@ -223,10 +223,10 @@ than no summary.
 `doctor()` now holds a local `problem()` beside the plain `warn()`, and which one a site uses is
 the whole decision. **Everything about this hangar's own state counts**, including the one-time
 manual steps `--fix` deliberately will not close: those go to zero once somebody does them, which
-is what a setup check is for. **The machine's CAPABILITIES do not** -- a `ps` that will not run, a
-terminal with no `writeToTty`. Those are facts about where the fleet is running and are permanent
-on some platforms, so counting them would leave a correctly configured GNOME Terminal hangar
-permanently non-zero. The dim `optional:` secret rows stay out by construction, since they go
+is what a setup check is for. **The machine's CAPABILITIES do not** -- a `ps` that will not run, an
+emulator that cannot bring a window it opened to the front. Those are facts about where the fleet
+is running and are permanent on some platforms, so counting them would leave a correctly
+configured GNOME Terminal hangar permanently non-zero. The dim `optional:` secret rows stay out by construction, since they go
 through `note`. The five `report*` helpers return their warning MESSAGES (`readonly string[]`)
 rather than sharing a mutable module variable, for the reason `two-hangars.test.ts` exists -- the
 count is `.length`, so there is one source for both the tally and the recap below.

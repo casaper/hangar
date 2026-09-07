@@ -45,10 +45,10 @@ export type EditorCapabilities = {
    *
    * True only for terminal vim, and only when no GUI vim is installed. It exists because the
    * alternative is worse in both directions: launching terminal vim as a subprocess would attach
-   * it to the tty `hangar` is running on and hold the command hostage, while opening a tab from
-   * inside the driver would put it in a window of its own -- the driver knows nothing about which
-   * window is the fleet's. Letting `open` add the tab through the terminal driver it is already
-   * using is what keeps it beside the clone's other tabs, in clone order.
+   * it to the tty `hangar` is running on and hold the command hostage, while opening a window
+   * from inside the driver would put it somewhere of its own -- this driver knows nothing about
+   * the clone's tmux session. Letting `open` add it as one more window in that session is what
+   * keeps it beside the clone's configured roles.
    */
   readonly inTerminalTab?: boolean | undefined;
 };

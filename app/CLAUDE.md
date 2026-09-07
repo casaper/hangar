@@ -363,9 +363,9 @@ stale on the next commit and nothing checks it, so run `wc -l` when you want one
 | commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`, `install`                                                                                                                                                                                                                                                                                                                                                                                         |
 | config                | `config/schema.ts` (the zod authority), `default-branch.ts`, `load.ts` (discovery + precedence), `derive.ts`, `json-schema.ts`, `drift.ts` (the example-vs-live comparison `config validate` runs)                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | per-clone artifacts   | `clone-config.ts` — the byte-compared builders `doctor` holds every clone to; `colour-assignments.ts`; `ports.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| generators            | `generate/` — `terminal-sh.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| generators            | `generate/` — `terminal-sh.ts`, `tmux-conf.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | editor drivers        | `editor/` — `vscode.ts`, `jetbrains.ts`, `index.ts`, `kinds.ts`, `types.ts`, `launch-only.ts`, `emacs.ts`, `vim.ts`, `zed.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| terminal drivers      | `terminal/` — `apple-terminal.ts`, `konsole.ts`, `iterm2.ts`, `index.ts`, `types.ts`, `gnome-terminal.ts`, `applescript.ts`, `none.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| emulator drivers      | `terminal/` — one window-opener each: `iterm2.ts`, `apple-terminal.ts`, `konsole.ts`, `gnome-terminal.ts`, `none.ts`, plus `applescript.ts`, `index.ts`, `types.ts`. Everything a window CONTAINS is `tmux.ts`, in the shared row                                                                                                                                                                                                                                                                                                                                                                                               |
 | platform              | `platform/` — `darwin.ts`, `linux.ts`, `index.ts`, `types.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | git / forge / tracker | `git.ts`, `bitbucket.ts`, `jira-records.ts`, `jira.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | fleet                 | `fleet.ts` — clone discovery, and everything per-clone derived from the index                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -377,7 +377,12 @@ implementations are equivalent. Adding a kind means implementing the interface a
 callers degrade one capability at a time instead of branching on a product name:
 
 - `editor/types.ts` — `EditorCapabilities` / `EditorDriver`; registered in `editor/kinds.ts`
-- `terminal/types.ts` — `TerminalCapabilities` / `TerminalDriver`; registered in `terminal/index.ts`
+- `terminal/types.ts` — `EmulatorCapabilities` / `EmulatorDriver`; registered in
+  `terminal/index.ts`. It answers one question — _which program can open a window and raise one_ —
+  because everything that needs enumerating, naming and typing into happens inside the hangar's own
+  tmux server (`src/tmux.ts`). That is one implementation of nothing else, so it is a module rather
+  than a sixth seam: a seam here is a capability record plus a driver interface, BECAUSE the
+  implementations are not equivalent
 - `platform/types.ts` — `PlatformCapabilities` / `PlatformDriver`; registered in
   `platform/index.ts`. The only one **not** overridable by config: `editor.kinds` and
   `terminal.kind` name a preference, this names a fact
@@ -418,14 +423,14 @@ and `doctor` isolate each one again around `isAvailable`/`launch` — so a clone
 `hangar ide <kind> sync` is the deliberate exception: there the developer named the editor, so its
 failure is the answer to their command rather than something to step over.
 
-| kind                                                                      | launch                                              | Hangar syncs                       |
-| ------------------------------------------------------------------------- | --------------------------------------------------- | ---------------------------------- |
-| `vscode` `cursor` `windsurf` `vscodium` `code-insiders` `positron` `trae` | the workspace copy it already has open              | `.vscode/*` + the workspace pair   |
-| `jetbrains` (`product:` idea, webstorm, pycharm, …)                       | the clone directory                                 | the shareable half of `.idea/`     |
-| `zed`                                                                     | the clone directory                                 | `.zed/settings.json`, `tasks.json` |
-| `emacs`                                                                   | `emacsclient -n`, else fresh `emacs`                | `.dir-locals.el`                   |
-| `vim`                                                                     | `mvim`/`gvim --remote-silent`, else **a clone tab** | nothing                            |
-| `xcode` `eclipse`                                                         | the clone directory                                 | nothing                            |
+| kind                                                                      | launch                                                 | Hangar syncs                       |
+| ------------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------- |
+| `vscode` `cursor` `windsurf` `vscodium` `code-insiders` `positron` `trae` | the workspace copy it already has open                 | `.vscode/*` + the workspace pair   |
+| `jetbrains` (`product:` idea, webstorm, pycharm, …)                       | the clone directory                                    | the shareable half of `.idea/`     |
+| `zed`                                                                     | the clone directory                                    | `.zed/settings.json`, `tasks.json` |
+| `emacs`                                                                   | `emacsclient -n`, else fresh `emacs`                   | `.dir-locals.el`                   |
+| `vim`                                                                     | `mvim`/`gvim --remote-silent`, else **a clone window** | nothing                            |
+| `xcode` `eclipse`                                                         | the clone directory                                    | nothing                            |
 
 Four things in that table are decisions rather than gaps:
 
@@ -446,8 +451,8 @@ Four things in that table are decisions rather than gaps:
   (`Cursor`, `Windsurf`, `Code - Insiders`, …) — reading the wrong one answers about another
   application's windows.
 - **`vim` may not be a window at all.** With `mvim` or `gvim` it behaves like any other editor.
-  With only `nvim`/`vim` it gets **an extra terminal tab in the clone**, built alongside the
-  other three so it lands in the fleet window in clone order. Launching terminal vim as a
+  With only `nvim`/`vim` it gets **an extra window in the clone's tmux session**, built alongside
+  the configured roles so it sits beside them. Launching terminal vim as a
   subprocess would attach it to the tty `hangar` itself is on and hold the command hostage.
 - **`xcode` and `eclipse` are launch-only, deliberately.** Xcode's `.xcodeproj` is a directory of
   generated state — copying it imports another checkout's index rather than a setting. Eclipse's
@@ -467,62 +472,98 @@ driver header says so, and `hangar doctor` prints a row per configured editor wi
 actually be launched — a `code` command never installed into PATH and a Toolbox that generated no
 shell scripts both mean `hangar open` silently opens no editor at all.
 
-## Which terminal it drives
+## Which terminal it drives, and what tmux owns
 
-`open` and `sync`'s `SYNC PAUSE` go through a **terminal driver**, picked from the environment
-(`ITERM_SESSION_ID`, `TERM_PROGRAM`, `KONSOLE_VERSION`, `VTE_VERSION`, …), then from what is
-running, and overridden by `terminal.kind` in `hangar.config.yaml`. Drivers declare
-**capabilities** rather than pretending to be equivalent, and every caller degrades one
-capability at a time:
+`hangar open` gives a clone **one tab of the developer's emulator**, and that tab is a client
+attached to **that clone's tmux session** — one tmux window inside it per `terminal.tabs[]` role,
+named for the clone and the role. `--window` puts it in a window of its own and
+`terminal.placement` sets the default. So the emulator is asked for two things and nothing else:
+**open one tab or window running one command**, and **bring one it opened to the front**.
+Everything that happens inside — creating the roles, naming them, ordering them, moving between
+them, typing a `SYNC PAUSE` into a live session — is `src/tmux.ts`, which is the same program on
+macOS and on Linux.
 
-| driver         | tabs | list         | tag                 | type into a live tab | colour               |
-| -------------- | ---- | ------------ | ------------------- | -------------------- | -------------------- |
-| iTerm2         | yes  | yes          | yes                 | yes                  | OSC 6, the tab       |
-| tmux           | yes  | yes          | `@hangar_*` options | yes                  | `set -w`, its own    |
-| Terminal.app   | yes  | yes          | via `custom title`  | yes                  | AppleScript, on open |
-| Konsole        | yes  | with `qdbus` | with `qdbus`        | with `qdbus`         | OSC 11 background    |
-| GNOME Terminal | yes  | no           | no                  | **no**               | OSC 11 background    |
+**That server is Hangar's own: `tmux -L hangar-<id>`, started from a config this CLI generates.**
+A private socket is what makes the layer safe to be opinionated in — prefix keys, status-line
+format and, the reason it has to be private, SERVER options. `extended-keys`, which is what makes
+Shift+Enter a newline in Claude Code, is a server option, and writing one onto the server somebody
+keeps their own work on is not a trade this tool gets to make for them. Two hangars are two
+sockets, for the same reason they get differently named files under `~/.claude`. The cost is real
+and is printed rather than hidden: these sessions are invisible to a bare `tmux ls`, so
+`tmux -L hangar-<id> ls` is the fleet's window list and `tmux -L hangar-<id> attach -t '=<clone>:'`
+is the way back into one whose tab was closed.
 
-iTerm2 is the reference because it has scriptable per-session **user variables** — everything
-`open` does safely (find the fleet window, notice a clone is already open, refuse to adopt
-another hangar's window) rests on tagging a tab and reading the tag back. **tmux is the only
-other driver with a real equivalent**: `@hangar_id`/`@hangar_clone`/`@hangar_role` window
-options, which is why it reaches the full capability set. Terminal.app and Konsole approximate
-it with a title; GNOME Terminal cannot do it at all, so there `open` says so once and only
-appends.
+**Identity is the session NAME, not a tag stamped on a window.** The socket says which hangar and
+the session says which clone, so "is this clone already open" has an exact answer —
+`has-session` — instead of an inference from where some window's shell happens to be standing,
+and a window the developer splits, renames or `cd`s elsewhere cannot lie about which clone it
+belongs to. That is the check that keeps a clone from ending up with two Claude Code sessions in
+it, which is this fleet's worst failure. It also makes the good case possible at all: a session
+outlives the tab attached to it, so a clone whose tab was closed still has `claude` running in it
+and opening the clone again reattaches.
 
-**The colour column is the generated shell hook's, not the driver's** — except Terminal.app's,
-which is the one emulator that cannot be coloured from the shell at all. That is what
-`TerminalCapabilities.paintOnCreate` marks, and it stays false for tmux even though tmux is now
-coloured: the hook does it, so a window made with `C-b c` gets its hue too, which a driver that
-only ever paints what `hangar open` created cannot manage. **tmux went uncoloured until it was
-asked about** — the hook fell through to `title`, so the one driver with the full capability set
-on Linux had no colour layer but `env`. `generate/terminal-sh.ts` carries the rest, including why
-every `tmux set -w` names `$TMUX_PANE`.
+Which emulator hosts that tab comes from the environment (`ITERM_SESSION_ID`, `TERM_PROGRAM`,
+`KONSOLE_VERSION`, `VTE_VERSION`, …), then from what is running, and `terminal.kind` overrides
+both. **There is no system setting to consult** — macOS has no default-terminal preference at all,
+and the `.command` handler answers Terminal.app for a developer who lives in iTerm2 — so the
+terminal `hangar` was typed into is the only honest reading of "the terminal I use". Drivers
+declare **capabilities** rather than pretending to be equivalent:
 
-**tmux maps a SESSION to a window and a WINDOW to a tab**, and `$TMUX` is tested before every
-emulator signal — inside tmux inside iTerm2 both are set, and driving the emulator opens a tab
-beside the multiplexer and types a `SYNC PAUSE` into whichever pane happens to be showing.
+| driver         | new tab                                                     | new window | raise a window it opened |
+| -------------- | ----------------------------------------------------------- | ---------- | ------------------------ |
+| iTerm2         | yes                                                         | yes        | yes                      |
+| Terminal.app   | needs Accessibility                                         | yes        | yes                      |
+| Konsole        | yes                                                         | yes        | with `qdbus`             |
+| GNOME Terminal | yes                                                         | yes        | **no**                   |
+| none           | no — the session is still built and the attach line printed |            |                          |
 
-Two consequences worth knowing before debugging either:
+**Raising is the only capability a caller degrades around**, and its absence costs one line: the
+clone's window is open and not in front, and `open` prints the `attach` line that finishes the
+job. Opening is the floor — a driver that cannot open a window is `none`, which is a mode rather
+than a failure.
 
-- **GNOME Terminal cannot receive a `SYNC PAUSE`.** Not an omission — VTE has no API for it, and
-  the generic POSIX route (`TIOCSTI`) has been disabled by default since Linux 6.2. `sync` reports
-  every session as missed and asks before touching the clone, which is the right question.
-- **Terminal.app needs Accessibility permission** for the terminal you run `hangar` from: its
-  `tabs` element is read-only in AppleScript, so a new tab can only be made by sending Cmd-T
-  through System Events. `open` checks the tab count actually grew and says what to allow if not.
-  It is also the one driver that paints the tab itself (AppleScript at creation), because it
-  ignores the escape sequence the shell hook uses — so a Terminal.app tab opened by hand in a
-  clone stays uncoloured.
+Three things about that table are decisions rather than gaps:
 
-Konsole and GNOME Terminal are written from Konsole's documented D-Bus interface and
-gnome-terminal's documented command line, and have **not been exercised against live ones** —
-macOS is the platform this fleet runs on. **tmux is the exception and deliberately so**: it is
-the same program on both platforms, so it was exercised here — sessions created and tagged, read
-back, selected, and a real `SYNC PAUSE` delivered into one pane and confirmed absent from the
-others. That is what makes it a safe answer for a Linux hangar, where it is the only route
-carrying `writeToTty` at all. `hangar doctor` prints the detected driver and its capabilities,
+- **Terminal.app is the one place a tab costs something.** Its `window`'s `tab` element is
+  declared `access="r"` in the AppleScript dictionary, so there is no `make new tab` and a tab can
+  only be created by sending Cmd-T through System Events, which needs Accessibility permission for
+  whichever terminal `hangar` runs from. `do script` with no `in` clause creates a WINDOW and needs
+  none of it. So a tab is attempted, the tab count is checked to have actually grown — System
+  Events reports success for a key it delivered nowhere — and a refusal falls back to a window
+  naming what to allow. The developer asked for their clone, not for a piece of window furniture.
+- **iTerm2 is handed the command at CREATION, never typed into afterwards**, and every part of
+  that is measured rather than chosen. `iterm2.ts` records the three findings: `write text` into a
+  session that was just created is accepted and dropped, a bare `create tab with default profile`
+  returns `missing value`, and `command` is argv rather than a shell line — so a builtin like
+  `exec` starts nothing and PATH is the application's, which is why `attachCommand` names tmux by
+  absolute path.
+- **Nothing is ever typed at a raw tty, and there is no portable way to.** VTE exposes no API for
+  writing into a running terminal, and the generic POSIX route (the `TIOCSTI` ioctl) has been
+  disabled by default since Linux 6.2, because injecting keystrokes into another process's
+  terminal is a privilege-escalation primitive. tmux is the mechanism precisely because it needs
+  neither — which is what makes `SYNC PAUSE` available on a Linux box with no KDE, and what makes
+  a session started by hand OUTSIDE hangar's tmux unreachable. `sync` attributes that miss rather
+  than reporting a generic one, and still asks before touching the clone.
+
+**The colour is the generated shell hook's, in every emulator.** `clone-terminal.sh` paints
+whatever `$PWD` is in, so a window the developer made with `C-b c` is coloured too — which nothing
+that only paints what `hangar open` created can manage. Inside tmux it sets window options rather
+than emitting escapes, since tmux swallows those, and the hue lands at full strength on the
+window-status entry and both pane borders. The status line's `status-left` is the one piece
+`open` paints itself, at SESSION scope when it creates the session: the bar has to be right the
+instant the client attaches, which is before any shell has printed a prompt, and it is a session
+option the hook could only reach with `-g`. `generate/terminal-sh.ts` carries the rest, including
+why every `tmux set -w` names `$TMUX_PANE`.
+
+**tmux is exercised; two of the four emulators are not.** Against tmux 3.7c here: a session per
+clone with a window per role, read back by role in `tabs[]` order, four sessions carrying four
+distinct hues with no global leak, a clone raised and a clone reattached with its scrollback
+intact, and a real `SYNC PAUSE` landed in the pane on a named tty and — confirmed with
+`capture-pane` — in **no** other of four. iTerm2 is exercised on this machine. Konsole and GNOME
+Terminal are written from Konsole's documented D-Bus interface and gnome-terminal's documented
+command line and have **not been exercised against live ones** — macOS is the platform this fleet
+runs on, and what is unverified there is which window comes up, not what happens inside it, which
+is tmux either way. `hangar doctor` prints the detected emulator and the state of the tmux server,
 which is the first thing to look at.
 
 ## What `colours sync` generates
@@ -548,6 +589,14 @@ four files are **generated by `hangar colours sync` — never hand-edit them**:
   hangars can be sourced into one shell, and a bare name would have the last one sourced answer
   for both.
 - `clone-terminal.sh` — the terminal colour hook, sourced from `~/.zshrc` or `~/.bashrc`.
+- `clone-tmux.conf` — the config this hangar's own tmux server starts under
+  (`tmux -L hangar-<id> -f <this>`). It carries no per-clone data: the hue is a session option
+  `open` sets when it creates a clone's session, and the window options are the hook's. It holds
+  the four settings Claude Code documents for running inside tmux, two of which are SERVER options
+  and are the reason the socket is private at all. **It is read once, when the server starts**, so
+  regenerating it reaches nothing already running — `hangar doctor` reads the live server's options
+  back and says when they disagree, and `--fix` deliberately will not `kill-server`, because that
+  would end every live agent in the fleet.
 
 Not generated, because it holds no per-clone data: each clone's untracked
 `.claude/settings.local.json` (`theme` + the shared `statusLine`).
@@ -573,13 +622,13 @@ that needs it — the same reason the rest of this file is here.
 One rule decides every row: _a tracked file that a `hangar` command rewrites is a merge conflict
 on every `git pull` from a published upstream._
 
-| Not tracked                                   | Written by                             |
-| --------------------------------------------- | -------------------------------------- |
-| `hangar.config.yaml` — **the marker file**    | `hangar setup`                         |
-| `CLAUDE.local.md` — this hangar's identity    | `setup`, `doctor --fix`                |
-| `.claude/settings.json`                       | `setup`, `doctor --fix`                |
-| `clone-colours.sh`, `clone-terminal.sh`       | `hangar colours sync`                  |
-| `.hangar/colour-assignments.json` — **INPUT** | `hangar colours change` — nothing else |
+| Not tracked                                                | Written by                             |
+| ---------------------------------------------------------- | -------------------------------------- |
+| `hangar.config.yaml` — **the marker file**                 | `hangar setup`                         |
+| `CLAUDE.local.md` — this hangar's identity                 | `setup`, `doctor --fix`                |
+| `.claude/settings.json`                                    | `setup`, `doctor --fix`                |
+| `clone-colours.sh`, `clone-terminal.sh`, `clone-tmux.conf` | `hangar colours sync`                  |
+| `.hangar/colour-assignments.json` — **INPUT**              | `hangar colours change` — nothing else |
 
 Tracked: this file, the root `CLAUDE.md`, `bin/**`, `app/**`, `.envrc`, `.envrc.hangar`, `.nvmrc`,
 `.editorconfig`, `hangar.config.example.yaml`, `hangar.schema.json`, `.gitignore`, `CHANGELOG.md`,
@@ -616,11 +665,11 @@ The code is in `app/`, but files one level up are generated out of it — so cha
 and not regenerating them leaves a hangar that contradicts itself. Nothing catches that: there is
 no hook in `.git/hooks`.
 
-| Change this in `app/src/**`                                       | Regenerate with        | Which rewrites                                              |
-| ----------------------------------------------------------------- | ---------------------- | ----------------------------------------------------------- |
-| `config/schema.ts`                                                | `hangar config schema` | `hangar.schema.json` — **tracked**                          |
-| `palette.ts`, `generate/colours-sh.ts`, `generate/terminal-sh.ts` | `hangar colours sync`  | `clone-colours.sh` **and** `clone-terminal.sh` — gitignored |
-| any new config key                                                | by hand                | `hangar.config.example.yaml` — **tracked**                  |
+| Change this in `app/src/**`                                                                | Regenerate with        | Which rewrites                                                                 |
+| ------------------------------------------------------------------------------------------ | ---------------------- | ------------------------------------------------------------------------------ |
+| `config/schema.ts`                                                                         | `hangar config schema` | `hangar.schema.json` — **tracked**                                             |
+| `palette.ts`, `generate/colours-sh.ts`, `generate/terminal-sh.ts`, `generate/tmux-conf.ts` | `hangar colours sync`  | `clone-colours.sh`, `clone-terminal.sh` **and** `clone-tmux.conf` — gitignored |
+| any new config key                                                                         | by hand                | `hangar.config.example.yaml` — **tracked**                                     |
 
 **Only one generated root file is still tracked, and the rule that decides it is publication:** a
 tracked file that a `hangar` command rewrites is a merge conflict on every `git pull` from

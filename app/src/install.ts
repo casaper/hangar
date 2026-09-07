@@ -161,7 +161,7 @@ export const runInstall = (clone: Clone, opts: InstallOptions = {}): void => {
  * `undefined` means no version manager could answer, which is not an error -- see `runStep`.
  *
  * **The nvm half has not been exercised against a live nvm**, for the same reason the Konsole and
- * GNOME Terminal drivers say so: this machine has fnm, so the nvm branch is only ever reached
+ * GNOME Terminal window-openers say so: this machine has fnm, so the nvm branch is only ever reached
  * where nvm is what is installed. What IS verified here is that it fails silently and cleanly
  * when nvm is absent -- exit 1, no output on either stream -- so an fnm-only machine pays
  * nothing for it and the fnm answer is returned before the probe is reached at all.

@@ -7,7 +7,7 @@ instructions and permission rules were read once, at startup.
 ## Your remit
 
 You change the `hangar` CLI. `app/CLAUDE.md` is your primary guidance and governs every edit under
-`app/src/**` — the package layout, the two conventions, the code map, the four seams, and the
+`app/src/**` — the package layout, the two conventions, the code map, the five seams, and the
 hangar-root files this package generates.
 
 **Read `hangar-internals` before changing a subsystem, not after.** Being consulted before the code
