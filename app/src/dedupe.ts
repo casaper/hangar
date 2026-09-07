@@ -188,9 +188,28 @@ const filesUnder = (dir: string): string[] => {
 const hashOf = (path: string): string =>
   createHash('sha256').update(readFileSync(path)).digest('hex');
 
-const readHead = (path: string): string => {
+/**
+ * A file's text, for the frontmatter scan.
+ *
+ * **Deliberately not truncated, and that is a fix rather than a relaxation.** This used to take
+ * the first 4096 characters, on the reasoning that a frontmatter block is small -- and then the
+ * tracker's record grew a neighbourhood listing, so the block's size became a function of how
+ * many parents, sub-tasks, siblings and relations a ticket has. Past 4096 characters the closing
+ * `---` falls outside the window, the regex below matches nothing, and `freshnessOf` reports
+ * `mtime`.
+ *
+ * That is not a slightly worse answer. The cache hook REFUSES to serve a record whose timestamp
+ * came from mtime, because a file's mtime is not evidence about when Jira was asked -- so a
+ * window one line too small silently turns the whole ticket cache off, and every sync re-fetches
+ * a neighbourhood that was already on disk. The largest block here runs to about 4.5 KB.
+ *
+ * The truncation was never buying any I/O either: `readFileSync` reads the whole file and the
+ * slice only shortened what the regex saw. The block is still read from the START of the file
+ * and still ends at the first closing delimiter, so the body cannot be mistaken for it.
+ */
+const readTextOf = (path: string): string => {
   try {
-    return readFileSync(path, 'utf8').slice(0, 4096);
+    return readFileSync(path, 'utf8');
   } catch {
     return '';
   }
@@ -218,10 +237,11 @@ const parseStamp = (value: string): number | undefined => {
  * own `updated:` is only a fallback -- it is written on a ticket's OWN file and left off the
  * relation copies, so it cannot rank the two against each other, and it can be older than the
  * ticket state a later fetch captured. Read out of the leading frontmatter block only, never
- * the body, which quotes comments that can contain anything.
+ * the body, which quotes comments that can contain anything -- the regex is anchored at the
+ * start of the file and stops at the first closing delimiter, which is what enforces that.
  */
 export const freshnessOf = (path: string): { at: number; source: Copy['source'] } => {
-  const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---/.exec(readHead(path))?.[1] ?? '';
+  const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---/.exec(readTextOf(path))?.[1] ?? '';
   for (const source of ['fetched', 'updated'] as const) {
     // Both spellings, because both generations of the cache are on disk at once and have to
     // rank against each other: `jira-scope` wrote `fetched:` / `updated:`, and the
