@@ -340,153 +340,112 @@ shared memory directory and the theme. Then finish with:
 hangar doctor --all --fix
 ```
 
-### How far the genericisation goes today
+### How far the genericisation goes
 
-The config surface above describes the whole tool, and it is now wired. One thing is left, and it
-is narrower than it was:
-
-1. **Two Linux details are unverified, and both are reported rather than assumed.**
-   - **Whether `ps` under procps names a Claude Code process `claude`.** Everything the fleet does
-     about live sessions rests on it — the busy-clone skip, and delivering a `SYNC PAUSE` before a
-     rebase — and if the answer is `node`, a Linux hangar finds zero sessions and says nothing,
-     because zero sessions is also what an idle machine looks like. So `hangar doctor` prints a
-     `claude sessions` row saying how many processes it looked at, how many matched, and when none
-     did, which command names mention `claude` anyway. Your first `doctor` answers this in a line;
-     please report what it says.
-   - **The Konsole and GNOME Terminal window-openers have never run against a live terminal.**
-     They are written from Konsole's documented D-Bus interface and gnome-terminal's documented
-     command line, and each is one command line plus, for Konsole, a D-Bus call to bring a window
-     forward. Everything inside the window is tmux, which is the same program here and was
-     exercised here — so what is unverified on Linux is which emulator comes up, not what happens
-     in it. GNOME Terminal cannot bring a window it opened to the front, and `doctor` says so by
-     name rather than leaving a capability quietly false.
-
-   Everything else that was on this list is done: the VS Code window-state path, `open -a` and the
-   install hints all go through a platform seam with a `darwin` and a `linux` implementation, and
-   the Homebrew-only `jq` fallback in both status-line scripts is a search list.
-
-What *is* wired, and worth knowing because that list used to have six entries: ports, port roles
-and their env keys, the per-hangar port offset, clone directory naming, the per-clone dotenv and
-its extra variables, symlinks, the secrets file **and the variables a repo needs out of it**, the
+The config surface above describes the whole tool, and all of it is wired: ports, port roles and
+their env keys, the per-hangar port offset, clone directory naming, the per-clone dotenv and its
+extra variables, symlinks, the secrets file **and the variables a repo needs out of it**, the
 install steps (any of fourteen package managers or an explicit command, in any directory, Node or
-not, under either version manager), workspace naming and directories, VS Code's per-clone path
-keys in both directions, theme and statusline naming, the forge and tracker identity, the first
-clone of a fresh hangar, and which hangar a command acts on (`--hangar`, then the walk up from
-your working directory, then `HANGAR_ROOT`).
+not, under either version manager), workspace naming and directories, VS Code's per-clone path keys
+in both directions, theme and statusline naming, the forge and tracker identity, the first clone of
+a fresh hangar, the tracker's two cache scripts with their TTL and the env var that bypasses them,
+and which hangar a command acts on (`--hangar`, then the walk up from your working directory, then
+`HANGAR_ROOT`). The VS Code window-state path, `open -a` and the install hints go through a
+platform seam with a `darwin` and a `linux` implementation.
 
-**A second walk of that first day, on a real clone of this repo, found five more — all now
-fixed.** Four of them shared one cause: `hangar setup` was the sole gate for both the machine's
-tooling check and the shared secrets file, and the fastest way in for somebody joining a
-configured fleet ("copy the example and stop") routes around `setup` entirely.
+**What a config key cannot move is the argv contract.** `tracker.syncScript` and
+`tracker.namerScript` name your own scripts, and Hangar calls them with the arguments the cache
+hook expects — so honouring the key is the tool's half, and matching that contract is the script's.
+`tracker.cache.bypassEnvKey` is set in front of the command rather than passed as a flag, because
+a repo's own sync script tends to die on an unknown one.
 
-- **`hangar doctor --all --fix` stopped at the first clone.** The declared symlink points at the
-  shared secrets file, `realpathSync` throws on a link whose target does not exist yet, and a
-  correct link was therefore reported as a wrong one — after which the repair refused, and
-  refusing threw out of the per-clone loop. Every remaining clone's ports, hooks, remotes and
-  theme went unvisited with nothing saying so, and deleting the link and re-running was a closed
-  loop. A link is now judged on where it points, and one failed repair no longer ends the run.
-- **Nothing but `setup` ever created the secrets file.** `doctor` now reports its absence and
-  `--fix` creates the commented-out scaffold. Clones load it with `dotenv_if_exists`, so an
-  absent one loaded nothing and said nothing.
-- **`doctor` was silent about three of the four credentials this fleet uses.** The forge token
-  and the Atlassian pair are now derived from `forge` and `tracker` instead of waiting to be
-  declared — and `forge.tokenEnvKey`, which turned out to be a config key nothing read, is now
+**Two Linux details are unverified, and both are reported rather than assumed.**
+
+- **Whether `ps` under procps names a Claude Code process `claude`.** Everything the fleet does
+  about live sessions rests on it — the busy-clone skip, and delivering a `SYNC PAUSE` before a
+  rebase — and if the answer is `node`, a Linux hangar finds zero sessions and says nothing,
+  because zero sessions is also what an idle machine looks like. So `hangar doctor` prints a
+  `claude sessions` row saying how many processes it looked at, how many matched, and when none
+  did, which command names mention `claude` anyway. Your first `doctor` answers this in a line;
+  please report what it says.
+- **The Konsole and GNOME Terminal window-openers have never run against a live terminal.** They
+  are written from Konsole's documented D-Bus interface and gnome-terminal's documented command
+  line, and each is one command line plus, for Konsole, a D-Bus call to bring a window forward.
+  Everything inside the window is tmux, which is the same program here and was exercised here — so
+  what is unverified on Linux is which emulator comes up, not what happens in it. GNOME Terminal
+  cannot bring a window it opened to the front, and `doctor` says so by name rather than leaving a
+  capability quietly false.
+
+### What `doctor` checks about the hangar itself
+
+The per-clone rows are the visible half. These are the hangar-level ones, and the reason they
+exist is that `hangar setup` is not the only way in: the fastest route for somebody joining a
+configured fleet is to copy the example config and stop, which routes around `setup` entirely.
+
+- **The shared secrets file.** `doctor` reports its absence and `--fix` creates the commented-out
+  scaffold. Clones load it with `dotenv_if_exists`, so an absent one loads nothing and says
+  nothing — which is why nothing else would tell you.
+- **All four credentials this fleet uses.** The forge token and the Atlassian pair are derived
+  from `forge` and `tracker` rather than waiting to be declared, and `forge.tokenEnvKey` is
   honoured by the adapter that reads the token.
-- **The tooling check ran only in `setup`.** `doctor` prints it too, one green line or a named
-  list. Its Homebrew probe now asks `brew --prefix`, so an Intel Mac without `brew shellenv` in
-  its profile is no longer told it has no Homebrew.
-- **A copied config declared eight VS Code path rewrites for a file no clone had.**
-  `.vscode/settings.json` is untracked, so a fresh fleet has none of it and `ide vscode sync` has
-  nothing to seed from — leaving the keys correctly declared and completely inert, with every
-  symptom appearing inside the editor. `doctor` now says so. Nothing generates that file: its
-  contents are yours.
+- **The machine's tooling**, one green line or a named list. Its Homebrew probe asks
+  `brew --prefix` last and only when `/opt/homebrew` is absent, so an Intel Mac — where
+  `brew shellenv` is not in the install instructions and `HOMEBREW_PREFIX` is therefore unset — is
+  read correctly rather than told it has no Homebrew. `.envrc.hangar` resolves it the same three
+  ways in the same order, deliberately.
+- **The whole derived half of each clone's `.claude/settings.local.json`.** The builder overlays
+  all of it and keeps the personal keys — a wholesale rewrite would delete a developer's MCP
+  servers to fix a theme — and `doctor` compares all of it. That matters most when a hangar is
+  renamed or moved, where a partial check cannot help: the `settings targets` row asks only
+  whether the named path exists, and an existence check cannot notice a rename it is standing in
+  the middle of.
+- **VS Code path keys declared for a file no clone has.** `.vscode/settings.json` is untracked, so
+  a fresh fleet has none of it and `ide vscode sync` has nothing to seed from — leaving the keys
+  correctly declared and completely inert, with every symptom appearing inside the editor. Nothing
+  generates that file: its contents are yours.
+- **A hook matcher naming a binary or a root that is not there.** A hook is recognised as this
+  hangar's by the shape `<root>/bin/<binary> --hangar <path> <subcommand>` — the hangar's own
+  `bin/` plus the subcommand, not the exact current command string — so renaming the binary or
+  moving the root replaces the matcher instead of appending a second one beside it. Two
+  `SessionEnd` collectors is untidy; two `PreToolUse` Jira hooks, one of them a dead path, can
+  block every Bash call in that clone, and the Jira hook fails open, so it would never say a word.
+- **The terminal-hook row, on the resolved absolute path.** `clone-terminal.sh` is the same
+  filename in every hangar, so a basename match would let a second hangar report the hook sourced
+  on the strength of the first one's line in `.zshrc` while its own colours did nothing.
+- **A symlink is judged on where it points**, not on whether `realpathSync` resolves — it throws
+  on a link whose target does not exist yet, which is the normal state of the secrets link before
+  the file is created. And one failed repair does not end the run, so a later clone's ports,
+  hooks, remotes and theme are still visited.
 
-**And five more from the same walk, further from the first day but found on it:**
+**`doctor`'s summary counts both halves** — the hangar's own state and the clones' — and says
+which is which. The exit code is 0 either way: in this CLI a `--check` flag is the gate and a
+report is a report, so read the summary line, never `$?`.
 
-- **`doctor`'s summary counted only the clones.** A hangar with none yet printed five warnings
-  and closed with `No problems in 0 clone(s).` It now counts both halves and says which is which.
-  The exit code is still 0 — in this CLI a `--check` flag is the gate and a report is a report —
-  so read the summary line, never `$?`.
-- **`open` had no `-n` while this file said three commands lacked one.** It matters more than
-  the omission looked: `open --all` fetches and moves a branch in every clone, and
-  `--no-checkout` is a way to not do that rather than a way to see it first.
-- **`.envrc.hangar` could not find Homebrew on an Intel Mac.** `brew shellenv` exports
-  `HOMEBREW_PREFIX` and is in the Apple-silicon install instructions but not the older Intel one,
-  so a machine with Homebrew at `/usr/local` aborted `direnv allow` with "requires Homebrew". It
-  asks `brew --prefix` now, last and only when the default is absent.
-- **`doctor`'s terminal-hook row matched a bare filename.** `clone-terminal.sh` is the same name
-  in every hangar, so a second hangar reported the hook sourced on the strength of the first
-  one's line in `.zshrc` while its own colours did nothing.
-- **The two mode settings files still need a hand edit, and now say what it costs.** `doctor`
-  prints the exact shell line instead of prose, and says out loud that the change stays modified
-  in `git status` and conflicts on a pull — because those files are tracked on purpose and there
-  will never be a `--fix` for them.
+### What `doctor` cannot check, so it is written down here
 
-Two things that were true of the *documentation* rather than the code have also been closed, and
-both were found by walking a colleague's first day end to end. The example config had drifted
-from the live one by one line — `forge.defaultBranch`, `main` against `master` — which pointed
-`checkout-default`, `open`'s fast-forward and `sync`'s fallback at a branch this repo does not
-have; that invariant is now checked by `hangar config validate` whenever the two files share an
-`id`, rather than only asserted in a skill. And `repo.install[].nodeVersionFile` was honoured
-under fnm only, silently, while this file promised either manager — so an nvm user's first
-`add-clone` built the app under whatever Node happened to be first on PATH.
+- **Which kind of Bitbucket credential the token has to be.** Bearer auth means an access token;
+  an App Password is Basic-only and 401s — see *Secrets* above. Nothing can tell the two apart
+  from the value, so this is written down rather than discovered at the first `sync`.
+- **The two `.claude/modes/*.settings.json` files need a hand edit.** They carry operator mode's
+  permission list, which is its security boundary — generating them would let a command operator
+  mode is allowed to run (`doctor --fix`) rewrite the list that constrains it. So `doctor` reports
+  a stale `statusLine.command`, prints the exact shell line that fixes it, and does not repair it.
+  **Expect that edit to stay in `git status` and to conflict on a pull** — they are tracked files
+  a hangar command must never write, so there is no version of this that is free.
+  `hangar-internals/reference/modes.md` has the three alternatives that were considered and why
+  each is worse.
+- **Whether the example config still agrees with the live one.** That one is checked, but by
+  `hangar config validate` rather than `doctor`, and only while the two files share an `id` —
+  which means changing the `id` for a second hangar on the machine is also the moment the check
+  goes quiet. It holds `forge.defaultBranch` in particular: an example pointing at a branch the
+  repo does not have aims `checkout-default`, `open`'s fast-forward and `sync`'s fallback at
+  nothing.
 
-**A third walk found six more, and the two that matter were invisible from the README alone —
-they only appear when you compare what a generator WRITES against what `doctor` HOLDS it to.**
-
-- **A clone's settings file was written once and then held to two of its eight derived values.**
-  `settingsContentFor` regenerated `theme` and the health-check allows while claiming to reapply
-  the derived half, and `doctor` checked the same two. That is invisible until a hangar is
-  renamed or moved — and this one had been renamed: all four clones went on naming
-  `~/.claude/dvb-clone-statusline.sh` and `~/.claude/dvb-gn-memory` while the generator and the
-  hangar-root session had moved on, so the fleet's ONE shared memory directory was two
-  directories with 25 entries each, and `hangar doctor --all` said `No problems in 4 clone(s).`
-  The two were still byte-identical when this was found, so nothing had been lost — but they
-  would have diverged the moment either side wrote.
-  The builder now overlays the whole derived half (keeping the personal keys — a rewrite would
-  delete a developer's MCP servers to fix a theme) and `doctor` compares all of it. The
-  `settings targets` row that looked like it covered this only asked whether the named path
-  EXISTS, and the pre-rename script was still on disk — an existence check cannot notice a
-  rename it is standing in the middle of.
-- **Four `tracker.*` config keys were declared, schema'd, documented and read by nothing.**
-  `cache.bypassEnvKey`, `cache.ttlMinutes`, `syncScript` and `namerScript`, against hardcoded
-  literals in the cache hook — the same defect `forge.tokenEnvKey` turned out to be one walk
-  earlier, which was fixed once without anyone sweeping for siblings. `bypassEnvKey` reached
-  furthest: its schema DEFAULT is `HANGAR_TRACKER_NO_CACHE`, the hangar-root `CLAUDE.md` tells
-  every clone session to use it, and the hook obeyed `JIRA_SYNC_NO_CACHE` — so a hangar that
-  omitted the key was told one name and obeyed another. All four are honoured now; what stays
-  fixed is the argv contract, which is a requirement of whatever script you name.
-- **A stale hook was appended beside, not replaced.** Found by the test written for the first of
-  these: the filter that removes a previous run's hooks matched on this hangar's own `bin/`, so
-  a matcher naming a PREVIOUS root survived and a second one was added next to it. Two
-  `SessionEnd` collectors is untidy; two `PreToolUse` Jira hooks, one of them a path that is not
-  there, can block every Bash call in that clone.
-- **The example config spelt this hangar's id where the schema default uses `{id}`.**
-  `workspaceFileName` and `workspaceFolderLabel` said `dvb_gn` literally — inert here and wrong
-  the moment somebody copies the file and changes `id`, which this README tells them to do when
-  a second hangar on the machine already has the name. Nothing complained, either:
-  `config validate`'s example-vs-live check is gated on the two files sharing an `id`, so
-  changing it is also the moment that check goes quiet.
-- **Nothing said what kind of Bitbucket credential the token has to be.** Bearer auth means an
-  access token; an App Password is Basic-only and 401s — see *Secrets* above. `doctor` cannot
-  tell the two apart, so this is written down rather than discovered at the first `sync`.
-- **Developer mode's own prompt denied the test suite 24 lines above describing it.**
-  `.claude/modes/dev.md` still said "the fleet has no test suite" while the same file put
-  `pnpm test` in the gate and called it a seed suite. Two skill references said it too.
-
-The repository itself is now yours rather than this hangar's. `CLAUDE.md` is generic and the
-machine-specific half is a generated, gitignored `CLAUDE.local.md` beside it; `.claude/settings.json`
-is generated by `hangar setup` and repaired by `doctor`; `colour-assignments.json` has moved to the
-gitignored `.hangar/`, with a fallback read so a `git pull` cannot lose your assignments.
-
-**The two `.claude/modes/*.settings.json` files stay tracked, and that is deliberate.** They carry
-operator mode's permission list, which is its security boundary — generating them would let a
-command operator mode is allowed to run (`doctor --fix`) rewrite the list that constrains it. So
-`doctor` reports a stale `statusLine.command` in them, prints the exact shell line that fixes it,
-and does not repair it. **Expect that edit to stay in `git status` and to conflict on a pull** —
-they are tracked files a hangar command must never write, so there is no version of this that is
-free. `hangar-internals/reference/modes.md` has the three alternatives that were
-considered and why each is worse.
+The repository is yours rather than this hangar's. `CLAUDE.md` is generic and the machine-specific
+half is a generated, gitignored `CLAUDE.local.md` beside it; `.claude/settings.json` is generated
+by `hangar setup` and repaired by `doctor`; `colour-assignments.json` lives in the gitignored
+`.hangar/`, with a fallback read of the old root-level path so a `git pull` cannot lose your
+assignments.
 
 ## Starting Claude Code in operator mode
 
@@ -552,10 +511,10 @@ pnpm golden && git diff --exit-code dev/golden/gated
 **That last line is expected to produce no diff, in your hangar as much as in the one it was
 recorded in.** Everything under `dev/golden/gated/` is rendered from two checked-in fixture
 configs in temp directories, with `%HANGAR%`/`%HOME%` normalised away, so a diff on your first
-run is a finding rather than a formality. It used to hold a capture of the maintainer's own
-hangar too, which meant the first developer gate anyone else ran opened with a 120-file diff
-that looked like a broken tool; that capture still runs, into the gitignored
-`dev/golden/advisory/`, where it is worth reading and never diffed.
+run is a finding rather than a formality. The capture of this hangar's own tree runs too, into
+the gitignored `dev/golden/advisory/`, where it is worth reading and never diffed — a capture of
+one developer's machine inside the gate would open everybody else's first run with a 120-file
+diff that looks like a broken tool.
 
 The one thing that legitimately differs is the **platform**: each fixture's `manifest.txt`
 carries the platform driver's own answers — the kind and application-support directory, the
@@ -755,10 +714,11 @@ commented out, exactly as `setup` writes it. That matters because copying the ex
 runs `setup`, which was the only thing that had ever created it: each clone loads the file with
 `dotenv_if_exists`, so an absent one loads nothing and reports nothing.
 
-This is the gap that used to swallow a new hangar whole. The Playwright symlink above exists
-*because* the tracked test `.env` blanks that password — its `why` says so — but nothing told a
-fresh hangar to put the variable in the shared file at all. So the symlink got created, `doctor`
-went green, and the suite logged in with an empty password.
+This is the gap that swallows a new hangar whole, and it is why `doctor` checks the VARIABLES a
+repo needs and not just the file. The Playwright symlink above exists *because* the tracked test
+`.env` blanks that password — its `why` says so — but a link to a shared file that does not name
+the variable creates itself happily: the symlink is correct, the file is there, and the suite logs
+in with an empty password.
 
 ## The two shared directories
 
