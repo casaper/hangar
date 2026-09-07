@@ -1,5 +1,4 @@
 import {
-  copyFileSync,
   lstatSync,
   readFileSync,
   readlinkSync,
@@ -507,9 +506,6 @@ export const writeStoreRecord = (hangar: Hangar, key: string, content: string): 
   }
 };
 
-/** How a name ended up pointing at its record. A `copy` has un-shared it, so it is reported. */
-export type LinkHow = 'symlink' | 'copy';
-
 /**
  * Replace `copy` with a relative symlink to the store record.
  *
@@ -522,27 +518,25 @@ export type LinkHow = 'symlink' | 'copy';
  * comparing it with the record is what turns a broken assumption into a refusal here rather than
  * a cache full of links that quietly reach nothing.
  *
- * The copy fallback is for a filesystem or an account without symlink rights. It is returned
- * rather than swallowed: a copy is no longer one shared record, and silence would hide that.
+ * **A filesystem that cannot make the link leaves the name exactly as it is**, and the caller
+ * reports that it could not be pointed at the store -- the same shape as `linkToWinner`. Writing
+ * a byte copy instead was tried and is wrong twice over: the name already holds a readable
+ * record, so nothing is rescued, and a copy can never satisfy this pass. It is not a symlink, so
+ * the next run puts it back in the link list, copies it again, and reports it again -- for ever.
+ * A warning that is red in normal operation is read by nobody, which is the same reason
+ * `keepOwn` is reported the run it is decided and then goes quiet.
  */
-export const linkToStore = (hangar: Hangar, key: string, copy: string): LinkHow => {
+export const linkToStore = (hangar: Hangar, key: string, copy: string): void => {
   const record = storeRecordPath(hangar, key);
   const target = storeLinkTarget(hangar, key);
   const staging = `${copy}.linking-${String(process.pid)}`;
   try {
     // A staging name left behind by a killed run is stale by definition.
     rmSync(staging, { force: true });
-    let how: LinkHow = 'symlink';
-    try {
-      symlinkSync(target, staging);
-    } catch {
-      copyFileSync(record, staging);
-      how = 'copy';
-    }
-    if (how === 'symlink' && realpathSync(staging) !== realpathSync(record))
+    symlinkSync(target, staging);
+    if (realpathSync(staging) !== realpathSync(record))
       throw new Error(`${target} does not reach ${record} from ${dirname(copy)}`);
     renameSync(staging, copy);
-    return how;
   } catch (error) {
     try {
       rmSync(staging, { force: true });
