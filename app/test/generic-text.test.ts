@@ -8,6 +8,7 @@ import {
   portCheckHint,
 } from '../src/clone-config.ts';
 import { cloneColoursArtifact } from '../src/generate/colours-sh.ts';
+import { tmuxConfArtifact } from '../src/generate/tmux-conf.ts';
 import { cloneAt } from '../src/fleet.ts';
 import { syntheticHangar } from './fixture.ts';
 
@@ -84,6 +85,7 @@ test('no per-clone artifact names the repo this CLI was built in', () => {
       envLocalContent(clone),
       claudeLocalMdContent(clone),
       cloneColoursArtifact(hangar, [clone]).content,
+      tmuxConfArtifact(hangar).content,
     ];
     for (const text of texts) {
       for (const literal of THIS_REPOS_OWN) {

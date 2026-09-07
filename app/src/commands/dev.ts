@@ -42,6 +42,7 @@ import { cloneColoursArtifact } from '../generate/colours-sh.ts';
 import { type Artifact } from '../generate/index.ts';
 import { statuslineArtifact } from '../generate/statusline-sh.ts';
 import { terminalHookArtifact } from '../generate/terminal-sh.ts';
+import { tmuxConfArtifact } from '../generate/tmux-conf.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
 
 import { platform } from '../platform/index.ts';
@@ -292,6 +293,7 @@ export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
     cloneColoursArtifact(hangar, clones),
     terminalHookArtifact(hangar, hangar.config.terminal.colour),
     statuslineArtifact(hangar, clones),
+    tmuxConfArtifact(hangar),
   ];
   for (const artifact of shared) {
     const name = artifact.path.split('/').pop() ?? 'artifact';

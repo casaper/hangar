@@ -45,6 +45,13 @@ export type HangarPaths = {
   readonly cloneColoursScript: string;
   readonly terminalHookScript: string;
   /**
+   * The config this hangar's own tmux server starts under (`tmux -L hangar-<id> -f <this>`).
+   *
+   * At the root beside the two `clone-*` shell helpers rather than under `.hangar/`, because a
+   * developer debugging tmux reads it and `tmux -f`s it by hand. Generated, so gitignored.
+   */
+  readonly tmuxConf: string;
+  /**
    * The explicit clone -> colour assignments. INPUT, and the only per-clone value not derived
    * from the index.
    *
@@ -141,6 +148,7 @@ export const pathsFor = (
     envShared: join(root, secretsFile),
     cloneColoursScript: join(root, 'clone-colours.sh'),
     terminalHookScript: join(root, 'clone-terminal.sh'),
+    tmuxConf: join(root, 'clone-tmux.conf'),
     colourAssignmentsFile: join(root, '.hangar', 'colour-assignments.json'),
     legacyColourAssignmentsFile: join(root, 'colour-assignments.json'),
     statuslineScript: join(claudeDir, `${id}-clone-statusline.sh`),
