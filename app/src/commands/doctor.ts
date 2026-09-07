@@ -820,6 +820,51 @@ const reportPlatform = (): void => {
 };
 
 /**
+ * One warning, kept as well as printed.
+ *
+ * Every hangar-level check both prints its warning where its row would have been and contributes
+ * it to the closing recap. One helper rather than the same two lines in each reporter: a check
+ * that remembered only to print would go silently missing from the summary, which is the exact
+ * failure the recap exists to fix.
+ */
+const collectWarnings = (): {
+  readonly seen: readonly string[];
+  readonly problem: (m: string) => void;
+} => {
+  const seen: string[] = [];
+  return {
+    seen,
+    problem: (message: string): void => {
+      seen.push(message);
+      warn(message);
+    },
+  };
+};
+
+/** A warning this run printed, and which half of the report it came from. */
+export type DoctorWarning = {
+  /** The clone it belongs to, or undefined for a hangar-level one. */
+  readonly clone?: string | undefined;
+  readonly text: string;
+};
+
+/**
+ * The closing recap: every warning this run printed, repeated below the summary.
+ *
+ * Pure and exported per this repo's first convention, and it exists because the COUNT alone was
+ * not actionable. `doctor` prints upwards of a hundred `ok` rows before its summary, so
+ * `1 problem(s) (above the clones)` left the reader scrolling back through all of them to find
+ * out which -- and an unsourced terminal hook sat unnoticed through several sessions in exactly
+ * that gap, with the check working correctly and printing the fix the whole time.
+ *
+ * Each warning is repeated VERBATIM rather than re-worded. The line at the point of discovery is
+ * the one somebody may already have searched the output for, and two phrasings of one finding
+ * read as two findings.
+ */
+export const doctorRecap = (warnings: readonly DoctorWarning[]): readonly string[] =>
+  warnings.map(({ clone, text }) => (clone === undefined ? `· ${text}` : `· ${clone}  ${text}`));
+
+/**
  * Is the terminal colour hook sourced from a shell rc, and does any rc name a file that is gone?
  *
  * The second half is the important one, and it is why this check exists at all. The idiomatic way
@@ -837,7 +882,7 @@ const reportPlatform = (): void => {
  * rather than two written separately -- an rc that sources the hook as `$HOME/code/.../` has to
  * match, and that is the exact form the note below tells people to add.
  */
-const reportShellHook = (hangar: Hangar): number => {
+const reportShellHook = (hangar: Hangar): readonly string[] => {
   const hookPath = hangar.paths.terminalHookScript;
   const hookName = basename(hookPath);
   const sourcing: string[] = [];
@@ -868,15 +913,13 @@ const reportShellHook = (hangar: Hangar): number => {
     if (sourced) sourcing.push(rc);
   }
 
-  let problems = 0;
+  const { seen, problem } = collectWarnings();
   if (stale.size > 0) {
-    problems += 1;
-    warn(`a shell rc sources a file that no longer exists: ${[...stale].join(', ')}`);
+    problem(`a shell rc sources a file that no longer exists: ${[...stale].join(', ')}`);
     note('Guarded with `[[ -r … ]]`, so this fails SILENTLY — the colours just stop.');
   }
   if (sourcing.length === 0) {
-    problems += 1;
-    warn(`no shell rc sources ${hookName}, so no shell colours itself per clone`);
+    problem(`no shell rc sources ${hookName}, so no shell colours itself per clone`);
     // `$HOME`, not `~`: a tilde inside double quotes is not expanded, so the `~/…` form
     // `tildify` produces would be a line that silently never matches.
     const quotable = hangar.paths.terminalHookScript.startsWith(home)
@@ -886,7 +929,7 @@ const reportShellHook = (hangar: Hangar): number => {
   } else {
     ok(`${'terminal hook'.padEnd(22)} ${pc.dim(`sourced from ${sourcing.join(', ')}`)}`);
   }
-  return problems;
+  return seen;
 };
 
 /**
@@ -905,14 +948,15 @@ const reportShellHook = (hangar: Hangar): number => {
  * tool. A dozen green rows on every run is a wall people learn to scroll past, and the recommended
  * tools stay out of here entirely: `setup` is where you are choosing what to install.
  */
-const reportEnvironmentRow = (hangar: Hangar): number => {
+const reportEnvironmentRow = (hangar: Hangar): readonly string[] => {
   const report = inspectEnvironment(hangar.root);
   if (report.missingRequired.length === 0) {
     const count = report.statuses.filter((s) => s.tool.kind === 'required').length + 1;
     ok(`${'tooling'.padEnd(22)} ${pc.dim(`${String(count)} required programs present`)}`);
-    return 0;
+    return [];
   }
-  warn(`missing required tooling: ${report.missingRequired.join(', ')}`);
+  const missing = `missing required tooling: ${report.missingRequired.join(', ')}`;
+  warn(missing);
   for (const { tool, present } of report.statuses) {
     if (present || tool.kind !== 'required') continue;
     note(`${tool.name.padEnd(18)} ${tool.why}\n  ${installHint(tool)}`);
@@ -928,7 +972,7 @@ const reportEnvironmentRow = (hangar: Hangar): number => {
     );
   }
   note('`hangar setup` prints the same list with the recommended tools, and refuses to continue.');
-  return 1;
+  return [missing];
 };
 
 /**
@@ -947,7 +991,7 @@ const reportEnvironmentRow = (hangar: Hangar): number => {
  * A hangar that declares nothing gets NO row at all. Silence beats "0 variables declared" for
  * the majority of hangars that never fill this in, and the empty default is legal.
  */
-const reportSecretVariables = (hangar: Hangar, fix: boolean): number => {
+const reportSecretVariables = (hangar: Hangar, fix: boolean): readonly string[] => {
   const expected = expectedSecretVariables(
     hangarOwnSecretVariables({
       forgeKind: usesBitbucket(hangar.config.forge) ? 'bitbucketCloud' : 'none',
@@ -956,7 +1000,7 @@ const reportSecretVariables = (hangar: Hangar, fix: boolean): number => {
     }),
     hangar.config.secrets.variables,
   );
-  if (expected.length === 0) return 0;
+  if (expected.length === 0) return [];
 
   const path = hangar.paths.envShared;
 
@@ -975,7 +1019,7 @@ const reportSecretVariables = (hangar: Hangar, fix: boolean): number => {
    * every line inert. `{ mode: 0o600 }` on the create rather than a following `chmod`, because
    * between the two syscalls a world-readable file is sitting where credentials are about to go.
    */
-  let problems = 0;
+  const { seen, problem: report } = collectWarnings();
   let justCreated = false;
   if (!existsSync(path)) {
     if (fix) {
@@ -983,8 +1027,7 @@ const reportSecretVariables = (hangar: Hangar, fix: boolean): number => {
       justCreated = true;
       ok(`created ${tildify(path)} (mode 600) — every line commented out`);
     } else {
-      problems += 1;
-      warn(`the shared secrets file ${tildify(path)} does not exist`);
+      report(`the shared secrets file ${tildify(path)} does not exist`);
       note(
         '`hangar doctor --fix` creates it, commented out. Every clone loads it with ' +
           '`dotenv_if_exists`, so an absent one loads nothing and reports nothing.',
@@ -1005,7 +1048,7 @@ const reportSecretVariables = (hangar: Hangar, fix: boolean): number => {
   const unset = statuses.filter((s) => s.state !== 'set');
   if (unset.length === 0) {
     ok(`${'secrets'.padEnd(22)} ${pc.dim(`${String(expected.length)} expected, all set`)}`);
-    return problems;
+    return seen;
   }
   for (const s of unset) {
     const problem = secretVariableProblem(s);
@@ -1013,10 +1056,7 @@ const reportSecretVariables = (hangar: Hangar, fix: boolean): number => {
     // The dim `optional:` rows are notes, not problems, and stay out of the count for the same
     // reason they are dim: a hangar whose owner never syncs must not be permanently non-zero.
     if (s.optional) note(pc.dim(`optional: ${problem}`));
-    else {
-      problems += 1;
-      warn(problem);
-    }
+    else report(problem);
   }
   // A run that just created the file would otherwise report it created and then report every
   // variable absent, which reads as two contradictory findings rather than one expected state.
@@ -1025,7 +1065,7 @@ const reportSecretVariables = (hangar: Hangar, fix: boolean): number => {
       ? `That scaffold is what is now unset: uncomment and fill in ${tildify(path)}.`
       : `Fill them in at ${tildify(path)}; nothing derives a credential, so \`--fix\` cannot.`,
   );
-  return problems;
+  return seen;
 };
 
 /**
@@ -1037,13 +1077,14 @@ const reportSecretVariables = (hangar: Hangar, fix: boolean): number => {
  * a tab, not a window -- and Xcode and Eclipse are launch-only, so saying `$PROJECT_DIR$` of
  * them (as this row once did) described a mechanism they do not have.
  */
-const reportEditor = (editor: EditorDriver, clones: readonly Clone[]): number => {
+const reportEditor = (editor: EditorDriver, clones: readonly Clone[]): readonly string[] => {
   if (!editor.isAvailable()) {
-    warn(`${editor.label} cannot be launched`);
+    const cannot = `${editor.label} cannot be launched`;
+    warn(cannot);
     note(editor.unavailableHint());
-    return 1;
+    return [cannot];
   }
-  let problems = 0;
+  const { seen, problem } = collectWarnings();
   /*
    * A `rootKeys` table with no file in any clone to apply it to.
    *
@@ -1070,8 +1111,7 @@ const reportEditor = (editor: EditorDriver, clones: readonly Clone[]): number =>
   for (const artifact of clones.length === 0 ? [] : editor.artifacts) {
     if (artifact.tracked || Object.keys(artifact.rootKeys).length === 0) continue;
     if (clones.some((clone) => artifact.copies(clone).some((path) => existsSync(path)))) continue;
-    problems += 1;
-    warn(
+    problem(
       `${artifact.id} is in no clone, so ${editor.label}'s ${String(Object.keys(artifact.rootKeys).length)} per-clone path setting(s) are inert`,
     );
     note(
@@ -1091,7 +1131,7 @@ const reportEditor = (editor: EditorDriver, clones: readonly Clone[]): number =>
       ? 'sync, per-clone paths'
       : 'sync';
   ok(`${'editor'.padEnd(22)} ${pc.dim(`${editor.label} — ${how}, ${setup}`)}`);
-  return problems;
+  return seen;
 };
 
 /**
@@ -1109,27 +1149,30 @@ const reportEditor = (editor: EditorDriver, clones: readonly Clone[]): number =>
  * clone predating the rename keeps the old answer for good and the config may well be the newer
  * one. Naming both and letting the developer decide is the honest report.
  */
-const reportDefaultBranch = (recorded: string | undefined, clones: readonly Clone[]): number => {
+const reportDefaultBranch = (
+  recorded: string | undefined,
+  clones: readonly Clone[],
+): readonly string[] => {
   if (recorded === undefined) {
-    warn('`forge.defaultBranch` is not recorded yet');
+    const unrecorded = '`forge.defaultBranch` is not recorded yet';
+    warn(unrecorded);
     note('The next command that needs it detects it from git and writes the line itself.');
-    return 1;
+    return [unrecorded];
   }
 
   const disagree = clones
     .map((clone) => ({ clone, branch: defaultBranchFromGit(clone.path) }))
     .filter((seen) => seen.branch !== undefined && seen.branch !== recorded);
   if (disagree.length > 0) {
-    warn(
-      `${CONFIG_FILENAME} says the default branch is ${recorded}, but ${disagree
-        .map((seen) => `${seen.clone.name} says ${String(seen.branch)}`)
-        .join(', ')}`,
-    );
+    const renamed = `${CONFIG_FILENAME} says the default branch is ${recorded}, but ${disagree
+      .map((seen) => `${seen.clone.name} says ${String(seen.branch)}`)
+      .join(', ')}`;
+    warn(renamed);
     note(
       `Edit \`forge.defaultBranch\` if the repo renamed it, or refresh a stale clone ` +
         `(\`git -C <clone> remote set-head origin --auto\`). Every command trusts the config.`,
     );
-    return 1;
+    return [renamed];
   }
 
   const agree = clones.filter((clone) => defaultBranchFromGit(clone.path) === recorded).length;
@@ -1140,7 +1183,7 @@ const reportDefaultBranch = (recorded: string | undefined, clones: readonly Clon
         : `${recorded} — origin/HEAD agrees in ${String(agree)} clone(s)`,
     )}`,
   );
-  return 0;
+  return [];
 };
 
 export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOptions): void => {
@@ -1166,9 +1209,9 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
    * oversight: a `--check` flag is the gate (`config schema --check` and `colours sync --check`
    * both exit 1), and a report is a report. `doctor` has no `--check`.
    */
-  let hangarProblems = 0;
+  const hangarWarnings: string[] = [];
   const problem = (message: string): void => {
-    hangarProblems += 1;
+    hangarWarnings.push(message);
     warn(message);
   };
 
@@ -1360,7 +1403,9 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
       note('`hangar config schema` regenerates it from src/config/schema.ts.');
     }
     try {
-      hangarProblems += reportDefaultBranch(loadConfigFile(configPath).forge.defaultBranch, all);
+      hangarWarnings.push(
+        ...reportDefaultBranch(loadConfigFile(configPath).forge.defaultBranch, all),
+      );
     } catch (error) {
       problem(`${tildify(configPath)} does not validate`);
       note(error instanceof CliError ? (error.hint ?? error.message) : String(error));
@@ -1384,8 +1429,8 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
    * nobody sources is a colour scheme that quietly does not exist.
    */
   reportPlatform();
-  hangarProblems += reportEnvironmentRow(hangar);
-  hangarProblems += reportSecretVariables(hangar, opts.fix === true);
+  hangarWarnings.push(...reportEnvironmentRow(hangar));
+  hangarWarnings.push(...reportSecretVariables(hangar, opts.fix === true));
 
   const { driver, source } = terminal(hangar);
   const can = CAPABILITY_LABELS.filter(([key]) => driver.capabilities[key]).map(
@@ -1404,7 +1449,7 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
     warn(refusal.message);
     if (refusal.hint !== undefined) note(refusal.hint);
   }
-  hangarProblems += reportShellHook(hangar);
+  hangarWarnings.push(...reportShellHook(hangar));
 
   /*
    * The editors, and whether each one can actually be launched.
@@ -1440,7 +1485,7 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
   }
   for (const editor of editorChoice.drivers) {
     try {
-      hangarProblems += reportEditor(editor, all);
+      hangarWarnings.push(...reportEditor(editor, all));
     } catch (err) {
       // Same isolation as `open`: an optional editor's probe must not end the health report that
       // the DEFAULT editor's row is in.
@@ -1460,6 +1505,14 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
   }
   const targets = opts.all === true || ref === undefined ? all : [requireClone(hangar, ref)];
   let problems = 0;
+  /*
+   * What is still wrong AFTER this run, which is not the same as what was wrong when it started.
+   *
+   * A check `--fix` repaired stays in `problems` -- the count is of what the run FOUND -- but it
+   * must not reach the recap, whose whole job is to list what the reader still has to act on.
+   * Listing a repaired artifact there would send somebody to fix a file this command just wrote.
+   */
+  const cloneWarnings: DoctorWarning[] = [];
 
   for (const clone of targets) {
     heading(cloneLabel(clone));
@@ -1494,17 +1547,21 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
           note(
             `could not repair: ${error instanceof CliError ? (error.hint ?? error.message) : String(error)}`,
           );
+          cloneWarnings.push({ clone: clone.name, text: `${check.name} — ${check.detail}` });
         }
       } else if (check.repair) {
         fail(`${check.name.padEnd(22)} ${check.detail}`);
         note('fixable with `hangar doctor --fix`');
+        cloneWarnings.push({ clone: clone.name, text: `${check.name} — ${check.detail}` });
       } else {
         fail(`${check.name.padEnd(22)} ${check.detail}`);
+        cloneWarnings.push({ clone: clone.name, text: `${check.name} — ${check.detail}` });
       }
     }
   }
 
   console.log('');
+  const hangarProblems = hangarWarnings.length;
   const total = hangarProblems + problems;
   // The two halves are named separately because they are fixed in different places: a clone
   // problem is almost always derivable, and a hangar one is as often a decision (a credential to
@@ -1521,5 +1578,22 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
     note('A repaired .env.local needs `direnv allow` in that clone; a theme needs a restart.');
   } else {
     note(`${String(total)} problem(s) (${where}). Re-run with --fix to repair the derivable ones.`);
+  }
+
+  /*
+   * The recap, and it goes LAST on purpose: it is the part meant to survive a scrollback that
+   * ate everything above it.
+   */
+  const recap = doctorRecap([
+    ...hangarWarnings.map((text): DoctorWarning => ({ text })),
+    ...cloneWarnings,
+  ]);
+  if (recap.length > 0) {
+    // A `heading`, because the bullets themselves go through `note` and are dim: under the
+    // equally dim summary sentence they read as a footnote to the count rather than as the
+    // thing to act on, which is the defect this whole block exists to fix. The bold label is
+    // what makes the list findable in a hundred-row report.
+    heading('still to fix');
+    for (const line of recap) note(line);
   }
 };

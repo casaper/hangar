@@ -227,8 +227,9 @@ is what a setup check is for. **The machine's CAPABILITIES do not** -- a `ps` th
 terminal with no `writeToTty`. Those are facts about where the fleet is running and are permanent
 on some platforms, so counting them would leave a correctly configured GNOME Terminal hangar
 permanently non-zero. The dim `optional:` secret rows stay out by construction, since they go
-through `note`. The five `report*` helpers return a count rather than sharing a mutable module
-variable, for the reason `two-hangars.test.ts` exists.
+through `note`. The five `report*` helpers return their warning MESSAGES (`readonly string[]`)
+rather than sharing a mutable module variable, for the reason `two-hangars.test.ts` exists -- the
+count is `.length`, so there is one source for both the tally and the recap below.
 
 The summary names the two halves separately -- `above the clones` and `in N clone(s)` -- because
 they are fixed in different places: a clone problem is almost always derivable, and a hangar one
@@ -238,6 +239,31 @@ is as often a decision `--fix` will never close.
 is this CLI's gate -- `config schema --check` and `colours sync --check` both exit 1 when stale,
 verified -- and a report is a report. `doctor` has no `--check`, so nothing should read `$?` from
 it; the summary line is the answer.
+
+### The count was not actionable on its own
+
+The tally above fixed a summary that contradicted the report. It did not fix the reason anybody
+reads a summary: a full `doctor` run is upwards of a hundred `ok` rows, and
+`1 problem(s) (above the clones)` says a problem exists without saying which. **An unsourced
+terminal colour hook sat unreported-on for several sessions in exactly that gap** -- the check
+below was working the whole time, printed the precise line to add, and the developer had to ask
+why their tab colours had stopped rather than read it. A check nobody scrolls back to is worth
+about as much as a check that is red in normal operation.
+
+So the footer now repeats every outstanding warning as a `·` bullet, hangar-level first. Three
+decisions in it:
+
+- **Verbatim, never re-worded.** The wording at the point of discovery is what somebody may
+  already have searched the output for, and two phrasings of one finding read as two findings.
+- **Outstanding, not found.** Under `--fix` a repaired check stays in the COUNT -- that is what
+  the run found -- and drops out of the recap, because the recap is a to-do list. Listing a
+  repaired artifact would send somebody to fix a file `doctor` had just written.
+- **`doctorRecap` is a pure exported builder** and `test/doctor-recap.test.ts` asserts properties
+  over it -- that nothing is dropped, that order survives, that a clone warning names its clone
+  and a hangar one does not. Not the bullet character: expected text here would be a second
+  oracle to hand-update on every prose edit, which is the work the golden net absorbs. `doctor`'s
+  own output is captured under `advisory/` and gated for nobody, so this builder is the only
+  mechanical check the recap has.
 
 ## The shell-hook check matched a bare filename
 

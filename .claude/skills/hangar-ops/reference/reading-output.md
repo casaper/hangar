@@ -71,6 +71,14 @@ Each per-clone check is a **green `ok` line** or a **red failure**. A failure wh
 derivable from the clone index adds `` fixable with `hangar doctor --fix` ``; a failure without that
 line cannot be repaired automatically and needs a human decision. The footer counts the problems.
 
+**The footer then repeats every warning, one `·` bullet each — hangar-level ones first, then the
+per-clone ones prefixed with their clone.** That recap is the part to relay: a full report is
+upwards of a hundred green rows, so the count on its own sent people scrolling back through all of
+it to find which row was red. A warning appears there **verbatim**, so quote the bullet rather than
+paraphrasing it. Only what is still outstanding is listed — under `--fix`, a check that was
+repaired stays in the count and drops out of the recap, because the recap is what the reader still
+has to act on. No bullets at all means nothing is outstanding.
+
 Four things to say correctly when you relay a report:
 
 - **`settings targets` and `settings.local.json` are not the same question, so they can disagree
