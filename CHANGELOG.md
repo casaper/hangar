@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.16.2](https://github.com/casaper/hangar/compare/v0.16.1...v0.16.2) (2026-09-07)
+
+### Bug Fixes
+
+* **jira:** Compare a cached name's link target, not two inodes ([00770ad](https://github.com/casaper/hangar/commit/00770adea41e86a8b6d3edc865358e21556d6b6f))
+* **jira:** Find a cached record by its directory, and point it at the store with a symlink ([32ad6f7](https://github.com/casaper/hangar/commit/32ad6f7154fb7e1a2a514184747c4aecca05af8b))
+* **jira:** Read a whole frontmatter block, so a record's fetched_at is found ([76e74ce](https://github.com/casaper/hangar/commit/76e74ce373725351e55c0fb423d113ccd010f5b0))
+* **tmp:** Link the record store into every clone, and fold a clone's own private one ([06b1f33](https://github.com/casaper/hangar/commit/06b1f331bedbc2b619ff01a8672d5bb71c60fa3d))
+* **tmp:** Remove a clone's private record store once nothing is left to decide ([304f515](https://github.com/casaper/hangar/commit/304f5152a86d97fe3bed22a41f974c56900fb93e))
+
+### Refactoring
+
+* **jira:** Let a name that cannot be a symlink stay exactly as it is ([7c6b41e](https://github.com/casaper/hangar/commit/7c6b41efa57b5c05d9068e7d20203fdb049080f6))
+
+### Documentation
+
+* **jira:** Say that a cached record is a symlink into the store ([bbd962d](https://github.com/casaper/hangar/commit/bbd962d640380d211999efa7b258ae4ba422c5d5))
+
 ## [0.16.1](https://github.com/casaper/hangar/compare/v0.16.0...v0.16.1) (2026-09-07)
 
 ### Documentation
