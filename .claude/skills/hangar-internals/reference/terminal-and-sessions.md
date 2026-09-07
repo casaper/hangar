@@ -182,6 +182,46 @@ just not brought forward, and `tmux attach -t hangar-<id>` finishes the job. The
 spare untagged window sitting in a clone is the foreign window `open` is built to be suspicious
 of.
 
+### The colour lives in the shell hook, and every `set -w` names `$TMUX_PANE`
+
+**tmux had no colour at all until it was asked about.** `generate/terminal-sh.ts` sent `$TMUX`
+down its `title` family, on the reasoning that the emulator sequences would need DCS passthrough
+and that pane colour is tmux's own business -- so the one driver with the full capability set on
+Linux offered the `env` layer and nothing else, which needs the developer to write their own
+status-line format before anything is visible.
+
+It is fixed in the **hook**, not here, and the driver still declares `paintOnCreate: false`. That
+is now a positive statement rather than a gap. Two reasons, and the second is the one that
+decides it:
+
+- A driver only paints tabs `hangar open` created; the hook paints whatever `$PWD` is in, so a
+  window made with `C-b c` is coloured too. That is the same argument `TerminalCapabilities`
+  already makes for every emulator except Terminal.app.
+- The value a `paintOnCreate` driver receives is the **tinted background** (`commands/open.ts`),
+  because that is the surface Terminal.app paints. A tmux window-status entry wants the full hue,
+  so routing tmux through the seam would mean carrying two colours through it for one consumer.
+
+The hook sets five window options -- `@hangar_colour`, `window-status-style`,
+`window-status-current-style`, and both pane border styles. All five were confirmed settable per
+window on tmux 3.7c, confirmed not to leak into a sibling window, and confirmed to clear with
+`set -uw`. `-u` rather than writing a literal default, so two hangars sharing one server restore
+each other's values instead of flattening them; never `-g`, which would have the last clone
+entered recolour every window of both.
+
+**`-t "$TMUX_PANE"` on every call, and it is load-bearing.** `set -w` with no target is the
+session's ACTIVE window, not the window the calling shell is in. Without it, two clone windows in
+one session got this: entering `clone_02` in window 1 put `clone_02`'s hue on **window 0** and
+left window 1 with none. A pane id is a legal target for a window option and resolves to that
+pane's own window, so the fix costs no extra exec -- tmux sets `TMUX_PANE` in every pane, and it
+keeps working from a split, which is the same property that put the `@hangar_*` tags at window
+scope above. This was found by opening two windows in one session and reading the options back,
+which is the only way it shows up: with a single window the wrong target and the right one are
+the same window.
+
+`window-status-current-style` is set alongside `window-status-style` because they are different
+options -- the first styles a window that is not current. With only the second, the clone you are
+actually looking at is the one window with no colour.
+
 **`send-keys -l -- <text>` then a separate `Enter`.** `-l` is literal, so a word like `Enter`
 inside a `SYNC PAUSE` message stays a word instead of becoming a keypress, and `--` guards a
 message beginning with a dash. The newline has to be its own call for the same reason `-l` is

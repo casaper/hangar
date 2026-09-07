@@ -33,13 +33,14 @@ esac
 #   iterm2  OSC 6, which colours the tab in the tab bar -- the full hue.
 #   konsole OSC 11 background, plus OSC 30 for the tab label.
 #   osc11   OSC 11 background. VTE (GNOME Terminal), xterm, alacritty, kitty, foot, …
+#   tmux    `set -w` window options: the window-status entry and the pane borders. tmux
+#           swallows the emulator sequences, so it is coloured through its own options.
 #   title   title only. Terminal.app ignores OSC 11, and `hangar open` paints its tabs
-#           over AppleScript instead; under tmux, escape sequences would need DCS
-#           passthrough and tmux has its own pane colours, so the chrome is left alone.
+#           over AppleScript instead.
 #   none    nothing recognised. No escape sequences at all; the env layer still works.
 # ---------------------------------------------------------------------------
 if [ -n "${TMUX:-}" ]; then
-    _hangar_wt_fam='title'
+    _hangar_wt_fam='tmux'
 elif [ -n "${ITERM_SESSION_ID:-}" ] || [ "${TERM_PROGRAM:-}" = 'iTerm.app' ] || [ "${LC_TERMINAL:-}" = 'iTerm2' ]; then
     _hangar_wt_fam='iterm2'
 elif [ "${TERM_PROGRAM:-}" = 'Apple_Terminal' ]; then
@@ -62,11 +63,14 @@ else
     esac
 fi
 
-# `main x tint`, as #rrggbb. The hue arrives as the r;g;b triple the table stores.
-_hangar_wt_tinted() {
+# The hue as #rrggbb, scaled to $2 per cent. The triple is what the colour table stores.
+#
+# 100 for a tab label or a pane border, where the full strength is exactly what is wanted,
+# and the configured tint for a window BACKGROUND, which text has to stay readable against.
+_hangar_wt_hex() {
     local r rest g b
     r=${1%%;*}; rest=${1#*;}; g=${rest%%;*}; b=${rest#*;}
-    printf '#%02x%02x%02x' "$((r * _hangar_wt_tint / 100))" "$((g * _hangar_wt_tint / 100))" "$((b * _hangar_wt_tint / 100))"
+    printf '#%02x%02x%02x' "$((r * $2 / 100))" "$((g * $2 / 100))" "$((b * $2 / 100))"
 }
 
 # $1 = r;g;b, or empty to restore the terminal default.
@@ -84,6 +88,45 @@ _hangar_wt_chrome_set() {
             printf '\033]6;1;bg;green;brightness;%d\a' "$g"
             printf '\033]6;1;bg;blue;brightness;%d\a'  "$b"
             ;;
+        tmux)
+            # Window options, never `-g`: two hangars can share one tmux server, and a
+            # global would have whichever clone was entered last recolour every window of
+            # both. `-u` on the way out restores the session value rather than writing a
+            # literal default over it, which is what keeps that sharing lossless.
+            #
+            # `-t "$TMUX_PANE"` on every call, and it is load-bearing. `set -w` with NO
+            # target is the session's ACTIVE window, not the window the calling shell is
+            # in -- so with two clone windows open, a `cd` in the background one repainted
+            # whichever window was on screen. Measured: entering clone_02 in window 1 put
+            # clone_02's hue on window 0 and left window 1 with none.
+            #
+            # A PANE id is a legal target for a window option and resolves to that pane's
+            # own window, so this costs no extra exec -- tmux sets TMUX_PANE in every pane,
+            # and it keeps working from a split, which is also why the driver keeps its
+            # `@hangar_*` tags at window scope.
+            if [ -z "$1" ]; then
+                tmux set -uw -t "$TMUX_PANE" @hangar_colour 2>/dev/null
+                tmux set -uw -t "$TMUX_PANE" window-status-style 2>/dev/null
+                tmux set -uw -t "$TMUX_PANE" window-status-current-style 2>/dev/null
+                tmux set -uw -t "$TMUX_PANE" pane-border-style 2>/dev/null
+                tmux set -uw -t "$TMUX_PANE" pane-active-border-style 2>/dev/null
+                return 0
+            fi
+            local hue
+            hue=$(_hangar_wt_hex "$1" 100)
+            # The hue as data too, in the `@hangar_*` namespace `terminal/tmux.ts` already
+            # owns -- so a developer's own status-line format can read it instead of
+            # re-deriving the colour, and `tmux show -w` explains what painted the window.
+            tmux set -w -t "$TMUX_PANE" @hangar_colour "$hue" 2>/dev/null
+            # Both status styles: the first is the window when it is not current, the second
+            # when it is. Without the second, the clone you are LOOKING at is the one window
+            # with no colour.
+            tmux set -w -t "$TMUX_PANE" window-status-style "fg=$hue" 2>/dev/null
+            tmux set -w -t "$TMUX_PANE" window-status-current-style "fg=$hue,bold" 2>/dev/null
+            # The borders carry it too, for a status line that is switched off or too full.
+            tmux set -w -t "$TMUX_PANE" pane-border-style "fg=$hue" 2>/dev/null
+            tmux set -w -t "$TMUX_PANE" pane-active-border-style "fg=$hue" 2>/dev/null
+            ;;
         konsole|osc11)
             if [ -z "$1" ]; then
                 # OSC 111 resets the background where it is understood (xterm, VTE). A
@@ -96,7 +139,7 @@ _hangar_wt_chrome_set() {
                 fi
                 return 0
             fi
-            printf '\033]11;%s\a' "$(_hangar_wt_tinted "$1")"
+            printf '\033]11;%s\a' "$(_hangar_wt_hex "$1" "${_hangar_wt_tint}")"
             ;;
     esac
 }

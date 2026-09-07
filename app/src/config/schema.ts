@@ -306,11 +306,13 @@ export const terminalSchema = z.strictObject({
    * bottom one always works:
    *
    * - `chrome` -- the tab or window colour, through whichever escape sequence the emulator
-   *   understands (iTerm2's tab colour, everyone else's background colour). Terminal.app
+   *   understands (iTerm2's tab colour, everyone else's background colour). Under tmux it is
+   *   tmux's own window options instead, since tmux swallows the sequences. Terminal.app
    *   understands neither, so there it is painted by AppleScript when the tab is created.
    * - `title` -- the window/tab title, which every terminal since the 1980s supports.
    * - `env` -- `HANGAR_CLONE*` variables, which need no terminal support at all and are what a
-   *   prompt, a starship config or a tmux status line can colour itself from.
+   *   prompt or a starship config can colour itself from. This was once the only thing a tmux
+   *   user got; it is now the floor under tmux too, not the whole of it.
    */
   colour: z
     .strictObject({
@@ -322,7 +324,8 @@ export const terminalSchema = z.strictObject({
        *
        * A saturated hue behind text is unreadable, so the background gets a dark fraction of it
        * -- enough to tell four windows apart at a glance, not enough to fight the theme. iTerm2
-       * is unaffected: it colours the tab itself, where the full hue is exactly right.
+       * and tmux are unaffected: they colour a tab and a window-status entry, where the full hue
+       * is exactly right.
        */
       tint: z.number().min(0).max(1).default(0.16),
     })

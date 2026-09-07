@@ -475,13 +475,13 @@ running, and overridden by `terminal.kind` in `hangar.config.yaml`. Drivers decl
 **capabilities** rather than pretending to be equivalent, and every caller degrades one
 capability at a time:
 
-| driver         | tabs | list         | tag                 | type into a live tab |
-| -------------- | ---- | ------------ | ------------------- | -------------------- |
-| iTerm2         | yes  | yes          | yes                 | yes                  |
-| tmux           | yes  | yes          | `@hangar_*` options | yes                  |
-| Terminal.app   | yes  | yes          | via `custom title`  | yes                  |
-| Konsole        | yes  | with `qdbus` | with `qdbus`        | with `qdbus`         |
-| GNOME Terminal | yes  | no           | no                  | **no**               |
+| driver         | tabs | list         | tag                 | type into a live tab | colour               |
+| -------------- | ---- | ------------ | ------------------- | -------------------- | -------------------- |
+| iTerm2         | yes  | yes          | yes                 | yes                  | OSC 6, the tab       |
+| tmux           | yes  | yes          | `@hangar_*` options | yes                  | `set -w`, its own    |
+| Terminal.app   | yes  | yes          | via `custom title`  | yes                  | AppleScript, on open |
+| Konsole        | yes  | with `qdbus` | with `qdbus`        | with `qdbus`         | OSC 11 background    |
+| GNOME Terminal | yes  | no           | no                  | **no**               | OSC 11 background    |
 
 iTerm2 is the reference because it has scriptable per-session **user variables** — everything
 `open` does safely (find the fleet window, notice a clone is already open, refuse to adopt
@@ -490,6 +490,15 @@ other driver with a real equivalent**: `@hangar_id`/`@hangar_clone`/`@hangar_rol
 options, which is why it reaches the full capability set. Terminal.app and Konsole approximate
 it with a title; GNOME Terminal cannot do it at all, so there `open` says so once and only
 appends.
+
+**The colour column is the generated shell hook's, not the driver's** — except Terminal.app's,
+which is the one emulator that cannot be coloured from the shell at all. That is what
+`TerminalCapabilities.paintOnCreate` marks, and it stays false for tmux even though tmux is now
+coloured: the hook does it, so a window made with `C-b c` gets its hue too, which a driver that
+only ever paints what `hangar open` created cannot manage. **tmux went uncoloured until it was
+asked about** — the hook fell through to `title`, so the one driver with the full capability set
+on Linux had no colour layer but `env`. `generate/terminal-sh.ts` carries the rest, including why
+every `tmux set -w` names `$TMUX_PANE`.
 
 **tmux maps a SESSION to a window and a WINDOW to a tab**, and `$TMUX` is tested before every
 emulator signal — inside tmux inside iTerm2 both are set, and driving the emulator opens a tab

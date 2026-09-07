@@ -54,22 +54,30 @@ It paints **three independent layers**, because the emulators support wildly dif
 | layer  | how                                    | where                                        |
 | ------ | -------------------------------------- | -------------------------------------------- |
 | chrome | iTerm2's OSC 6 tab colour, at full hue | iTerm2                                       |
+| chrome | `tmux set -w` window options, full hue | tmux, which swallows the escape sequences    |
 | chrome | OSC 11 background, darkened to a tint  | Konsole, GNOME Terminal/VTE, xterm, kitty, … |
 | chrome | nothing — `hangar open` paints the tab | Terminal.app, which ignores OSC 11           |
 | title  | OSC 0 (plus OSC 30 for Konsole's tab)  | everywhere recognised                        |
 | env    | `HANGAR_CLONE*` variables              | everywhere, with no terminal support at all  |
 
 The **env layer is the floor** and the reason this works on terminals nobody has thought about: a
-prompt, a starship config or a tmux status line can colour itself from `HANGAR_CLONE_SGR` (a real
-escape sequence, 24-bit or 256-colour depending on `$COLORTERM`) with no emulator co-operation.
-The others are `HANGAR_CLONE`, `_RGB`, `_HEX`, `_X256`, `_COLOUR` and `HANGAR_ID`.
+prompt or a starship config can colour itself from `HANGAR_CLONE_SGR` (a real escape sequence,
+24-bit or 256-colour depending on `$COLORTERM`) with no emulator co-operation. The others are
+`HANGAR_CLONE`, `_RGB`, `_HEX`, `_X256`, `_COLOUR` and `HANGAR_ID`.
 
 The background is a **tint** (`terminal.colour.tint`, 16% by default), not the hue: a saturated
-colour behind text is unreadable. iTerm2 escapes this because OSC 6 colours the tab in the tab
-bar, where full strength is exactly right. Under **tmux** and on an unrecognised terminal the
-chrome and title layers are skipped entirely — escapes would need DCS passthrough, and a stray
-escape in someone's output is corruption, not colour. If your terminal ignores the OSC 111 reset,
-set `HANGAR_TERM_BG` to your real background and the hook restores that instead.
+colour behind text is unreadable. iTerm2 and tmux escape this because they colour a tab and a
+window-status entry, where full strength is exactly right. On an **unrecognised** terminal the
+chrome and title layers are skipped entirely — a stray escape in someone's output is corruption,
+not colour. If your terminal ignores the OSC 111 reset, set `HANGAR_TERM_BG` to your real
+background and the hook restores that instead.
+
+**Under tmux the hook sets five window options** rather than emitting escapes, which tmux would
+swallow: `@hangar_colour` plus `window-status-style`, `window-status-current-style` and both pane
+border styles. So a clone shows up in tmux's own status line and on its pane borders, and it
+works for a window you made yourself with `C-b c`, not only one `hangar open` created. They are
+**window**-scoped and cleared with `set -u`, so two hangars can share one tmux server and a
+window you `cd` out of restores what it had. `tmux show -w` is how to see what painted a window.
 
 `hangar doctor` reports the detected driver and its capabilities, whether an rc actually sources
 the hook, and — the trap worth knowing — **whether an rc names a file under this hangar that no

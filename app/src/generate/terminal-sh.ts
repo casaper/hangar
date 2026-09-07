@@ -33,6 +33,7 @@ export type TerminalColourSettings = {
  * | layer  | how                                        | works in                                  |
  * | ------ | ------------------------------------------ | ----------------------------------------- |
  * | chrome | iTerm2's OSC 6 tab colour                  | iTerm2 -- the full hue, on the tab itself |
+ * |        | `tmux set -w` window options               | tmux -- the full hue, on its own chrome   |
  * |        | OSC 11 background, darkened to a tint      | Konsole, VTE (GNOME Terminal), xterm, …   |
  * |        | nothing; `hangar open` uses AppleScript    | Terminal.app                              |
  * | title  | OSC 0 (and OSC 30 for Konsole's tab)       | everywhere                                |
@@ -41,6 +42,23 @@ export type TerminalColourSettings = {
  * The env layer is the floor and the reason this works on terminals nobody has thought about: a
  * prompt, a starship config or a tmux status line can colour itself from `HANGAR_CLONE_SGR`
  * without the emulator co-operating in any way.
+ *
+ * ## tmux is coloured HERE and not by the terminal driver
+ *
+ * tmux swallows the emulator's escape sequences, so under it this hook used to fall through to
+ * `title` and a tmux user got no colour at all -- the one full-capability driver on Linux, and
+ * the only layer it had was `env`, which needs the developer to write their own status-line
+ * format. The driver looks like the obvious place to fix that, and is not, for two reasons.
+ *
+ * A driver only ever paints tabs `hangar open` created, whereas this hook paints whatever `$PWD`
+ * is in -- so a window made with `C-b c` gets its colour too, which is the same argument
+ * `TerminalCapabilities.paintOnCreate` already makes for every other emulator. And the value a
+ * `paintOnCreate` driver is handed is the TINTED background (`commands/open.ts`), which is the
+ * wrong colour for a status-line entry; routing tmux through the seam would mean carrying two
+ * colours through it for one consumer.
+ *
+ * So `tmux.ts` keeps `paintOnCreate: false`, and that is now a positive statement -- the hook
+ * covers it -- rather than the gap it was.
  *
  * ## Why the background is a TINT and not the hue
  *
@@ -98,13 +116,14 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
     '#   iterm2  OSC 6, which colours the tab in the tab bar -- the full hue.',
     '#   konsole OSC 11 background, plus OSC 30 for the tab label.',
     '#   osc11   OSC 11 background. VTE (GNOME Terminal), xterm, alacritty, kitty, foot, …',
+    '#   tmux    `set -w` window options: the window-status entry and the pane borders. tmux',
+    '#           swallows the emulator sequences, so it is coloured through its own options.',
     '#   title   title only. Terminal.app ignores OSC 11, and `hangar open` paints its tabs',
-    '#           over AppleScript instead; under tmux, escape sequences would need DCS',
-    '#           passthrough and tmux has its own pane colours, so the chrome is left alone.',
+    '#           over AppleScript instead.',
     '#   none    nothing recognised. No escape sequences at all; the env layer still works.',
     '# ---------------------------------------------------------------------------',
     `if [ -n "\${TMUX:-}" ]; then`,
-    `    ${p}_fam='title'`,
+    `    ${p}_fam='tmux'`,
     `elif [ -n "\${ITERM_SESSION_ID:-}" ] || [ "\${TERM_PROGRAM:-}" = 'iTerm.app' ] || [ "\${LC_TERMINAL:-}" = 'iTerm2' ]; then`,
     `    ${p}_fam='iterm2'`,
     `elif [ "\${TERM_PROGRAM:-}" = 'Apple_Terminal' ]; then`,
@@ -127,11 +146,14 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
     '    esac',
     'fi',
     '',
-    '# `main x tint`, as #rrggbb. The hue arrives as the r;g;b triple the table stores.',
-    `${p}_tinted() {`,
+    '# The hue as #rrggbb, scaled to $2 per cent. The triple is what the colour table stores.',
+    '#',
+    '# 100 for a tab label or a pane border, where the full strength is exactly what is wanted,',
+    '# and the configured tint for a window BACKGROUND, which text has to stay readable against.',
+    `${p}_hex() {`,
     '    local r rest g b',
     '    r=${1%%;*}; rest=${1#*;}; g=${rest%%;*}; b=${rest#*;}',
-    `    printf '#%02x%02x%02x' "$((r * ${p}_tint / 100))" "$((g * ${p}_tint / 100))" "$((b * ${p}_tint / 100))"`,
+    `    printf '#%02x%02x%02x' "$((r * $2 / 100))" "$((g * $2 / 100))" "$((b * $2 / 100))"`,
     '}',
     '',
     '# $1 = r;g;b, or empty to restore the terminal default.',
@@ -149,6 +171,45 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
     '            printf \'\\033]6;1;bg;green;brightness;%d\\a\' "$g"',
     '            printf \'\\033]6;1;bg;blue;brightness;%d\\a\'  "$b"',
     '            ;;',
+    '        tmux)',
+    '            # Window options, never `-g`: two hangars can share one tmux server, and a',
+    '            # global would have whichever clone was entered last recolour every window of',
+    '            # both. `-u` on the way out restores the session value rather than writing a',
+    '            # literal default over it, which is what keeps that sharing lossless.',
+    '            #',
+    '            # `-t "$TMUX_PANE"` on every call, and it is load-bearing. `set -w` with NO',
+    "            # target is the session's ACTIVE window, not the window the calling shell is",
+    '            # in -- so with two clone windows open, a `cd` in the background one repainted',
+    '            # whichever window was on screen. Measured: entering clone_02 in window 1 put',
+    "            # clone_02's hue on window 0 and left window 1 with none.",
+    '            #',
+    "            # A PANE id is a legal target for a window option and resolves to that pane's",
+    '            # own window, so this costs no extra exec -- tmux sets TMUX_PANE in every pane,',
+    '            # and it keeps working from a split, which is also why the driver keeps its',
+    '            # `@hangar_*` tags at window scope.',
+    '            if [ -z "$1" ]; then',
+    '                tmux set -uw -t "$TMUX_PANE" @hangar_colour 2>/dev/null',
+    '                tmux set -uw -t "$TMUX_PANE" window-status-style 2>/dev/null',
+    '                tmux set -uw -t "$TMUX_PANE" window-status-current-style 2>/dev/null',
+    '                tmux set -uw -t "$TMUX_PANE" pane-border-style 2>/dev/null',
+    '                tmux set -uw -t "$TMUX_PANE" pane-active-border-style 2>/dev/null',
+    '                return 0',
+    '            fi',
+    '            local hue',
+    `            hue=$(${p}_hex "$1" 100)`,
+    '            # The hue as data too, in the `@hangar_*` namespace `terminal/tmux.ts` already',
+    "            # owns -- so a developer's own status-line format can read it instead of",
+    '            # re-deriving the colour, and `tmux show -w` explains what painted the window.',
+    '            tmux set -w -t "$TMUX_PANE" @hangar_colour "$hue" 2>/dev/null',
+    '            # Both status styles: the first is the window when it is not current, the second',
+    '            # when it is. Without the second, the clone you are LOOKING at is the one window',
+    '            # with no colour.',
+    '            tmux set -w -t "$TMUX_PANE" window-status-style "fg=$hue" 2>/dev/null',
+    '            tmux set -w -t "$TMUX_PANE" window-status-current-style "fg=$hue,bold" 2>/dev/null',
+    '            # The borders carry it too, for a status line that is switched off or too full.',
+    '            tmux set -w -t "$TMUX_PANE" pane-border-style "fg=$hue" 2>/dev/null',
+    '            tmux set -w -t "$TMUX_PANE" pane-active-border-style "fg=$hue" 2>/dev/null',
+    '            ;;',
     '        konsole|osc11)',
     '            if [ -z "$1" ]; then',
     '                # OSC 111 resets the background where it is understood (xterm, VTE). A',
@@ -161,7 +222,7 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
     '                fi',
     '                return 0',
     '            fi',
-    `            printf '\\033]11;%s\\a' "$(${p}_tinted "$1")"`,
+    `            printf '\\033]11;%s\\a' "$(${p}_hex "$1" "\${${p}_tint}")"`,
     '            ;;',
     '    esac',
     '}',
