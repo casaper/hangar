@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, rmdirSync } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
 
 import { freshnessOf } from '../dedupe.ts';
@@ -10,9 +10,11 @@ import {
   frontmatterOf,
   hasTopLevelKey,
   linkToStore,
+  storeLinkTarget,
   storeRecordPath,
 } from '../jira-records.ts';
 import type { Hangar } from '../hangar.ts';
+import { linkTargetOf } from '../tmp.ts';
 
 /**
  * `hangar jira hook` -- a `PreToolUse` hook that serves a cached ticket instead of fetching it.
@@ -247,14 +249,6 @@ const removeEmpty = (dirs: readonly string[]): void => {
     } catch {
       // Not empty, or already gone -- either way it is not this run's to remove.
     }
-  }
-};
-
-const inodeOf = (path: string): number | undefined => {
-  try {
-    return statSync(path).ino;
-  } catch {
-    return undefined;
   }
 };
 
@@ -501,7 +495,13 @@ export const jiraHook = (hangar: Hangar | undefined, opts: JiraHookOptions): voi
   for (const plan of plans) {
     try {
       if (plan.kept) continue;
-      if (inodeOf(plan.destination) === inodeOf(storeRecordPath(hangar, plan.record.key))) {
+      // Already pointing at the store, asked as a fact about the destination alone. This
+      // compared the two files' INODES, and `inodeOf` answered `undefined` for a path it could
+      // not stat -- so two failures compared equal, and a store record that vanished between
+      // `planLinks` reading it and this loop made every destination look linked. The hook then
+      // denied the fetch and named files that were not there, which is the one outcome a cache
+      // must never produce: an agent left unable to read a ticket for a reason it cannot see.
+      if (linkTargetOf(plan.destination) === storeLinkTarget(hangar, plan.record.key)) {
         linked.push(plan.destination);
         continue;
       }
