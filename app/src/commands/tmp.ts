@@ -8,7 +8,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 import pc from 'picocolors';
 
@@ -22,11 +22,12 @@ import {
   sameTicketGroups,
 } from '../dedupe.ts';
 import {
+  danglingStoreLinks,
   groupTicketRecords,
-  isTicketRecordName,
   linkToStore,
   planGroup,
   storeContentFrom,
+  ticketNameOf,
   writeStoreRecord,
 } from '../jira-records.ts';
 import { CliError } from '../exec.ts';
@@ -443,8 +444,10 @@ const syncJiraStore = (hangar: Hangar, dryRun: boolean): void => {
    * them, and it would create `tmp/jira-tickets/` in a repo that will never have one.
    */
   if (hangar.config.tracker.kind === 'none') return;
-  const groups = groupTicketRecords(hangar, ticketRecordPaths(hangar));
-  if (groups.length === 0) return;
+  const paths = ticketRecordPaths(hangar);
+  const groups = groupTicketRecords(hangar, paths);
+  const dangling = danglingStoreLinks(paths);
+  if (groups.length === 0 && dangling.length === 0) return;
 
   heading(`One record per ticket in ${tildify(hangar.paths.jiraTickets)}`);
   if (!dryRun) mkdirSync(hangar.paths.jiraTickets, { recursive: true });
@@ -492,7 +495,8 @@ const syncJiraStore = (hangar: Hangar, dryRun: boolean): void => {
       note(pc.dim(`${copy.rel} → link${dryRun ? ' would be made' : 'ed'}`));
       if (dryRun) continue;
       try {
-        linkToStore(hangar, group.key, copy.path);
+        if (linkToStore(hangar, group.key, copy.path) === 'copy')
+          warn(`${copy.rel}: no symlink support here — copied, so this name is not shared`);
       } catch (error) {
         warn(`${copy.rel}: could not link — ${(error as Error).message}`);
       }
@@ -506,8 +510,14 @@ const syncJiraStore = (hangar: Hangar, dryRun: boolean): void => {
     }
   }
 
-  if (records === 0 && links === 0) note(pc.dim('every ticket already has one record'));
-  else
+  // Nothing to re-point them at: the record they named is gone, so only a re-sync fixes it.
+  for (const path of dangling) {
+    warn(`${basename(dirname(path))}/${basename(path)}: reaches no record — re-sync the ticket`);
+  }
+
+  if (records === 0 && links === 0) {
+    if (dangling.length === 0) note(pc.dim('every ticket already has one record'));
+  } else
     ok(
       `${String(records)} record(s) ${dryRun ? 'to write' : 'written'}, ` +
         `${String(links)} name(s) ${dryRun ? 'to link' : 'linked'}`,
@@ -532,10 +542,13 @@ const ticketRecordPaths = (hangar: Hangar): string[] => {
       try {
         isDir = statSync(path).isDirectory();
       } catch {
-        continue;
+        // A dangling symlink -- not a directory, and still worth classifying rather than
+        // skipping: a name that reaches nothing is exactly what this pass has to report.
+        isDir = false;
       }
       if (isDir) walk(path);
-      else if (isTicketRecordName(basename(path))) found.push(path);
+      // The containing directory, because the store layout's `ticket.md` carries no key.
+      else if (ticketNameOf(basename(dir), basename(path)) !== undefined) found.push(path);
     }
   };
   walk(hangar.paths.tmp);
@@ -563,10 +576,19 @@ const ticketRecordPaths = (hangar: Hangar): string[] => {
 const resolveSameTicketCopies = (hangar: Hangar, dryRun: boolean): void => {
   const groups = sameTicketGroups(hangar.paths.tmp).filter(
     // Ticket RECORDS belong to `syncJiraStore` above, which picks a winner by a stronger rule
-    // (a ticket's own record beats a relation copy regardless of age) and links every name to
-    // one store file. What is left here is the rest of the per-ticket cache -- `plan_<KEY>.md`,
+    // (a ticket's own record beats a neighbour regardless of age) and points every name at one
+    // store file. What is left here is the rest of the per-ticket cache -- `plan_<KEY>.md`,
     // `pr_description_<KEY>.md` -- where freshest-wins is the whole of the right answer.
-    (g) => !g.linked && !g.identical && g.canonical !== `ticket_${g.key}.md`,
+    //
+    // Asked through `ticketNameOf` rather than by rebuilding the canonical name here, which is
+    // how this filter and the store pass came to disagree about what a record is: whichever
+    // layout is on disk, exactly one of the two passes claims it.
+    (g) =>
+      !g.linked &&
+      !g.identical &&
+      !g.copies.some(
+        (copy) => ticketNameOf(basename(dirname(copy.path)), basename(copy.path)) !== undefined,
+      ),
   );
   if (groups.length === 0) return;
   blank();
