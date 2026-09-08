@@ -82,6 +82,37 @@ The most dangerous command in the CLI and the two that share its machinery.
   hand while it is working.** It is aborted after 10 minutes
   (`ORCH_UTIL_RESOLVE_TIMEOUT_MS` overrides), and the headless session id it prints is the
   transcript to read afterwards.
+- **The operator can talk to that run while it happens, and the protocol is why the prompt goes
+  in over stdin.** The resolver is spawned with `--input-format stream-json`, which makes stdin a
+  stream of further user messages rather than a single prompt, so a line typed at the terminal is
+  forwarded as one more message — the way to say "keep master's version of that spec" while the
+  model is still reading files, instead of discovering the wrong choice a minute later. Five
+  properties hold it together. The first four are measured against the CLI; the last is
+  reasoned, and is the one to suspect first if this ever misbehaves:
+  - **The prompt itself is the first message on stdin, not an argv prompt.** One shape, verified,
+    for both the first message and every later one.
+  - **`--replay-user-messages` echoes each accepted line back on the output stream**, so a
+    delivered instruction is SHOWN (`→ sent: …`) rather than hoped for. The first replay is the
+    prompt this command sent itself and is not printed. A message written after stdin has closed
+    is an `EPIPE` on a dead child, which is handled and never takes the sync down.
+  - **A queued line is picked up as the NEXT turn**, so the session does not exit at the first
+    `result` if something was typed during it: stdin closes on a `result` with nothing pending,
+    and EOF is what ends the session — it will otherwise wait for input forever.
+  - **Streaming input does NOT hand permission decisions to a host**, which is the one way these
+    flags could have reintroduced the hang they sit next to: `--input-format stream-json` is the
+    SDK host protocol, and `--permission-prompts` defaults either to `host` — nobody answering,
+    so the first tool call outside the allowlist blocks until the ten-minute timeout and the sync
+    rolls back — or to nobody, which denies and carries on. An A/B of the two spawn shapes on a
+    call outside the allowlist answers it: both auto-deny with `This command requires approval`,
+    the model reads the refusal and continues, and both reach `result success`. Nothing needs
+    `--permission-prompts none` pinned, and a future default that changes this is what that A/B
+    is for.
+  - **The channel exists only when `process.stdin` is a tty.** An agent driving `sync` through a
+    Bash tool, a script or a `SessionEnd` hook has no terminal, gets no reader, and gets the
+    fire-and-forget run unchanged. The reader is built with `terminal: false` and released
+    (`close()` plus a `pause()`) the moment the child is done — a readline that owns the tty takes
+    over Ctrl-C, and interrupting a sync has to keep working, as does the `confirm()` and the
+    terminal-owning `--continue` that come straight after it.
 - **Nothing `sync` spawns can stop for a human unseen.** Every git subprocess runs under
   `noEditorEnv` — `GIT_EDITOR=true` and `GIT_SEQUENCE_EDITOR=true` in the ENVIRONMENT, which is
   the layer git reads before any config and the only one an operator's shell cannot outrank. A

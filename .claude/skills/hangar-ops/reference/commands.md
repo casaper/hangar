@@ -73,6 +73,18 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   branch — and only the strategy differs. `--strategy` outranks the name.
 - **`--onto <ref>` skips the pull-request lookup entirely.** Reach for it only when the user names
   a target; the lookup is usually the right answer and is printed on every run.
+- **A `sync` that hits conflicts can be steered while it works, and only from a terminal.** While
+  the headless resolver is running, a line typed at the keyboard plus Enter reaches it — "keep
+  master's version of that spec" — and comes back as a cyan `→ sent:` line, which is the
+  confirmation it was delivered. It is picked up at the resolver's NEXT turn rather than the one
+  in flight, so a line typed mid-tool-call lands a few seconds later. There is no flag: the
+  channel exists when stdin is a tty and does not when it is not, which means **an agent running
+  `hangar sync` through a Bash tool cannot use it** — no terminal, no channel, and the run is the
+  fire-and-forget one. This is the user's to type, in the window the sync is running in.
+- **A `--continue` during that sync owns the terminal.** If git needs an answer — a GPG passphrase
+  for a signed commit, a prompt from one of the repo's own hooks — the question appears on screen
+  and waits for it. There is no timeout, so a sync sitting silent after the resolver has finished
+  is worth LOOKING at rather than killing: something is asking.
 - **`open -n` is worth running before the real thing.** It prints the branch each clone would
   land on (or why it would be left alone), the tmux session and windows it would create or the
   window it would bring forward, the attach line verbatim, and the editors it would launch — and

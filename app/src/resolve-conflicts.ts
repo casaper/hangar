@@ -34,6 +34,15 @@ import { note, step, truncate, warn } from './ui.ts';
  * `--output-format stream-json`, and every event is rendered as one dim line as it happens.
  * This is a DISPLAY change only: the mechanical verification below is untouched, and nothing
  * the model says on the stream is believed.
+ *
+ * ## Why it also listens
+ *
+ * Watching those lines go by is worth little if the only way to correct a wrong choice is to
+ * wait for the run to end and start over. `--input-format stream-json` makes the child's stdin a
+ * stream of further user messages, so a line the operator types is forwarded into the run and
+ * picked up at its next turn. That is a second INPUT, not a second authority: the tree it
+ * produces is checked exactly as before, and an instruction cannot talk this command into
+ * accepting conflict markers.
  */
 const MARKER = '<'.repeat(7);
 
@@ -87,6 +96,29 @@ const prompt = (operation: string, target: string, files: readonly string[]): st
     'When done, state one line per file describing what you kept.',
   ].join('\n');
 
+/**
+ * One line of the resolver's stdin protocol.
+ *
+ * Pure and exported because it is a contract with another program: a field of the wrong shape is
+ * a message silently ignored rather than an error, and the only other way to check it is a live
+ * `claude -p`. `content` is a plain string, which the protocol accepts alongside a block array,
+ * and `parent_tool_use_id` is null because this is a person talking to the session rather than a
+ * tool result being handed back into one.
+ */
+export const userMessageLine = (text: string): string =>
+  `${JSON.stringify({
+    type: 'user',
+    message: { role: 'user', content: text },
+    parent_tool_use_id: null,
+  })}\n`;
+
+/** The event's `type`, or undefined for anything that is not a tagged object. */
+const eventType = (event: unknown): string | undefined => {
+  if (typeof event !== 'object' || event === null) return undefined;
+  const type = (event as Record<string, unknown>)['type'];
+  return typeof type === 'string' ? type : undefined;
+};
+
 const LINE_WIDTH = 96;
 
 /** `mm:ss` since the run started, so a long quiet stretch is still visibly progressing. */
@@ -125,6 +157,12 @@ type StreamRender = {
   sessionId: string | undefined;
   /** When the last line was PRINTED -- not when the last event arrived. See `emit`. */
   lastAt: number;
+  /**
+   * Replayed user messages seen so far. The FIRST is the prompt this command sent itself, whose
+   * subject is already on screen as the file list above it; the operator's own lines are every
+   * one after that, and those are the ones worth a line.
+   */
+  replays: number;
 };
 
 /**
@@ -154,6 +192,22 @@ const renderEvent = (event: unknown, startedAt: number, state: StreamRender): vo
   if (e['type'] === 'system' && e['subtype'] === 'init') {
     const id = e['session_id'];
     if (typeof id === 'string') state.sessionId = id;
+    return;
+  }
+  // A user message coming back out is one of ours going in: `--replay-user-messages` echoes each
+  // line stdin accepted, which is the only proof an instruction was delivered rather than typed
+  // into a pipe that had already gone.
+  if (e['type'] === 'user' && e['isReplay'] === true) {
+    state.replays += 1;
+    if (state.replays === 1) return;
+    const message = e['message'];
+    const content =
+      typeof message === 'object' && message !== null
+        ? (message as Record<string, unknown>)['content']
+        : undefined;
+    if (typeof content === 'string') {
+      emit(pc.cyan(truncate(`→ sent: ${firstLine(content)}`, LINE_WIDTH)));
+    }
     return;
   }
   if (e['type'] === 'system' && e['subtype'] === 'api_retry') {
@@ -203,13 +257,24 @@ export const resolveWithClaude = async (
   note(`progress follows; typically 1-3 minutes, aborted after ${humanMs(timeoutMs())}`);
 
   const startedAt = Date.now();
-  const state: StreamRender = { finalText: '', sessionId: undefined, lastAt: Date.now() };
+  const state: StreamRender = {
+    finalText: '',
+    sessionId: undefined,
+    lastAt: Date.now(),
+    replays: 0,
+  };
 
   const child = spawn(
     'claude',
     [
       '-p',
-      prompt(operation, target, files),
+      // The prompt goes in over stdin as the first user message rather than as an argv prompt,
+      // because stdin is a channel that stays open: `--input-format stream-json` is what lets
+      // the operator add an instruction to a run already under way, and `--replay-user-messages`
+      // echoes each accepted line back so a delivery can be shown rather than assumed.
+      '--input-format',
+      'stream-json',
+      '--replay-user-messages',
       '--output-format',
       'stream-json',
       '--verbose',
@@ -227,8 +292,51 @@ export const resolveWithClaude = async (
       'Bash(git show:*)',
       'Bash(git status:*)',
     ],
-    { cwd: repo, stdio: ['ignore', 'pipe', 'inherit'] },
+    { cwd: repo, stdio: ['pipe', 'pipe', 'inherit'] },
   );
+
+  const toChild = child.stdin;
+  toChild.on('error', () => {
+    // The child is already gone. A write racing its exit is not a failure of the resolution,
+    // and an unhandled EPIPE here would take the whole sync down with it.
+  });
+  toChild.write(userMessageLine(prompt(operation, target, files)));
+
+  /**
+   * Whether the operator has typed something that has not had a turn yet.
+   *
+   * The session does not exit on its own: it finishes a turn and waits for more input, so EOF is
+   * what ends it. A queued line is picked up as the NEXT turn, though -- so closing stdin at the
+   * first `result` would drop an instruction typed a second earlier, and every turn that follows
+   * one gets to run before EOF.
+   */
+  let pending = false;
+  const endTurn = (): void => {
+    if (pending) pending = false;
+    else toChild.end();
+  };
+
+  /**
+   * The operator's way in, and it exists only where somebody could be typing.
+   *
+   * `process.stdin.isTTY` is the whole condition: an agent driving `hangar sync` through a Bash
+   * tool, a script or a `SessionEnd` hook has no terminal, so no reader is attached and the run
+   * is the fire-and-forget one -- prompt in, EOF, done. `terminal: false` on purpose: a readline
+   * that owns the tty puts it in raw mode and takes over Ctrl-C, and interrupting a sync has to
+   * keep working while this is attached.
+   */
+  const typed = process.stdin.isTTY
+    ? createInterface({ input: process.stdin, terminal: false })
+    : undefined;
+  if (typed === undefined) toChild.end();
+  else {
+    note(pc.dim('type a line + Enter to instruct the resolver — it lands at its next turn'));
+    typed.on('line', (line) => {
+      if (line.trim() === '') return;
+      pending = true;
+      toChild.write(userMessageLine(line));
+    });
+  }
 
   // The timeout is read back off the child (`killed` is set by `kill()`) rather than from a
   // local flag: the only assignment would be inside the callback, which TS's control-flow
@@ -246,12 +354,16 @@ export const resolveWithClaude = async (
   const reader = createInterface({ input: child.stdout });
   reader.on('line', (line) => {
     if (line.trim() === '') return;
+    let event: unknown;
     try {
-      renderEvent(JSON.parse(line), startedAt, state);
+      event = JSON.parse(line);
     } catch {
       // Not JSON. Something on the clone's stdout that is not part of the protocol; the
       // render loop must survive it rather than take the whole sync down.
+      return;
     }
+    renderEvent(event, startedAt, state);
+    if (eventType(event) === 'result') endTurn();
   });
 
   const code = await new Promise<number>((resolve) => {
@@ -265,6 +377,13 @@ export const resolveWithClaude = async (
   clearTimeout(timer);
   clearInterval(heartbeat);
   reader.close();
+  if (typed !== undefined) {
+    // Give the terminal back. `sync` reads it again straight afterwards -- its own `confirm()`,
+    // and a `git rebase --continue` that runs with stdio inherited -- and a reader still attached
+    // would be a second consumer of the same keystrokes, which looks nothing like its cause.
+    typed.close();
+    process.stdin.pause();
+  }
 
   if (state.sessionId !== undefined) {
     note(pc.dim(`headless session ${state.sessionId} (${elapsed(startedAt)})`));
