@@ -2,13 +2,19 @@
  * The fleet's colour identity, and the ONE place the hues are real data.
  *
  * A clone's colour is not decoration -- it is how three (or ten) near-identical terminal
- * windows are told apart. Only the main hue is stored; the shimmer, the prompt border and
- * the statusline's dim tone are derived, so a hue change can never leave the four artifacts
- * disagreeing. The formulas below reproduce the hand-written originals byte for byte:
+ * windows are told apart. Only the main hue is stored; everything else is derived, so a hue
+ * change can never leave the artifacts that carry it disagreeing. The first three formulas
+ * reproduce the hand-written originals byte for byte:
  *
  *   shimmer = main + 40% toward white   #00ccff -> #66e0ff
  *   border  = main x 0.8                #00ccff -> #00a3cc
  *   dim     = main x 0.6                0;204;255 -> 0;122;153
+ *
+ * The last two are not cosmetic ratios but CONTRAST decisions, and they exist because the
+ * tmux status bar was unreadable in every clone:
+ *
+ *   ink     = black or white, whichever reads on main   -> text ON the hue
+ *   barText = main, lifted until it clears the floor    -> the hue AS text, on the bar
  *
  * ORDER IS LOAD-BEARING and the list is append-only. A clone with no explicit assignment
  * takes `PALETTE[(N-1) % length]`, so inserting or reordering an entry silently re-colours
@@ -83,6 +89,15 @@ export type CloneColour = {
    * arithmetic is not something to write in shell.
    */
   readonly x256: number;
+  /**
+   * Pure black or pure white -- whichever reads on `main`. The text colour for anything drawn
+   * ON the hue, which is how the status bar carries a clone's identity: a solid block of the
+   * hue is far easier to find at a glance than coloured text, and the ink makes it legible
+   * without anybody choosing a pair by hand.
+   */
+  readonly ink: string;
+  /** `main`, lifted toward white only as far as `STATUS_BAR_BG` requires. Hue AS text. */
+  readonly barText: string;
   /** True when the fleet has outgrown the palette and this hue repeats an earlier clone. */
   readonly reused: boolean;
   /** True when this hue was chosen with `hangar colours change`, not by the index formula. */
@@ -103,6 +118,89 @@ const towardWhite = (rgb: Rgb, amount: number): Rgb =>
   rgb.map((c) => Math.floor(c + (255 - c) * amount)) as unknown as Rgb;
 
 const triple = (rgb: Rgb): string => rgb.join(';');
+
+/**
+ * WCAG 2.1 relative luminance, and the contrast ratio between two colours.
+ *
+ * Hand-rolled rather than a dependency, and the reason is the GUARANTEE rather than a dislike of
+ * dependencies. `ink` restricts itself to pure black and pure white, and for exactly two
+ * candidates the floor is provable: against black the ratio is `(L + 0.05) / 0.05`, against white
+ * `1.05 / (L + 0.05)`, and the two cross at `(L + 0.05)^2 = 0.0525`. So whichever is better is
+ * never worse than **4.58:1** -- on any sRGB colour at all. That is WCAG AA for normal text, for
+ * every hue in the table above and every hue anyone ever appends to it. Nothing to measure and
+ * nothing to tune, which is the opposite of how the status bar got into the state it was in.
+ *
+ * **It holds for PURE black and white only.** A near-black picked to match the bar looks tidier
+ * and silently voids it -- and degrades worst through `tmux-256color`'s colour cube, on the one
+ * terminal here that has no true colour. So `ink` is one of exactly two values, and
+ * `test/contrast.test.ts` asserts that it is.
+ *
+ * Four libraries were weighed -- culori, colorjs.io, wcag-contrast, apca-w3 -- and none of them
+ * ships its own TypeScript types, in a package whose only `@types/*` is Node's. APCA (the WCAG 3
+ * draft) is the better algorithm for light text on dark and would change exactly one answer here:
+ * indigo's ink flips to white. Both clear AA, so it buys a dependency and no readability.
+ */
+const channelLuminance = (channel: number): number => {
+  const c = channel / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+};
+
+export const relativeLuminance = (hex: string): number => {
+  const [r, g, b] = parseHex(hex);
+  return 0.2126 * channelLuminance(r) + 0.7152 * channelLuminance(g) + 0.0722 * channelLuminance(b);
+};
+
+export const contrastRatio = (a: string, b: string): number => {
+  const first = relativeLuminance(a);
+  const second = relativeLuminance(b);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+};
+
+/**
+ * The tmux status bar's own colours, and the floor everything drawn on it clears.
+ *
+ * These live here, with the hues, rather than in `generate/tmux-conf.ts` which renders them: the
+ * bar's background is what `barText` is measured AGAINST, so a conf and a derivation holding two
+ * different ideas of it would be wrong in a way nothing reports. The conf is the one file the
+ * whole hangar shares and these are hangar-level -- no clone's hue is in here.
+ *
+ * The bar had none of this and so had tmux's built-in `bg=green,fg=black`, which put every clone
+ * hue on saturated green: measured, the whole palette lands between 1.00:1 and 2.64:1, and the
+ * `green` clone against green is 1.00 -- the same colour, invisible rather than merely poor.
+ */
+export const STATUS_BAR_BG = '#1c1c1c';
+/** The bar's own text -- window names, the clock. 8.88:1 on the background above. */
+export const STATUS_BAR_FG = '#bbbbbb';
+/** A window that is not current, before any hue lands on it. 4.94:1. */
+export const STATUS_BAR_DIM = '#8a8a8a';
+/** WCAG 2.1 AA for normal text, which is the size a status bar draws at. */
+export const CONTRAST_FLOOR = 4.5;
+
+const INK_DARK = '#000000';
+const INK_LIGHT = '#ffffff';
+
+/** Text ON the hue: whichever of black and white reads better. See the proof above. */
+const inkFor = (main: string): string =>
+  contrastRatio(main, INK_DARK) >= contrastRatio(main, INK_LIGHT) ? INK_DARK : INK_LIGHT;
+
+/**
+ * The hue AS text on the bar: itself, or lifted toward white until it clears the floor.
+ *
+ * A floor and not a wash. Fourteen of the sixteen hues already clear it and come back
+ * BYTE-IDENTICAL, so full saturation -- which is where the palette's whole distinguishability
+ * lives -- survives everywhere it can. Only indigo (10%) and crimson (33%) move at all. Reusing
+ * `shimmer` would have been one line and would have lightened all sixteen while still promising
+ * nothing about the seventeenth.
+ */
+const barTextFor = (main: string): string => {
+  const rgb = parseHex(main);
+  for (let lift = 0; lift < 100; lift += 1) {
+    const candidate = toHex(towardWhite(rgb, lift / 100));
+    if (contrastRatio(candidate, STATUS_BAR_BG) >= CONTRAST_FLOOR) return candidate;
+  }
+  // Unreachable -- white clears any dark bar. Here so the return type needs no assertion.
+  return INK_LIGHT;
+};
 
 /**
  * Nearest entry in xterm-256's 6x6x6 colour cube (indices 16-231).
@@ -149,6 +247,8 @@ export const colourFor = (index: number, override?: string): CloneColour => {
     dimTriple: triple(scale(main, 0.6)),
     mainTriple: triple(main),
     x256: toX256(main),
+    ink: inkFor(entry.hex),
+    barText: barTextFor(entry.hex),
     reused: assigned === undefined && index > PALETTE.length,
     explicit: assigned !== undefined,
   };
