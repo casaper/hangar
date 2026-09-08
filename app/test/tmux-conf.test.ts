@@ -2,6 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { TMUX_SETTINGS, tmuxConfArtifact } from '../src/generate/tmux-conf.ts';
+import {
+  colourFor,
+  PALETTE,
+  STATUS_BAR_BG,
+  STATUS_BAR_DIM,
+  STATUS_BAR_FG,
+} from '../src/palette.ts';
 import { namesNoMachinePath, syntheticHangar } from './fixture.ts';
 
 /**
@@ -50,15 +57,54 @@ test('terminal-features is the appended one, so it is compared as a substring', 
   }
 });
 
-test('the conf is hangar-level: it names no clone and no colour', () => {
+test('the conf is hangar-level: it names no clone and no clone HUE', () => {
   const hangar = syntheticHangar();
   const { content } = tmuxConfArtifact(hangar);
   // The hue is a SESSION option set by `open`, and the window options are the shell hook's. A
-  // clone name or a `#rrggbb` in here would mean per-clone data in a file the whole hangar
+  // clone name or a clone's hue in here would mean per-clone data in a file the whole hangar
   // shares -- whichever clone was opened last would colour every other clone's status bar.
-  assert.doesNotMatch(content, /#[0-9a-fA-F]{6}/, 'no literal hue belongs in a shared conf');
+  //
+  // The palette's own hexes, not `/#[0-9a-fA-F]{6}/`. That regex was what this asserted while
+  // the conf carried no colour at all, and it went red the moment the bar was given its own
+  // neutral background -- which is hangar-level and belongs here. Naming what is forbidden
+  // guards strictly more than forbidding the shape did: it covers the DERIVED values too, and
+  // a shimmer or a border leaking in is the likelier mistake than a raw palette entry.
+  for (const entry of PALETTE) {
+    const colour = colourFor(1, entry.name);
+    for (const [what, value] of [
+      ['main', colour.main],
+      ['shimmer', colour.shimmer],
+      ['border', colour.border],
+      ['barText', colour.barText],
+      ['mainTriple', colour.mainTriple],
+    ] as const) {
+      assert.ok(!content.includes(value), `${entry.name}'s ${what} (${value}) is per-clone data`);
+    }
+  }
   assert.doesNotMatch(content, /wt-00[0-9]/, 'no clone directory belongs in a shared conf');
   assert.ok(content.includes(`@hangar_id ${hangar.id}`), 'the hangar id is the one identity here');
+});
+
+test('the bar carries its own background, so no clone hue is ever drawn on tmux green', () => {
+  const { content } = tmuxConfArtifact(syntheticHangar());
+  // The bug this file exists to prevent a return of. With no `status-style` tmux uses its
+  // built-in `bg=green,fg=black`, and every clone hue was then text on saturated green -- the
+  // whole palette between 1.00:1 and 2.64:1, the `green` clone at exactly 1.00. Nothing else
+  // can set this: it is not per-clone, so neither `open` nor the shell hook owns it, and a
+  // server started without it is unconfigured in a way tmux reports as success.
+  assert.match(
+    content,
+    new RegExp(`^set -g status-style '.*bg=${STATUS_BAR_BG}`, 'm'),
+    'the bar must name its own background',
+  );
+  assert.ok(content.includes(`fg=${STATUS_BAR_FG}`), 'and its own text colour, not fg=default');
+  assert.ok(content.includes(`fg=${STATUS_BAR_DIM}`), 'and the tone a non-current window takes');
+  // Both window styles, because the hook and `open` write over these per window and per
+  // session, and `set -uw` on the way out restores exactly what is here. A missing base is a
+  // window that falls back to tmux's green rather than to the bar.
+  for (const option of ['window-status-style', 'window-status-current-style']) {
+    assert.match(content, new RegExp(`^set -g ${option} '`, 'm'), `${option} needs a neutral base`);
+  }
 });
 
 test('the conf lands at the hangar root and names no machine path', () => {

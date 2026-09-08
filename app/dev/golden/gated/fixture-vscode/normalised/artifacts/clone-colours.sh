@@ -3,10 +3,15 @@
 # The hues are data in src/palette.ts and everything else is derived from them;
 # editing this file instead just means the next sync silently reverts you.
 #
-# hangar_vsfix_colour <clone>  ->  "<r;g;b> <xterm-256 index> <name>"
+# hangar_vsfix_colour <clone>  ->  "<r;g;b> <xterm-256 index> <name> <ink> <bar text>"
 #
 # Read it with two lines, in any POSIX shell:
-#     set -- $(hangar_vsfix_colour "$clone") ; rgb=$1 x256=$2 name=$3
+#     set -- $(hangar_vsfix_colour "$clone") ; rgb=$1 x256=$2 name=$3 ink=$4 bar=$5
+#
+# Fields are only ever APPENDED, so $1..$3 stay where anything already reading them
+# expects. ink is the pure black or white that reads on the hue, and <bar text> is the hue
+# lifted far enough to read AS text on the tmux status bar -- both from src/palette.ts,
+# because choosing them needs a gamma curve per channel and this file runs on every cd.
 #
 # One other place cannot source this file and carries its own copy of the table:
 #   ~/.claude/vsfix-clone-statusline.sh
@@ -14,13 +19,16 @@
 # It is generated from the same data, so the two cannot drift.
 #
 # Formula, so the set reads as one family: shimmer = main + 40% toward white,
-# border = main x 0.8, statusline dim = main x 0.6.
+# border = main x 0.8, statusline dim = main x 0.6. The two contrast fields are not
+# ratios: ink is whichever of black and white reads better on the hue, which can never be
+# worse than 4.58:1 for any colour, and <bar text> is a floor rather than a lightening --
+# fourteen of the sixteen hues clear it untouched and come back byte-identical.
 
 hangar_vsfix_colour() {
     case "$1" in
-        checkout_0001) printf '0;204;255 45 cyan'    ;;   # #00ccff
-        checkout_0002) printf '255;204;0 220 yellow' ;;   # #ffcc00
-        checkout_0003) printf '0;204;0 40 green'     ;;   # #00cc00
+        checkout_0001) printf '0;204;255 45 cyan #000000 #00ccff'    ;;   # #00ccff
+        checkout_0002) printf '255;204;0 220 yellow #000000 #ffcc00' ;;   # #ffcc00
+        checkout_0003) printf '0;204;0 40 green #000000 #00cc00'     ;;   # #00cc00
         *)             return 1 ;;
     esac
 }

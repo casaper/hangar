@@ -58,10 +58,17 @@ export type TerminalColourSettings = {
  *
  * ## Why the background is a TINT and not the hue
  *
- * A saturated hue behind text is unreadable. iTerm2 escapes this because OSC 6 colours the tab
- * in the tab bar, where full strength is exactly what is wanted; everywhere else the only lever
- * is the window background, so it gets a dark fraction of the hue instead -- enough to tell four
- * windows apart at a glance, not enough to fight the theme. `terminal.colour.tint` is the knob.
+ * A saturated hue behind text is unreadable *when you do not control the text*. iTerm2 escapes
+ * this because OSC 6 colours the tab in the tab bar, where full strength is exactly what is
+ * wanted; everywhere else the only lever is the whole window background, sitting behind a
+ * terminal's worth of output whose colours nothing here chose, so it gets a dark fraction of the
+ * hue instead -- enough to tell four windows apart at a glance, not enough to fight the theme.
+ * `terminal.colour.tint` is the knob.
+ *
+ * The tmux status bar is the one place full strength goes BEHIND text, and that is the same rule
+ * applied rather than an exception to it: the bar is the only surface here whose text this code
+ * also owns, so it can put `colour.ink` in front of the hue and know the pair reads.
+ * `src/palette.ts` carries the proof that it always does.
  *
  * ## Everything is named with the hangar id
  *
@@ -114,6 +121,8 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
     '#   osc11   OSC 11 background. VTE (GNOME Terminal), xterm, alacritty, kitty, foot, …',
     '#   tmux    `set -w` window options: the window-status entry and the pane borders. tmux',
     '#           swallows the emulator sequences, so it is coloured through its own options.',
+    '#           The window you are in gets the hue as a BACKGROUND behind a chosen ink; the',
+    '#           others get it as text, lifted far enough to read on the bar.',
     '#   title   title only. Terminal.app ignores OSC 11, and `hangar open` paints its tabs',
     '#           over AppleScript instead.',
     '#   none    nothing recognised. No escape sequences at all; the env layer still works.',
@@ -152,7 +161,11 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
     `    printf '#%02x%02x%02x' "$((r * $2 / 100))" "$((g * $2 / 100))" "$((b * $2 / 100))"`,
     '}',
     '',
-    '# $1 = r;g;b, or empty to restore the terminal default.',
+    '# $1 = r;g;b, or empty to restore the terminal default. $2 = the ink that reads on that',
+    '# hue, $3 = the hue lifted far enough to read AS text on the status bar. Both arrive from',
+    '# the table beside this file rather than being worked out here: choosing them needs WCAG',
+    '# relative luminance, a gamma curve per channel, which is not arithmetic to redo in shell on',
+    '# every `cd`. Only the tmux arm reads them; the others take the hue and ignore the rest.',
     `${p}_chrome_set() {`,
     `    [ "\${${p}_chrome}" = 1 ] || return 0`,
     `    case "\${${p}_fam}" in`,
@@ -204,11 +217,17 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
     "            # owns -- so a developer's own status-line format can read it instead of",
     '            # re-deriving the colour, and `tmux show -w` explains what painted the window.',
     '            command tmux set -w -t "$TMUX_PANE" @hangar_colour "$hue" 2>/dev/null',
-    '            # Both status styles: the first is the window when it is not current, the second',
-    '            # when it is. Without the second, the clone you are LOOKING at is the one window',
-    '            # with no colour.',
-    '            command tmux set -w -t "$TMUX_PANE" window-status-style "fg=$hue" 2>/dev/null',
-    '            command tmux set -w -t "$TMUX_PANE" window-status-current-style "fg=$hue,bold" 2>/dev/null',
+    '            # Both status styles, because tmux picks between them itself: the first is the',
+    '            # window when it is not current, the second when it is. Without the second, the',
+    '            # clone you are LOOKING at is the one window with no colour.',
+    '            #',
+    '            # The current one takes the hue as a BACKGROUND with the ink in front of it --',
+    '            # the same shape the clone badge on the bar gets from `hangar open`, so which',
+    '            # clone and which window read alike. The others take it as TEXT, and take the',
+    '            # LIFTED form: two of the sixteen palette hues cannot be read at full strength',
+    '            # on the bar, and the lift is per-hue rather than lightening all sixteen.',
+    '            command tmux set -w -t "$TMUX_PANE" window-status-current-style "bg=$hue,fg=$2,bold" 2>/dev/null',
+    '            command tmux set -w -t "$TMUX_PANE" window-status-style "fg=$3" 2>/dev/null',
     '            # The borders carry it too, for a status line that is switched off or too full.',
     '            command tmux set -w -t "$TMUX_PANE" pane-border-style "fg=$hue" 2>/dev/null',
     '            command tmux set -w -t "$TMUX_PANE" pane-active-border-style "fg=$hue" 2>/dev/null',
@@ -279,7 +298,7 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
     '# has already claimed is left entirely alone -- it repaints the chrome itself.',
     '# ---------------------------------------------------------------------------',
     `${p}_chpwd() {`,
-    '    local clone= rest= first= fields= rgb= x256= name=',
+    '    local clone= rest= first= fields= rgb= x256= name= ink= bar=',
     `    case "$PWD" in`,
     `        "\${${p}_root}"/*)`,
     `            rest=\${PWD#"\${${p}_root}/"}`,
@@ -289,11 +308,21 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
     '    esac',
     '',
     '    if [ -n "$clone" ]; then',
-    "        # Split the table's three space-separated fields WITHOUT `set --`: zsh does not",
+    "        # Split the table's five space-separated fields WITHOUT `set --`: zsh does not",
     '        # word-split an unquoted parameter, so `set -- $fields` would hand over one field',
-    '        # there and two empty ones. Parameter expansion behaves the same in both shells.',
-    '        rgb=${fields%% *}; rest=${fields#* }; x256=${rest%% *}; name=${rest#* }',
-    `        ${p}_chrome_set "$rgb"`,
+    '        # there and four empty ones. Parameter expansion behaves the same in both shells.',
+    '        #',
+    '        # One uniform pair of steps per field, and only the LAST is taken with `#* `. That',
+    '        # shape is the fix for a real trap: the older three-field split ended',
+    '        # `name=${rest#* }` -- everything after the second space -- so appending a field to',
+    '        # the table landed it INSIDE $name, which is exported as HANGAR_CLONE_COLOUR. It',
+    '        # would have read `cyan #000000`, with every gate still green. Written this way, a',
+    '        # sixth field cannot corrupt the fifth.',
+    '        rgb=${fields%% *};  rest=${fields#* }',
+    '        x256=${rest%% *};   rest=${rest#* }',
+    '        name=${rest%% *};   rest=${rest#* }',
+    '        ink=${rest%% *};    bar=${rest#* }',
+    `        ${p}_chrome_set "$rgb" "$ink" "$bar"`,
     `        ${p}_title_set "$clone · \${${p}_id}"`,
     `        ${p}_env_set "$clone" "$rgb" "$x256" "$name"`,
     `        ${p}_active=$clone`,

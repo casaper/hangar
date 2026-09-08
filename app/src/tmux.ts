@@ -313,13 +313,19 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
   };
 
   /**
-   * Session-scope options: whose session this is, and its hue on the status line.
+   * Session-scope options: whose session this is, and its hue BEHIND the status line's name.
    *
    * Session scope and not the window scope the shell hook uses, for two reasons. The status bar
    * has to be right the instant the client attaches, which is before any shell has printed a
    * prompt and so before the hook has run once. And `status-left` IS a session option -- the hook
    * could only reach it with `-g`, which would have whichever clone was entered last recolour the
    * status bar of every other session on the socket.
+   *
+   * The hue is the badge's BACKGROUND rather than its text, with `colour.ink` -- pure black or
+   * pure white, whichever reads on that hue -- in front of it. A solid block of colour is far
+   * easier to find across four near-identical windows than coloured text is, and the ink is
+   * what makes it legible without anybody pairing the two by hand. `palette.ts` has the proof
+   * that best-of-black-or-white cannot fall below 4.58:1 for any hue.
    *
    * `@hangar_clone` needs only this one write: measured on tmux 3.7c, a session-scope user option
    * is visible from a pane-context format too (`list-panes -a -F '#{@hangar_clone}'` answered for
@@ -334,7 +340,7 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
       '-t',
       target,
       'status-left',
-      `#[fg=${clone.colour.main},bold] ${clone.name} #[default] `,
+      `#[fg=${clone.colour.ink},bg=${clone.colour.main},bold] ${clone.name} #[default] `,
     ]);
   };
 

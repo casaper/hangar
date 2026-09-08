@@ -1,4 +1,5 @@
 import type { Hangar } from '../hangar.ts';
+import { STATUS_BAR_BG, STATUS_BAR_DIM, STATUS_BAR_FG } from '../palette.ts';
 import { type Artifact, artifactHeader } from './index.ts';
 
 /**
@@ -33,11 +34,21 @@ import { type Artifact, artifactHeader } from './index.ts';
  * tmux and not of this code, so `doctor` reads the live server's options back and says when they
  * disagree with the table below rather than leaving the developer to wonder.
  *
- * ## Nothing per-clone belongs in here
+ * ## Nothing per-clone belongs in here -- but the BAR's own colours do
  *
- * The hue is a SESSION option set when `open` creates a clone's session, and the window options
- * are the generated shell hook's. This file is one per hangar, like the statusline script, and
- * `test/tmux-conf.test.ts` asserts it names no clone and no colour.
+ * No clone hue appears in this file. The hue is a SESSION option set when `open` creates a
+ * clone's session, and the window options are the generated shell hook's; a hue here would be
+ * per-clone data in a file the whole hangar shares, so whichever clone was opened last would
+ * colour every other clone's bar. `test/tmux-conf.test.ts` asserts that none of them is here.
+ *
+ * The bar's own background and text are a different thing and belong here, because they are
+ * hangar-level and because nothing else can set them. Without a `status-style` tmux uses its
+ * built-in `bg=green,fg=black` -- and that is not a neutral default but a saturated one, so
+ * every clone hue was being drawn as text on green. Measured across the palette: 1.00:1 to
+ * 2.64:1, failing even the 3.0 that large text wants, with the `green` clone at exactly 1.00 --
+ * the same colour twice, and invisible. `src/palette.ts` owns those three neutrals, because
+ * `barText` is derived by measuring AGAINST the background and two files holding different
+ * ideas of it would be wrong with nothing to report it.
  */
 
 /** How to read one setting back off a live server, and how to compare what comes out. */
@@ -141,9 +152,18 @@ export const tmuxConfArtifact = (hangar: Hangar): Artifact => {
       'set -g  renumber-windows on',
       '',
       '# ---- the status line --------------------------------------------------------------',
-      "# The format only. Every colour in it is the clone's, set per session by `hangar open`",
-      '# and per window by the generated `clone-terminal.sh` hook -- so nothing here carries a',
-      '# hue, and a literal colour here would fight both.',
+      '# The bar names its own background, and carries no hue. Both halves matter -- see the',
+      '# header: without these four lines tmux draws every clone hue on its own saturated',
+      '# green, and a hue in here would paint every clone with whichever was opened last.',
+      '#',
+      '# So the neutrals are the FLOOR, and a clone lands on top of them: `hangar open` gives',
+      "# the session a `status-left` badge in the clone's hue with an ink chosen for it, and the",
+      '# shell hook gives the current window the same treatment. Both fall back to exactly these',
+      '# values, which is what `set -uw` on the way out restores.',
+      `set -g status-style 'bg=${STATUS_BAR_BG},fg=${STATUS_BAR_FG}'`,
+      `set -g status-right-style 'fg=${STATUS_BAR_DIM}'`,
+      `set -g window-status-style 'fg=${STATUS_BAR_DIM}'`,
+      `set -g window-status-current-style 'fg=${STATUS_BAR_FG},bold'`,
       'set -g status-position top',
       'set -g status-left-length 40',
       "set -g status-right '#{?client_prefix,^B ,}%H:%M'",
