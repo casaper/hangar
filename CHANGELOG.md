@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.18.0](https://github.com/casaper/hangar/compare/v0.17.0...v0.18.0) (2026-09-08)
+
+### Features
+
+* **cli:** Let a bare claude in the hangar root open both sessions ([eebbeac](https://github.com/casaper/hangar/commit/eebbeacd6e07342fc8650be24053e0e1c06676ff))
+* **cli:** Open both hangar-root sessions in one tmux window ([bd3f09b](https://github.com/casaper/hangar/commit/bd3f09bf72b649b96d4e44c4104e50d5525967f6))
+* **modes:** Make one command the only way into a hangar-root session ([d6d7b83](https://github.com/casaper/hangar/commit/d6d7b8305aa14b91d10db1b6d1860b2a033333b2))
+
+### Bug Fixes
+
+* **cli:** Answer hangar claude --help on a machine with no claude installed ([f04b15e](https://github.com/casaper/hangar/commit/f04b15e480fecad3b0302b0891cd1adee492f415))
+
+### Documentation
+
+* **modes:** Name the tmux hop the statusline's PATH argument runs through ([23314bc](https://github.com/casaper/hangar/commit/23314bcee4cb0bd2ddf8922a0d73bc95029b5497))
+* **modes:** Say that one command opens both hangar-root sessions ([473dab3](https://github.com/casaper/hangar/commit/473dab378f3d569d9001c64fd8888671a30f7279))
+
 ## [0.17.0](https://github.com/casaper/hangar/compare/v0.16.2...v0.17.0) (2026-09-08)
 
 ### Features
