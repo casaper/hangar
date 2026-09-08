@@ -1,0 +1,56 @@
+#!/bin/sh
+# A bare `claude` in the hangar root: both hangar-root sessions, in one tmux window.
+#
+# This directory exists for one reason -- it is on PATH in the hangar shell and in no other.
+# `.envrc` adds `bin` and this one; every clone's own `.envrc.private` repeats only
+# `PATH_add <hangar>/bin`, because that is how `hangar` is reached from inside a clone. So a
+# `claude` in `bin/` would have been on PATH in every clone shell too, where
+# `terminal.tabs[]`'s default `command: 'claude'` is the line that starts each clone's own
+# session -- and a clone session would have launched the hangar-root pair instead of itself.
+#
+# Not a direnv alias, because there is no such thing: direnv exports the ENVIRONMENT DIFF that
+# evaluating a `.envrc` produces, and a shell function is not an environment variable. PATH is,
+# which is why `PATH_add` is the only mechanism here that reaches an interactive shell at all.
+#
+# ## The $PWD test is NOT redundant with the directory split, and this is why
+#
+# A tmux SERVER inherits the environment of whatever started it. `hangar open` is normally typed
+# at the hangar root, so the clone server it starts inherits a PATH with this directory on it --
+# and measured, a clone window's `command: 'claude'` then resolves to this file, from a $PWD
+# inside the clone. The split alone does not cover that, because nothing in the clone put the
+# directory on the path; an ancestor process did.
+#
+# So: the pair only when this was typed AT the hangar root, and the real binary everywhere else.
+# Exact equality rather than "inside the hangar", because every clone is inside the hangar too.
+#
+# `pwd -P` and never `$PWD`. `$PWD` is a shell VARIABLE and is inherited, so a non-interactive
+# shell that never cd'd carries whatever its parent had -- measured, that made this file answer
+# for a directory the caller was not standing in. `pwd` asks the OS, and `-P` resolves symlinks
+# on both sides so a hangar reached through a link still compares equal.
+set -eu
+
+self="$(CDPATH= cd -- "${0%/*}" && pwd -P)"
+hangar="$(CDPATH= cd -- "$self/../.." && pwd -P)"
+here="$(pwd -P)"
+
+if [ "$here" = "$hangar" ]; then
+    exec hangar claude "$@"
+fi
+
+# Anywhere else: find the real binary, with THIS directory skipped so we cannot re-enter.
+# `hangar claude` does the same skip in `resolveClaudeBinary`; both halves of the loop are cut.
+real=''
+IFS=:
+for dir in $PATH; do
+    if [ "$dir" != "$self" ] && [ -x "$dir/claude" ]; then
+        real="$dir/claude"
+        break
+    fi
+done
+unset IFS
+
+if [ -z "$real" ]; then
+    printf 'claude: not found on PATH outside %s\n' "$self" >&2
+    exit 127
+fi
+exec "$real" "$@"
