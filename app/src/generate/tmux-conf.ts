@@ -165,7 +165,14 @@ export const tmuxConfArtifact = (hangar: Hangar): Artifact => {
       `set -g window-status-style 'fg=${STATUS_BAR_DIM}'`,
       `set -g window-status-current-style 'fg=${STATUS_BAR_FG},bold'`,
       'set -g status-position top',
-      'set -g status-left-length 40',
+      // A MAXIMUM, not a width, so headroom costs nothing -- and 40 no longer obviously clears
+      // the badge. `status-left` is now `#[fg=…,bg=…,bold] <clone> #[default] `: 39 characters
+      // of style markup around the name, where the old unbackgrounded form was 28. Whether tmux
+      // measures the expanded string or only what it draws decides whether 40 truncated a
+      // ten-character clone name, and nothing readable off the server answers that -- the option
+      // holds the format, not the render. So this is set past either reading rather than settled,
+      // which leaves room for a clone name of 22 characters on top of the markup.
+      'set -g status-left-length 64',
       "set -g status-right '#{?client_prefix,^B ,}%H:%M'",
       "set -g window-status-format ' #I #W '",
       "set -g window-status-current-format ' #I #W '",

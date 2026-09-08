@@ -1,7 +1,13 @@
 import type { Clone } from './fleet.ts';
 import { run } from './exec.ts';
 import type { Hangar } from './hangar.ts';
-import { colourByHex, STATUS_BAR_BG, STATUS_BAR_DIM, STATUS_BAR_FG } from './palette.ts';
+import {
+  colourByHex,
+  STATUS_BAR_BG,
+  STATUS_BAR_DIM,
+  STATUS_BAR_FG,
+  STATUS_LEFT_LENGTH,
+} from './palette.ts';
 import { orUndefined } from './terminal/types.ts';
 
 /**
@@ -494,6 +500,10 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
        * per-window styles fall BACK to when `set -uw` clears them.
        */
       tmux(['set', '-g', 'status-style', `bg=${STATUS_BAR_BG},fg=${STATUS_BAR_FG}`]);
+      // The badge's own room. A live server is still on whatever its start config gave it, so
+      // raising this in the conf alone would reach an open session only at the next server
+      // start -- which is the gap this whole function exists to close.
+      tmux(['set', '-g', 'status-left-length', String(STATUS_LEFT_LENGTH)]);
       tmux(['set', '-g', 'status-right-style', `fg=${STATUS_BAR_DIM}`]);
       tmux(['set', '-g', 'window-status-style', `fg=${STATUS_BAR_DIM}`]);
       tmux(['set', '-g', 'window-status-current-style', `fg=${STATUS_BAR_FG},bold`]);
