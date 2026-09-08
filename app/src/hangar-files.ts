@@ -45,8 +45,8 @@ export const hangarSettingsPath = (root: string): string => join(root, '.claude'
  *   root and the clones are separate repos. Without one shared path a fact learned in a clone is
  *   invisible in the other three and in the fleet-root session.
  * - **`statusLine`**, which badges the window with the hangar-root MODE it was launched in (a red
- *   `NO MODE` when it was launched in neither). `bin/hangar-mode` resolves the hangar from its own
- *   location, so only this path needs generating.
+ *   `NO MODE` when it was launched in neither). `bin/hangar-statusline` resolves the hangar from
+ *   its own location, so only this path needs generating.
  *
  * No `permissions` block: the two `.claude/modes/*.settings.json` files carry those, and operator
  * mode's list is its security boundary -- see `hangar-internals/reference/modes.md` for why that
