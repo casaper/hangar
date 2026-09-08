@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.17.0](https://github.com/casaper/hangar/compare/v0.16.2...v0.17.0) (2026-09-08)
+
+### Features
+
+* **colours:** Apply the status bar to a tmux server that is already running ([52fe00e](https://github.com/casaper/hangar/commit/52fe00ed4c016e846bcc720c6f34d393fbf14c33)), closes [#1c1c1c](https://github.com/casaper/hangar/issues/1c1c1c) [#bbbbbb](https://github.com/casaper/hangar/issues/bbbbbb) [#ffcc00](https://github.com/casaper/hangar/issues/ffcc00) [#000000](https://github.com/casaper/hangar/issues/000000)
+* **sync:** Let the operator instruct the conflict resolver while it is still working ([7dcd0f1](https://github.com/casaper/hangar/commit/7dcd0f1b46d296f751f978c7c5c39ffb376279d6))
+
+### Bug Fixes
+
+* **colours:** Choose a readable ink for any clone hue, and derive it from the hue itself ([a40cff8](https://github.com/casaper/hangar/commit/a40cff81a27e6af7114218a8515d7e9882277e1c))
+* **sync:** Let no editor open in a rebase, and put anything else that asks on the screen ([833fbc2](https://github.com/casaper/hangar/commit/833fbc238a0992323c6b99d0035d6fef8b0e5c71))
+* **terminal:** Give the tmux status bar its own background, so a clone hue is readable on it ([db439d8](https://github.com/casaper/hangar/commit/db439d81fec5c106b5048e92265fd13f21d72469)), closes [#1c1c1c](https://github.com/casaper/hangar/issues/1c1c1c) [#bbbbbb](https://github.com/casaper/hangar/issues/bbbbbb) [#000000](https://github.com/casaper/hangar/issues/000000)
+* **terminal:** Leave the clone badge room, now that it carries a background ([50ffc10](https://github.com/casaper/hangar/commit/50ffc10bad5af5d25edb93a6be458c7676b1478a))
+
+### Documentation
+
+* **colours:** Say that the status bar carries the hue as a background, not as text ([d83f1bc](https://github.com/casaper/hangar/commit/d83f1bc394a07beb703f99711946160fe39727cc))
+
 ## [0.16.2](https://github.com/casaper/hangar/compare/v0.16.1...v0.16.2) (2026-09-07)
 
 ### Bug Fixes
