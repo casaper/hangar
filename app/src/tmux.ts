@@ -1,6 +1,7 @@
 import type { Clone } from './fleet.ts';
 import { run } from './exec.ts';
 import type { Hangar } from './hangar.ts';
+import { colourByHex, STATUS_BAR_BG, STATUS_BAR_DIM, STATUS_BAR_FG } from './palette.ts';
 import { orUndefined } from './terminal/types.ts';
 
 /**
@@ -265,6 +266,21 @@ export type TmuxServer = {
   readonly sendLine: (tty: string, text: string) => boolean;
   /** One live option, for `doctor` to compare with `TMUX_SETTINGS`. */
   readonly setting: (showFlags: string, name: string) => string | undefined;
+  /**
+   * Re-apply the status bar to a server that is ALREADY RUNNING. Returns sessions restyled.
+   *
+   * `clone-tmux.conf` reaches it through `-f`, which tmux reads ONCE when the server starts --
+   * so regenerating the conf leaves every live session on whatever it started with, and for the
+   * bar that meant tmux's own `bg=green`. The repair for a server behind on its conf is
+   * `kill-server`, which `doctor` refuses for good reason: it ends every live agent in the fleet.
+   *
+   * It does not have to be. Every option the bar needs is a global SESSION option rather than a
+   * server option, so all of it can be written onto a running server with nothing restarted and
+   * nothing interrupted. That is the whole difference between this and the four settings
+   * `TMUX_SETTINGS` carries -- two of those really are server options, and there is no way to
+   * change one under a live server.
+   */
+  readonly restyle: (clones: readonly Clone[]) => number;
   readonly killSession: (clone: Clone) => boolean;
 };
 
@@ -469,6 +485,48 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
     setting: (showFlags, name) => {
       const res = tmux(['show', showFlags, name]);
       return res.ok ? res.out : undefined;
+    },
+    restyle: (clones) => {
+      if (!tmux(['list-sessions']).ok) return 0;
+      /*
+       * The globals first, and they are worth writing even with no clone session on the socket:
+       * a window the developer made by hand is on this bar too, and the neutrals are what the
+       * per-window styles fall BACK to when `set -uw` clears them.
+       */
+      tmux(['set', '-g', 'status-style', `bg=${STATUS_BAR_BG},fg=${STATUS_BAR_FG}`]);
+      tmux(['set', '-g', 'status-right-style', `fg=${STATUS_BAR_DIM}`]);
+      tmux(['set', '-g', 'window-status-style', `fg=${STATUS_BAR_DIM}`]);
+      tmux(['set', '-g', 'window-status-current-style', `fg=${STATUS_BAR_FG},bold`]);
+
+      const byName = new Map(clones.map((clone) => [clone.name, clone]));
+      let restyled = 0;
+      for (const row of readSessions()) {
+        const clone = row.clone === undefined ? undefined : byName.get(row.clone);
+        // A session naming a clone that is gone is `staleSessions`' business, and `doctor`
+        // already reports it. Nothing to paint it with, so it keeps the neutral bar.
+        if (clone === undefined) continue;
+        // The same builder `open` uses, so the badge cannot differ by route.
+        paintSession(clone);
+        const format = '#{window_id} #{@hangar_colour}';
+        const ids = tmux(['list-windows', '-t', tmuxTarget(clone), '-F', format]);
+        for (const row of ids.ok ? lines(ids.out) : []) {
+          const [id, tagged] = row.split(' ');
+          if (id === undefined) continue;
+          /*
+           * A window's OWN tag wins over its session's clone. The hook writes `@hangar_colour`
+           * from `$PWD`, so a window the developer opened with `C-b c` and then `cd`d into
+           * another clone is already recorded as that clone's -- and repainting the whole
+           * session one colour would throw that away until its next `cd`. An untagged window
+           * (one that no shell has printed a prompt in yet) takes the session's.
+           */
+          const colour = (tagged === undefined ? undefined : colourByHex(tagged)) ?? clone.colour;
+          const style = `bg=${colour.main},fg=${colour.ink}`;
+          tmux(['set', '-w', '-t', id, 'window-status-current-style', `${style},bold`]);
+          tmux(['set', '-w', '-t', id, 'window-status-style', `fg=${colour.barText}`]);
+        }
+        restyled += 1;
+      }
+      return restyled;
     },
     killSession: (clone) => tmux(['kill-session', '-t', tmuxTarget(clone)]).ok,
   };

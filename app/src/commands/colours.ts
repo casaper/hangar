@@ -23,6 +23,7 @@ import { terminalHookArtifact } from '../generate/terminal-sh.ts';
 import { tmuxConfArtifact } from '../generate/tmux-conf.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
 import { colourFor, paint, paletteEntry, PALETTE, PALETTE_NAMES } from '../palette.ts';
+import { tmuxServer, tmuxSocketName } from '../tmux.ts';
 import { tildify } from '../user-paths.ts';
 import { CliError } from '../exec.ts';
 
@@ -65,6 +66,28 @@ export const coloursSync = (hangar: Hangar, opts: ColoursSyncOptions): void => {
       'Run `hangar colours sync` to regenerate them.',
     );
   }
+  /*
+   * The status bar of every session ALREADY RUNNING, which no file can reach.
+   *
+   * `clone-tmux.conf` gets to the server through `-f`, and tmux reads that once when the server
+   * starts. So writing a correct conf leaves every open clone on whatever it started with, and
+   * `doctor` can only name `kill-server` -- which it refuses to run, because it would end every
+   * live agent in the fleet. Everything the bar needs is a global SESSION option though, so it
+   * can simply be written onto the live server: nothing restarts, and no session notices beyond
+   * its bar becoming readable.
+   *
+   * Skipped on a dry run, which is the one thing here that touches state outside the artifacts.
+   */
+  if (!dryRun) {
+    const restyled = tmuxServer(hangar).restyle(discoverClones(hangar));
+    if (restyled > 0) {
+      ok(
+        `restyled    ${String(restyled)} live tmux session(s) on ${tmuxSocketName(hangar.id)}  ` +
+          `(no restart needed)`,
+      );
+    }
+  }
+
   if (stale.length === 0) note('All colour artifacts are up to date.');
   else if (dryRun) note('(dry run -- nothing was written)');
   else note('A theme change needs a Claude Code restart in the affected clone to show up.');

@@ -254,6 +254,20 @@ export const colourFor = (index: number, override?: string): CloneColour => {
   };
 };
 
+/**
+ * The colour whose main hue is this hex, for a tmux window that has tagged itself with one.
+ *
+ * The shell hook writes `@hangar_colour` per window, so a window standing in a clone OTHER than
+ * its session's has already recorded which -- and `colours sync` restyling a live server has to
+ * believe it rather than repainting the whole session one colour. Looked up by hex and not by
+ * name deliberately: `colours change` means a clone's hue need not be the one its index implies,
+ * and the hex is the same either way.
+ */
+export const colourByHex = (hex: string): CloneColour | undefined => {
+  const entry = PALETTE.find((candidate) => candidate.hex === hex.toLowerCase());
+  return entry === undefined ? undefined : colourFor(1, entry.name);
+};
+
 const ESC = '\u001b';
 
 /** Wrap text in the clone's hue for terminal output (24-bit colour). */
