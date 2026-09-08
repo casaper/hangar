@@ -12,6 +12,12 @@
 # having loaded is ENTAILED by the mode existing at all, not assumed. A clone's SessionStart hook
 # has no such guarantee, which is why `bin/hangar --hangar <root>` stays absolute there.
 #
+# That entailment runs through one hop worth naming, because this script is not invoked by the
+# shell that typed `hangar claude`: Claude Code runs it inside a tmux window, whose PATH is the
+# tmux SERVER's inherited environment rather than a fresh direnv load. The server was started by
+# that same `hangar claude`, so it inherited that shell's PATH -- which is why the hop preserves
+# the guarantee instead of weakening it, and why a `claude` reached any other way would not.
+#
 # Two probes that could NOT settle this, recorded so nobody repeats them:
 #   - the status line does not run under `claude -p`, so it cannot be exercised from a script;
 #   - `$CLAUDE_PROJECT_DIR` is NOT exported to tool subprocesses (checked: unset, while
