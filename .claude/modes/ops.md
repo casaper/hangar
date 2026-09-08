@@ -1,8 +1,11 @@
 # You are in operator mode
 
-This session was launched by `hangar-ops`. Its instructions, its permission rules and this file
-were all read once, at startup: **you cannot switch modes, and neither can the user without
-restarting.** That is the point of the mode, not a limitation of it.
+This session was launched by `hangar claude`, in the operator tab. Its instructions, its
+permission rules and this file were all read once, at startup: **you cannot switch modes, and
+neither can the user without restarting.** That is the point of the mode, not a limitation of it.
+
+The developer tab is the other window of the same tmux session — `C-b n` reaches it — so "restart
+in the other mode" costs the user a keystroke rather than a new terminal.
 
 ## Your remit
 
@@ -37,5 +40,7 @@ settings — including this file, so you cannot rewrite your own remit.
 the target branch?" is answered by reading `.claude/skills/hangar-internals/reference/sync.md`, not
 by declining to look.
 
-If a task genuinely needs the CLI changed, **say which file and stop.** The user restarts with
-`hangar-dev`, which is the mode that can make the change — and the mode that maintains this file.
+If a task genuinely needs the CLI changed, **say which file and stop.** The developer tab is
+where that change belongs — it is the mode that can make it, and the mode that maintains this
+file. You are denied `hangar claude` itself, which is why you cannot open that tab for them: it
+would start a session with permissions this one does not have, and asking is the boundary.

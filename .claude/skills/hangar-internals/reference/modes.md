@@ -1,8 +1,13 @@
-# Launch modes — `hangar-ops` and `hangar-dev`
+# Launch modes — `hangar claude`
 
 Two ways to start Claude Code in this hangar, differing in the instructions and the permission
-rules they load. `bin/hangar-ops` and `bin/hangar-dev` are three-line wrappers over
-`bin/hangar-mode`; the five files they name are in `.claude/modes/`.
+rules they load. **One command opens both**: `hangar claude` puts operator in tmux window 1 and
+developer in window 2 of one session, on a socket of its own, and attaches the terminal it was
+typed in. `-m dev` selects the other tab. From the hangar root a bare `claude` reaches it, through
+`.local/bin/claude`.
+
+`src/commands/claude.ts` is the command and `.claude/modes/` holds the four files it names, plus
+`statusline.sh`.
 
 ## What they are for
 
@@ -24,6 +29,13 @@ There is no mode feature. Each mode is `--settings <file>` plus `--append-system
 <file>` plus `-n <name>`, and for `dev` a working directory of `app/` so that `app/CLAUDE.md` is
 loaded from the first turn instead of lazily on first read beneath it.
 
+**`claudeArgvFor` puts those three AHEAD of anything passed through, and that ordering is the
+whole of what resuming into a mode is.** `hangar claude --resume <id> -m ops` reaches claude as
+`--settings … --append-system-prompt-file … -n … --resume <id>`; reversed, the session resumes
+with the badge of a mode whose rules it does not have. It was a comment for as long as the
+launchers existed and is now a pure builder with a test on it, because it is the one property
+here whose failure looks exactly like success.
+
 `-n` is not decoration: it puts the mode in the prompt box, the terminal title and the `/resume`
 picker. Two near-identical hangar-root windows is the same problem as two near-identical clone
 windows, and the answer is the same — make it visible.
@@ -42,35 +54,130 @@ fleet map rather than replacing it. The cwd cannot leave the hangar either: `han
 config by walking up from the working directory, and `--hangar <path>` is honoured only by
 `config show|validate`.
 
-## Why they are scripts in `bin/`, and not functions in `.envrc.hangar`
+**One consequence worth knowing: `--append-system-prompt-file` turns the system-prompt snapshot
+off**, so the remit is re-applied on every launch instead of being frozen into the conversation.
+That is what makes resuming into a mode possible at all. A bare `claude --resume` of the same
+session resumes with no mode, which is the trap — it looks identical and has none of the rules.
 
-**They started as shell functions in `.envrc.hangar` and that could never have worked.** direnv
-exports the **environment diff** that evaluating a `.envrc` produces, and a shell function is not
-an environment variable — so a function defined there never reaches the interactive shell. The
-tell is that the file's own long-standing helpers behave the same way: inside this hangar,
+## Why a bare `claude` is a PATH shim, and why it needs its own directory
+
+**There is no such thing as a direnv alias.** direnv exports the **environment diff** that
+evaluating a `.envrc` produces, and a shell function is not an environment variable — so a
+function defined in `.envrc.hangar` never reaches the interactive shell. The tell is that the
+file's own long-standing helpers behave the same way: inside this hangar,
 `direnv exec . zsh -c 'type hangar_use_node'` answers **not found**. They work only because
 `.envrc` *calls* them while direnv is still evaluating the file, which is the one thing a
 user-facing command cannot do.
 
-`PATH` *is* an environment variable, so `PATH_add bin` genuinely reaches the shell. That makes
-`bin/` the only mechanism that works without editing someone's `~/.zshrc`, and it inherits
-`bin/hangar`'s per-hangar scoping for free: the `hangar-ops` on PATH belongs to the hangar you are
-standing in, and there is deliberately no global install.
+`PATH` *is* an environment variable, so `PATH_add` genuinely reaches the shell — which makes a
+file on PATH the only mechanism that works without editing someone's `~/.zshrc`. It also gets
+`bin/hangar`'s per-hangar scoping for free: the `claude` on PATH belongs to the hangar you are
+standing in.
 
-**The root is resolved from the script's own location, never from `$PWD`** — the same rule
-`bin/hangar` states for itself, and the reason `hangar-dev` works from three directories down
-inside `app/src/`. As a shell function this had to be reconstructed at call time from
-`command -v hangar`, because `source_env` does a `pushd` and `$PWD` is the hangar root only while
-the file is being sourced. As a script the problem does not arise.
+**But it must not be in `bin/`, and that is measured rather than cautious.** Every clone's own
+`.envrc.private` carries `PATH_add <hangar>/bin` — it has to, that is how `hangar` is reached from
+inside a clone — and repeats nothing else. So `bin/claude` would have been on PATH in every clone
+shell too, where `terminal.tabs[]`'s schema default `command: 'claude'` is the line that starts
+each clone's own Claude Code session. Every clone window would have launched the hangar-root pair
+instead of itself. `.local/bin` gets a second `PATH_add` in the hangar's `.envrc` alone, which no
+clone repeats, so in a clone the shim is not on the path at all — nothing to guard, and nothing to
+keep in step with a `$PWD` check.
 
-`hangar-mode` validates the mode name and refuses an unknown one with exit 2 rather than letting
-the missing-file check report a confusing path.
+**The proxy still tests where it was typed, and that is not redundant.** A tmux SERVER inherits
+the environment of whatever started it, and `hangar open` is normally typed at the hangar root —
+so, measured, a clone window's `command: 'claude'` resolved to the shim from a `$PWD` inside the
+clone, and reached a `hangar claude` that refuses from inside a clone. The clone's session would
+not have started. Nothing in the clone put the directory on PATH; an ancestor process did, which
+is exactly what the directory split cannot see. So the shim runs the pair only when it was typed
+AT the hangar root, and hands to the real binary everywhere else.
 
-**One consequence worth knowing: `--append-system-prompt-file` turns the system-prompt snapshot
-off**, so the remit is re-applied on every launch instead of being frozen into the conversation.
-`hangar-ops --resume <id>` resumes *into* operator mode; a bare `claude --resume` of that same
-session resumes with no mode at all, which is the trap — a resumed session looks identical and has
-none of the rules.
+**`pwd -P`, never `$PWD`.** `$PWD` is a shell variable and is inherited, so a non-interactive
+shell that never `cd`'d carries whatever its parent had — which made an early version of the shim
+answer for a directory the caller was not standing in. `pwd` asks the OS, and `-P` resolves
+symlinks on both sides so a hangar reached through a link still compares equal.
+
+**The recursion is cut on both sides.** The shim skips its own directory when it resolves the real
+binary, and `resolveClaudeBinary` skips the same directory when `hangar claude` looks for one —
+verified with `.local/bin` FIRST on PATH, where it answers the real binary and not the shim. The
+tmux window command names claude by absolute path for the same reason, which is the rule
+`attachCommand` already follows for tmux itself.
+
+**Editing `.envrc` revokes direnv's trust**, so `direnv allow` is a one-time step after pulling a
+change to it — and until it is run the hangar shell has no `hangar` either, because `PATH_add bin`
+is in the same file.
+
+## One session, two windows, and a socket of its own
+
+`tmux -L hangar-<id>-claude`, not a session on the clone socket. Every session on that one is
+expected to name a clone: `staleSessions` walks it for sessions whose `@hangar_clone` matches no
+live clone, and two mode sessions — carrying the conf's global `@hangar_id` and no
+`@hangar_clone` — are exactly the shape `src/tmux.ts` calls *foreign*. `doctor` would report them
+stale for ever, which is the check nobody reads. It also keeps `tmux -L hangar-<id> ls` meaning
+precisely "the clones". The names are distinct by exact equality, which is all the comparison in
+`currentSession` does.
+
+`.hangar/claude-tmux.conf` is the config, rewritten by `hangar claude` every run immediately
+before the server starts. That is why it gets no `doctor` row and no `.gitignore` line, unlike
+`clone-tmux.conf`: `colours sync` writes that one and nothing else would notice it going stale,
+whereas this one cannot be stale. Its bar options are a table with two consumers — rendered into
+the conf, and written with `set -g` onto a server already running — the same split
+`clone-tmux.conf` and `TmuxServer.restyle` live on, and possible because every one of them is a
+global *session* option rather than a server option.
+
+**The pair is a singleton, and tmux does most of the work.** A window whose command exits is
+closed by tmux, so a tab whose claude you `/exit` is simply gone and the next run recreates it —
+which is also the moment passed-through arguments have somewhere to go. `renumber-windows off`
+is what keeps operator at index 1 when developer's window closes; with it on, the tabs would swap
+places for no reason a reader could see. Arguments aimed at a tab that is still live cannot be
+honoured at all, so they refuse rather than attach to a session the caller did not name;
+`--replace` reaches that cell by ending the tab's claude and asks first through `confirm`, which
+fails closed with no terminal. And attaching uses `-d`, because two clients on one session mirror
+each other's window selection — switching tabs in one moves the other, which reads as the bar
+changing by itself.
+
+## The header, and the width budget that shapes it
+
+tmux reserves `status-left-length` and `status-right-length` first and gives the window list
+whatever remains. So `status-left` is empty with a length of 0: the whole width goes to the tabs,
+which is where the text saying what each session is FOR lives. Only the CURRENT tab carries that
+text, on a block of its mode's hue; the other shows its bare name. Measured on tmux 3.7c:
+
+    operator current    ` ops · run the fleet  dev `        26 columns
+    developer current   ` ops  dev · change the CLI `        27 columns
+
+against `columns - 3` given to the list, so the worst case fits exactly at a 30-column terminal.
+`status` is `on` and not `2`, which is what keeps it one line — tmux truncates a status line
+rather than wrapping it, so "never two lines" is a property of that one setting.
+
+The hue is baked into each window's own `window-status-current-format` rather than read from a
+user option inside the `#[…]` style spec: a per-window format with the value already in it is what
+`clone-terminal.sh` does and is known to work. The purpose text stays a user option
+(`@hangar_purpose`), which expands inside a format perfectly well.
+
+`MODE_COLOURS` in `src/palette.ts` holds the two hues — ops `#1f6feb`, dev `#b35400` — with ink
+from the same `inkFor` the clone hues use: white on both, at 4.63:1 and 5.02:1. **They are a
+hand-maintained duplicate of `statusline.sh`'s own two triples**, named here rather than left to
+be discovered. That file cannot source them: it is one of the hand-maintained mode files, derived
+from nothing under `app/src/**`, deliberately, because it must render a badge when everything else
+is broken. Change one, change both.
+
+## Two guards on the escalation, and only one is a permission list
+
+`hangar claude` passes its arguments through, so an operator session could otherwise run
+`hangar claude -m dev -p '…'` — or `--dangerously-skip-permissions` — and get a session running
+under `dev.settings.json`, with everything developer mode may do including writes to `app/**`.
+The pre-existing `Bash(hangar dev)` denial does not match a `claude` subcommand.
+
+- **`ops.settings.json` denies `Bash(hangar claude)` and `Bash(hangar claude:*)`.**
+- **The command refuses when `$CLAUDECODE` is set**, which no editable file can turn off. That
+  variable is set in every tool subprocess — measured alongside `CLAUDE_CODE_ENTRYPOINT` and
+  `CLAUDE_CODE_SESSION_ID`, and unlike `$CLAUDE_PROJECT_DIR`, which is injected per hook. There is
+  no legitimate call from inside a session anyway: attaching a tmux client needs a terminal.
+
+A third refusal is about intent rather than privilege: `hangar claude` stops when the working
+directory is inside a clone, because `hangar` itself is on a clone's PATH by design. A dry run
+runs ahead of all three, because it creates nothing and attaches nothing, so none of them has
+anything to protect.
 
 ## Which mode you are in shows in the status line
 
@@ -90,18 +197,21 @@ file is what probing that class of question produced — all three are wired at 
 | Channel | Set by | Covers |
 | --- | --- | --- |
 | `$1` | the mode's own `statusLine` argv, via `--settings` | authoritative whenever it arrives |
-| `$HANGAR_MODE` | `export` in `bin/hangar-mode` | the argv-less entry in the root `.claude/settings.json` winning instead |
+| `$HANGAR_MODE` | `new-window -e` per window, from `hangar claude` | the argv-less entry in the root `.claude/settings.json` winning instead |
 | neither | — | a red `NO MODE` badge |
 
 Any one channel working shows the right badge; all three failing shows a **red warning rather than
 a confident wrong answer**. That makes the confirming observation a cheap one: a freshly launched
-`hangar-ops` window reading `OPS` validates the entire chain, whichever channel carried it.
+`hangar claude` window reading `OPS` validates the entire chain, whichever channel carried it.
 
 Three implementation rules, each the opposite of the obvious version:
 
-- **`$HANGAR_MODE` is exported by `bin/hangar-mode` and nowhere else.** Exported from `.envrc` or
-  `.envrc.hangar` it would reach every shell in the hangar, and a bare `claude` would then wear a
-  badge whose rules it does not have — at which point `NO MODE` stops meaning anything.
+- **`$HANGAR_MODE` is set by `hangar claude` and nowhere else, one window at a time.** Exported
+  from `.envrc` or `.envrc.hangar` it would reach every shell in the hangar, and a bare `claude`
+  would then wear a badge whose rules it does not have — at which point `NO MODE` stops meaning
+  anything. Per WINDOW rather than per session for a second measured reason: on tmux 3.7c a window
+  created without its own `-e` inherits the session's value, so the developer tab would badge
+  itself `OPS`.
 - **The badge sets an explicit background** (`48;2;r;g;b`, white bold on top), never `\033[7m`.
   Reverse video inverts against each window's own theme, so the badge would come out a different
   colour per terminal — the exact ambiguity it is there to remove. The WORD survives a terminal
@@ -203,13 +313,13 @@ should resolve a conflict in carelessly.
 
 It is now **`hangar-statusline <mode>`**, resolved on PATH, and both files are byte-identical on
 every machine. `bin/hangar-statusline` resolves the hangar root from its own location and execs
-`.claude/modes/statusline.sh` — the rule `bin/hangar` and `bin/hangar-mode` already follow.
+`.claude/modes/statusline.sh` — the rule `bin/hangar` already follows.
 
 **Why a name on PATH is sound here and still refused for the clone hooks.** That was the third
 rejected alternative below, on the grounds that it depends on direnv having loaded. It does — but
 here that dependency is *entailed rather than assumed*: `bin/hangar-statusline` is on PATH for
-exactly the same reason `bin/hangar-ops` is, namely direnv's `PATH_add bin`. A session running in a
-mode was started by a launcher found that way, so a mode existing at all is proof direnv loaded. A
+exactly the same reason `bin/hangar` is, namely direnv's `PATH_add bin`. A session running in a
+mode was started by a `hangar` found that way, so a mode existing at all is proof direnv loaded. A
 clone's `SessionStart` hook has no such guarantee — it runs with an unpredictable PATH — which is
 why `bin/hangar --hangar <root>` stays absolute there. The two cases only looked alike.
 
@@ -217,11 +327,13 @@ why `bin/hangar --hangar <root>` stays absolute there. The two cases only looked
 present and executable in this hangar, which is what a partial checkout or a lost permission bit
 looks like. It still offers no `--fix`, for the escalation reason above.
 
-**One probe that supports it, stopping short of proof.** A Bash tool subprocess of a session
-launched by `bin/hangar-dev` has `bin/` on its PATH — `command -v hangar-statusline` answers, the
-script runs, and the DEV badge renders — and it also carries `HANGAR_MODE=dev`, which only
-`bin/hangar-mode` exports. So the launching shell's environment does reach children of the Claude
-Code process, which is the assumption the PATH lookup rests on. What it does not prove is that the
+**One probe that supports it, stopping short of proof.** A Bash tool subprocess of a session in
+the developer tab has `bin/` on its PATH — `command -v hangar-statusline` answers, the script
+runs, and the DEV badge renders — and it also carries `HANGAR_MODE=dev`, which only
+`hangar claude` sets. So the launching shell's environment does reach children of the Claude Code
+process, which is the assumption the PATH lookup rests on. It reaches them through the tmux
+server, which inherits the environment of the shell that started it, so `PATH_add bin` is in
+force there for the same reason it is at the prompt. What it does not prove is that the
 STATUS LINE subprocess is spawned the same way; Claude Code could sanitise the environment for that
 one path specifically. Treat it as strong evidence, not a verification — the verification is
 launching a mode and looking at the badge.
@@ -230,7 +342,8 @@ launching a mode and looking at the badge.
 
 - **The status line does not run under `claude -p`.** A settings file whose `statusLine.command`
   wrote its argv and environment to a file produced nothing in print mode, so the whole question is
-  unreachable from a script. Verify it the way a human can: launch `hangar-ops` and look.
+  unreachable from a script. Verify it the way a human can: run `claude` at the hangar root and
+  look at each tab.
 - **`$CLAUDE_PROJECT_DIR` is not exported to tool subprocesses.** It is unset there while
   `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_SESSION_ID` and friends are all set — so it
   is injected per-hook, not a general environment variable, and was never a candidate for a

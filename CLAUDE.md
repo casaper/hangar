@@ -314,7 +314,7 @@ at the shared hangar memory and `plansDirectory` at `plans/`, so a hangar-root s
 straight into the shared archive, plus a `statusLine` that badges the window with which of the two
 hangar-root **modes** it was launched in (a red `NO MODE` when it was launched in neither). Beside
 it are two skills: **`hangar-ops`** for driving the CLI and **`hangar-internals`** for changing it,
-and a `modes/` directory holding what those two launchers hand to Claude Code.
+and a `modes/` directory holding what `hangar claude` hands to Claude Code.
 
 **Neither skill reaches a clone session**, and neither does that settings file. Skills load from
 the start directory and every parent only as far as the **repository root**, and each clone is its

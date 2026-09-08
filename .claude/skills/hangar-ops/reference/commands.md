@@ -27,6 +27,23 @@ Global: `--hangar <path>` (the hangar root to operate on; **only `config show` a
 | `doctor` | `[clone]` (defaults to every clone) | `-a, --all` · `--fix` | report bare; **act [user]** with `--fix` |
 | `setup` | — | `-y, --yes` · `--origin <url>` · `--id <name>` · `--preset <name>` · `--force` · `-n, --dry-run` | act |
 | `teach-rg` | `<clone>` | `-n, --dry-run` · `-y, --yes` | act |
+| `claude` | `[claude-args...]` (passed through untouched) | `-m, --mode <ops\|dev>` (default `ops`) · `--replace` · `--yes` · `--dry-run` | **DENIED to you** — see below |
+
+**`claude` is the one command in this table you cannot run**, and the denial is deliberate rather
+than an oversight in the permission list. It opens the two hangar-root sessions as two tabs of one
+tmux window, and it passes every other argument straight through — so `hangar claude -m dev -p '…'`
+would start a session under developer mode's rules, with the writes to `app/**` that this mode is
+denied. `ops.settings.json` denies both `Bash(hangar claude)` and `Bash(hangar claude:*)`, and the
+command refuses a second time on its own when `$CLAUDECODE` is set, so it will not run from here
+even if a settings file says otherwise.
+
+What that means in practice: when a task needs the CLI changed, **name the file and stop** — do
+not try to open the developer tab. It is already the next window of the session you are in, and
+`C-b n` is how the user reaches it.
+
+**`--dry-run` is spelled out and `-n` is not available**, because `-n` is claude's own `--name`
+and everything but hangar's four flags belongs to claude. This is the second exception to "every
+`-n` in this CLI is a dry run", after `resume`'s `--limit`.
 
 ## Groups
 

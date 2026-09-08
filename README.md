@@ -55,7 +55,8 @@ browser test run — that isolation is the entire reason the fleet exists.
 - **Shared caches.** A Jira ticket fetched in one clone becomes available to all of them; finished
   plans are collected into one archive. Both happen from `SessionEnd` hooks, so it is not something
   to remember.
-- **Two Claude Code modes at the hangar root** — one that drives the CLI, one that changes it.
+- **Two Claude Code modes at the hangar root** — one that drives the CLI, one that changes it,
+  opened together as two tabs of one tmux window by typing `claude`.
 
 ## What every clone gets
 
@@ -447,15 +448,38 @@ by `hangar setup` and repaired by `doctor`; `colour-assignments.json` lives in t
 `.hangar/`, with a fallback read of the old root-level path so a `git pull` cannot lose your
 assignments.
 
-## Starting Claude Code in operator mode
+## Starting Claude Code at the hangar root
 
 ```bash
-hangar-ops                      # start a session in operator mode
-hangar-ops --resume <id>        # resume one, keeping the mode
+cd ~/code/<your hangar>
+claude                          # both modes, two tabs, operator in front
 ```
 
-That is it — no arguments, from anywhere in the hangar. `hangar-ops` is a small script in `bin/`,
-which direnv has already put on your PATH.
+That is the whole of it. `claude` at the hangar root opens **one tmux window with two tabs** —
+operator in the first, developer in the second — and attaches your terminal to it. `C-b n` moves
+between them, `C-b d` detaches and leaves both running, and typing `claude` again reattaches.
+Each tab's header says what that session is for, and only the tab you are in carries the words:
+
+```
+ ops · run the fleet   dev
+└──── blue ─────────┘
+```
+
+`claude` reaches this through `.local/bin/claude`, a two-line shim direnv puts on your PATH in the
+hangar root and nowhere else — **inside a clone, `claude` is the ordinary Claude Code binary**. The
+long spelling is `hangar claude`, and it works from anywhere in the hangar except a clone.
+
+| | |
+| --- | --- |
+| `claude` | both tabs, operator selected |
+| `claude -m dev` | both tabs, developer selected |
+| `claude --resume <id>` | resume that session in the operator tab, keeping the mode |
+| `claude --resume <id> -m dev` | the same, in the developer tab |
+| `claude --help` | claude's own help, with `-m, --mode` folded into it |
+| `claude --dry-run` | report what would be created, change nothing |
+
+Every argument other than those four is passed straight through to `claude`, so anything you know
+how to do with Claude Code works here too.
 
 **Operator mode is for driving the fleet.** The session runs `hangar` on your behalf and reads its
 output: what the clones are doing, why `doctor` is red, syncing a clone, opening a window,
@@ -465,40 +489,46 @@ flags up rather than recalling them.
 **What it cannot do is change the CLI.** Writes to `app/**`, `.claude/skills/**` and
 `.claude/modes/**` are denied by that session's permission rules — including the file holding its own
 instructions, so it cannot rewrite its own remit. Reading all of them is allowed and is usually the
-right answer. If a task genuinely needs the CLI changed, it will name the file and stop.
+right answer. If a task genuinely needs the CLI changed, it will name the file and stop — it is
+also denied `hangar claude`, so it cannot open the developer tab for you. That tab is already the
+next window along.
 
-Three things about how a mode works, because they are not obvious:
+**Developer mode is for changing the `hangar` CLI itself** — the TypeScript in `app/src/**`, the
+config schema, the generated artifacts, the skills, and operator mode's own instructions. Its
+working directory is `app/`, so `app/CLAUDE.md` — the package layout, the two conventions the code
+follows, the code map and the five extension seams — is loaded from the first turn instead of
+lazily.
+
+Use whichever tab matches the question: "the CLI needs to do something different" is the developer
+tab, "run the CLI" is the operator one. The split is enforced rather than suggested: **developer
+mode is the only one that can improve operator mode's instructions**, because operator mode is
+denied writes to them. That asymmetry is why there are two modes rather than one.
+
+Four things about how a mode works, because they are not obvious:
 
 - **A mode is three launch flags** — `--settings`, `--append-system-prompt-file` and a session name
   — and Claude Code reads all three **once, at startup**. So neither you nor the session can switch
   modes without restarting. That is the point of it, not a limitation.
-- **`hangar-ops --resume <id>` resumes *into* operator mode.** A bare `claude --resume` of the same
-  session comes back with none of its rules.
+- **`claude --resume <id>` resumes *into* a mode**, because those three flags are placed ahead of
+  your `--resume`. A bare `claude --resume` of the same session, from outside the hangar root,
+  comes back with none of its rules.
 - **The window is badged.** The status line is built to show a blue `OPS`, an amber `DEV`, or a red
   `NO MODE` for a session launched as a plain `claude` — which is the tell that a resumed session
   lost its rules. This part is newly added and not yet confirmed by eye; see **Troubleshooting**.
+- **The pair is a singleton.** Never a third tab. A tab whose session you `/exit` simply closes,
+  and the next `claude` recreates it — which is also when arguments can be applied to it. Aimed at
+  a tab that is still running, arguments are refused rather than silently dropped; `--replace`
+  ends that tab's session and asks before it does.
+
+The two sessions live on a tmux socket of their own, `tmux -L hangar-<id>-claude`, so they are
+invisible to a bare `tmux ls` and separate from the clone sessions `hangar open` creates.
 
 The commands that move git state or files between live working trees — `sync`, `checkout-default`,
 `open`, `add-clone`, `remove-clone`, `colours change`, `doctor --fix` — stay yours by default. An
 operator session runs the dry run, reports it, and hands you a copy-pasteable line; tell it to go
 ahead and it will run them.
 
-## Developer mode, and what it is for
-
-```bash
-hangar-dev
-```
-
-**Developer mode is for changing the `hangar` CLI itself** — the TypeScript in `app/src/**`, the
-config schema, the generated artifacts, the skills, and the operator mode's own instructions. It
-starts with its working directory in `app/`, so `app/CLAUDE.md` — the package layout, the two
-conventions the code follows, the code map and the four extension seams — is loaded from the first
-turn instead of lazily.
-
-Use it when the answer to a question is "the CLI needs to do something different", and operator mode
-when the answer is "run the CLI". The split is enforced rather than suggested: **developer mode is
-the only one that can improve operator mode's instructions**, because operator mode is denied writes
-to them. That asymmetry is why there are two modes rather than one.
+## Developer mode's own checks
 
 After any change, from `app/`:
 
@@ -769,7 +799,7 @@ echo 'source ~/code/my_fleet/clone-terminal.sh' >> ~/.zshrc
 | `hangar: command not found`                                    | direnv has not loaded. `direnv allow` at the hangar root. Same answer for a missing `tsc`, `eslint`, `prettier` or `pnpm`. |
 | `no hangar.config.yaml … so this is not a hangar`              | `hangar setup`, or `cp hangar.config.example.yaml hangar.config.yaml`                                                |
 | Every clone reports ports 4200 / 6006 / 9323                   | You ran the repo's own port script from the hangar root, where the clone's env file is never loaded. It does not error, it answers wrong — the tell is a `(default)` marker. Use `hangar ports`. |
-| A red `NO MODE` badge in a window you started with `hangar-ops` | Either the session was resumed with a bare `claude --resume` (which drops the mode), or the badge wiring is at fault — see below. |
+| A red `NO MODE` badge in a tab `claude` opened | Either the session was resumed with a bare `claude --resume` from outside the hangar root (which drops the mode), or the badge wiring is at fault — see below. |
 | `git checkout <branch>` refuses, "matched multiple remote tracking branches" | The sibling remotes all have that branch. `hangar doctor --fix` restores the `checkout.defaultRemote=origin` that resolves it. |
 | `hangar sync` refuses to start                                 | The clone is mid-rebase or mid-merge. Finish or abort that first — step one is a stash, and it would bury the half-applied state. |
 | An editor never opens                                          | `hangar doctor` prints a row per configured editor with whether it can actually be launched. A `code` command that was never installed into PATH means `hangar open` silently opens no editor. |
@@ -781,7 +811,7 @@ channels — the status line's own arguments, an environment variable set only b
 otherwise the red fallback — precisely because none of them could be verified from outside a live
 session, and **it has not yet been confirmed by eye in a freshly launched window.** Any one channel
 working shows the right badge; all three failing shows the red warning rather than a confident wrong
-answer. If `hangar-ops` gives you `NO MODE`, that is the bug.
+answer. If the operator tab gives you `NO MODE`, that is the bug.
 
 ## Where the rest is written down
 

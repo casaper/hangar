@@ -13,14 +13,15 @@ or acts. **Check a flag spelling there rather than recalling it**; several are u
 actively misleading (see `resume` below).
 
 **If this session was launched in a mode, that mode's file is your remit and outranks a habit.**
-`hangar-ops` and `hangar-dev` start Claude Code with `.claude/modes/<mode>.md` appended to the
-system prompt and `.claude/modes/<mode>.settings.json` as their permission rules — read once, at
-startup, so neither you nor the user can switch without restarting. Operator mode is denied writes
-to `app/**`, `.claude/skills/**` and `.claude/modes/**`, and pre-approves the reporting commands
-below. A session started as a bare `claude` has neither, and the defaults in this file apply —
-**including a bare `claude --resume` of a session that WAS in a mode**, which comes back with none
-of its rules. **The status line is the tell: it reads a red `NO MODE` instead of `OPS` or
-`DEV`.** Resume through `hangar-ops --resume <id>` to keep them.
+`hangar claude` starts Claude Code with `.claude/modes/<mode>.md` appended to the system prompt
+and `.claude/modes/<mode>.settings.json` as their permission rules — read once, at startup, so
+neither you nor the user can switch without restarting. Operator mode is denied writes to
+`app/**`, `.claude/skills/**` and `.claude/modes/**`, is denied `hangar claude` itself, and
+pre-approves the reporting commands below. A session started as a bare `claude` from anywhere but
+the hangar root has neither, and the defaults in this file apply — **including a bare
+`claude --resume` of a session that WAS in a mode**, which comes back with none of its rules.
+**The status line is the tell: it reads a red `NO MODE` instead of `OPS` or `DEV`.** Resume
+through `hangar claude --resume <id> -m <mode>` to keep them.
 
 ## Addressing a clone
 

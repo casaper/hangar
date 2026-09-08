@@ -360,10 +360,10 @@ stale on the next commit and nothing checks it, so run `wc -l` when you want one
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | entry point           | `cli.ts` — every command, option and alias is registered here, plus the `preAction` config gate and the `configureHelp` that prints all of a command's aliases                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | maintainer            | `commands/dev.ts` — `hangar dev golden`, the capture behind `pnpm golden`; `commands/release.ts` — `hangar dev release`, the gates and preflight in front of semantic-release, with `release/commits.ts` beside it reading the range. **Both are hidden in `cli.ts`, and that is their interface contract**: nothing about either is promised to an operator, so neither gets a row in `hangar-ops/reference/commands.md`. `dev` is deliberately NOT in `NEEDS_NO_CONFIG` — a capture, or a release, derived from a hangar with no config would be derived from the schema defaults, the one output neither may be mistaken for |
-| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`, `install`                                                                                                                                                                                                                                                                                                                                                                                         |
+| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`, `install`, `claude`                                                                                                                                                                                                                                                                                                                                                                               |
 | config                | `config/schema.ts` (the zod authority), `default-branch.ts`, `load.ts` (discovery + precedence), `derive.ts`, `json-schema.ts`, `drift.ts` (the example-vs-live comparison `config validate` runs)                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | per-clone artifacts   | `clone-config.ts` — the byte-compared builders `doctor` holds every clone to; `colour-assignments.ts`; `ports.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| generators            | `generate/` — `terminal-sh.ts`, `tmux-conf.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| generators            | `generate/` — `terminal-sh.ts`, `tmux-conf.ts`, `claude-tmux-conf.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | editor drivers        | `editor/` — `vscode.ts`, `jetbrains.ts`, `index.ts`, `kinds.ts`, `types.ts`, `launch-only.ts`, `emacs.ts`, `vim.ts`, `zed.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | emulator drivers      | `terminal/` — one window-opener each: `iterm2.ts`, `apple-terminal.ts`, `konsole.ts`, `gnome-terminal.ts`, `none.ts`, plus `applescript.ts`, `index.ts`, `types.ts`. Everything a window CONTAINS is `tmux.ts`, in the shared row                                                                                                                                                                                                                                                                                                                                                                                               |
 | platform              | `platform/` — `darwin.ts`, `linux.ts`, `index.ts`, `types.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -651,16 +651,25 @@ on every `git pull` from a published upstream._
 | `.claude/settings.json`                                    | `setup`, `doctor --fix`                |
 | `clone-colours.sh`, `clone-terminal.sh`, `clone-tmux.conf` | `hangar colours sync`                  |
 | `.hangar/colour-assignments.json` — **INPUT**              | `hangar colours change` — nothing else |
+| `.hangar/claude-tmux.conf`                                 | `hangar claude`, every run             |
 
-Tracked: this file, the root `CLAUDE.md`, `bin/**`, `app/**`, `.envrc`, `.envrc.hangar`, `.nvmrc`,
+Tracked: this file, the root `CLAUDE.md`, `bin/**`, `.local/bin/**`, `app/**`, `.envrc`,
+`.envrc.hangar`, `.nvmrc`,
 `.editorconfig`, `hangar.config.example.yaml`, `hangar.schema.json`, `.gitignore`, `CHANGELOG.md`,
 `package.json` (scripts and nothing else — see the top of this file), `.releaserc.json`,
 `.claude/**` except the
 generated `settings.json`, and the two `.gitkeep` files under `plans/` and `tmp/`. Never the
 application.
 
-Four of those rows are worth a sentence each:
+Five of those rows are worth a sentence each:
 
+- **`.hangar/claude-tmux.conf` gets no `doctor` row and no `.gitignore` line of its own**, and
+  the reason is which command owns it. `colours sync` writes `clone-tmux.conf` and `doctor`
+  byte-compares it, because nothing else would notice it going stale. `hangar claude` rewrites
+  this one immediately before it starts the server that reads it, so stale is not a state it can
+  reach — and `.hangar/` is already gitignored. It is also why `.local/bin/claude` is TRACKED
+  rather than generated: the shim holds no machine-specific value, so there is nothing to
+  generate and nothing to drift.
 - **`.hangar/colour-assignments.json` is the only file here that is both untracked and
   irreplaceable** — operator input that nothing regenerates. It has its own gitignore entry rather
   than sitting under the `.hangar/` line, because that line is documented as safe-to-delete
@@ -746,27 +755,34 @@ Five more root files are hand-maintained and belong to this package rather than 
   `resolveBrewPrefix` does the same three in the same order, deliberately. The probe is last and
   conditional in both: an Intel Mac without `brew shellenv` in its profile has the variable unset,
   and stopping at the default aborted the whole `.envrc` on a machine that has Homebrew.
-- **`bin/hangar-mode` plus `bin/hangar-ops` / `bin/hangar-dev` / `bin/hangar-statusline`, and the
-  five files in `.claude/modes/`** — `ops.md`, `dev.md`, a `*.settings.json` beside each, and `statusline.sh`.
+- **`.local/bin/claude` and `bin/hangar-statusline`, plus the five files in `.claude/modes/`** —
+  `ops.md`, `dev.md`, a `*.settings.json` beside each, and `statusline.sh`. **`hangar claude` is
+  the one way into either mode** (`src/commands/claude.ts`): it opens both as two tabs of one tmux
+  session on its own socket, and a bare `claude` at the hangar root reaches it through the shim.
   A mode is `--settings` + `--append-system-prompt-file` + `-n`, read once at startup, and `dev`'s
   working directory is `app/` so that THIS file is loaded from its first turn. **`statusline.sh`
-  badges the window `OPS` / `DEV` / a red `NO MODE`**, taking the mode from its own argv or
-  from `$HANGAR_MODE` — which `bin/hangar-mode` exports and nothing else may, since from `.envrc`
-  it would reach every shell in the hangar and make the badge meaningless.
-  **The launchers are scripts in `bin/` and cannot be shell functions in `.envrc.hangar`**:
-  direnv exports an environment diff, and a function is not an environment variable —
-  `PATH_add bin` is what actually reaches the shell. That same `PATH_add` is why the two settings
-  files say **`hangar-statusline <mode>` rather than an absolute path**: a tracked file cannot name
-  one machine's home directory, and a session running in a mode is proof direnv loaded, because the
-  launcher it started from was found the same way. All five are **hand-maintained, so they add
-  no row to the derivation table above and need no `--check`** — nothing derives them from
+  badges the window `OPS` / `DEV` / a red `NO MODE`**, taking the mode from its own argv or from
+  `$HANGAR_MODE` — which `hangar claude` sets per tmux window and nothing else may, since from
+  `.envrc` it would reach every shell in the hangar and make the badge meaningless.
+  **The shim cannot be a shell function in `.envrc.hangar`**: direnv exports an environment diff,
+  and a function is not an environment variable — `PATH_add` is what actually reaches the shell.
+  **It also cannot be in `bin/`**, and that is the one thing to know before moving it: every
+  clone's `.envrc.private` repeats `PATH_add <hangar>/bin` so `hangar` works from inside a clone,
+  so a `claude` there would have been on PATH in every clone shell, where `terminal.tabs[]`'s
+  default `command: 'claude'` starts each clone's own session. `.local/bin` gets its own
+  `PATH_add` in the hangar's `.envrc` alone. That same mechanism is why the two settings files say
+  **`hangar-statusline <mode>` rather than an absolute path**: a tracked file cannot name one
+  machine's home directory, and a session running in a mode is proof direnv loaded, because the
+  `hangar` that started it was found the same way. All seven are **hand-maintained, so they add no
+  row to the derivation table above and need no `--check`** — nothing derives them from
   `app/src/**`. Operator mode is denied writes to `app/**`, `.claude/skills/**` and
-  `.claude/modes/**`, which means **developer mode is the only one that can improve operator
-  mode's instructions**; that asymmetry is the reason the pair exists.
+  `.claude/modes/**`, **and is denied `hangar claude` itself**, which means **developer mode is
+  the only one that can improve operator mode's instructions**; that asymmetry is the reason the
+  pair exists, and the denial is what stops a pass-through `-p` from getting around it.
   `hangar-internals/reference/modes.md` has the rationale, including why the root `CLAUDE.md`
-  cannot be suppressed for either of them, four probes that answered wrongly, and two more that
-  could not answer at all — the status line does not run under `claude -p`, and
-  `$CLAUDE_PROJECT_DIR` is not exported to tool subprocesses.
+  cannot be suppressed for either of them, the socket and the singleton rules, four probes that
+  answered wrongly, and two more that could not answer at all — the status line does not run
+  under `claude -p`, and `$CLAUDE_PROJECT_DIR` is not exported to tool subprocesses.
 - **`.nvmrc` and `app/.nvmrc`** are a pair, both `24`. Move them together.
 - **`.claude/skills/**` is tracked, and both skills are artifacts of this package.** A command
   whose flags change is a `hangar-ops/reference/commands.md` edit; a design decision that changes

@@ -39,7 +39,7 @@ take the one that matches what you are touching:
 | changing `open`'s window handling or `resume`'s session discovery | `reference/terminal-and-sessions.md` |
 | changing the zod schema, the loader, discovery, the no-config gate, or `forge.defaultBranch` | `reference/config.md` |
 | changing `doctor`, any generated per-clone artifact, or the plan archive | `reference/doctor.md` |
-| changing the `hangar-ops` / `hangar-dev` launch modes, their permission rules, or what a hangar-root session is told it is | `reference/modes.md` |
+| changing `hangar claude`, the two hangar-root modes, their permission rules, or what a hangar-root session is told it is | `reference/modes.md` |
 | cutting a release, changing what a commit type is worth, or the CHANGELOG's sections | `reference/release.md` |
 
 Two things are deliberately elsewhere:

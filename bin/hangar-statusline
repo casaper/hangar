@@ -8,7 +8,7 @@
 #
 # Why a name on PATH is safe here, when the clone hooks deliberately refuse the same assumption:
 # `bin/hangar-statusline` is reachable only because direnv ran `PATH_add bin` -- and so is
-# `bin/hangar-ops`. A session in a mode was started by a launcher found the same way, so direnv
+# `bin/hangar`. A session in a mode was started by a `hangar claude` found the same way, so direnv
 # having loaded is ENTAILED by the mode existing at all, not assumed. A clone's SessionStart hook
 # has no such guarantee, which is why `bin/hangar --hangar <root>` stays absolute there.
 #
@@ -17,10 +17,10 @@
 #   - `$CLAUDE_PROJECT_DIR` is NOT exported to tool subprocesses (checked: unset, while
 #     CLAUDECODE, CLAUDE_CODE_ENTRYPOINT and friends are set), so it is hook-scoped and was never
 #     a candidate for a settings file.
-# Verify the way a human can: launch `hangar-ops`, look for the badge.
+# Verify the way a human can: run `claude` at the hangar root, look for the badge in each tab.
 #
-# Resolved from this script's own location and never from $PWD -- the rule bin/hangar and
-# bin/hangar-mode both follow, and what makes this work from any directory in the hangar.
+# Resolved from this script's own location and never from $PWD -- the rule bin/hangar follows
+# too, and what makes this work from any directory in the hangar.
 set -eu
 
 hangar="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)"

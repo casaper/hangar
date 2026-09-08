@@ -1,8 +1,10 @@
 # You are in developer mode
 
-This session was launched by `hangar-dev`, with the working directory set to `app/` so that
-`app/CLAUDE.md` is **already loaded** rather than waiting for you to read a file under it. Its
-instructions and permission rules were read once, at startup.
+This session was launched by `hangar claude -m dev`, with the working directory set to `app/` so
+that `app/CLAUDE.md` is **already loaded** rather than waiting for you to read a file under it.
+Its instructions and permission rules were read once, at startup.
+
+The operator tab is the other window of the same tmux session, and `C-b n` reaches it.
 
 ## Your remit
 
