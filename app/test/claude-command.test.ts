@@ -215,6 +215,14 @@ test('a help page with no --model row still documents the flag, rather than fail
 });
 
 test('an empty help page is survivable, because it means claude --help itself failed', () => {
+  // This is also the answer when claude is not installed at all: `hangar claude --help` reports
+  // ahead of the missing-binary refusal, precisely because that is when it is most wanted.
   const out = claudeHelpWith('');
   assert.match(out, /-m, --mode <ops\|dev>/);
+  assert.match(out, /--replace/);
+  assert.match(out, /--dry-run/);
+  // The heading may not claim a page that is not there.
+  assert.doesNotMatch(out, /everything else above/);
+  assert.match(out, /every other flag reaches it unchanged/);
+  assert.ok(!out.startsWith('\n'), 'no leading blank where the page would have been');
 });

@@ -304,10 +304,14 @@ export const claudeHelpWith = (helpText: string): string => {
     );
     return [...rows.slice(0, at), ...inserted, ...rows.slice(at)].join('\n');
   }
+  // Two headings, because this block also answers when there is no page at all: `claude` not
+  // installed yet. "Everything else above" then names nothing, so it says what is true instead.
+  const page = helpText.replace(/\n+$/, '');
   return [
-    helpText.replace(/\n+$/, ''),
-    '',
-    'Added by hangar (everything else above is passed straight through to claude):',
+    ...(page === '' ? [] : [page, '']),
+    page === ''
+      ? "Added by hangar (claude's own help is unavailable; every other flag reaches it unchanged):"
+      : 'Added by hangar (everything else above is passed straight through to claude):',
     `${MODE_HELP_TERM}  ${MODE_HELP_TEXT}`,
     '  --replace             end the claude already in that tab and start this one there',
     '  --dry-run             report what would be created, change nothing',
@@ -561,18 +565,22 @@ export type ClaudeOptions = { readonly argv: readonly string[] };
 export const claude = (hangar: Hangar, opts: ClaudeOptions): void => {
   const inv = splitClaudeArgv(opts.argv);
   const binary = resolveClaudeBinary(process.env['PATH'], hangar.root);
+
+  // Ahead of every guard, and ahead of the missing-binary refusal below: `--help` is a question
+  // about this command, not a request to start one. With no claude installed there is no page to
+  // fold `-m, --mode` into -- and `claudeHelpWith` then answers with hangar's own rows alone,
+  // which is the most useful thing this command can say on a machine that cannot yet run it.
+  if (inv.help) {
+    const res = binary === undefined ? undefined : run(binary, ['--help']);
+    process.stdout.write(claudeHelpWith(res?.ok === true ? res.stdout : ''));
+    return;
+  }
+
   if (binary === undefined) {
     throw new CliError(
       'claude is not on PATH',
       'install Claude Code, or check that `command -v claude` answers outside this hangar.',
     );
-  }
-
-  // Ahead of every guard: `--help` is a question about this command, not a request to start one.
-  if (inv.help) {
-    const res = run(binary, ['--help']);
-    process.stdout.write(claudeHelpWith(res.ok ? res.stdout : ''));
-    return;
   }
 
   const srv = server(hangar);
