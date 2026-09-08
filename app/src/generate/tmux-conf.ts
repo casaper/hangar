@@ -113,15 +113,30 @@ export const TMUX_SETTINGS: readonly TmuxSetting[] = [
   },
 ];
 
-/** `set -s extended-keys on   # why`, aligned so the reasons form a column. */
-const claudeCodeLines = (): string[] => {
-  const lhs = TMUX_SETTINGS.map((s) => `set ${s.set.padEnd(3)} ${s.name} ${quote(s.value)}`);
+/**
+ * Single-quote a value that needs it, and leave a bare word bare.
+ *
+ * Load-bearing rather than cosmetic: an unquoted `#` starts a tmux comment, so a status format
+ * or a hex colour written bare would silently truncate the line it is on.
+ */
+export const quoteTmuxValue = (value: string): string =>
+  /^[A-Za-z0-9_.:-]+$/.test(value) ? value : `'${value}'`;
+
+/**
+ * `set -s extended-keys on   # why`, aligned so the reasons form a column.
+ *
+ * Exported because there are two servers, not one: `generate/claude-tmux-conf.ts` renders the
+ * same block for the hangar-root session server. Both run Claude Code, so both need all four --
+ * and the alternative is a second copy of a table this file spends a paragraph explaining why
+ * there must only be one of.
+ */
+export const claudeCodeSettingLines = (): string[] => {
+  const lhs = TMUX_SETTINGS.map(
+    (s) => `set ${s.set.padEnd(3)} ${s.name} ${quoteTmuxValue(s.value)}`,
+  );
   const width = Math.max(...lhs.map((l) => l.length));
   return TMUX_SETTINGS.map((s, i) => `${(lhs[i] ?? '').padEnd(width)}   # ${s.why}`);
 };
-
-/** Single-quote a value that needs it, and leave a bare word bare. */
-const quote = (value: string): string => (/^[A-Za-z0-9_.:-]+$/.test(value) ? value : `'${value}'`);
 
 export const tmuxConfArtifact = (hangar: Hangar): Artifact => {
   const socket = `hangar-${hangar.id}`;
@@ -138,7 +153,7 @@ export const tmuxConfArtifact = (hangar: Hangar): Artifact => {
       '# ---- Claude Code inside tmux ------------------------------------------------------',
       '# The reason this hangar runs its own server: two of these are SERVER options, and a',
       '# server option must never be written onto a server somebody else owns.',
-      ...claudeCodeLines(),
+      ...claudeCodeSettingLines(),
       '',
       '# ---- whose sessions these are -----------------------------------------------------',
       '# A global session option, so every session on this socket inherits it and there is',

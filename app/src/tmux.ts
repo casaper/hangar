@@ -51,6 +51,25 @@ import { orUndefined } from './terminal/types.ts';
 export const tmuxSocketName = (hangarId: string): string => `hangar-${hangarId}`;
 
 /**
+ * The socket the two hangar-ROOT sessions live on -- a second server, not a session on the one
+ * above, and `hangar claude` is its only writer.
+ *
+ * The concrete reason it is separate: every session on the clone socket is expected to name a
+ * clone. `staleSessions` walks that server for sessions whose `@hangar_clone` matches no live
+ * clone, and two mode sessions -- carrying the conf's global `@hangar_id` and no
+ * `@hangar_clone` -- are exactly the shape this module's own header calls "foreign". They would
+ * be reported as stale by `doctor` for ever, which is the check nobody reads.
+ *
+ * It also keeps `tmux -L hangar-<id> ls` meaning precisely "the clones", which is what the
+ * fleet's window list is for.
+ *
+ * Distinct by EXACT equality and nothing weaker: the only place a socket name is compared
+ * (`currentSession`, below) uses `!==`, so this never prefix-matches the clone socket the way a
+ * tmux `-t` target would.
+ */
+export const claudeSocketName = (hangarId: string): string => `hangar-${hangarId}-claude`;
+
+/**
  * The socket a `$TMUX` value names, or undefined when the variable is absent or malformed.
  *
  * `$TMUX` is `<socket path>,<server pid>,<session id>`, and the socket's BASENAME is what `-L`

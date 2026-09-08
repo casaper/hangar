@@ -42,8 +42,9 @@ import { cloneColoursArtifact } from '../generate/colours-sh.ts';
 import { type Artifact } from '../generate/index.ts';
 import { statuslineArtifact } from '../generate/statusline-sh.ts';
 import { terminalHookArtifact } from '../generate/terminal-sh.ts';
+import { claudeTmuxConfArtifact } from '../generate/claude-tmux-conf.ts';
 import { tmuxConfArtifact } from '../generate/tmux-conf.ts';
-import { tmuxSocketName } from '../tmux.ts';
+import { claudeSocketName, tmuxSocketName } from '../tmux.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
 
 import { platform } from '../platform/index.ts';
@@ -260,6 +261,10 @@ export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
      */
     `tmux-socket        ${tmuxSocketName(hangar.id)}`,
     `tmux-conf          ${hangar.paths.tmuxConf}`,
+    // The second server, for the two hangar-ROOT sessions. Captured beside the first because it
+    // is the same kind of fact -- a destination derived from the id, with no content of its own.
+    `claude-socket      ${claudeSocketName(hangar.id)}`,
+    `claude-tmux-conf   ${hangar.paths.claudeTmuxConf}`,
     `port-roles         ${hangar.config.ports.roles.map((r) => `${r.id}(${r.envKey})=${String(r.base)}`).join(' ')}`,
     `port-step/offset   ${String(hangar.config.ports.step)} / ${String(hangar.config.ports.offset)}`,
     '',
@@ -303,6 +308,7 @@ export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
     terminalHookArtifact(hangar, hangar.config.terminal.colour),
     statuslineArtifact(hangar, clones),
     tmuxConfArtifact(hangar),
+    claudeTmuxConfArtifact(hangar),
   ];
   for (const artifact of shared) {
     const name = artifact.path.split('/').pop() ?? 'artifact';

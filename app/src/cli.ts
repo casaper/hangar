@@ -6,6 +6,7 @@ import pc from 'picocolors';
 import { addClone } from './commands/add-clone.ts';
 import { install } from './commands/install.ts';
 import { checkoutDefault } from './commands/checkout-default.ts';
+import { claude, claudeArgvFromProcess } from './commands/claude.ts';
 import { coloursChange, coloursList, coloursSync } from './commands/colours.ts';
 import { configSchema, configShow, configValidate } from './commands/config.ts';
 import { doctor } from './commands/doctor.ts';
@@ -153,6 +154,10 @@ const TOLERATES_INVALID_CONFIG: readonly string[] = [
   'config show',
   'config validate',
   'config schema',
+  // Not a reporting command, and the one entry here that is not. It needs the root and the id
+  // and nothing else -- and a config too broken to parse is exactly the moment somebody needs
+  // developer mode to fix it. Requiring a valid one would make a typo a lockout.
+  'claude',
 ];
 
 /**
@@ -314,6 +319,47 @@ program
       ...options,
       ...(placement === undefined ? {} : { placement }),
     });
+  });
+
+/*
+ * `hangar claude` -- both hangar-root modes, two tabs of one tmux window.
+ *
+ * Registered unlike every other command here, and each departure is forced by what the command
+ * IS: a wrapper whose arguments belong to another program.
+ *
+ * - `.allowUnknownOption()` and `.allowExcessArguments()`, because claude's whole flag surface
+ *   arrives here and commander must not refuse a flag it has never heard of.
+ * - `.helpOption(false)`, because `--help` has to reach the action -- it prints CLAUDE's help
+ *   with hangar's one added row folded in, which commander's own help page cannot do.
+ * - the action reads `process.argv` rather than its parameters. Commander cannot keep
+ *   `--model sonnet` together without also breaking `--resume <id> -m dev`; `claudeArgvFromProcess`
+ *   says why, and `sync`'s `forcedStrategy` is the existing precedent for the route.
+ *
+ * The options below are therefore DOCUMENTATION, not parsing -- `splitClaudeArgv` is what reads
+ * them. Declared anyway so `hangar --help` lists them, and `-n` is deliberately absent: it is
+ * claude's own `--name`, so the dry run is spelled out in full here.
+ */
+program
+  .command('claude')
+  .summary('Open both hangar-root Claude sessions in one tmux window')
+  .description(
+    [
+      'Start the two sessions a hangar root has — operator, which drives the fleet, and developer, which changes the CLI — as two tabs of one tmux window, and attach this terminal to them. The operator tab is selected; `-m dev` selects the other. Each tab says in the header what it is for.',
+      'Every other argument is passed straight through to `claude`, so `hangar claude --resume <id> -m ops` resumes that session back into operator mode, with its permissions and its remit in force. A bare `claude --resume` of the same session comes back in no mode at all.',
+      'The pair is a singleton: one operator tab and one developer tab, on a tmux socket of their own so a bare `tmux -L hangar-<id> ls` still lists exactly the clones. A tab whose claude has exited is simply gone and is recreated by the next run — which is when passed-through arguments can be honoured. `--replace` is for when it cannot: it ends the claude in that tab, and asks first.',
+      'From the hangar root, a bare `claude` reaches this command. Inside a clone it does not, and neither does this: a clone shell gets the real binary.',
+    ].join('\n\n'),
+  )
+  .allowUnknownOption()
+  .allowExcessArguments()
+  .helpOption(false)
+  .argument('[claude-args...]', 'anything claude takes — passed through untouched')
+  .option('-m, --mode <ops|dev>', 'which tab this session runs in', 'ops')
+  .option('--replace', 'end the claude already in that tab and start this one in its place')
+  .option('--yes', 'do not ask before --replace ends a session')
+  .option('--dry-run', 'report what would be created and change nothing')
+  .action(() => {
+    claude(requireHangar(), { argv: claudeArgvFromProcess(process.argv.slice(2)) });
   });
 
 program
@@ -639,7 +685,13 @@ dev
 const report = (error: unknown): never => {
   if (error instanceof CliError) {
     console.error(`${pc.red('error')}: ${error.message}`);
-    if (error.hint !== undefined) console.error(`       ${error.hint}`);
+    // Every LINE indented, not just the first. Six hints in this CLI are already several lines
+    // long (`release`'s preflight, `config/load`'s discovery failure) and each of them printed
+    // its first line under the `error:` gutter and the rest hard against the left margin, which
+    // reads as two messages rather than one.
+    if (error.hint !== undefined) {
+      for (const line of error.hint.split('\n')) console.error(`       ${line}`);
+    }
     process.exit(1);
   }
   throw error;

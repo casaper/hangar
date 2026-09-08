@@ -190,8 +190,14 @@ export const STATUS_LEFT_LENGTH = 64;
 const INK_DARK = '#000000';
 const INK_LIGHT = '#ffffff';
 
-/** Text ON the hue: whichever of black and white reads better. See the proof above. */
-const inkFor = (main: string): string =>
+/**
+ * Text ON the hue: whichever of black and white reads better. See the proof above.
+ *
+ * Exported because the clone hues are not the only thing drawn on a solid block of colour --
+ * `MODE_COLOURS` below needs the same answer, and a second copy of a two-line contrast pick is
+ * exactly the drift this file exists to prevent.
+ */
+export const inkFor = (main: string): string =>
   contrastRatio(main, INK_DARK) >= contrastRatio(main, INK_LIGHT) ? INK_DARK : INK_LIGHT;
 
 /**
@@ -203,6 +209,32 @@ const inkFor = (main: string): string =>
  * `shimmer` would have been one line and would have lightened all sixteen while still promising
  * nothing about the seventeenth.
  */
+/**
+ * The two hangar-ROOT modes, which are not clones and never appear in `PALETTE`.
+ *
+ * A clone hue says which of several near-identical checkouts you are in. These say something
+ * else entirely -- whether this session may change the CLI or only run it -- so they are a
+ * separate two-entry table rather than two more palette entries, and nothing derives them from
+ * an index. `hangar claude` paints one tmux tab per mode with them, ink from `inkFor`: white on
+ * both, at 4.63:1 for ops and 5.02:1 for dev.
+ *
+ * Cool blue for the mode that reads and runs, warm amber for the one that changes things.
+ *
+ * ## The one duplicate in this file, named rather than hidden
+ *
+ * `.claude/modes/statusline.sh` draws the Claude Code status-line badge INSIDE these tabs and
+ * carries the same two triples as literals. It cannot source them: it is one of the
+ * hand-maintained mode files, derived from nothing under `app/src/**`, and deliberately so --
+ * it must render a badge even when everything else is broken. So the pair is kept in step by
+ * hand, and each side names the other. Change one, change both.
+ */
+export type ModeColour = { readonly main: string; readonly ink: string; readonly purpose: string };
+
+export const MODE_COLOURS: Readonly<Record<'ops' | 'dev', ModeColour>> = {
+  ops: { main: '#1f6feb', ink: inkFor('#1f6feb'), purpose: 'run the fleet' },
+  dev: { main: '#b35400', ink: inkFor('#b35400'), purpose: 'change the CLI' },
+};
+
 const barTextFor = (main: string): string => {
   const rgb = parseHex(main);
   for (let lift = 0; lift < 100; lift += 1) {

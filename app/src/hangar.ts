@@ -52,6 +52,16 @@ export type HangarPaths = {
    */
   readonly tmuxConf: string;
   /**
+   * The config the hangar-ROOT session server starts under (`tmux -L hangar-<id>-claude`).
+   *
+   * Under `.hangar/` and NOT at the root beside `clone-tmux.conf`, and the difference is which
+   * command owns it. `colours sync` writes that one and `doctor` byte-compares it, because
+   * nothing else would notice it going stale. This one is rewritten by `hangar claude` -- the
+   * only command that reads it -- immediately before the server starts, so staleness is not a
+   * state it can be in. Nothing to check, and nothing to gitignore: `.hangar/` already is.
+   */
+  readonly claudeTmuxConf: string;
+  /**
    * The explicit clone -> colour assignments. INPUT, and the only per-clone value not derived
    * from the index.
    *
@@ -149,6 +159,7 @@ export const pathsFor = (
     cloneColoursScript: join(root, 'clone-colours.sh'),
     terminalHookScript: join(root, 'clone-terminal.sh'),
     tmuxConf: join(root, 'clone-tmux.conf'),
+    claudeTmuxConf: join(root, '.hangar', 'claude-tmux.conf'),
     colourAssignmentsFile: join(root, '.hangar', 'colour-assignments.json'),
     legacyColourAssignmentsFile: join(root, 'colour-assignments.json'),
     statuslineScript: join(claudeDir, `${id}-clone-statusline.sh`),

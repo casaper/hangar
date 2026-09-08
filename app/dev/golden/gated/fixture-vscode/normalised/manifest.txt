@@ -15,6 +15,8 @@ platform-caps      openExternally=true openApplicationByName=true vscodeWindowSt
 vscode-state       %HOME%/Library/Application Support/Code/User/globalStorage/storage.json
 tmux-socket        hangar-vsfix
 tmux-conf          %HANGAR%/clone-tmux.conf
+claude-socket      hangar-vsfix-claude
+claude-tmux-conf   %HANGAR%/.hangar/claude-tmux.conf
 port-roles         web(VSFIX_WEB_PORT)=4200 storybook(VSFIX_STORYBOOK_PORT)=6006 e2eReport(VSFIX_E2E_REPORT_PORT)=9323
 port-step/offset   50 / 0
 
@@ -75,3 +77,4 @@ artifact clone-colours.sh       -> %HANGAR%/clone-colours.sh
 artifact clone-terminal.sh      -> %HANGAR%/clone-terminal.sh
 artifact vsfix-clone-statusline.sh -> %HOME%/.claude/vsfix-clone-statusline.sh
 artifact clone-tmux.conf        -> %HANGAR%/clone-tmux.conf
+artifact claude-tmux.conf       -> %HANGAR%/.hangar/claude-tmux.conf

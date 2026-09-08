@@ -5,7 +5,9 @@
       "Edit(./.claude/skills/**)",
       "Edit(./.claude/modes/**)",
       "Bash(hangar dev)",
-      "Bash(hangar dev:*)"
+      "Bash(hangar dev:*)",
+      "Bash(hangar claude)",
+      "Bash(hangar claude:*)"
     ],
     "ask": [
       "Bash(hangar sync)",

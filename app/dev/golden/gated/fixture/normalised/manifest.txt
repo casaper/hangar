@@ -15,6 +15,8 @@ platform-caps      openExternally=true openApplicationByName=true vscodeWindowSt
 vscode-state       %HOME%/Library/Application Support/Code/User/globalStorage/storage.json
 tmux-socket        hangar-wt
 tmux-conf          %HANGAR%/clone-tmux.conf
+claude-socket      hangar-wt-claude
+claude-tmux-conf   %HANGAR%/.hangar/claude-tmux.conf
 port-roles         api(FIXTURE_API_PORT)=3000 db(FIXTURE_DB_PORT)=5432 swagger(FIXTURE_SWAGGER_PORT)=8080
 port-step/offset   100 / 37
 
@@ -66,3 +68,4 @@ artifact clone-colours.sh       -> %HANGAR%/clone-colours.sh
 artifact clone-terminal.sh      -> %HANGAR%/clone-terminal.sh
 artifact wt-clone-statusline.sh -> %HOME%/.claude/wt-clone-statusline.sh
 artifact clone-tmux.conf        -> %HANGAR%/clone-tmux.conf
+artifact claude-tmux.conf       -> %HANGAR%/.hangar/claude-tmux.conf
