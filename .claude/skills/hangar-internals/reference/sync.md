@@ -82,6 +82,26 @@ The most dangerous command in the CLI and the two that share its machinery.
   hand while it is working.** It is aborted after 10 minutes
   (`ORCH_UTIL_RESOLVE_TIMEOUT_MS` overrides), and the headless session id it prints is the
   transcript to read afterwards.
+- **Nothing `sync` spawns can stop for a human unseen.** Every git subprocess runs under
+  `noEditorEnv` — `GIT_EDITOR=true` and `GIT_SEQUENCE_EDITOR=true` in the ENVIRONMENT, which is
+  the layer git reads before any config and the only one an operator's shell cannot outrank. A
+  `-c core.editor=true` beats the config files and loses to a `GIT_EDITOR=vim` in an rc file, and
+  losing costs a hang rather than an error: an editor spawned against a captured pipe has its
+  screen output discarded while it reads the keyboard from `/dev/tty` directly, so the run stops
+  dead with nothing on screen and the paused session never gets the closing message it was
+  promised. What that leaves is everything git launches which is NOT an editor — a pinentry for a
+  signed commit, a prompt from a `pre-commit` hook — so each `--continue` runs with the
+  **terminal inherited**, where a question is visible and can be answered. **No timeout:** killing
+  a rebase to escape a question buries a half-applied one in exchange for a keystroke, and SIGTERM
+  reaches git rather than the grandchild already holding the tty.
+- **Inheriting the terminal costs `stderr`, and the verdict is better without it.** Whether a
+  rebase is done comes from `inProgressOperation` — the state directory, which is what git's own
+  status reads — and not from a matched error string or from `REBASE_HEAD`, which is gone as soon
+  as a step is staged. That also tells apart two states one string cannot: no operation and
+  nothing conflicted means the rebase is OVER when a continue has just run, and means it never
+  STARTED when found on the way in (a `pre-rebase` hook refusing, unstaged files the stash
+  missed). Reading the second as the first is how a paused agent is told its branch moved while
+  nothing happened at all.
 - **`hangar open` lands each clone on a branch before it opens a single window**, through the same
   `landOnBranch` that `checkout-default` is built on — one implementation, so the two cannot end
   up with different ideas of which trees are safe to move. Order matters: one of those windows runs

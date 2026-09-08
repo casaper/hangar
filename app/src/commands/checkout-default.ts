@@ -201,7 +201,7 @@ export const landOnBranch = (
   }
 
   step('git fetch --all');
-  if (!git(clone.path, ['fetch', '--all'], true).ok) {
+  if (!git(clone.path, ['fetch', '--all'], { inherit: true }).ok) {
     // Not fatal: the local refs may already be new enough to check out with, and refusing over
     // an offline sibling remote would make this command useless on a train.
     warn('fetch did not complete — working from the refs this clone already has');
@@ -267,7 +267,7 @@ const checkout = (clone: Clone, branch: string): boolean => {
   }
   const args = local ? ['checkout', branch] : ['checkout', '-b', branch, '--track', remote];
   step(`git ${args.join(' ')}`);
-  if (git(clone.path, args, true).ok) {
+  if (git(clone.path, args, { inherit: true }).ok) {
     ok(`on ${branch}${local ? '' : ` (created from ${remote})`}`);
     return true;
   }
@@ -322,7 +322,7 @@ const fastForward = (hangar: Hangar, clone: Clone, branch: string): boolean => {
   }
 
   step(`git merge --ff-only ${remote}`);
-  if (!git(clone.path, ['merge', '--ff-only', remote], true).ok) {
+  if (!git(clone.path, ['merge', '--ff-only', remote], { inherit: true }).ok) {
     warn(`could not fast-forward ${branch} to ${remote}`);
     return false;
   }

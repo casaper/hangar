@@ -566,15 +566,47 @@ const abortAndRestore = (clone: Clone, strategy: Strategy, stashed: boolean): vo
   }
 };
 
-/** Drive a rebase to completion, resolving each conflicted step. */
+/**
+ * Drive a rebase to completion, resolving each conflicted step.
+ *
+ * ## Every `--continue` owns the terminal, and the verdict comes from git's own state
+ *
+ * The continue runs with this process's terminal inherited, exactly like the `git rebase` that
+ * started the operation. That is not about seeing the output: it is so that anything git
+ * launches which wants an answer can be given one. An editor cannot open here at all any more
+ * (`noEditorEnv` in `git.ts` has the story), but a cold gpg-agent raising a pinentry for a
+ * signed commit and a `pre-commit` hook that prompts both still can -- and against a captured
+ * pipe each of those is a sync that hangs with nothing on screen and a paused agent that never
+ * hears how it ended.
+ *
+ * The price is `stderr`, which an inherited child does not capture -- so every question here is
+ * put to `inProgressOperation` instead. That is the better source in any case: it reads the
+ * state directory, exactly as git's own status does, where the alternatives are a `stderr`
+ * string to match on and `rev-parse REBASE_HEAD`, which `git.ts` documents as being precisely
+ * the wrong proxy for "is a rebase in progress". Deriving state at the moment it is reported is
+ * the rule for everything in this file.
+ *
+ * ## A rebase that never STARTED is not a rebase that finished
+ *
+ * This runs whenever the initial `git rebase` exited non-zero -- which includes exiting without
+ * starting anything: unstaged changes the stash did not catch, a `pre-rebase` hook refusing. In
+ * that state the first continue fails with nothing in progress and nothing conflicted, which is
+ * indistinguishable from a rebase that ran to completion. Reading it as completion is how `sync`
+ * comes to print `rebase complete` and tell the paused agent its branch moved while nothing
+ * happened at all, so the two are separated by WHEN: found on the way in, it means the rebase
+ * did not start; found after a continue, it means the rebase is over.
+ */
 const continueRebase = async (clone: Clone, strategy: Strategy): Promise<boolean> => {
+  if (inProgressOperation(clone.path) === undefined && conflictedFiles(clone.path).length === 0) {
+    fail('the rebase did not start — git printed the reason above');
+    return false;
+  }
   for (let guard = 0; guard < 50; guard += 1) {
     if (conflictedFiles(clone.path).length === 0) {
-      const cont = git(clone.path, ['-c', 'core.editor=true', 'rebase', '--continue']);
-      if (cont.ok) return true;
-      if (cont.stderr.includes('no rebase in progress')) return true;
+      git(clone.path, ['rebase', '--continue'], { inherit: true });
+      if (inProgressOperation(clone.path) === undefined) return true;
       if (conflictedFiles(clone.path).length === 0) {
-        fail(cont.stderr.trim() || 'rebase --continue failed');
+        fail('rebase --continue stopped with nothing conflicted — see git’s output above');
         return false;
       }
     }
@@ -584,11 +616,6 @@ const continueRebase = async (clone: Clone, strategy: Strategy): Promise<boolean
       return false;
     }
     git(clone.path, ['add', '-A']);
-    const cont = git(clone.path, ['-c', 'core.editor=true', 'rebase', '--continue']);
-    if (cont.ok && conflictedFiles(clone.path).length === 0) {
-      const stillRebasing = gitTry(clone.path, ['rev-parse', '--verify', '--quiet', 'REBASE_HEAD']);
-      if (stillRebasing === undefined) return true;
-    }
   }
   fail('rebase did not finish after 50 steps — giving up');
   return false;
@@ -793,19 +820,23 @@ const integrate = async (
   // 6. integrate
   let integrated = true;
   if (strategy.kind === 'ff-only') {
-    const res = git(clone.path, ['merge', '--ff-only', target.ref], true);
+    const res = git(clone.path, ['merge', '--ff-only', target.ref], { inherit: true });
     integrated = res.ok;
     if (!integrated) fail(`fast-forward failed — ${target.branch} has diverged locally`);
   } else if (strategy.kind === 'rebase') {
-    const res = git(clone.path, ['rebase', target.ref], true);
+    const res = git(clone.path, ['rebase', target.ref], { inherit: true });
     integrated = res.ok || (await continueRebase(clone, strategy));
   } else if (strategy.kind === 'merge') {
-    const res = git(clone.path, ['merge', '--no-edit', target.ref], true);
+    const res = git(clone.path, ['merge', '--no-edit', target.ref], { inherit: true });
     if (!res.ok) {
       const outcome = await resolveWithClaude(clone.path, 'merge', strategy.target.ref);
       if (outcome.resolved) {
         git(clone.path, ['add', '-A']);
-        integrated = git(clone.path, ['-c', 'core.editor=true', 'merge', '--continue']).ok;
+        // Same two rules as `continueRebase`: the terminal is the child's, so anything wanting
+        // an answer can be given one, and whether the merge landed is read back off git rather
+        // than taken from an exit code -- `run.integrated` is what a paused agent is told.
+        git(clone.path, ['merge', '--continue'], { inherit: true });
+        integrated = inProgressOperation(clone.path) === undefined;
       } else {
         fail(outcome.reason ?? 'could not resolve merge conflicts');
         integrated = false;
@@ -836,7 +867,7 @@ const integrate = async (
   // 7. put the working tree back
   if (stashed) {
     // `apply`, not `pop`: the stash stays as a safety net until the apply is proven clean.
-    const applied = git(clone.path, ['stash', 'apply'], true);
+    const applied = git(clone.path, ['stash', 'apply'], { inherit: true });
     if (applied.ok && conflictedFiles(clone.path).length === 0) {
       git(clone.path, ['stash', 'drop']);
       ok('re-applied your changes and dropped the stash');

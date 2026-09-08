@@ -4,15 +4,61 @@ import { isAbsolute, join } from 'node:path';
 import { run, runOrThrow, type RunResult } from './exec.ts';
 
 /**
+ * The environment every git subprocess of this CLI runs in: one where no editor can open.
+ *
+ * `sync` drives a rebase to completion, and `git rebase --continue` opens an editor for the
+ * commit message it is about to reuse. WHICH editor is a four-layer decision, and git reads the
+ * environment before it reads any config -- measured on git 2.55:
+ *
+ * | invocation                               | `git var GIT_EDITOR` |
+ * | ---------------------------------------- | -------------------- |
+ * | nothing set (global `core.editor=vim`)   | `vim`                |
+ * | `git -c core.editor=true`                | `true`               |
+ * | `GIT_EDITOR=vim git -c core.editor=true` | **`vim`**            |
+ * | `GIT_EDITOR=true git -c core.editor=vim` | `true`               |
+ *
+ * A config-level guard is not enough, and the third row is why: `-c core.editor=true` beats the
+ * config files and loses to whatever the operator's shell exported, and `GIT_EDITOR=vim` in an
+ * rc file is an ordinary thing to have. What that costs is a hang rather than an error -- vim
+ * spawned against a captured pipe has its screen output discarded while it reads the keyboard
+ * from `/dev/tty` directly, so the sync stops dead with nothing on screen and the clone's paused
+ * agent never receives the closing message a `SYNC PAUSE` promises it. The environment is the
+ * one layer nothing downstream can override, which is why the guard lives here.
+ *
+ * `GIT_SEQUENCE_EDITOR` alongside it: this CLI never wants a todo editor either, and the two
+ * together are the whole of git's editor surface. Taken from `process.env` at CALL time -- a
+ * module constant would freeze the environment as it stood at import.
+ */
+export const noEditorEnv = (base: NodeJS.ProcessEnv): NodeJS.ProcessEnv => ({
+  ...base,
+  GIT_EDITOR: 'true',
+  GIT_SEQUENCE_EDITOR: 'true',
+});
+
+export type GitOptions = {
+  /**
+   * Hand the child this process's terminal instead of capturing it. What that buys is not the
+   * output: it is that anything git launches which wants an answer -- a gpg pinentry, a prompt
+   * from a hook -- is VISIBLE and can be answered, rather than blocking a pipe nobody is
+   * watching. `stderr` is then no longer captured, so a caller using this reads its verdict off
+   * git's own state.
+   */
+  readonly inherit?: boolean;
+};
+
+/**
  * Thin git wrappers. Everything here is read-only unless the name says otherwise, and every
  * call is scoped with `-C <repo>` -- the fleet rule is that a session never writes outside
  * its own clone, and passing an explicit repo path is what makes that auditable.
  */
-export const git = (repo: string, args: readonly string[], inherit = false): RunResult =>
-  run('git', ['-C', repo, ...args], inherit ? { inherit: true } : {});
+export const git = (repo: string, args: readonly string[], opts: GitOptions = {}): RunResult =>
+  run('git', ['-C', repo, ...args], {
+    env: noEditorEnv(process.env),
+    inherit: opts.inherit === true,
+  });
 
 export const gitOut = (repo: string, args: readonly string[]): string =>
-  runOrThrow('git', ['-C', repo, ...args]);
+  runOrThrow('git', ['-C', repo, ...args], { env: noEditorEnv(process.env) });
 
 /** Trimmed stdout, or undefined when the command failed (missing ref, detached HEAD, ...). */
 export const gitTry = (repo: string, args: readonly string[]): string | undefined => {
