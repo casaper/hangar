@@ -66,8 +66,10 @@ prompt or a starship config can colour itself from `HANGAR_CLONE_SGR` (a real es
 `HANGAR_CLONE`, `_RGB`, `_HEX`, `_X256`, `_COLOUR` and `HANGAR_ID`.
 
 The background is a **tint** (`terminal.colour.tint`, 16% by default), not the hue: a saturated
-colour behind text is unreadable. iTerm2 and tmux escape this because they colour a tab and a
-window-status entry, where full strength is exactly right. On an **unrecognised** terminal the
+colour behind text is unreadable *when nothing chose that text*. iTerm2 escapes this because it
+colours a tab, where full strength is exactly right; so does tmux's status bar, but for a
+different reason -- there Hangar owns the text too, so it puts the hue behind it and a computed
+ink in front. On an **unrecognised** terminal the
 chrome and title layers are skipped entirely — a stray escape in someone's output is corruption,
 not colour. If your terminal ignores the OSC 111 reset, set `HANGAR_TERM_BG` to your real
 background and the hook restores that instead. **Terminal.app understands neither sequence**, so
@@ -82,10 +84,40 @@ works for a window you made yourself with `C-b c`, not only one `hangar open` cr
 **window**-scoped and cleared with `set -u`, so a window you `cd` out of restores what it had and
 nothing leaks into a sibling. `tmux show -w` is how to see what painted a window.
 
-The status line's own left segment is the one piece `hangar open` paints, at SESSION scope when it
-creates a clone's session: the bar has to be right the instant the window attaches, which is
-before any shell has printed a prompt. So a clone's tmux status bar carries its name in its hue
-from the first frame, and the windows inside it get theirs from the hook on the first `cd`.
+## What the status bar looks like, and why it is readable
+
+The bar itself is **neutral** -- a dark background with grey text -- and the clone's hue arrives on
+top of it as a **background block**:
+
+```
+ clone_01 │ 1 claude   2 shell   3 app                                    10:11
+└────────┘ └─────────┘
+ the hue,   the window
+ with an    you are in,
+ ink on it  same shape
+```
+
+The name badge on the left is the one piece `hangar open` paints, at SESSION scope when it creates
+a clone's session: the bar has to be right the instant the window attaches, which is before any
+shell has printed a prompt. So a clone's bar carries its name from the first frame, and the
+windows inside it get theirs from the hook on the first `cd`.
+
+**The ink on the hue is chosen for you, and cannot be unreadable.** It is pure black or pure white,
+whichever contrasts more -- which for any colour at all is never worse than 4.58:1, so every hue in
+the palette clears WCAG AA without anybody checking a pair by hand. A window that is *not* current
+shows the hue as text instead, lifted just far enough to read on the dark bar; fourteen of the
+sixteen hues need no lift at all and appear at full strength.
+
+**This is worth knowing because tmux's own default is the opposite of readable.** Its built-in
+`status-style` is `bg=green,fg=black` -- a saturated colour, not a neutral one -- so a bar that has
+not been given a background of its own draws every clone hue as text on green: 1.00:1 to 2.64:1
+across the palette, and the `green` clone at exactly 1.00, the same colour twice. That is what the
+conf's own neutrals are for, and what `hangar colours sync` puts onto a server already running.
+
+**A running tmux server does not read a regenerated `clone-tmux.conf`** (`-f` is read once, at
+server start), so `hangar colours sync` writes the bar's styles straight onto the live server and
+re-paints every open session and window. Nothing restarts and no session is disturbed. That is why
+a bar that looks wrong is usually fixed by `hangar colours sync` rather than by closing anything.
 
 The windows `hangar open` creates live on Hangar's own tmux socket, `tmux -L hangar-<id>`, one
 session per clone. That is where to look when a window is open but not in front, or when the

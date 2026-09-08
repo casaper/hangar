@@ -227,9 +227,15 @@ client attaches, which is before any shell has printed a prompt and so before th
 once, and `status-left` IS a session option -- the hook could only reach it with `-g`, which would
 have whichever clone was entered last recolour the bar of every other session on the socket.
 
-The hook sets five window options -- `@hangar_colour`, `window-status-style`,
-`window-status-current-style`, and both pane border styles. All five were confirmed settable per
-window on tmux 3.7c, confirmed not to leak into a sibling window, and confirmed to clear with
+It is a **badge**: `#[fg=<ink>,bg=<hue>,bold] <clone> #[default]`. The hue is the background and
+not the text, because a solid block of colour is what a developer actually finds across four
+near-identical windows -- and because putting the hue behind text is only safe when something
+also chooses the text, which is the next section.
+
+The hook sets five window options -- `@hangar_colour`, `window-status-current-style` (the hue as
+a BACKGROUND with the ink in front), `window-status-style` (the hue as text, in its lifted
+`barText` form), and both pane border styles at full strength. All five were confirmed settable
+per window on tmux 3.7c, confirmed not to leak into a sibling window, and confirmed to clear with
 `set -uw`. `-u` rather than writing a literal default, so two hangars sharing one server restore
 each other's values instead of flattening them; never `-g`, which would have the last clone
 entered recolour every window of both.
@@ -249,6 +255,77 @@ the same window.
 options -- the first styles a window that is not current. With only the second, the clone you are
 actually looking at is the one window with no colour.
 
+## The status bar had no background, and so had tmux's own green
+
+**The bug, because it is the reason half of the above reads the way it does.** `clone-tmux.conf`
+set the status line's FORMAT and deliberately no colour -- "every colour in it is the clone's" --
+so nothing ever set `status-style` and tmux used its built-in default. Read off the live server:
+
+```
+$ tmux -L hangar-<id> show -g status-style
+status-style bg=green,fg=black
+```
+
+That is a saturated default rather than a neutral one, so every clone hue was being drawn as text
+on green. Measured with WCAG 2.1 across the palette: **1.00:1 to 2.64:1** -- the whole set fails
+even the 3.0 that large text wants, and the `green` clone is exactly 1.00, the same colour twice.
+Four clones looked like four different problems and were four points on one scale.
+
+Three things fell out of fixing it, and each one is a decision rather than a detail:
+
+- **The bar names its own background AND its own foreground**, from `STATUS_BAR_BG` /
+  `_FG` / `_DIM` in `palette.ts`. Not `fg=default`, so the bar is self-contained on a light
+  terminal theme too. They live with the hues rather than in the conf that renders them because
+  `barText` is derived by measuring AGAINST that background -- two files holding different ideas
+  of it would be wrong with nothing to report it. Both window styles keep a neutral base there as
+  well, since `set -uw` restores what is in the conf: without one, a window leaving a clone falls
+  back to tmux's green rather than to the bar.
+- **The ink is pure black or pure white, and that is what makes the floor PROVABLE.** Against
+  black the ratio is `(L + 0.05) / 0.05`, against white `1.05 / (L + 0.05)`; the two cross at
+  `(L + 0.05)^2 = 0.0525`, so the better of them is never worse than **4.58:1** on any sRGB colour
+  at all. Every hue in the palette and every hue anyone ever appends to it is therefore readable
+  with nobody checking. It holds for PURE black and white only -- a near-black tuned to the bar
+  looks tidier, still passes on today's sixteen, and silently voids the proof for the seventeenth,
+  which is why `test/contrast.test.ts` pins the pair and not just the outcome.
+- **`barText` is a floor, not a wash.** Fourteen hues clear 4.5:1 at full strength and come back
+  byte-identical; only indigo (10% toward white) and crimson (33%) move. Reusing `shimmer` would
+  have been one line, lightened all sixteen, and still promised nothing about a hue added later.
+
+**No library, and the reason is the guarantee rather than a dislike of dependencies.** culori,
+colorjs.io, wcag-contrast and apca-w3 were all weighed and none of them ships its own TypeScript
+types, in a package whose only `@types/*` is Node's. APCA -- the WCAG 3 draft, and genuinely
+better for light text on dark -- changes exactly one answer on this palette: indigo's ink flips to
+white. Both clear AA, so it buys a dependency and no readability.
+
+**`pnpm golden` could not have caught any of this**, which is the cleanest example in this repo of
+where the capture net ends. `gated/*` pins the bytes of the rendered conf and the hue table, so it
+would have recorded the unreadable pair for ever: it says what the colours ARE and nothing about
+whether one reads on the other. `test/contrast.test.ts` asserts the arithmetic instead, over the
+whole palette, so an unreadable hue appended in future fails `pnpm test` rather than arriving as a
+screenshot.
+
+### Reaching a server that is already running
+
+`-f` is read ONCE, when the server starts, so all of the above reached nothing that was already
+open -- four sessions and eleven windows kept the green bar, and `doctor` could only name
+`kill-server`, which it refuses to run because that ends every live agent in the fleet.
+
+It did not have to. Every option the bar needs is a global **session** option rather than a server
+option, so `colours sync` writes them onto the live server, then re-paints each session's badge
+through the same `paintSession` builder `open` uses, then each of its windows. That is the actual
+line between these and the four settings in `TMUX_SETTINGS`: two of those are server options, and
+for them `kill-server` really is the only repair.
+
+A window's own `@hangar_colour` tag wins over its session's clone, looked up by hex because
+`colours change` means a clone's hue need not be the one its index implies. That is the case the
+hook exists for -- a `C-b c` window `cd`d into another clone has already recorded which -- and
+repainting a whole session one colour would discard it until the next `cd`. It is skipped on `-n`
+and `--check`, being the one thing in that command that touches state outside the artifacts.
+
+`doctor` gets **no** row for any of it. The conf byte-compare already goes red on a stale file, and
+`TMUX_SETTINGS` is documented as the four settings Claude Code needs -- growing it with a style
+would make `doctor` claim something it was not written to say.
+
 **`send-keys -l -- <text>` then a separate `Enter`.** `-l` is literal, so a word like `Enter`
 inside a `SYNC PAUSE` message stays a word instead of becoming a keypress, and `--` guards a
 message beginning with a dash. The newline has to be its own call for the same reason `-l` is
@@ -265,6 +342,24 @@ session and creating nothing, a detached clone reattached with its shell's scrol
 sessions carrying four distinct `status-left` hues with no global leak, and a real `SYNC PAUSE`
 line landed in the pane on a named tty and -- confirmed with `capture-pane` -- in **no** other of
 four. A tty nothing owns returns false, so `sync` reports a miss rather than claiming a pause.
+
+The status bar was exercised on the live fleet with four Claude sessions running throughout and
+none disturbed: `colours sync` reported `restyled 4 live tmux session(s)`, and all four badges and
+all eleven windows read back with `bg=<hue>,fg=<ink>`. The HOOK's tmux arm was exercised on a
+throwaway socket instead -- `tmux -L hangar-probe -f clone-tmux.conf` -- which is also the check
+that the conf loads at all: a `cd` into a clone wrote `@hangar_colour=#ffcc00` and the matching
+`bg=#ffcc00,fg=#000000,bold`, and that hue's non-current style came back byte-identical to its
+main, which is what a floor rather than a wash looks like. The five-field hue table's split was
+checked in `sh`, `bash` and `zsh`, because appending to that table is the trap below.
+
+**The trap, since it would have passed every gate.** `clone-colours.sh` prints its fields
+positionally and `clone-terminal.sh` split them ending `name=${rest#* }` -- everything after the
+second space. Appending `ink` and `barText` therefore landed them INSIDE `$name`, which the hook
+exports as `HANGAR_CLONE_COLOUR`: measured, `cyan #000000 #00ccff`. Nothing typechecks a generated
+shell string, so the only thing that would have noticed is a developer's own prompt printing a hex
+after the colour name. The split is now one uniform pair of steps per field with only the last
+taken by `#* `, so a sixth field cannot corrupt the fifth -- and fields are appended, never
+reordered, so `$1..$3` stay where anything already reading them expects.
 
 iTerm2 is exercised on this machine, and three of its behaviours are recorded in `iterm2.ts`
 rather than here because they are that driver's own: `write text` into a session that was just
