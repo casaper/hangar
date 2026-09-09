@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { workspacePath, workspacePaths } from '../clone-config.ts';
+import { cloneTokens, workspacePath, workspacePaths } from '../clone-config.ts';
 import { CliError, run } from '../exec.ts';
 import { cloneDirPattern, type Clone } from '../fleet.ts';
 import { git } from '../git.ts';
@@ -33,6 +33,7 @@ import type { Hangar } from '../hangar.ts';
 
 const ROOT_TOKEN = '__HANGAR_CLONE_ROOT__';
 const INDEX_TOKEN = '__HANGAR_CLONE_INDEX__';
+const INDEX2_TOKEN = '__HANGAR_CLONE_INDEX2__';
 
 /**
  * The settings whose value is an absolute path INTO the clone, mapped to the path each one
@@ -135,12 +136,20 @@ const readStringValue = (text: string, key: string): string | undefined => {
  * cannot disagree: the template is rendered with a sentinel where the index goes, escaped whole,
  * and the sentinel becomes the capture group. A label that does not mention the index at all is
  * not per-clone, so there is nothing to find and nothing to rewrite.
+ *
+ * **Which token it returns is decided by which one the label asked for.** `{index2}` is the
+ * PADDED index, and a label using it (`acme clone 0003`) rendered back through a bare
+ * `String(clone.index)` becomes `acme clone 3` -- a label silently rewritten by a command
+ * reporting a successful sync, in every hangar whose `clones.pad` matters. A label naming both
+ * takes the padded form: the two cannot be told apart by one capture group, and losing the
+ * padding is the damaging direction.
  */
 const INDEX_SENTINEL = '\u0001HANGARINDEX\u0001';
 
-const indexLabelRe = (hangar: Hangar): RegExp | undefined => {
+const indexLabelRe = (hangar: Hangar): { re: RegExp; token: string } | undefined => {
   const template = hangar.config.editor.workspaceFolderLabel;
   if (!template.includes('{index}') && !template.includes('{index2}')) return undefined;
+  const token = template.includes('{index2}') ? INDEX2_TOKEN : INDEX_TOKEN;
   const rendered = renderTemplate(
     template,
     {
@@ -152,7 +161,7 @@ const indexLabelRe = (hangar: Hangar): RegExp | undefined => {
     'editor.workspaceFolderLabel',
   );
   const [before = '', after = ''] = escapeRegExp(rendered).split(INDEX_SENTINEL);
-  return new RegExp(`("name"\\s*:\\s*"${before})(\\d+)(${after}")`);
+  return { re: new RegExp(`("name"\\s*:\\s*"${before})(\\d+)(${after}")`), token };
 };
 
 export type Templatized = {
@@ -210,15 +219,20 @@ export const templatize = (artifact: EditorArtifact, text: string, clone: Clone)
     template = template.replace(new RegExp(`${escapeRegExp(root)}(?=[/"])`, 'g'), ROOT_TOKEN);
   }
   if (artifact.indexLabel) {
-    const labelRe = indexLabelRe(clone.hangar);
-    if (labelRe !== undefined) template = template.replace(labelRe, `$1${INDEX_TOKEN}$3`);
+    const label = indexLabelRe(clone.hangar);
+    if (label !== undefined) template = template.replace(label.re, `$1${label.token}$3`);
   }
   return { template, root, nonconforming };
 };
 
 /** The template as this clone should have it. */
-export const render = (template: string, clone: Clone): string =>
-  template.replaceAll(ROOT_TOKEN, clone.path).replaceAll(INDEX_TOKEN, String(clone.index));
+export const render = (template: string, clone: Clone): string => {
+  const tokens = cloneTokens(clone);
+  return template
+    .replaceAll(ROOT_TOKEN, clone.path)
+    .replaceAll(INDEX2_TOKEN, tokens.index2 ?? String(clone.index))
+    .replaceAll(INDEX_TOKEN, String(clone.index));
+};
 
 /**
  * Fresh each call: a global regex carries `lastIndex`, so a shared one would skip matches.

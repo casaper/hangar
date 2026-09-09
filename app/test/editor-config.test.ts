@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { wantsWorkspaceFiles, workspacePaths } from '../src/clone-config.ts';
+import { wantsWorkspaceFiles, workspaceContent, workspacePaths } from '../src/clone-config.ts';
+import { render, templatize, vscodeArtifacts } from '../src/editor/vscode.ts';
 import { cloneAt } from '../src/fleet.ts';
-import { fixtureConfigText, fixtureVscodeConfigText, syntheticHangar } from './fixture.ts';
+import { first, fixtureConfigText, fixtureVscodeConfigText, syntheticHangar } from './fixture.ts';
 
 /**
  * The `*.code-workspace` artifact, asserted to be gated on `editor.kinds`.
@@ -82,4 +83,20 @@ test('the schema default is a kind that wants one, which is what makes the fallb
   const hangar = syntheticHangar({ configText: text });
 
   assert.equal(wantsWorkspaceFiles(hangar), true);
+});
+
+test('a PADDED folder label keeps its padding through a sync', () => {
+  // `{index2}` is the padded index, and rendering the token back as a bare `clone.index` turns
+  // `vsfix clone 0003` into `vsfix clone 3` -- a label rewritten by a command that reports a
+  // successful sync. Latent in a hangar whose label uses `{index}`, which is why the second
+  // fixture declares the other form.
+  const hangar = syntheticHangar({ configText: fixtureVscodeConfigText() });
+  assert.match(hangar.config.editor.workspaceFolderLabel, /\{index2\}/, 'the fixture must pad');
+  const clone = cloneAt(hangar, 3);
+  const artifact = first(
+    vscodeArtifacts(hangar.config.editor.rootPathKeys).filter((a) => a.id === '*.code-workspace'),
+    'the workspace artifact',
+  );
+  const arrived = render(templatize(artifact, workspaceContent(clone), clone).template, clone);
+  assert.match(arrived, /"name": "vsfix clone 0003"/);
 });

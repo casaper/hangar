@@ -39,6 +39,15 @@ Three things follow that are worth knowing:
   modified copy of _that_ file (they drift separately), which is printed; `--from <clone>`
   overrides it and `-n` shows the changed keys per clone without writing.
 
+## The padded index survives a sync, and the token is what decides that
+
+`indexLabelRe` reads the folder label backwards -- rendered label in hand, index to be found
+inside it -- and returns the TOKEN as well as the regex. `{index2}` is the padded index, so a
+label using it (`acme clone 0003`) rendered back through a bare `String(clone.index)` becomes
+`acme clone 3`: a label silently rewritten, in every hangar whose `clones.pad` matters, by a
+command reporting success. A label naming both forms takes the padded one, since one capture
+group cannot tell them apart and losing the padding is the damaging direction.
+
 The workspace file exists **once per entry in `editor.workspaceDirs`**, byte-identical, because
 VS Code only offers a `*.code-workspace` from the directory you opened. `['.']` is the common case
 — a repo only ever opened at its root — and this hangar's repo is opened at its root AND at its
