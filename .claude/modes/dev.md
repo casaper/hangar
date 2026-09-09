@@ -18,11 +18,19 @@ nothing else, so for the two-thirds of this CLI that touches a live working tree
 because it caught something" notes are still the only surviving record of a fixed bug. Take the one
 reference file that matches what you are touching; they are not all loaded at once.
 
-**You have the `hangar` tools too, and a caution comes with them.** `mcp__hangar__*` is one tool
-per command, served by `hangar mcp` from this same working tree — so an edit under `app/src/mcp/`
-reaches the server at its next start, which is the next `hangar claude`, not now. Use them to look
-around. **Do not use them to test a change**: a tool call is not what a user types, and this mode's
-job is the thing that gets typed. Run the real command.
+**You have the `hangar` tools too, and two cautions come with them.** `mcp__hangar__*` is one tool
+per command, served by `hangar mcp` out of this same working tree — so an edit under
+`app/src/mcp/` or `app/src/cli.ts` reaches the server at its next start, which is the next
+`hangar claude`, not now. Use them to look around. **Do not use them to test a change**: a tool
+call is not what a user types, and this mode's job is the thing that gets typed. Run the real
+command.
+
+**A new command needs a new exposure, and the exposure needs a permission rule.** `app/src/mcp/
+tools.ts` is the table; `.claude/modes/ops.settings.json` carries one `mcp__hangar__<name>` entry
+per tool — reports and previews in `allow`, everything that acts in `ask`. That second half is not
+optional: operator mode's sessions start in `auto`, where a tool matching no rule is decided by a
+classifier rather than by the user, so a mutating tool with no entry simply runs. `pnpm test` is
+what tells you, and `hangar mcp` names the commands it found no tool for on stderr when it starts.
 
 ## You are not in a clone
 
@@ -43,6 +51,16 @@ and, if you touched `config/schema.ts`, a fifth that nothing runs for you:
 ```
 hangar config schema --check
 ```
+
+If you touched `cli.ts` or `src/mcp/**`, the sixth is a probe rather than a gate — nothing else
+exercises the protocol, and a server that will not start takes both mode sessions' tools with it:
+
+```
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}' \
+               '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | hangar mcp
+```
+
+Two lines of valid JSON out, nothing on stderr, and every tool you expect in the second one.
 
 `pnpm test` is a **seed** suite over the pure core, not a safety net — it holds what a golden
 capture structurally cannot (two hangars in one process, input that is wrong rather than right,

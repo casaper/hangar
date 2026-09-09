@@ -661,6 +661,16 @@ Three things about it belong here rather than only in the skill:
   rather than missing: a table naming a command that is not there, and an acting tool whose schema
   offers `dry-run`.
 
+**Coverage is every command but four, and every documented flag but one.** `claude` could only
+ever fail (`$CLAUDECODE` refuses on every tool call) and is the boundary the mode pair exists for;
+`dev release` completes as a tool only in its `-y` form; `dev golden` would be a partial capture
+reading as the gate; `jira hook` takes its payload on stdin. `setup` IS exposed, and that closes a
+hole rather than opening one — `modes.md` had it recorded as escalation-adjacent and unlisted, and
+it now has a rule in both spellings. The one flag no tool offers is `--quiet`, which exists so a
+`SessionEnd` hook and the bar's own spawn can stay silent; a caller reading the result wants the
+opposite. A `.hideHelp()` option is dropped by the same rule that keeps it out of `--help`, unless
+an exposure names it in `shows` — `add-clone --remote` is the only one that does.
+
 `hangar-internals/reference/modes.md` has the rest — the measured separation, why the Bash path
 stays open, and why the enumeration is a test while the coverage is a warning.
 

@@ -49,7 +49,14 @@ per disagreement, followed by
 `` Repair with `hangar doctor --fix`, then re-run `direnv allow` in that clone. `` — note the second
 half: a repaired `.env.local` does nothing until direnv reloads it.
 
-`--json` gives the same data machine-readably.
+`--json` gives the same data machine-readably — but it returns early and **drops that closing
+sentence**, so the repair guidance is only in the human form. That is why the `ports` tool leaves
+`json` a parameter rather than always passing it: the default is what a person sees.
+
+**Tool output has no colour at all.** A tool result is the same text with the ANSI escapes
+stripped and `NO_COLOR` set, so anywhere below that a green `ok`, a red failure or a dim row is
+described, read the WORD and not the hue — every one of them is `ok`, `x`, `!` or an
+`optional:` prefix in the text itself. The clone bullet `●` survives; its hue does not.
 
 **The specific trap:** the clones get their per-clone ports from direnv, which the repo wires up in
 a `SessionStart` hook (`.claude/hooks/direnv-load.sh` — it appends a `direnv export` plus a `cd`

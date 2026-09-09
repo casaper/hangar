@@ -32,7 +32,20 @@ written from either side is immediately visible on the other) and `plansDirector
 fleet root *is* the project root for a session started there, so it writes straight into the shared
 archive).
 
-**It carries no `permissions` block, deliberately.** Every `hangar` command prompts, including
-`hangar list`. That is the fleet's choice: `hangar doctor` and `hangar doctor --fix` differ by one
-flag, and Claude Code's Bash patterns match by prefix, so there is no way to pre-approve the report
-without also pre-approving the writer. Ask each time.
+**It carries no `permissions` block, deliberately.** Every `hangar` command typed at a shell
+prompts, including `hangar list`. That is the fleet's choice, and the reason is a limit of the
+mechanism: `hangar doctor` and `hangar doctor --fix` differ by one flag, and Claude Code's Bash
+patterns match by prefix, so there is no way to pre-approve the report without also pre-approving
+the writer.
+
+**The `mcp__hangar__*` tools are the exception, and only inside a mode session.** An MCP rule has
+no arguments to widen across, so `doctor` and `doctor_fix` are two names with two rules — which is
+why `.claude/modes/ops.settings.json` can pre-approve every report and every preview while every
+acting tool asks. That file, and `.claude/modes/mcp.json` which `hangar claude` passes as
+`--mcp-config`, are the only place any of it lives; this file's three settings files carry none of
+it, and a session started as a bare `claude` gets neither. The shell rule above is unchanged for
+everyone.
+
+**Do not confuse that server with a clone's own.** The MCP servers listed in a clone's
+`settings.local.json` belong to the application and reach clone sessions; the hangar server is
+passed at launch to the two hangar-root modes and appears in no `enabledMcpjsonServers` anywhere.

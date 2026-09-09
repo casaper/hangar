@@ -232,7 +232,8 @@ The pre-existing `Bash(hangar dev)` denial does not match a `claude` subcommand.
 
 - **`ops.settings.json` denies `Bash(hangar claude)` and `Bash(hangar claude:*)`**, and the MCP
   tool surface simply has no `claude` in it — an absence rather than a rule, because a tool that
-  does not exist cannot be reached by one.
+  does not exist cannot be reached by one. It would also be a tool that could never work: the
+  `$CLAUDECODE` refusal below fires on every tool call there will ever be.
 - **The command refuses when `$CLAUDECODE` is set**, which no editable file can turn off. That
   variable is set in every tool subprocess — measured alongside `CLAUDE_CODE_ENTRYPOINT` and
   `CLAUDE_CODE_SESSION_ID`, and unlike `$CLAUDE_PROJECT_DIR`, which is injected per hook. There is
@@ -261,11 +262,31 @@ permission rules have no argument matching at all** — Claude Code skips any `m
 contains parentheses, silently, when the settings file loads — so the granularity is exactly the
 tool name. Two names, two rules, nothing to widen.
 
+**Nearly every command is a tool, and the exceptions are four.** `claude` could only ever fail,
+for the `$CLAUDECODE` reason above, on the one command that must not be reachable. `dev release`
+pushes and cuts a version behind a confirmation that fails closed, so the only form that completes
+as a tool call is the one carrying `-y`. `dev golden` writes a partial capture that would read as
+the gate without being it, and aimed at `dev/golden/gated` would half-overwrite the baseline.
+`jira hook` reads its payload from stdin. Everything else is exposed, `setup` included — see the
+section on why the mode settings stay tracked for the gap that closes. The only flag no tool
+offers is `--quiet`, which exists for the `SessionEnd` hooks and the bar's own detached spawn.
+
 **So a dry run is a separate TOOL, not a parameter.** `sync_preview` fixes `--dry-run` and removes
 it from its own schema; `sync` hides it. A `dry-run` boolean would have put both under one rule,
 and pre-approving the preview would have pre-approved the sync — the same bug as `doctor:*`, moved
 rather than fixed. `serveMcp` refuses to start if an acting tool's generated schema offers
 `dry-run`, because only the live registry knows which commands have the flag.
+
+**`colours sync` is the one command with two read-only tools**, and that is not redundancy:
+`--check` is a gate that exits non-zero when an artifact is stale, `-n` is the report that says
+which one and what would change. `app/CLAUDE.md` names the dry run as the only staleness check
+there is for the two gitignored shell helpers, so collapsing the pair would have taken away the
+thing that check is for.
+
+**`pr_refresh` reports for permission purposes even though it writes**, and the two readings do
+not conflict. The clone bar spawns exactly this, detached, every time a record passes
+`forge.prCacheTtlSeconds`; a prompt in front of what already happens unattended twenty times a
+minute is theatre, and what it writes the next redraw would rewrite anyway.
 
 Measured, not assumed, with `--settings` and `--mcp-config` both loaded and a `-p` session:
 `mcp__hangar__doctor` ran with no prompt and `permission_denials` empty; `mcp__hangar__ide_emacs_sync`
@@ -473,8 +494,10 @@ entries **are** operator mode's boundary. Operator mode is denied `Edit(./.claud
 that denial is the whole reason the mode pair exists — and it is *allowed* `Bash(hangar doctor:*)`.
 So a `doctor --fix` that generated that file would let operator mode rewrite its own permission
 list through a command it is permitted to run, and the asymmetry this file spends its length
-justifying would be gone. `setup` is no better: it is not in operator mode's deny list either,
-only unlisted, so `hangar setup --force` reaches it behind one prompt about "hangar setup".
+justifying would be gone. `setup` was no better and is now named in both spellings —
+`Bash(hangar setup)`, `Bash(hangar setup:*)` and `mcp__hangar__setup` all `ask` — which is the
+reason `setup` is exposed as a tool at all rather than left out with `claude` and `dev`: a command
+that reaches the config is better named than merely unlisted.
 
 So `doctor` **reports and offers no repair**, the same shape as the `settings targets` check for
 an unresolvable theme.

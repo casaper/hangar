@@ -40,27 +40,41 @@ another name.
 | `reload` | `reload_preview` | `reload` |
 | `install` | `install_preview` | `install` |
 | `browse` | `browse_preview` | `browse` |
-| `pr refresh` | `pr_refresh` | — |
+| `pr refresh` | `pr_refresh_preview`, and `pr_refresh` itself | — |
 | `resume` | `resume_list` | — |
 | `teach-rg` | `teach_rg_preview` | `teach_rg` |
-| `add-clone` | — | `add_clone` |
+| `setup` | `setup_preview` | `setup` |
+| `add-clone` | — | `add_clone` (offers the undocumented `remote`) |
 | `remove-clone` | — | `remove_clone` |
 | `config show` | `config_show` | — |
 | `config validate` | `config_validate` | — |
 | `config schema` | `config_schema_check` | `config_schema_write` |
 | `colours list` | `colours_list` | — |
-| `colours sync` | `colours_check` | `colours_sync` |
+| `colours sync` | `colours_check` **and** `colours_sync_preview` | `colours_sync` |
 | `colours change` | — | `colours_change` |
 | `tmp merge` | `tmp_merge_preview` | `tmp_merge` |
 | `plans collect` | `plans_collect_preview` | `plans_collect` |
 | `plans stamp` | `plans_stamp_preview` | `plans_stamp` |
 | `ide <kind> sync` | `ide_<kind>_sync_preview` | `ide_<kind>_sync` |
 
-**Five commands have no tool, on purpose.** `claude` is the escalation boundary and is denied to
-you twice over; `dev golden` and `dev release` are maintainer commands promised to no operator;
-`jira hook` is a `PreToolUse` hook rather than something to call; and `setup` writes
-`hangar.config.yaml`, which a running hangar already has. For those, the shell is the only path
-and its own rules apply.
+**`colours sync` is the one command with two read-only tools**, because `--check` and `-n` answer
+different questions: `colours_check` exits non-zero when an artifact is stale, and
+`colours_sync_preview` says which one and what would change in it.
+
+**`pr_refresh` is pre-approved even though the table below calls it an act.** Both are right. It
+writes a cache file, so it acts; but the clone bar spawns exactly this, detached, every time a
+record passes `forge.prCacheTtlSeconds`, and asking you to approve what happens unattended twenty
+times a minute would be theatre. The next redraw would rewrite what it wrote.
+
+**Four commands have no tool, and none of them is an oversight.** `claude` refuses whenever
+`$CLAUDECODE` is set, so the tool could only ever fail — and it is the escalation boundary.
+`dev release` pushes and cuts a version, and its confirmation fails closed, so the only form that
+would work as a tool call is the one with `-y`. `dev golden` writes a partial capture that would
+read as the gate without being it. `jira hook` reads a `PreToolUse` payload from stdin and has
+nothing to do without one. For those, the shell is the only path and its own rules apply.
+
+**No tool offers `--quiet`.** It exists so a `SessionEnd` hook and the status bar's own spawn can
+say nothing unless something needs a human; you have the opposite need.
 
 **The shell is not closed.** Every Bash rule this mode had still stands, so anything the tools do
 not cover is still reachable by typing it. The tools are the better default door, not a wall —
@@ -145,6 +159,12 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
 
 ## Notes that change what you type
 
+**These are written in the shell spelling**, because that is the form you hand to the user and the
+form the flags are named in. Everything here is equally true of the tool that runs it — the map
+above says which — with one substitution throughout: where a note says `-n`, the tool is the
+separate `<thing>_preview`.
+
+
 - **The editor commands live under `ide`, aliased `editor`, so the top level carries one entry for
   the editors rather than one per editor.** `colours` is aliased `colors`, and `checkout-default`
   is aliased `checkout`.
@@ -158,9 +178,9 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   master's version of that spec" — and comes back as a cyan `→ sent:` line, which is the
   confirmation it was delivered. It is picked up at the resolver's NEXT turn rather than the one
   in flight, so a line typed mid-tool-call lands a few seconds later. There is no flag: the
-  channel exists when stdin is a tty and does not when it is not, which means **an agent running
-  `hangar sync` through a Bash tool cannot use it** — no terminal, no channel, and the run is the
-  fire-and-forget one. This is the user's to type, in the window the sync is running in.
+  channel exists when stdin is a tty and does not when it is not, which means **no agent can use
+  it — through the Bash tool or the `sync` tool alike.** A tool call has no terminal either, so
+  there is no channel and the run is the fire-and-forget one. This is the user's to type, in the window the sync is running in.
 - **A `--continue` during that sync owns the terminal.** If git needs an answer — a GPG passphrase
   for a signed commit, a prompt from one of the repo's own hooks — the question appears on screen
   and waits for it. There is no timeout, so a sync sitting silent after the resolver has finished

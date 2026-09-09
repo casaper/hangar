@@ -51,15 +51,16 @@ tool call goes through without stopping, it reported.
 | --- | --- |
 | `list`, `ports`, `status` (`--fetch` reaches the network but touches no tree), `doctor` **bare**, `colours list`, `config show`, `config validate`, `resume` (see below) | `sync` / `merge-default` / `rebase-default`, `checkout-default`, `open`, `add-clone`, `install`, `remove-clone`, `colours change`, `doctor --fix`, `setup`, `teach-rg`, `config schema`, `ide <kind> sync`, `colours sync`, `tmp merge`, `plans collect`, `plans stamp` |
 
-**The hangar's own `CLAUDE.md` reserves seven of those for the user, from the hangar root:** `sync`
-under any of its three names, `checkout-default`, `open`, `add-clone`, `install`, `remove-clone`,
-`colours change` and `doctor --fix`. They move git state, move files between live working trees, or
-open terminal windows.
+**The hangar's own `CLAUDE.md` reserves ten of those for the user, from the hangar root:** `sync`
+under any of its three names, `checkout-default`, `open`, `close`, `reload`, `add-clone`,
+`install`, `remove-clone`, `colours change` and `doctor --fix`. They move git state, move files
+between live working trees, or end a live session.
 
-So the default for those seven is: **run the dry run yourself, report what it says, and hand the
-real command over** — a copy-pasteable line, not a description of one. If the user has told you in
-this session to go ahead and run them, do that instead; this is a default, not a refusal. Say which
-you are doing.
+So the default for those ten is: **run the preview yourself, report what it says, and hand the real
+command over** — a copy-pasteable shell line, not a description of one. The preview is the tool
+whose name ends `_preview` (or `doctor`, or `colours_check`), and it is pre-approved precisely so
+this costs you nothing. If the user has told you in this session to go ahead and run the real one,
+do that instead; this is a default, not a refusal. Say which you are doing.
 
 **`doctor --fix` deserves its own sentence.** `doctor` bare is a report and safe. `--fix` writes
 into every clone's working directory, so it is the user's.
