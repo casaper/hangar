@@ -38,12 +38,12 @@ in `app/CLAUDE.md`; this is what the two commands do with it.
   nothing can tell which transcript a running session owns, and resuming the one already open
   puts two Claude Code sessions in one clone.
 
-## Taking a clone down
+## Taking a clone down, and putting one back on current config
 
-`app/src/commands/close.ts`. It ends processes somebody is working in, so it is a pure planner
-over read facts plus a switch over its output -- `-n` renders exactly the list the real run
-performs, and every branch, the refusal included, is asserted in `test/close.test.ts` without a
-tmux server or a live session.
+`app/src/commands/close.ts` and `reload.ts`. Both end processes somebody is working in, so both
+are a pure planner over read facts plus a switch over its output -- `-n` renders exactly the list
+the real run performs, and every branch, the two refusals included, is asserted in
+`test/close-reload.test.ts` without a tmux server or a live session.
 
 **There is one tmux server per HANGAR, not one per clone**, which is the first thing to get right
 about `close`. A clone is a SESSION on the one socket, so closing it is `kill-session`; a
@@ -56,13 +56,46 @@ not run its `SessionEnd` hook, so `plans collect` and `tmp merge` would never ru
 session and its plan would stay in the clone it was written in. The ordering is the correctness
 part: the root `CLAUDE.md` states that session end is *also the first moment a plan is safe to
 move, because nothing can rewrite it any more*, so collecting first races the session being
-closed.
+closed. **`reload` deliberately does neither**, and that is the same rule rather than an
+inconsistency -- the session is not over there, it comes back under the same id and runs the hook
+when it genuinely ends.
 
 **One refusal in `close`, and everything else is a warning inside one confirmation.** The refusal
 is closing the clone whose own session the command is running inside, which kills the terminal
 mid-command; `--force` is the way past it. A dev server dying with the session is named rather
 than treated as a guard -- it is recoverable by restarting it, which is the asymmetry with
 `remove-clone`, where the same fact blocks because the directory is about to be deleted.
+
+### `reload` is the path `kill-server` was the only answer for
+
+`colours sync` writes the bar's options onto a live server, and cannot reach a SERVER option --
+two of the four settings Claude Code needs inside tmux are server options, and the only repair for
+those was the `kill-server` `doctor --fix` refuses. `source-file` re-executes the conf's commands,
+`set -s` included, on the running server with nothing interrupted. Two of those settings are
+negotiated with the terminal when a client attaches (`extended-keys`, `focus-events`), so they
+reach an already-attached client only when its tab is reopened; `reload` prints that rather than
+implying otherwise.
+
+**The shells are respawned pane by pane, and the test is `#{pane_current_command}` against an
+ALLOW-list.** A process cannot have its environment changed from outside, so "reload the shell
+env" is a new shell: `respawn-pane -k` re-runs direnv, picks up the new PATH and installs the
+current prompt. That is destructive to whatever is in the pane, so a shell name means idle and is
+respawned, and anything else is skipped BY NAME. An allow-list and not a deny-list, because the
+question is "is it safe to kill this", and a deny-list would have to name every dev server, test
+runner and pager anyone might run -- the first one it forgot would die silently.
+
+**Claude Code's pane is recognised by its `@hangar_role`, never by what is running in it.** A
+session that has been exited leaves a shell there, and the pane is still Claude Code's -- so the
+allow-list above would respawn a bare shell and drop the resume. It is a case of its own: the
+clone's most recent live transcript gives a session id and the pane is respawned as
+`claude --resume <id>`, which skips the picker. That is also why the id is printed before anything
+is killed: `claudeTranscripts` marks liveness by matching a running process's working directory
+and over-counts on purpose, so with two sessions in one clone the answer is "most likely" rather
+than certain, and `--no-claude` is the way to decline it.
+
+**A stale workspace file is reported and never written.** The per-clone artifacts have one writer,
+`add-clone` and `doctor --fix`, and a second one is how two builders drift; `reload` is the right
+place to NOTICE and the wrong place to fix, so it names `doctor --fix` and moves on.
 
 ### Closing an editor window: what the two halves cost
 

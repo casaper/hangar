@@ -17,6 +17,7 @@ import { release } from './commands/release.ts';
 import { list } from './commands/list.ts';
 import { closeClones, type CloseOptions } from './commands/close.ts';
 import { open } from './commands/open.ts';
+import { reloadClones, type ReloadOptions } from './commands/reload.ts';
 import { plansCollect, plansStamp } from './commands/plans.ts';
 import { ports } from './commands/ports.ts';
 import { removeClone } from './commands/remove-clone.ts';
@@ -359,6 +360,27 @@ program
   .option('-n, --dry-run', 'print every decision and close nothing')
   .action((clones: string[], options: CloseOptions) => {
     closeClones(requireHangar(), clones, options);
+  });
+
+program
+  .command('reload')
+  .summary('Put an open clone back on current config, without closing it')
+  .description(
+    [
+      'Re-executes `clone-tmux.conf` on the live tmux server, restarts each idle shell so it re-runs direnv and picks up the current PATH and prompt, and restarts Claude Code in the same conversation it was already in — so a config change reaches a clone you are working in.',
+      '**This is the path `kill-server` used to be the only answer for.** `colours sync` writes the bar onto a running server but cannot reach a SERVER option, and two of the four settings Claude Code needs inside tmux are server options. `source-file` re-executes the whole conf, `set -s` included, with nothing interrupted. `extended-keys` and `focus-events` are negotiated when a client attaches, so those two still want the tab reopened.',
+      "A pane running anything other than a shell — a dev server, a test run — is left alone and named. Claude Code's pane is the exception: it is what holds the settings and `CLAUDE.md` read once at start-up, so it is restarted with `--resume <session-id>` and the conversation continues. `--no-claude` leaves it running and `--no-shells` leaves the shells alone.",
+    ].join('\n\n'),
+  )
+  .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2) — reloaded in ascending order')
+  .option('--all', 'reload every open clone in the fleet')
+  .option('--no-shells', 'leave every idle shell pane as it is')
+  .option('--no-claude', 'leave Claude Code running, on the settings it started with')
+  .option('--no-editor', "do not rewrite the editors' per-clone artifacts")
+  .option('-y, --yes', 'do not ask before restarting Claude Code')
+  .option('-n, --dry-run', 'print every decision and reload nothing')
+  .action((clones: string[], options: ReloadOptions) => {
+    reloadClones(requireHangar(), clones, options);
   });
 
 /*

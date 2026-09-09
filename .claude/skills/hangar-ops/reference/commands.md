@@ -21,6 +21,7 @@ Global: `--hangar <path>` (the hangar root to operate on; **only `config show` a
 | `checkout-default` (alias `checkout`) | `[clone]` | `-a, --all` · `-n, --dry-run` · `--include-busy` | **act [user]** |
 | `open` | `[clones...]` | `--all` · `--no-claude` · `--no-editor` · `-b, --branch <name>` · `--no-checkout` · `--include-busy` · `-n, --dry-run` | **act [user]** |
 | `close` | `[clones...]` | `--all` · `--no-editor` · `-y, --yes` · `--force` · `-n, --dry-run` | **act [user]** |
+| `reload` | `[clones...]` | `--all` · `--no-shells` · `--no-claude` · `--no-editor` · `-y, --yes` · `-n, --dry-run` | **act [user]** |
 | `browse` | `<ticket\|pr> <clone>` | `-n, --dry-run` (print the URL, open nothing) | act (opens a browser; `-n` is report) |
 | `resume` | `[clone]` (defaults to the clone you are in) | `-n, --limit <count>` (default `20`, `0` = all) | report **for you** — with no tty it prints the list instead of the picker; at a terminal it launches `claude --resume` |
 | `add-clone` | — | `--no-install` (+ a hidden `--remote <url>`) | **act [user]**, no `-n` |
@@ -183,13 +184,25 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   It **refuses** to close the clone whose own session you typed the command in — that kills the
   terminal mid-command — and `--force` is the way past. Everything else worth knowing (a live
   session, a dev server that dies with it) is named in one confirmation, which `-y` skips.
-- **Closing an editor window needs macOS and Accessibility.**
+- **`hangar reload <clone>` puts an open clone back on current config without closing it**, and
+  it is the answer for the settings `colours sync` cannot reach: `source-file` re-executes the
+  whole conf on the live server, SERVER options included. `extended-keys` and `focus-events` are
+  negotiated when a client attaches, so those two still want the tab reopened.
+  Each **idle shell** is restarted so it re-runs direnv and picks up the current PATH and prompt.
+  A pane running anything else — a dev server, a test run — is left alone and **named**.
+  **Claude Code is restarted into the same conversation** with `--resume <session-id>`, because
+  its process is what holds the settings and `CLAUDE.md` read once at start-up. With two sessions
+  in one clone the id is a best guess, so it is printed before anything is killed and
+  `--no-claude` declines the whole step; `--no-shells` declines the other half.
+  A workspace file that differs from its builder is **reported, never written** — that belongs to
+  `hangar doctor --fix`.
+- **Closing an editor window needs macOS and Accessibility, and reloading one is not possible.**
   `close` presses the window's own close button through System Events, which needs Accessibility
   granted for the terminal `hangar` runs from (System Settings → Privacy & Security →
   Accessibility). Without it — or on Linux — the window stays open, the command says so in one
-  line and does everything else. Reloading one is not possible either: VS Code's `Reload Window`
-  has no default keybinding outside a development build, and VS Code applies a settings change
-  live anyway.
+  line and does everything else. There is no editor reload at all: VS Code's `Reload Window` has
+  no default keybinding outside a development build, so `reload` names the gesture instead, and VS
+  Code applies a settings change live anyway.
 - **A clone's shells inside hangar's tmux get a short prompt, and only there.** One `❯` in the
   clone's hue — red instead when the last command failed — with no user, host, path, git state or
   time, because the footer two lines down is already saying all five. It is gated on the tmux

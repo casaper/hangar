@@ -302,18 +302,57 @@ export type TmuxServer = {
    * Re-apply the status bar to a server that is ALREADY RUNNING. Returns sessions restyled.
    *
    * `clone-tmux.conf` reaches it through `-f`, which tmux reads ONCE when the server starts --
-   * so regenerating the conf leaves every live session on whatever it started with, and for the
-   * bar that meant tmux's own `bg=green`. The repair for a server behind on its conf is
-   * `kill-server`, which `doctor` refuses for good reason: it ends every live agent in the fleet.
+   * so regenerating the conf leaves every live session on whatever it started with, and with no
+   * `status-style` that means tmux's own `bg=green` behind every clone hue.
    *
-   * It does not have to be. Every option the bar needs is a global SESSION option rather than a
-   * server option, so all of it can be written onto a running server with nothing restarted and
-   * nothing interrupted. That is the whole difference between this and the four settings
-   * `TMUX_SETTINGS` carries -- two of those really are server options, and there is no way to
-   * change one under a live server.
+   * Every option the bar needs is a global SESSION option rather than a server option, so all of
+   * it can be written onto a running server with nothing restarted and nothing interrupted --
+   * which is what this does, and why `colours sync` needs no restart. The four settings
+   * `TMUX_SETTINGS` carries are the other case: two of them really are server options, and
+   * `sourceConf` below is what reaches those, by re-executing the conf rather than by writing
+   * options one at a time.
    */
   readonly restyle: (clones: readonly Clone[]) => number;
+  /**
+   * Re-execute `clone-tmux.conf` on a server that is already running.
+   *
+   * This is the half `restyle` cannot reach. `-f` is read once at start-up, so a live server is
+   * stuck on whatever its start config gave it -- and two of the four settings Claude Code needs
+   * are SERVER options, which no amount of `set -g` from `restyle` can touch. `source-file`
+   * executes the file's commands, `set -s` included, so it reaches them without ending a single
+   * session. That is why `doctor --fix` never needs the `kill-server` it refuses to run.
+   *
+   * Two of those settings are negotiated with the terminal when a client attaches
+   * (`extended-keys`, `focus-events`), so they reach an ALREADY-attached client only when its
+   * tab is reopened. `hangar reload` says so rather than implying otherwise.
+   */
+  readonly sourceConf: () => boolean;
+  /** Every pane of a clone's session, with what is running in each. */
+  readonly panes: (clone: Clone) => readonly TmuxPane[];
+  /**
+   * Restart one pane's process, in `cwd`, optionally running `command` instead of a shell.
+   *
+   * `-k` because the pane is not waiting to be respawned -- it has a live process in it, and
+   * without `-k` tmux refuses. That makes this the destructive one on this interface, and why
+   * every caller decides pane by pane rather than sweeping a session.
+   */
+  readonly respawnPane: (paneId: string, cwd: string, command?: string) => boolean;
   readonly killSession: (clone: Clone) => boolean;
+};
+
+/**
+ * One pane, and what is standing in it.
+ *
+ * `command` is `#{pane_current_command}` -- the FOREGROUND process, which is what makes it the
+ * right question to ask before respawning: `zsh` means an idle shell and anything else means
+ * somebody's dev server, test run or editor is in there.
+ */
+export type TmuxPane = {
+  readonly id: string;
+  readonly windowId: string;
+  readonly role: string | undefined;
+  readonly command: string;
+  readonly path: string;
 };
 
 export const tmuxServer = (hangar: Hangar): TmuxServer => {
@@ -574,6 +613,41 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
       }
       return restyled;
     },
+    sourceConf: () => tmux(['source-file', hangar.paths.tmuxConf]).ok,
+    panes: (clone) => {
+      const format = [
+        '#{pane_id}',
+        '#{window_id}',
+        '#{@hangar_role}',
+        '#{pane_current_command}',
+        '#{pane_current_path}',
+      ].join(SEP);
+      const res = tmux(['list-panes', '-s', '-t', tmuxTarget(clone), '-F', format]);
+      if (!res.ok) return [];
+      return lines(res.out).flatMap((line) => {
+        const [id, windowId, role, command, path] = line.split(SEP);
+        if (id === undefined || windowId === undefined) return [];
+        return [
+          {
+            id,
+            windowId,
+            role: orUndefined(role),
+            command: command ?? '',
+            path: path ?? clone.path,
+          },
+        ];
+      });
+    },
+    respawnPane: (paneId, cwd, command) =>
+      tmux([
+        'respawn-pane',
+        '-k',
+        '-c',
+        cwd,
+        '-t',
+        paneId,
+        ...(command === undefined ? [] : ['sh', '-lc', command]),
+      ]).ok,
     killSession: (clone) => tmux(['kill-session', '-t', tmuxTarget(clone)]).ok,
   };
 };

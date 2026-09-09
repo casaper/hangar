@@ -57,9 +57,12 @@ browser test run — that isolation is the entire reason the fleet exists.
    $
    clone_01 · src/app · ✚✱⇡2 · fixes/ABC-1323_i_can_close_the_browser_tab…
   ```
-- **Closing a clone.** `hangar close 1` takes the whole working set down — the editor window, the
-  Claude Code session, the clone's tmux session — and collects the plans a killed session cannot
-  collect for itself.
+- **Closing and reloading a clone.** `hangar close 1` takes the whole working set down — the
+  editor window, the Claude Code session, the clone's tmux session — and collects the plans a
+  killed session cannot collect for itself. `hangar reload 1` is the other one: it re-reads the
+  tmux config on the live server, restarts each idle shell so it picks up a new environment, and
+  brings Claude Code back into the same conversation, leaving any pane that is running something
+  alone.
 - **Colour identity.** Near-identical terminal windows are the fleet's usability problem, so every
   clone gets a hue that shows up in its Claude Code status line, its prompt border, and the
   terminal window itself.
