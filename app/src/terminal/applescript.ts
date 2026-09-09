@@ -41,5 +41,24 @@ export const appIsRunning = (processName: string): boolean =>
 export const isAccessibilityDenial = (err: string): boolean =>
   err.includes('-1719') || err.includes('assistive access') || err.includes('not allowed');
 
+/**
+ * What to allow, and where -- with the part that is not obvious.
+ *
+ * "Allow your terminal" is the answer everyone gives and it is only half of one here. macOS
+ * attributes an Apple Event to the RESPONSIBLE process, which for a command typed in a terminal
+ * is that terminal -- but hangar's commands run inside its own tmux server, and a tmux server is
+ * reparented to launchd. A detached chain has no terminal to be responsible for it, so the
+ * attribution falls to the executable itself.
+ *
+ * Measured on this machine, with iTerm2 already allowed: from a pane on hangar's socket,
+ * `tell application "System Events" to get name of processes` succeeds (it needs no
+ * accessibility) while `tell process "Code" to get name of windows` still fails with
+ * `not allowed assistive access. (-1728)`. The same machine's Accessibility list had picked up
+ * bare executables of its own accord (`uv`, and hangar's own launcher script), which is what
+ * attribution-to-the-executable looks like from the outside.
+ *
+ * A granted process also keeps the answer it was given until it restarts, so a tmux server that
+ * has already been refused stays refused -- which is why the last clause is there.
+ */
 export const ACCESSIBILITY_HINT =
-  'System Settings → Privacy & Security → Accessibility: allow the terminal you run `hangar` from.';
+  'System Settings → Privacy & Security → Accessibility: allow the terminal you run `hangar` from, and — because hangar runs inside its own tmux server, which is detached from that terminal — the `tmux` binary too. A tmux server that was already refused keeps that answer until it restarts.';
