@@ -44,9 +44,49 @@ d()  { printf '\033[38;2;%sm' "$dim"; }
 r()  { printf '\033[0m'; }
 
 model="$(field '.model.display_name')"
-branch="$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+session="$(field '.session_id')"
+used="$(field '.context_window.total_input_tokens')"
+window="$(field '.context_window.context_window_size')"
+pct="$(field '.context_window.used_percentage')"
 
-out="$(c)$(printf '\033[1m')● ${clone}$(r)"
-[ -n "$branch" ] && out="${out}$(d) · $(r)$(c)${branch}$(r)"
-[ -n "$model" ]  && out="${out}$(d) · ${model}$(r)"
+# 232921 -> 233k, 1000000 -> 1M. Integer arithmetic only: `bc` is not a dependency this
+# script is allowed to acquire, and awk for one rounding is a process per render.
+# Anything that is not a run of digits prints nothing, which is how a payload without the
+# field -- an older Claude Code, a shape that has moved -- costs a segment and never a line.
+hum() {
+    case "${1:-}" in "" | *[!0-9]*) return 0 ;; esac
+    if [ "$1" -ge 1000000 ]; then
+        local m=$(($1 / 1000000)) f=$((($1 % 1000000) / 100000))
+        if [ "$f" -eq 0 ]; then printf '%dM' "$m"; else printf '%d.%dM' "$m" "$f"; fi
+    elif [ "$1" -ge 1000 ]; then
+        printf '%dk' "$((($1 + 500) / 1000))"
+    else
+        printf '%d' "$1"
+    fi
+}
+
+# The clone is the coloured bullet and nothing else: its name, its path and its branch are
+# on the tmux footer, in this clone's own hue, with room to spare. The bullet is what still
+# names it in a session started outside hangar's tmux, where there is no footer at all.
+out="$(c)$(printf '\033[1m')●$(r)"
+
+# `233k/1M · 23%`: the percentage is what gets read, and the pair either side of it is what
+# says whether 23 per cent is a lot. Claude Code's own badge shows the same first number raw
+# and neither of the other two.
+used_h="$(hum "$used")"
+window_h="$(hum "$window")"
+if [ -n "$used_h" ]; then
+    out="${out} $(c)${used_h}$(r)"
+    [ -n "$window_h" ] && out="${out}$(d)/${window_h}$(r)"
+fi
+case "${pct:-}" in
+    "" | *[!0-9]*) ;;
+    *) out="${out}$(d) · ${pct}%$(r)" ;;
+esac
+[ -n "$model" ] && out="${out}$(d) · ${model}$(r)"
+
+# The first eight characters of the session id, which is enough to tell two sessions in one
+# clone apart and is the handle `claude --resume` takes -- so the thing that brings this
+# conversation back is on screen rather than dug out of a transcript directory.
+[ -n "$session" ] && out="${out}$(d) · ${session:0:8}$(r)"
 printf '%s' "$out"

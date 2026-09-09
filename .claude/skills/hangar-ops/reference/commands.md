@@ -161,6 +161,17 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   have just saved — takes a moment to show up on either line.
   A blank field is never an error message — everything behind the bar exits quietly, because a
   status line is no place to report one.
+- **Claude Code's own status line in a clone shows the context, the model and the session id.**
+  `● 233k/1M · 23% · Opus 5 (1M context) · df714160` — the `●` is the clone's hue, and the last
+  field is the first eight characters of the session id, which is what `claude --resume` takes.
+  The clone's name and branch are not repeated there: the tmux footer has them. Three things it
+  cannot show, and each is Claude Code's rather than a gap here — **the task list** (not in the
+  status-line payload, and the on-disk format is documented as internal and version-fragile),
+  **the active plan's name or file** (not in the payload; the label in the input box is Claude
+  Code's own), and the raw **`NNNNNN tokens` badge**, which is a built-in footer row with no
+  setting to hide or reformat. The humanised figure is beside that badge, not instead of it, and
+  it counts the same tokens with the window size and percentage added.
+  **A theme or status-line change needs Claude Code restarted in that clone.**
 - **A clone's shells inside hangar's tmux get a short prompt, and only there.** One `❯` in the
   clone's hue — red instead when the last command failed — with no user, host, path, git state or
   time, because the footer two lines down is already saying all five. It is gated on the tmux
