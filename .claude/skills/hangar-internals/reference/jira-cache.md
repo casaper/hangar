@@ -196,12 +196,12 @@ Four things follow:
   no I/O anyway — the whole file is read either way and a slice would only shorten what the regex
   sees.
 
-**A ticket fetched in the last hour is not fetched again.** `hangar jira hook` is a
-`PreToolUse` hook, wired into each clone's untracked `.claude/settings.local.json` by absolute
-path — **but only where `tracker.kind` is not `none`** (see below). It reads the Bash command Claude Code is about to
+**A ticket fetched in the last hour is not fetched again.** `hangar jira hook` is a `PreToolUse`
+hook, wired into each clone's untracked `.claude/settings.local.json` by absolute path — **but only
+where `tracker.kind` is not `none`** (see below). It reads the Bash command Claude Code is about to
 run; when every file a `tracker.syncScript` run would write is already on disk and inside the TTL,
-it points whatever is missing at the record store and **denies** the command, telling the agent
-what it got instead. Five properties are the whole design:
+it points whatever is missing at the record store and **denies** the command, telling the agent what
+it got instead. Five properties are the whole design:
 
 - **It fails open.** A flag it does not know, a frontmatter shape it cannot read, a record with
   no parsable timestamp, a shell construct in the tail — all exit silently and let the fetch

@@ -91,17 +91,17 @@ has to restate its own config to get the row, and `optional: true` on all three 
 green for a hangar whose owner never syncs: each degrades visibly rather than breaking.
 
 **`usesBitbucket` in `bitbucket.ts` is the one place that decides whether this hangar talks to
-Bitbucket**, and it exists because three callers were each deciding it differently: `repoRef`
-parsed the origin URL and ignored `forge.kind` entirely, `setup` used
-`originUrl.includes('bitbucket.org')` (a substring test `notbitbucket.org.example.com` passes),
-and the token reader hardcoded the literal `BITBUCKET_TOKEN` — so **`forge.tokenEnvKey` was a
-config key nothing read**. A hangar naming a different variable got a `sync` that looked for
-`BITBUCKET_TOKEN`, did not find it, and reported the target branch as a guess. `DEFAULT_BITBUCKET_TOKEN_ENV_KEY`
-is now the single literal, on the `DEFAULT_EDITOR_KIND` precedent. `src/secrets.ts` holds the pure half:
-`secretVariableStatuses` takes the declaration and the file's TEXT — never a path — so every
-state can be asserted without a mode-600 file full of live credentials on disk, which is the only
-way this is testable at all. The value never leaves that module; callers get a three-state enum,
-so no report, log or golden capture can grow a credential in it by accident.
+Bitbucket**, and it exists because three callers were each deciding it differently: `repoRef` parsed
+the origin URL and ignored `forge.kind` entirely, `setup` used `originUrl.includes('bitbucket.org')`
+(a substring test `notbitbucket.org.example.com` passes), and the token reader hardcoded the literal
+`BITBUCKET_TOKEN` — so **`forge.tokenEnvKey` was a config key nothing read**. A hangar naming a
+different variable got a `sync` that looked for `BITBUCKET_TOKEN`, did not find it, and reported the
+target branch as a guess. `DEFAULT_BITBUCKET_TOKEN_ENV_KEY` is now the single literal, on the
+`DEFAULT_EDITOR_KIND` precedent. `src/secrets.ts` holds the pure half: `secretVariableStatuses`
+takes the declaration and the file's TEXT — never a path — so every state can be asserted without a
+mode-600 file full of live credentials on disk, which is the only way this is testable at all. The
+value never leaves that module; callers get a three-state enum, so no report, log or golden capture
+can grow a credential in it by accident.
 
 **Why the key exists.** `secrets` used to be `file` + `mode`, so a hangar could say WHERE the
 credentials live and never what has to be in them. `setup` scaffolds the names Hangar itself uses
@@ -142,12 +142,12 @@ world-readable file sits where credentials are about to go. When one `--fix` run
 file and reports every variable unset, the note says so, because two rows reading as contradictory
 findings is how a correct report gets ignored.
 
-There is no `repair` for the CONTENTS, and it is the one check here where that is structural
-rather than a choice: a credential cannot be derived from the clone index the way a port, a theme
-or an identity file can. Everything else `doctor` reports outside git is recoverable from the formula;
-this is the only thing a human has to supply. Which makes it worth a row precisely because it is
-the row `--fix` will never close. (`hangar-ops/reference/reading-output.md` says the same to
-whoever relays the report — change one and change both.)
+There is no `repair` for the CONTENTS, and it is the one check here where that is structural rather
+than a choice: a credential cannot be derived from the clone index the way a port, a theme or an
+identity file can. Everything else `doctor` reports outside git is recoverable from the formula;
+this is the only thing a human has to supply. Which makes it worth a row precisely because it is the
+row `--fix` will never close. (`hangar-ops/reference/reading-output.md` says the same to whoever
+relays the report — change one and change both.)
 
 ## `--fix` runs to the end, and a symlink is judged on where it POINTS
 
@@ -220,16 +220,16 @@ warnings -- its identity file, its settings, two mode statuslines, its secrets -
 `No problems in 0 clone(s).` A summary that contradicts the report immediately above it is worse
 than no summary.
 
-`doctor()` now holds a local `problem()` beside the plain `warn()`, and which one a site uses is
-the whole decision. **Everything about this hangar's own state counts**, including the one-time
-manual steps `--fix` deliberately will not close: those go to zero once somebody does them, which
-is what a setup check is for. **The machine's CAPABILITIES do not** -- a `ps` that will not run, an
-emulator that cannot bring a window it opened to the front. Those are facts about where the fleet
-is running and are permanent on some platforms, so counting them would leave a correctly
-configured GNOME Terminal hangar permanently non-zero. The dim `optional:` secret rows stay out by construction, since they go
-through `note`. The five `report*` helpers return their warning MESSAGES (`readonly string[]`)
-rather than sharing a mutable module variable, for the reason `two-hangars.test.ts` exists -- the
-count is `.length`, so there is one source for both the tally and the recap below.
+`doctor()` now holds a local `problem()` beside the plain `warn()`, and which one a site uses is the
+whole decision. **Everything about this hangar's own state counts**, including the one-time manual
+steps `--fix` deliberately will not close: those go to zero once somebody does them, which is what a
+setup check is for. **The machine's CAPABILITIES do not** -- a `ps` that will not run, an emulator
+that cannot bring a window it opened to the front. Those are facts about where the fleet is running
+and are permanent on some platforms, so counting them would leave a correctly configured GNOME
+Terminal hangar permanently non-zero. The dim `optional:` secret rows stay out by construction,
+since they go through `note`. The five `report*` helpers return their warning MESSAGES (`readonly
+string[]`) rather than sharing a mutable module variable, for the reason `two-hangars.test.ts`
+exists -- the count is `.length`, so there is one source for both the tally and the recap below.
 
 The summary names the two halves separately -- `above the clones` and `in N clone(s)` -- because
 they are fixed in different places: a clone problem is almost always derivable, and a hangar one
@@ -351,9 +351,9 @@ will not tell you -- the dry run never spawns -- so the thing to check is that a
 root and then requires the result to be **inside** that root — a string-prefix test on the resolved
 path, with symlinks followed. Anything outside is rejected with `plansDirectory must be within
 project root` and the CLI **silently falls back to `~/.claude/plans`**, mixed in with this machine's
-other projects. That is not a check to work around: `../plans`, an absolute
-the hangar's own `plans/`, and a `.claude/plans` symlink pointing at the hangar root all fail it the same
-way. An absolute `~/.claude/dvb-gn-plans` was configured in all three clones and did exactly that,
+other projects. That is not a check to work around: `../plans`, an absolute the hangar's own
+`plans/`, and a `.claude/plans` symlink pointing at the hangar root all fail it the same way. An
+absolute `~/.claude/dvb-gn-plans` was configured in all three clones and did exactly that,
 unnoticed, for a day.
 
 Dates come from the filename, then the file's own birthtime/mtime, then the first transcript that

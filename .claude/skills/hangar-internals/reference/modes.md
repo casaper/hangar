@@ -35,12 +35,12 @@ There is no mode feature. Each mode is `--settings <file>` plus `--append-system
 <file>` plus `--mcp-config <file>` plus `-n <name>`, and for `dev` a working directory of `app/` so
 that `app/CLAUDE.md` is loaded from the first turn instead of lazily on first read beneath it.
 
-**`claudeArgvFor` puts those four AHEAD of anything passed through, and that ordering is the
-whole of what resuming into a mode is.** `hangar claude --resume <id> -m ops` reaches claude as
+**`claudeArgvFor` puts those four AHEAD of anything passed through, and that ordering is the whole
+of what resuming into a mode is.** `hangar claude --resume <id> -m ops` reaches claude as
 `--settings … --append-system-prompt-file … --mcp-config … -n … --resume <id>`; reversed, the
-session resumes with the badge of a mode whose rules and tools it does not have. It was a comment for as long as the
-launchers existed and is now a pure builder with a test on it, because it is the one property
-here whose failure looks exactly like success.
+session resumes with the badge of a mode whose rules and tools it does not have. It was a comment
+for as long as the launchers existed and is now a pure builder with a test on it, because it is the
+one property here whose failure looks exactly like success.
 
 `-n` is not decoration: it puts the mode in the prompt box, the terminal title and the `/resume`
 picker. Two near-identical hangar-root windows is the same problem as two near-identical clone
@@ -289,8 +289,9 @@ not conflict. The clone bar spawns exactly this, detached, every time a record p
 minute is theatre, and what it writes the next redraw would rewrite anyway.
 
 Measured, not assumed, with `--settings` and `--mcp-config` both loaded and a `-p` session:
-`mcp__hangar__doctor` ran with no prompt and `permission_denials` empty; `mcp__hangar__ide_emacs_sync`
-came back denied and named in `permission_denials`. That is the separation, working.
+`mcp__hangar__doctor` ran with no prompt and `permission_denials` empty;
+`mcp__hangar__ide_emacs_sync` came back denied and named in `permission_denials`. That is the
+separation, working.
 
 ### Three reasons a tool call is a subprocess
 
@@ -322,13 +323,13 @@ mutating tool added to `app/src/mcp/tools.ts` and forgotten in `ops.settings.jso
 `test/mcp-tools.test.ts` asserts every exposure appears in exactly one of the three lists and that
 a reporting one is in `allow`.
 
-**`dev.settings.json` enumerates none of them, and that is the deliberate asymmetry rather than
-the same omission.** The enumeration is a boundary, and developer mode has none to hold — it may
-already write `app/**`, run `hangar dev` and open either tab. Giving it forty-one rules would be a
-second list to keep in step for no guarantee, and the test would then be pinning a file whose
-whole content is "yes" repeated. Operator mode is the one with something to lose. It reads the tracked `ops.settings.json` by a path relative to
-itself, which is portable because that file is byte-identical on every machine — the same property
-that made `hangar-statusline` a PATH name.
+**`dev.settings.json` enumerates none of them, and that is the deliberate asymmetry rather than the
+same omission.** The enumeration is a boundary, and developer mode has none to hold — it may already
+write `app/**`, run `hangar dev` and open either tab. Giving it forty-one rules would be a second
+list to keep in step for no guarantee, and the test would then be pinning a file whose whole content
+is "yes" repeated. Operator mode is the one with something to lose. It reads the tracked
+`ops.settings.json` by a path relative to itself, which is portable because that file is
+byte-identical on every machine — the same property that made `hangar-statusline` a PATH name.
 
 **A command with no tool is merely missing**, and is visible the moment somebody looks for it. So
 that direction is a line on stderr when the server starts, listing what `unexposedCommands` found.
@@ -486,8 +487,8 @@ regenerated that file would let operator mode rewrite its own permission list.
 ## Why the mode settings are the one generated-file candidate that stays tracked
 
 Publication forced the question for every tracked file naming one machine's home directory, and
-these two answered differently from the rest. `.claude/settings.json` became generated and gitignored;
-`.claude/modes/{ops,dev}.settings.json` did not.
+these two answered differently from the rest. `.claude/settings.json` became generated and
+gitignored; `.claude/modes/{ops,dev}.settings.json` did not.
 
 The reason is an escalation path, not tidiness. `ops.settings.json`'s ~40 `allow`/`ask`/`deny`
 entries **are** operator mode's boundary. Operator mode is denied `Edit(./.claude/modes/**)` —

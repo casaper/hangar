@@ -17,17 +17,17 @@ reserialised; key order and the hand-maintained tab indentation are preserved as
 
 Three things follow that are worth knowing:
 
-- **The key list is declared, not sniffed** — and it is **config**, not code:
-  `editor.rootPathKeys` in `hangar.config.yaml` (`config/schema.ts:334`, a `z.record` of setting
-  key → path relative to the clone root), seeded by `hangar setup` (`commands/setup.ts:267`) from
-  the eight defaults in `editor/vscode.ts:51`. It used to be a hard-coded table in an
-  `app/src/vscode.ts` that no longer exists; the move changed where you add a key, not what
-  happens if you forget to. A clone-specific setting that is missing from it gets copied
-  verbatim and leaves one clone's tool path aimed at another clone's `node_modules` — silent,
-  exactly like a Storybook health check on a sibling's port. A rendered file that still contains
-  another clone's directory name is therefore a **hard error** naming the file; the fix is to add the
-  key to the config, not to force the write. Absolute paths _outside_ the fleet root are left
-  alone — the `~/.vscode/extensions/…` YAML schema URL in the workspace file is genuinely shared.
+- **The key list is declared, not sniffed** — and it is **config**, not code: `editor.rootPathKeys`
+  in `hangar.config.yaml` (`config/schema.ts:334`, a `z.record` of setting key → path relative to
+  the clone root), seeded by `hangar setup` (`commands/setup.ts:267`) from the eight defaults in
+  `editor/vscode.ts:51`. It used to be a hard-coded table in an `app/src/vscode.ts` that no longer
+  exists; the move changed where you add a key, not what happens if you forget to. A clone-specific
+  setting that is missing from it gets copied verbatim and leaves one clone's tool path aimed at
+  another clone's `node_modules` — silent, exactly like a Storybook health check on a sibling's
+  port. A rendered file that still contains another clone's directory name is therefore a **hard
+  error** naming the file; the fix is to add the key to the config, not to force the write. Absolute
+  paths _outside_ the fleet root are left alone — the `~/.vscode/extensions/…` YAML schema URL in
+  the workspace file is genuinely shared.
 - **`launch.json` and `tasks.json` are tracked by git**, unlike `settings.json`, `mcp.json` and the
   workspace files, so they are **compared and never written** — there is no flag to force it. They
   are versioned per branch, so the newest copy is not the right one, it is just whatever branch

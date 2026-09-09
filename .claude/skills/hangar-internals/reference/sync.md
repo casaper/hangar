@@ -4,20 +4,20 @@ The most dangerous command in the CLI and the two that share its machinery.
 `app/src/commands/sync.ts` (882 lines) and `checkout-default.ts` (328); the shared landing step is
 `landOnBranch`.
 
-- **`hangar sync` types into a live Claude session.** There is no CLI mechanism to message a
-  running interactive session, so it finds the session's tty, maps it to the tmux pane on that tty and writes
-  a pause message, then a closing message afterwards. Each one leads with a marker —
-  `SYNC PAUSE`, then **exactly one** `SYNC FINISHED` or `SYNC ABORTED`, which the pause promises
-  and a `finally` delivers. That guarantee is the point: six paths lead out of a sync between
-  the two messages, five of them used to send nothing, and an agent told to STOP and wait for a
-  message that never comes waits for good. The closing message **reports the state it found**
-  rather than an outcome — a half-applied operation, files still conflicted, work still in a
-  stash — because those combine, and it says whether to resume or to stand still and tell the
-  user. `--all` **skips** clones with a live session unless `--include-busy`. Rebase vs merge
-  follows the rule "rebase only my own linear branch"; anything with merge commits, or started by
-  someone else, is merged instead. It **refuses to start on a clone that is already mid-rebase or
-  mid-merge** — finish or abort that first, because step one is a `git stash push` and it would
-  bury the half-applied state in a stash nobody thinks to look in.
+- **`hangar sync` types into a live Claude session.** There is no CLI mechanism to message a running
+  interactive session, so it finds the session's tty, maps it to the tmux pane on that tty and
+  writes a pause message, then a closing message afterwards. Each one leads with a marker — `SYNC
+  PAUSE`, then **exactly one** `SYNC FINISHED` or `SYNC ABORTED`, which the pause promises and a
+  `finally` delivers. That guarantee is the point: six paths lead out of a sync between the two
+  messages, five of them used to send nothing, and an agent told to STOP and wait for a message that
+  never comes waits for good. The closing message **reports the state it found** rather than an
+  outcome — a half-applied operation, files still conflicted, work still in a stash — because those
+  combine, and it says whether to resume or to stand still and tell the user. `--all` **skips**
+  clones with a live session unless `--include-busy`. Rebase vs merge follows the rule "rebase only
+  my own linear branch"; anything with merge commits, or started by someone else, is merged instead.
+  It **refuses to start on a clone that is already mid-rebase or mid-merge** — finish or abort that
+  first, because step one is a `git stash push` and it would bury the half-applied state in a stash
+  nobody thinks to look in.
 - **`hangar sync` integrates onto the branch the clone's PULL REQUEST targets, not onto
   `master`.** Nothing local knows that branch: a branch cut from `master` can have a PR onto
   `release9`, or onto another branch of this fleet (a stacked PR — one clone's PR onto another

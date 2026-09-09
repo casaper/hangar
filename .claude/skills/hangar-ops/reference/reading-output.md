@@ -124,10 +124,10 @@ Four things to say correctly when you relay a report:
   below it can name VS Code on a hangar whose config says JetBrains. Fix the config first —
   `hangar config validate` says what is wrong — and re-read; until then `hangar open` uses those
   same fallback editors.
-- **How much of the shared cache a clone has linked is deliberately not checked.** A clone's
-  `tmp/` entries settle at the next `tmp merge`, which every clone runs from a `SessionEnd` hook;
-  a check that is red in normal operation is a check nobody reads. (`hangar-internals/reference/doctor.md` says the same — change one and
-  change both.)
+- **How much of the shared cache a clone has linked is deliberately not checked.** A clone's `tmp/`
+  entries settle at the next `tmp merge`, which every clone runs from a `SessionEnd` hook; a check
+  that is red in normal operation is a check nobody reads. (`hangar-internals/reference/doctor.md`
+  says the same — change one and change both.)
 - **The summary counts BOTH halves, and the exit code is always 0.** The closing line names
   `N problem(s)` and says where they are — `above the clones`, `in N clone(s)`, or both — because
   the two are fixed in different places: a clone problem is almost always derivable and `--fix`
@@ -140,19 +140,19 @@ Four things to say correctly when you relay a report:
   this CLI a `--check` flag is the gate (`config schema --check`, `colours sync --check` both
   exit 1) and a report is a report. Read the summary line, not `$?`.**
 - **The `secrets` row reports two sources and repairs neither.** What it checks is
-  `secrets.variables[]` — what the repo's own tooling needs — **plus the credentials Hangar
-  itself needs, derived from the config**: the forge token named by `forge.tokenEnvKey` when the
-  origin is a Bitbucket URL, and the Atlassian pair when `tracker.kind` is `jira`. Those three
-  need no declaration, and that is the point: a config declaring only the variables the REPO needs
-  — this fleet's is one Playwright password — would otherwise leave three of the four credentials
+  `secrets.variables[]` — what the repo's own tooling needs — **plus the credentials Hangar itself
+  needs, derived from the config**: the forge token named by `forge.tokenEnvKey` when the origin is
+  a Bitbucket URL, and the Atlassian pair when `tracker.kind` is `jira`. Those three need no
+  declaration, and that is the point: a config declaring only the variables the REPO needs — this
+  fleet's is one Playwright password — would otherwise leave three of the four credentials
   unchecked. A declared entry with the same NAME overrides the derived one, which is how you make a
-  forge token red rather than dim. A credential is the one thing in the fleet that cannot be
-  derived from a clone index, so relay it as a job for the human, with the variable's `why`, and
-  never as something you can repair. It distinguishes two states worth keeping apart when you report them: **not set** is a
-  gap, while **set but EMPTY** is worse, because an empty value reads as configured to everything
-  downstream — an empty token produces a 401 rather than "no token configured". A row printed dim
-  and prefixed `optional:` is a variable declared `optional: true`; mention it, do not chase it.
-  A hangar that expects nothing gets no row at all, which is not the same as being fully
+  forge token red rather than dim. A credential is the one thing in the fleet that cannot be derived
+  from a clone index, so relay it as a job for the human, with the variable's `why`, and never as
+  something you can repair. It distinguishes two states worth keeping apart when you report them:
+  **not set** is a gap, while **set but EMPTY** is worse, because an empty value reads as configured
+  to everything downstream — an empty token produces a 401 rather than "no token configured". A row
+  printed dim and prefixed `optional:` is a variable declared `optional: true`; mention it, do not
+  chase it. A hangar that expects nothing gets no row at all, which is not the same as being fully
   configured.
 - **The secrets FILE, unlike its contents, `--fix` does create.** A separate row above the
   variables says when the shared secrets file does not exist at all, and `--fix` writes the same

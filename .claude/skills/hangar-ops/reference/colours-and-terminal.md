@@ -130,7 +130,7 @@ emulator was closed and the session is still running: `tmux -L hangar-<id> ls`, 
 `tmux -L hangar-<id> attach -t '=<clone>:'`. The socket is private, so the tmux you run for your
 own work never sees any of it -- and a bare `tmux ls` will not find these.
 
-`hangar doctor` reports which emulator was detected and what the tmux server is doing, whether an rc actually sources
-the hook, and — the trap worth knowing — **whether an rc names a file under this hangar that no
-longer exists.** The idiomatic `[ -r X ] && . X` guard means a renamed artifact fails _silently_:
-the colours simply stop, with nothing anywhere to say why.
+`hangar doctor` reports which emulator was detected and what the tmux server is doing, whether an rc
+actually sources the hook, and — the trap worth knowing — **whether an rc names a file under this
+hangar that no longer exists.** The idiomatic `[ -r X ] && . X` guard means a renamed artifact fails
+_silently_: the colours simply stop, with nothing anywhere to say why.

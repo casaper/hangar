@@ -125,14 +125,14 @@ absence is a note and a skip, not a failure; semantic-release still does its own
 
 ## Two things to know before the first real run
 
-**The tag is lightweight.** Confirmed at v0.14.0: `git cat-file -t v0.14.0` answers `commit`. `@semantic-release/git` tags with `git tag <name> <sha>` — no
-`-a`, no message — while the fourteen historical tags are annotated and carry hand-written
-milestone prose (`v0.13.0` is "the IntelliJ colleague: an editor that is not VS Code"). So from
-`v0.14.0` on, `git cat-file -t <tag>` answers `commit` rather than `tag`. Nothing breaks:
-`git describe --tags` in `lastReleaseTag` matches both, and `changelog.sh --tag-prefix v` reads
-either. But it is a visible change in a repo that clearly cared about those messages, and
-`.releaserc.json` has no option for it — the only way back is a `git tag -f -a` after the fact,
-which needs a force-push.
+**The tag is lightweight.** Confirmed at v0.14.0: `git cat-file -t v0.14.0` answers `commit`.
+`@semantic-release/git` tags with `git tag <name> <sha>` — no `-a`, no message — while the fourteen
+historical tags are annotated and carry hand-written milestone prose (`v0.13.0` is "the IntelliJ
+colleague: an editor that is not VS Code"). So from `v0.14.0` on, `git cat-file -t <tag>` answers
+`commit` rather than `tag`. Nothing breaks: `git describe --tags` in `lastReleaseTag` matches both,
+and `changelog.sh --tag-prefix v` reads either. But it is a visible change in a repo that clearly
+cared about those messages, and `.releaserc.json` has no option for it — the only way back is a `git
+tag -f -a` after the fact, which needs a force-push.
 
 **A failed release usually leaves everything ALREADY PUSHED.** The order is `prepare` (changelog,
 version bump, release commit), then tag, then **push**, and only then `publish` — the GitHub
@@ -171,9 +171,10 @@ the only record of now live in `commands/release.ts`:
 ## Why `dev`, and what does not change
 
 A release is only meaningful in a checkout of this repo, never in an operator's hangar — the same
-contract `dev golden` has. So it is hidden, it gets **no row in `hangar-ops/reference/commands.md`**,
-and `.claude/modes/ops.settings.json` denies `hangar dev` outright: operator mode has no business
-cutting a release, and developer mode is the only one that can write that file.
+contract `dev golden` has. So it is hidden, it gets **no row in
+`hangar-ops/reference/commands.md`**, and `.claude/modes/ops.settings.json` denies `hangar dev`
+outright: operator mode has no business cutting a release, and developer mode is the only one that
+can write that file.
 
 `hangar doctor` gets no row for any of this either, for the reason it gets none for
 `core.hooksPath`: every hangar root is a clone of this repo, but only a CLI developer ever releases

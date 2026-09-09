@@ -332,15 +332,15 @@ each other's values instead of flattening them; never `-g`, which would have the
 entered recolour every window of both.
 
 **`-t "$TMUX_PANE"` on every call, and it is load-bearing.** `set -w` with no target is the
-session's ACTIVE window, not the window the calling shell is in. Without it, two windows in one session
-got this: entering a clone's directory from window 1 put its hue on **window 0** and left window 1
-with none. It still happens inside one clone's session -- a `cd` into a sibling clone's directory
-is a second hue in one session, and a window made with `C-b c` is a second window to get wrong. A pane id is a legal target for a window option and resolves to that
-pane's own window, so the fix costs no extra exec -- tmux sets `TMUX_PANE` in every pane, and it
-keeps working from a split, which is the same property that makes a split pane keep its
-clone. This was found by opening two windows in one session and reading the options back,
-which is the only way it shows up: with a single window the wrong target and the right one are
-the same window.
+session's ACTIVE window, not the window the calling shell is in. Without it, two windows in one
+session got this: entering a clone's directory from window 1 put its hue on **window 0** and left
+window 1 with none. It still happens inside one clone's session -- a `cd` into a sibling clone's
+directory is a second hue in one session, and a window made with `C-b c` is a second window to get
+wrong. A pane id is a legal target for a window option and resolves to that pane's own window, so
+the fix costs no extra exec -- tmux sets `TMUX_PANE` in every pane, and it keeps working from a
+split, which is the same property that makes a split pane keep its clone. This was found by opening
+two windows in one session and reading the options back, which is the only way it shows up: with a
+single window the wrong target and the right one are the same window.
 
 `window-status-current-style` is set alongside `window-status-style` because they are different
 options -- the first styles a window that is not current. With only the second, the clone you are

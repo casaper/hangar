@@ -177,11 +177,12 @@ separate `<thing>_preview`.
 - **A `sync` that hits conflicts can be steered while it works, and only from a terminal.** While
   the headless resolver is running, a line typed at the keyboard plus Enter reaches it — "keep
   master's version of that spec" — and comes back as a cyan `→ sent:` line, which is the
-  confirmation it was delivered. It is picked up at the resolver's NEXT turn rather than the one
-  in flight, so a line typed mid-tool-call lands a few seconds later. There is no flag: the
-  channel exists when stdin is a tty and does not when it is not, which means **no agent can use
-  it — through the Bash tool or the `sync` tool alike.** A tool call has no terminal either, so
-  there is no channel and the run is the fire-and-forget one. This is the user's to type, in the window the sync is running in.
+  confirmation it was delivered. It is picked up at the resolver's NEXT turn rather than the one in
+  flight, so a line typed mid-tool-call lands a few seconds later. There is no flag: the channel
+  exists when stdin is a tty and does not when it is not, which means **no agent can use it —
+  through the Bash tool or the `sync` tool alike.** A tool call has no terminal either, so there is
+  no channel and the run is the fire-and-forget one. This is the user's to type, in the window the
+  sync is running in.
 - **A `--continue` during that sync owns the terminal.** If git needs an answer — a GPG passphrase
   for a signed commit, a prompt from one of the repo's own hooks — the question appears on screen
   and waits for it. There is no timeout, so a sync sitting silent after the resolver has finished
