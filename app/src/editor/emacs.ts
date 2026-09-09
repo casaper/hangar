@@ -64,6 +64,7 @@ export const EMACS_ARTIFACTS: readonly EditorArtifact[] = [
     copies: (clone: Clone) => [join(clone.path, '.dir-locals.el')],
     rootKeys: {},
     indexLabel: false,
+    cloneValues: false,
   },
 ];
 

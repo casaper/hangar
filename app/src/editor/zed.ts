@@ -29,6 +29,7 @@ const zedFile = (name: string): EditorArtifact => ({
   copies: (clone: Clone) => [join(clone.path, '.zed', name)],
   rootKeys: {},
   indexLabel: false,
+  cloneValues: false,
 });
 
 /**

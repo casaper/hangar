@@ -39,6 +39,39 @@ Three things follow that are worth knowing:
   modified copy of _that_ file (they drift separately), which is printed; `--from <clone>`
   overrides it and `-n` shows the changed keys per clone without writing.
 
+## The workspace file carries the clone's own name and hue, and a sync rebuilds them
+
+`clone-config.ts`'s `workspaceCloneValues` is one flat map of `key -> value for this clone`:
+`window.title`, and the eight `workbench.colorCustomizations` entries that put the clone's hue on
+the title bar and the activity bar. `workspaceSettings` builds the nested object from that map and
+`editor/vscode.ts` tokenises the same keys, so all three read one list.
+
+**Flat, and matched by KEY rather than by value.** `readStringValue`'s regex is anchored on the
+quoted key, which finds a setting at any nesting depth -- the colour entries are
+`"titleBar.activeBackground": "…"` in the text like any other. Matching by value would have to
+replace every `#000000` in the file, and `ink` is `#000000` for most of the palette, so a colour
+the developer put there themselves would be rewritten as some other clone's.
+
+**Why they must be tokens and not just written.** The workspace file is SYNCED: the newest copy
+wins, so a VS Code setup is one setup. A per-clone value copied verbatim would give every clone
+the source clone's name and hue -- the one thing the fleet's colours exist to prevent, arriving as
+a command reporting a successful sync. Rendered from the builder instead, a sync REPAIRS a file
+somebody copied between clones. `test/editor-config.test.ts` asserts a round trip through another
+clone comes out byte-identical to that clone's own render.
+
+**`window.title` is settable from a workspace file at all** because it is registered with no
+`scope`, which makes it window-scoped -- verified in the shipped bundle against
+`window.menuBarVisibility` beside it, which carries `scope: 1` and could not be. The issue key
+reaches the title through `${activeRepositoryBranchName}`, a real title variable
+(`titleService.registerVariables`), because the branch carries the key: there is no transform that
+would reduce a branch to just the key, and the two things that could -- an extension, or a
+`post-checkout` hook rewriting a generated file -- are not worth a shorter string.
+
+A workspace value **replaces** a personal `window.title` rather than extending it, and hangar
+cannot read the personal one to preserve it. So the generated shape mirrors the default -- the
+file, then the dirty marker -- with the clone and its branch in front, and `${rootName}` left out
+because it is the workspace file's own name and so a second, worse spelling of the clone.
+
 ## The padded index survives a sync, and the token is what decides that
 
 `indexLabelRe` reads the folder label backwards -- rendered label in hand, index to be found
@@ -52,9 +85,15 @@ The workspace file exists **once per entry in `editor.workspaceDirs`**, byte-ide
 VS Code only offers a `*.code-workspace` from the directory you opened. `['.']` is the common case
 — a repo only ever opened at its root — and this hangar's repo is opened at its root AND at its
 app directory, so it declares both and every clone carries two copies. The name comes from
-`editor.workspaceFileName`, rendered per clone. `doctor` checks for each and fills a missing one
-from a twin; `workspaceContent()` in `clone-config.ts` is only the fallback for a clone that has
-none.
+`editor.workspaceFileName`, rendered per clone.
+
+**`doctor` compares both copies by CONTENT and `--fix` writes `workspaceContent()`**, like every
+other generated per-clone file. Everything in the file is derived -- the folder label from
+`editor.workspaceFolderLabel`, the path from the clone, the settings from `workspaceCloneValues` --
+so an existence-only check meant a clone that had one kept whatever it was first given: a hangar
+whose generated settings gained a key handed it to new clones and to nobody else, with the row
+green. `ide vscode sync` renders the same values from the same builder, so the two cannot disagree
+about what a clone's copy should say.
 
 ## VS Code is ranked above the other editors, and the code says so
 

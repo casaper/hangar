@@ -167,6 +167,11 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   could not run is not a guard that passed — without `lsof` nothing can tell whether the clone is
   still serving. Check its ports by hand, or install `lsof`; `--force` overrides, and on a
   `--delete` that is unrecoverable.
+- **A clone's `*.code-workspace` is compared by content, and `--fix` rewrites it.** Everything in
+  it is generated — the folder label, the clone path, and the per-clone settings that put the clone
+  name and its branch in the VS Code title bar and its hue on the activity bar. So it is hand-edit-
+  at-your-peril like `CLAUDE.local.md`, and a hangar whose generated settings change reaches every
+  existing clone through `hangar doctor --all --fix` rather than only new ones.
 - **`doctor` never runs an install step; it only checks the declaration.** A green install row
   means the directory exists and the manager's marker is there. A **dim** row (rather than green)
   means the manager leaves nothing inside the clone to look at — maven, go, cargo, pip, poetry,

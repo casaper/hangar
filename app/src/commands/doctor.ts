@@ -657,8 +657,16 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
 
   /*
    * Both copies: VS Code only offers a `*.code-workspace` from the directory you opened, and
-   * this repo is opened at its root and at `angular/`. `workspaceContent` is the fallback for
-   * a clone that has neither -- `hangar ide vscode sync` is what keeps existing ones in step.
+   * this repo is opened at its root and at `angular/`.
+   *
+   * **Compared by CONTENT, not merely for existence**, and byte for byte like every other
+   * generated per-clone file. Everything in this one is derived -- the folder label from
+   * `editor.workspaceFolderLabel`, the path from the clone, and the settings from
+   * `workspaceCloneValues`, which carries the clone's name and its hue. Checking only that the
+   * file was there meant a clone that had one kept whatever it was first given: a hangar whose
+   * generated settings gained a key would hand it to new clones and to nobody else, silently,
+   * because the row was green. `hangar ide vscode sync` re-renders the same values from the same
+   * builder, so the two cannot disagree about what a clone's copy should say.
    *
    * **No row at all when no configured editor reads one**, rather than a green "not applicable":
    * the `editor` row below already says what Hangar does per configured editor, and this check
@@ -671,23 +679,34 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
    * and the difference is the cost: a stale hook starts a process on every Bash tool call, while
    * a stale workspace file is an inert gitignored file that nothing reads.
    */
+  const readIfPresent = (path: string): string | undefined => {
+    try {
+      return readFileSync(path, 'utf8');
+    } catch {
+      return undefined;
+    }
+  };
   if (wantsWorkspaceFiles(hangar)) {
     const wsPaths = workspacePaths(clone);
+    const wanted = workspaceContent(clone);
     const wsMissing = wsPaths.filter((p) => !existsSync(p));
+    const wsStale = wsPaths.filter((p) => existsSync(p) && readIfPresent(p) !== wanted);
+    const where = (paths: readonly string[]): string =>
+      paths.map((path) => relative(clone.path, dirname(path)) || 'root').join(' and ');
     checks.push({
       name: 'code-workspace',
-      ok: wsMissing.length === 0,
+      ok: wsMissing.length === 0 && wsStale.length === 0,
       detail:
-        wsMissing.length === 0
-          ? `${workspacePath(clone).split('/').pop() ?? ''} (${workspacePaths(clone)
-              .map((path) => relative(clone.path, dirname(path)) || 'root')
-              .join(' and ')})`
-          : `missing: ${wsMissing.map((p) => relative(clone.path, p)).join(', ')}`,
+        wsMissing.length === 0 && wsStale.length === 0
+          ? `${workspacePath(clone).split('/').pop() ?? ''} (${where(wsPaths)})`
+          : [
+              wsMissing.length > 0 ? `missing in ${where(wsMissing)}` : '',
+              wsStale.length > 0 ? `not what the builder renders in ${where(wsStale)}` : '',
+            ]
+              .filter((part) => part !== '')
+              .join('; '),
       repair: () => {
-        const template = wsPaths.find((p) => existsSync(p));
-        const content =
-          template === undefined ? workspaceContent(clone) : readFileSync(template, 'utf8');
-        for (const path of wsMissing) writeFile(path, content);
+        for (const path of [...wsMissing, ...wsStale]) writeFile(path, wanted);
       },
     });
   }

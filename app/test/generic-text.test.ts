@@ -6,6 +6,7 @@ import {
   envLocalContent,
   exampleIssueKey,
   portCheckHint,
+  workspaceContent,
 } from '../src/clone-config.ts';
 import { cloneColoursArtifact } from '../src/generate/colours-sh.ts';
 import { tmuxConfArtifact } from '../src/generate/tmux-conf.ts';
@@ -88,6 +89,7 @@ test('no per-clone artifact names the repo this CLI was built in', () => {
       cloneColoursArtifact(hangar, [clone]).content,
       tmuxConfArtifact(hangar).content,
       tmuxStatusArtifact(hangar).content,
+      workspaceContent(clone),
     ];
     for (const text of texts) {
       for (const literal of THIS_REPOS_OWN) {

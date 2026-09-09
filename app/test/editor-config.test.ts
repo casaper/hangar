@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { wantsWorkspaceFiles, workspaceContent, workspacePaths } from '../src/clone-config.ts';
+import {
+  wantsWorkspaceFiles,
+  workspaceCloneValues,
+  workspaceContent,
+  workspacePaths,
+} from '../src/clone-config.ts';
 import { render, templatize, vscodeArtifacts } from '../src/editor/vscode.ts';
 import { cloneAt } from '../src/fleet.ts';
 import { first, fixtureConfigText, fixtureVscodeConfigText, syntheticHangar } from './fixture.ts';
@@ -83,6 +88,49 @@ test('the schema default is a kind that wants one, which is what makes the fallb
   const hangar = syntheticHangar({ configText: text });
 
   assert.equal(wantsWorkspaceFiles(hangar), true);
+});
+
+/**
+ * The per-clone half of the workspace file, through a sync.
+ *
+ * `ide vscode sync` takes the newest copy of a file and writes it into every clone, so anything
+ * per-clone in it has to survive the round trip as a TOKEN. This is the assertion that it does:
+ * without it a single sync hands every clone the source clone's name and hue, which is the one
+ * thing the fleet's colours exist to prevent -- and it would look like a success, because syncing
+ * is exactly what the command reports having done.
+ */
+test('a synced workspace file arrives carrying the RECEIVING clone name and hue', () => {
+  const hangar = syntheticHangar({ configText: fixtureVscodeConfigText() });
+  const [one, two] = [cloneAt(hangar, 1), cloneAt(hangar, 3)];
+  const artifact = first(
+    vscodeArtifacts(hangar.config.editor.rootPathKeys).filter((a) => a.id === '*.code-workspace'),
+    'the workspace artifact',
+  );
+
+  const source = workspaceContent(one);
+  const { template } = templatize(artifact, source, one);
+  const arrived = render(template, two);
+
+  assert.equal(arrived, workspaceContent(two), 'a sync must rebuild, not copy');
+  for (const [key, value] of Object.entries(workspaceCloneValues(two))) {
+    assert.ok(arrived.includes(`"${key}": "${value}"`), `${key} did not arrive as clone 3's`);
+  }
+  // And the source clone's own values are gone -- the half that a copy would have left behind.
+  assert.ok(!arrived.includes(one.name), `the receiving clone is called ${one.name}`);
+  assert.ok(!arrived.includes(one.colour.main), "it is wearing clone 1's hue");
+});
+
+test('round-tripping a clone through itself changes nothing', () => {
+  const hangar = syntheticHangar({ configText: fixtureVscodeConfigText() });
+  const clone = cloneAt(hangar, 2);
+  const artifact = first(
+    vscodeArtifacts(hangar.config.editor.rootPathKeys).filter((a) => a.id === '*.code-workspace'),
+    'the workspace artifact',
+  );
+  const source = workspaceContent(clone);
+  // Idempotence is what makes `ide vscode sync` safe to run twice, and what makes its
+  // "in sync" report mean anything at all.
+  assert.equal(render(templatize(artifact, source, clone).template, clone), source);
 });
 
 test('a PADDED folder label keeps its padding through a sync', () => {

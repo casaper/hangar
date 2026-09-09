@@ -1,6 +1,17 @@
 {
   "settings": {
-    "yaml.maxItemsComputed": 25000
+    "yaml.maxItemsComputed": 25000,
+    "window.title": "checkout_0002${separator}${activeRepositoryBranchName}${separator}${activeEditorMedium}${separator}${dirty}",
+    "workbench.colorCustomizations": {
+      "titleBar.activeBackground": "#ffcc00",
+      "titleBar.activeForeground": "#000000",
+      "titleBar.inactiveBackground": "#ffcc00",
+      "titleBar.inactiveForeground": "#000000",
+      "activityBar.background": "#ffcc00",
+      "activityBar.foreground": "#000000",
+      "activityBar.inactiveForeground": "#000000",
+      "activityBar.activeBorder": "#000000"
+    }
   },
   "folders": [
     {

@@ -59,6 +59,7 @@ const ideaFile = (name: string): EditorArtifact => ({
   // Empty: `$PROJECT_DIR$` means there is nothing clone-specific to rewrite.
   rootKeys: {},
   indexLabel: false,
+  cloneValues: false,
 });
 
 export const JETBRAINS_ARTIFACTS: readonly EditorArtifact[] = [

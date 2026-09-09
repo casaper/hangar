@@ -389,10 +389,99 @@ export const claudeLocalMdContent = (clone: Clone): string => {
   ].join('\n');
 };
 
+/**
+ * The per-clone VS Code settings, flat, as `key -> value for this clone`.
+ *
+ * ONE map, and it is flat for a reason: `ide vscode sync` finds a setting by its quoted key
+ * wherever it sits, so the keys inside `workbench.colorCustomizations` are listed here exactly as
+ * they appear in the file. `workspaceSettings` below builds the nested object from this map, and
+ * `editor/vscode.ts` tokenises the same keys on the way through a sync -- so all three read one
+ * list and a fourth clone cannot end up wearing a third clone's colour.
+ *
+ * **Not `.vscode/settings.json`**, which is the file that looks like the obvious home. That one
+ * is SHARED: `hangar ide vscode sync` copies it between clones and rewrites only the declared
+ * `rootPathKeys`, so a per-clone value in it reaches every clone with the first sync. The
+ * workspace file is generated per clone from this builder, so it is where a per-clone value
+ * belongs and where `doctor` will hold it.
+ *
+ * ## The title
+ *
+ * `window.title` is registered with no `scope`, which makes it window-scoped and therefore
+ * settable from a workspace file -- verified in the shipped bundle, against
+ * `window.menuBarVisibility` next to it, which carries `scope: 1` and could not be. And
+ * `${activeRepositoryBranchName}` is a real title variable (`titleService.registerVariables`),
+ * which is what puts the issue key on screen: the branch carries it, and there is no transform
+ * to reduce the branch to just the key. An extension or a `post-checkout` hook rewriting this
+ * generated file could, and neither is worth a shorter string.
+ *
+ * **A workspace value REPLACES a personal one rather than extending it**, and hangar cannot read
+ * the personal one to preserve it. So this is deliberately shaped like the default -- the file,
+ * then the dirty marker -- with the clone and its branch put in front, and `${rootName}` left
+ * out because it is the workspace file's own name (`<id>_<NN>`) and so a second, worse spelling
+ * of the clone. Somebody whose own title format matters to them will notice this one and can say
+ * so; the alternative was leaving the whole feature out.
+ *
+ * ## The hue
+ *
+ * The same clone colour the tmux bar and the Claude Code theme use, on the two surfaces that are
+ * always visible and never carry anything hangar has to reason about: the title bar and the
+ * activity bar. Deliberately not the status bar -- that is where the branch, the errors and every
+ * extension put their own colours, and re-grounding it would be arguing with them.
+ *
+ * `ink` in front of `main` for the same reason as everywhere else: best-of-black-or-white cannot
+ * fall below 4.58:1 on any sRGB colour, which is what makes every hue in the palette legible
+ * without anybody checking (`palette.ts`, and `test/contrast.test.ts` holds it). Both title-bar
+ * states get the hue, so a clone is findable when its window is NOT the focused one -- which is
+ * the moment the colours exist for.
+ *
+ * These override a personal `workbench.colorCustomizations` rather than merging into it.
+ *
+ * ## `ide vscode sync` would otherwise flatten every one of these
+ *
+ * The workspace file is SYNCED across the fleet -- the newest copy wins, so that a VS Code setup
+ * is one setup -- with the per-clone bits carried through as tokens. That is exactly what these
+ * are, so `editor/vscode.ts` tokenises them by key and re-renders them per clone. Without that a
+ * single sync would give every clone the source clone's name and hue, which is the same leak that
+ * keeps them out of `.vscode/settings.json`; with it, a sync REPAIRS a file somebody copied.
+ */
+export const workspaceCloneValues = (clone: Clone): Readonly<Record<string, string>> => {
+  const { main, ink } = clone.colour;
+  return {
+    // `\${…}` is a literal `${…}` -- these are VS Code's own title variables, not ours.
+    'window.title': [
+      clone.name,
+      `\${activeRepositoryBranchName}`,
+      `\${activeEditorMedium}`,
+      `\${dirty}`,
+    ].join(`\${separator}`),
+    'titleBar.activeBackground': main,
+    'titleBar.activeForeground': ink,
+    'titleBar.inactiveBackground': main,
+    'titleBar.inactiveForeground': ink,
+    'activityBar.background': main,
+    'activityBar.foreground': ink,
+    'activityBar.inactiveForeground': ink,
+    'activityBar.activeBorder': ink,
+  };
+};
+
+/** Everything in the map above except the title -- i.e. the `colorCustomizations` block. */
+const colourKeysOf = (values: Readonly<Record<string, string>>): Record<string, string> =>
+  Object.fromEntries(Object.entries(values).filter(([key]) => key !== 'window.title'));
+
+export const workspaceSettings = (clone: Clone): Record<string, unknown> => {
+  const values = workspaceCloneValues(clone);
+  return {
+    'yaml.maxItemsComputed': 25000,
+    'window.title': values['window.title'],
+    'workbench.colorCustomizations': colourKeysOf(values),
+  };
+};
+
 export const workspaceContent = (clone: Clone): string =>
   `${JSON.stringify(
     {
-      settings: { 'yaml.maxItemsComputed': 25000 },
+      settings: workspaceSettings(clone),
       folders: [
         {
           name: render(

@@ -2,7 +2,12 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { cloneTokens, workspacePath, workspacePaths } from '../clone-config.ts';
+import {
+  cloneTokens,
+  workspaceCloneValues,
+  workspacePath,
+  workspacePaths,
+} from '../clone-config.ts';
 import { CliError, run } from '../exec.ts';
 import { cloneDirPattern, type Clone } from '../fleet.ts';
 import { git } from '../git.ts';
@@ -34,6 +39,13 @@ import type { Hangar } from '../hangar.ts';
 const ROOT_TOKEN = '__HANGAR_CLONE_ROOT__';
 const INDEX_TOKEN = '__HANGAR_CLONE_INDEX__';
 const INDEX2_TOKEN = '__HANGAR_CLONE_INDEX2__';
+/**
+ * One token per per-clone SETTING, named after the setting.
+ *
+ * A third token rather than a third literal: the keys come from `workspaceCloneValues`, so this
+ * side of the transform cannot list a key the builder has dropped or miss one it has gained.
+ */
+const cloneValueToken = (key: string): string => `__HANGAR_CLONE_VALUE_${key}__`;
 
 /**
  * The settings whose value is an absolute path INTO the clone, mapped to the path each one
@@ -76,6 +88,7 @@ export const vscodeArtifacts = (
     copies: (clone) => [vscodeFile(clone, 'settings.json')],
     rootKeys: rootPathKeys,
     indexLabel: false,
+    cloneValues: false,
   },
   {
     id: '.vscode/mcp.json',
@@ -83,6 +96,7 @@ export const vscodeArtifacts = (
     copies: (clone) => [vscodeFile(clone, 'mcp.json')],
     rootKeys: {},
     indexLabel: false,
+    cloneValues: false,
   },
   {
     id: '.vscode/launch.json',
@@ -90,6 +104,7 @@ export const vscodeArtifacts = (
     copies: (clone) => [vscodeFile(clone, 'launch.json')],
     rootKeys: {},
     indexLabel: false,
+    cloneValues: false,
   },
   {
     id: '.vscode/tasks.json',
@@ -97,6 +112,7 @@ export const vscodeArtifacts = (
     copies: (clone) => [vscodeFile(clone, 'tasks.json')],
     rootKeys: {},
     indexLabel: false,
+    cloneValues: false,
   },
   {
     // Two copies, because VS Code offers `*.code-workspace` files from the directory you
@@ -106,6 +122,7 @@ export const vscodeArtifacts = (
     copies: (clone) => workspacePaths(clone),
     rootKeys: WORKSPACE_ROOT_KEYS,
     indexLabel: true,
+    cloneValues: true,
   },
 ];
 
@@ -222,16 +239,35 @@ export const templatize = (artifact: EditorArtifact, text: string, clone: Clone)
     const label = indexLabelRe(clone.hangar);
     if (label !== undefined) template = template.replace(label.re, `$1${label.token}$3`);
   }
+  if (artifact.cloneValues) {
+    /*
+     * Positional, by KEY, and never by value: replacing every `#000000` in the file would reach
+     * a colour the developer put there themselves, and `ink` is `#000000` for most of the
+     * palette. Anchoring on the quoted key is also what makes this work at any nesting depth --
+     * `workbench.colorCustomizations`' own entries are `"titleBar.activeBackground": "…"` in the
+     * text like any other setting.
+     */
+    for (const key of Object.keys(workspaceCloneValues(clone))) {
+      const at = new RegExp(`("${escapeRegExp(key)}"\\s*:\\s*")([^"]*)(")`);
+      template = template.replace(at, `$1${cloneValueToken(key)}$3`);
+    }
+  }
   return { template, root, nonconforming };
 };
 
 /** The template as this clone should have it. */
 export const render = (template: string, clone: Clone): string => {
   const tokens = cloneTokens(clone);
-  return template
+  let text = template
     .replaceAll(ROOT_TOKEN, clone.path)
     .replaceAll(INDEX2_TOKEN, tokens.index2 ?? String(clone.index))
     .replaceAll(INDEX_TOKEN, String(clone.index));
+  // From the builder rather than from whatever the source clone had, so a sync REPAIRS a
+  // workspace file that was copied between clones instead of propagating one clone's identity.
+  for (const [key, value] of Object.entries(workspaceCloneValues(clone))) {
+    text = text.replaceAll(cloneValueToken(key), value);
+  }
+  return text;
 };
 
 /**

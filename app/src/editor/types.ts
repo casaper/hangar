@@ -57,9 +57,10 @@ export type EditorCapabilities = {
  * One file (or one set of byte-identical copies of it) that `<kind> sync` keeps in step.
  *
  * Named `EditorArtifact` rather than `VscodeArtifact` now that JetBrains uses the same record:
- * the engine in `commands/vscode.ts` is generic, and the only thing that differs between the two
- * editors is whether `rootKeys` is empty -- which makes `templatize`/`render` an identity
- * transform, so the same code path serves both without a branch.
+ * the engine in `commands/vscode.ts` is generic, and what differs between the two editors is
+ * whether `rootKeys` is empty and whether `cloneValues` is set -- with neither,
+ * `templatize`/`render` is an identity transform, so the same code path serves both without a
+ * branch.
  */
 export type EditorArtifact = {
   readonly id: string;
@@ -80,6 +81,15 @@ export type EditorArtifact = {
   readonly rootKeys: Readonly<Record<string, string>>;
   /** Whether the file carries the `"<index>: <id>"` workspace folder label. */
   readonly indexLabel: boolean;
+  /**
+   * Whether the file carries the per-clone settings in `workspaceCloneValues`.
+   *
+   * Those are the clone's name and its hue, so a sync that copied them verbatim would give every
+   * clone the source clone's identity -- which is the whole thing the fleet's colours exist to
+   * prevent. Tokenised by key on the way out and rebuilt from the builder on the way in, so a
+   * sync repairs them rather than spreading one.
+   */
+  readonly cloneValues: boolean;
 };
 
 export type EditorDriver = {
