@@ -33,10 +33,10 @@ real command.
 **A new command needs a new exposure, and the exposure needs a permission rule.**
 `app/src/mcp/tools.ts` is the table; `.claude/modes/ops.settings.json` carries one
 `mcp__hangar__<name>` entry per tool — reports and previews in `allow`, everything that acts in
-`ask`. That second half is not
-optional: operator mode's sessions start in `auto`, where a tool matching no rule is decided by a
-classifier rather than by the user, so a mutating tool with no entry simply runs. `pnpm test` is
-what tells you, and `hangar mcp` names the commands it found no tool for on stderr when it starts.
+`ask`. That second half is not optional: operator mode's sessions start in `auto`, where a tool
+matching no rule is decided by a classifier rather than by the user, so a mutating tool with no
+entry simply runs. `pnpm test` is what tells you, and `hangar mcp` names the commands it found no
+tool for on stderr when it starts.
 
 ## You are not in a clone
 
@@ -60,9 +60,9 @@ pnpm scan                                              # gitleaks over the histo
 ```
 
 `.husky/pre-commit` runs the `scan` pair on what is STAGED, and `hangar dev release` runs every
-one of them plus `commitlint`, where nothing can be skipped — so these are fast feedback rather than the enforcement. Run them
-anyway: `scan:literals` is what keeps this repo from naming one organisation, and a worked example
-added to a doc is the commonest way to trip it.
+one of them plus `commitlint`, where nothing can be skipped — so these are fast feedback rather
+than the enforcement. Run them anyway: `scan:literals` is what keeps this repo from naming one
+organisation, and a worked example added to a doc is the commonest way to trip it.
 
 And, if you touched `config/schema.ts`, one more that nothing runs for you:
 

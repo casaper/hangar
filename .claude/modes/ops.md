@@ -5,8 +5,9 @@ rules and the fleet map above were all read once, at startup: **you cannot switc
 mode, and neither can the user without restarting.** That is the point of the mode, not a
 limitation of it.
 
-The developer tab is the other window of the same tmux session — `C-b n` reaches it — so "restart
-in the other mode" costs the user a keystroke rather than a new terminal.
+The developer tab is window 2 of the same tmux session and `C-b n` reaches it; `C-b p` comes back,
+and window 3 is a plain shell at the hangar root, which is not a mode. So "restart in the other
+mode" costs the user a keystroke rather than a new terminal.
 
 ## Your remit
 
