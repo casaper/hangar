@@ -56,7 +56,8 @@ browser test run — that isolation is the entire reason the fleet exists.
   plans are collected into one archive. Both happen from `SessionEnd` hooks, so it is not something
   to remember.
 - **Two Claude Code modes at the hangar root** — one that drives the CLI, one that changes it,
-  opened together as two tabs of one tmux window by typing `claude`.
+  opened together as tabs of one tmux window by typing `claude`, with a third tab holding a plain
+  shell at the root.
 
 ## What every clone gets
 
@@ -452,18 +453,24 @@ assignments.
 
 ```bash
 cd ~/code/<your hangar>
-claude                          # both modes, two tabs, operator in front
+claude                          # both modes and a shell, operator in front
 ```
 
-That is the whole of it. `claude` at the hangar root opens **one tmux window with two tabs** —
-operator in the first, developer in the second — and attaches your terminal to it. `C-b n` moves
-between them, `C-b d` detaches and leaves both running, and typing `claude` again reattaches.
-Each tab's header says what that session is for, and only the tab you are in carries the words:
+That is the whole of it. `claude` at the hangar root opens **one tmux window with three tabs** —
+operator in the first, developer in the second, and a plain shell at the hangar root in the third —
+and attaches your terminal to it. `C-b n` moves between them, `C-b 3` goes straight to the shell,
+`C-b d` detaches and leaves all of them running, and typing `claude` again reattaches. Each mode
+tab's header says what that session is for, and only the tab you are in carries the words:
 
 ```
- ops · run the fleet   dev
+ ops · run the fleet   dev   shell
 └──── blue ─────────┘
 ```
+
+The shell tab is the odd one out on purpose: it is a window, not a mode. It has no permission
+rules, no badge and no `-m` of its own — it is somewhere to type `hangar list` or `git log` without
+spending a Claude Code turn on it. Typing `claude` **in** that tab does not nest a second client;
+it selects the operator tab and says so.
 
 `claude` reaches this through `.local/bin/claude`, a two-line shim direnv puts on your PATH in the
 hangar root and nowhere else — **inside a clone, `claude` is the ordinary Claude Code binary**. The
@@ -515,10 +522,12 @@ Four things about how a mode works, because they are not obvious:
 - **The window is badged.** The status line is built to show a blue `OPS`, an amber `DEV`, or a red
   `NO MODE` for a session launched as a plain `claude` — which is the tell that a resumed session
   lost its rules. This part is newly added and not yet confirmed by eye; see **Troubleshooting**.
-- **The pair is a singleton.** Never a third tab. A tab whose session you `/exit` simply closes,
-  and the next `claude` recreates it — which is also when arguments can be applied to it. Aimed at
-  a tab that is still running, arguments are refused rather than silently dropped; `--replace`
-  ends that tab's session and asks before it does.
+- **The pair is a singleton.** Never a second operator tab or a second developer one. A tab whose
+  session you `/exit` simply closes, and the next `claude` recreates it — which is also when
+  arguments can be applied to it. Aimed at a tab that is still running, arguments are refused
+  rather than silently dropped; `--replace` ends that tab's session and asks before it does. The
+  shell tab is recreated the same way after an `exit`, and while it is alive the tmux session
+  outlives both mode tabs.
 
 The two sessions live on a tmux socket of their own, `tmux -L hangar-<id>-claude`, so they are
 invisible to a bare `tmux ls` and separate from the clone sessions `hangar open` creates.

@@ -757,13 +757,15 @@ Five more root files are hand-maintained and belong to this package rather than 
   and stopping at the default aborted the whole `.envrc` on a machine that has Homebrew.
 - **`.local/bin/claude` and `bin/hangar-statusline`, plus the five files in `.claude/modes/`** —
   `ops.md`, `dev.md`, a `*.settings.json` beside each, and `statusline.sh`. **`hangar claude` is
-  the one way into either mode** (`src/commands/claude.ts`): it opens both as two tabs of one tmux
-  session on its own socket, and a bare `claude` at the hangar root reaches it through the shim.
-  A mode is `--settings` + `--append-system-prompt-file` + `-n`, read once at startup, and `dev`'s
-  working directory is `app/` so that THIS file is loaded from its first turn. **`statusline.sh`
-  badges the window `OPS` / `DEV` / a red `NO MODE`**, taking the mode from its own argv or from
-  `$HANGAR_MODE` — which `hangar claude` sets per tmux window and nothing else may, since from
-  `.envrc` it would reach every shell in the hangar and make the badge meaningless.
+  the one way into either mode** (`src/commands/claude.ts`): it opens both as tabs of one tmux
+  session on its own socket — with a third tab holding a plain shell at the hangar root, which is
+  not a mode and takes no `-m` — and a bare `claude` at the hangar root reaches it through the
+  shim. A mode is `--settings` + `--append-system-prompt-file` + `-n`, read once at startup, and
+  `dev`'s working directory is `app/` so that THIS file is loaded from its first turn.
+  **`statusline.sh` badges the window `OPS` / `DEV` / a red `NO MODE`**, taking the mode from its
+  own argv or from `$HANGAR_MODE` — which `hangar claude` sets per tmux window and nothing else
+  may, since from `.envrc` it would reach every shell in the hangar and make the badge
+  meaningless.
   **The shim cannot be a shell function in `.envrc.hangar`**: direnv exports an environment diff,
   and a function is not an environment variable — `PATH_add` is what actually reaches the shell.
   **It also cannot be in `bin/`**, and that is the one thing to know before moving it: every

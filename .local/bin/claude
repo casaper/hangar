@@ -1,5 +1,5 @@
 #!/bin/sh
-# A bare `claude` in the hangar root: both hangar-root sessions, in one tmux window.
+# A bare `claude` in the hangar root: both hangar-root sessions and a shell, in one tmux window.
 #
 # This directory exists for one reason -- it is on PATH in the hangar shell and in no other.
 # `.envrc` adds `bin` and this one; every clone's own `.envrc.private` repeats only

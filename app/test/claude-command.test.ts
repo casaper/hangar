@@ -6,8 +6,10 @@ import {
   claudeArgvFor,
   claudeArgvFromProcess,
   claudeHelpWith,
+  isMode,
   resolveClaudeBinary,
   splitClaudeArgv,
+  TAB_WINDOWS,
 } from '../src/commands/claude.ts';
 import { syntheticHangar } from './fixture.ts';
 
@@ -81,6 +83,21 @@ test('-- hands everything after it to claude verbatim, a literal -m included', (
 test('an unknown mode is refused rather than defaulted', () => {
   assert.throws(() => splitClaudeArgv(['-m', 'prod']), /unknown mode "prod"/);
   assert.throws(() => splitClaudeArgv(['-m']), /needs a mode/);
+});
+
+test('the shell tab is a window and not a mode, so -m cannot name it', () => {
+  // The shell tab has no settings file and no remit, so a `-m shell` that parsed would launch a
+  // session with neither -- which looks exactly like a mode until you read its permissions.
+  assert.equal(isMode('shell'), false);
+  assert.throws(() => splitClaudeArgv(['-m', 'shell']), /unknown mode "shell"/);
+});
+
+test('no two tabs claim the same window index', () => {
+  // tmux refuses `new-window -t` on an occupied index, so a collision here is a command that
+  // cannot rebuild its own workspace. The table is derived, which is what makes this a property.
+  const indexes = Object.values(TAB_WINDOWS);
+  assert.equal(new Set(indexes).size, indexes.length, `two tabs share an index: ${indexes.join()}`);
+  assert.ok(indexes.length >= 3, 'the shell tab is missing from the table');
 });
 
 test('hangar’s own flags are consumed and never forwarded', () => {

@@ -11,16 +11,24 @@ import {
 import { applyArtifact } from '../generate/index.ts';
 import type { Hangar } from '../hangar.ts';
 import { MODE_COLOURS } from '../palette.ts';
-import { claudeSocketName, tmuxBinary } from '../tmux.ts';
+import { claudeSocketName, tmuxBinary, tmuxSocketOf } from '../tmux.ts';
 import { confirm, note, ok, step, warn } from '../ui.ts';
 
 /**
- * `hangar claude` -- both hangar-root modes, in one tmux window, as two tabs.
+ * `hangar claude` -- both hangar-root modes and a shell, in one tmux window, as three tabs.
  *
  * A hangar-root session is either driving the fleet or changing the CLI, and which one it is
  * decides its permissions and its remit. This command is the only way into either: it starts a
- * tmux session on its own socket with operator in window 1 and developer in window 2, and
- * attaches the terminal you typed in to it.
+ * tmux session on its own socket with operator in window 1, developer in window 2 and a plain
+ * shell at the hangar root in window 3, and attaches the terminal you typed in to it.
+ *
+ * ## The shell tab is a third WINDOW and not a third MODE
+ *
+ * A mode is the three flags below plus a working directory, and a shell has none of them. So
+ * `Mode` stays a pair, `-m shell` is an error, and `C-b 3` is how that tab is reached. Its
+ * `HANGAR_MODE` is explicitly EMPTY, which is the one that would bite: a window created without
+ * that flag inherits the SESSION's value, and the shell tab is exactly where someone types
+ * `claude` -- so leaving it off would badge a session `OPS` with none of operator's rules.
  *
  * ## A mode is three flags and a working directory, and nothing in a session can change them
  *
@@ -75,6 +83,35 @@ const SPECS: Readonly<Record<Mode, ModeSpec>> = {
 };
 
 export const isMode = (value: string): value is Mode => MODES.includes(value as Mode);
+
+/**
+ * The shell tab: window 3, the hangar root, and whichever shell tmux starts by default.
+ *
+ * Deliberately NOT an entry in `SPECS`, because it is not a mode -- no settings file, no remit,
+ * no `-n`, and no `HANGAR_MODE` (see the header). It is there so the hand-run half of fleet work
+ * -- `hangar list`, `git log`, `pnpm golden` -- has somewhere to live that is not a tool call
+ * inside one of the two sessions.
+ */
+const SHELL_WINDOW = 3;
+const SHELL_NAME = 'shell';
+/** What the tab is for, in the same voice as a mode's purpose. A literal: it has no hue to read. */
+const SHELL_PURPOSE = 'a shell at the root';
+
+/** The column every tab name is reported in. `shell` is the longest of the three. */
+const TAB_COLUMN = 5;
+
+/**
+ * Every tab's window index, DERIVED rather than retyped.
+ *
+ * Exported for the one property worth asserting about it: no two tabs share an index. tmux
+ * refuses `new-window -t` on an occupied one, so a collision here is a command that cannot
+ * rebuild its own workspace. A hand-written copy of this table would pin itself and prove
+ * nothing.
+ */
+export const TAB_WINDOWS: Readonly<Record<string, number>> = {
+  ...Object.fromEntries(MODES.map((mode) => [mode, SPECS[mode].window])),
+  [SHELL_NAME]: SHELL_WINDOW,
+};
 
 // ---------------------------------------------------------------------------------------------
 // The pure half: four builders, each callable without a tmux server or a filesystem.
@@ -337,6 +374,7 @@ const trimmed = (out: string): string[] =>
 type WindowRow = {
   readonly index: number;
   readonly mode: string | undefined;
+  readonly shell: boolean;
   readonly pid: string;
 };
 
@@ -363,8 +401,13 @@ const server = (hangar: Hangar): Server => {
     tmux,
     running: () => tmux(['has-session', '-t', TARGET]).ok,
     /**
-     * Every window, keyed on the mode TAG -- never on the index or the name, both of which a
-     * developer can change from inside tmux without meaning anything by it.
+     * Every window, keyed on its TAG -- never on the index or the name, both of which a developer
+     * can change from inside tmux without meaning anything by it.
+     *
+     * Two tags rather than one that holds `ops | dev | shell`, and that is a migration rather
+     * than a taste: renaming `@hangar_mode` would leave every window of a server that is already
+     * running untagged, and the next run would try `new-window -t` on an index tmux says is
+     * occupied. A second tag beside the first needs no `kill-server`.
      */
     windows: () => {
       const res = tmux([
@@ -372,16 +415,17 @@ const server = (hangar: Hangar): Server => {
         '-t',
         TARGET,
         '-F',
-        ['#{window_index}', '#{@hangar_mode}', '#{pane_pid}'].join(SEP),
+        ['#{window_index}', '#{@hangar_mode}', '#{@hangar_shell}', '#{pane_pid}'].join(SEP),
       ]);
       if (!res.ok) return [];
       return trimmed(res.stdout).flatMap((line) => {
-        const [index, mode, pid] = line.split(SEP);
+        const [index, mode, shell, pid] = line.split(SEP);
         if (index === undefined) return [];
         return [
           {
             index: Number(index),
             mode: mode === undefined || mode === '' ? undefined : mode,
+            shell: shell === 'yes',
             pid: pid ?? '',
           },
         ];
@@ -419,15 +463,18 @@ const tagWindow = (srv: Server, mode: Mode): void => {
 };
 
 /**
- * Both windows present, each tagged with its mode, and only the one being launched gets the
- * caller's arguments.
+ * All three windows present, each tagged, and only the mode being launched gets the caller's
+ * arguments.
  *
- * The other window is created bare when it is missing, because the pair IS the workspace. Each
- * lands at its own fixed index, which is what `renumber-windows off` in the conf protects.
+ * The other windows are created bare when they are missing, because the three of them ARE the
+ * workspace. Each lands at its own fixed index, which is what `renumber-windows off` in the conf
+ * protects.
  *
- * `-e HANGAR_MODE` on every creation and never by inheritance: measured on tmux 3.7c, a window
- * created without it silently picks up the SESSION's value, so the developer tab would carry an
- * `OPS` badge and the status line would be confidently wrong.
+ * `-e HANGAR_MODE` on every MODE creation and never by inheritance: measured on tmux 3.7c, a
+ * window created without it silently picks up the SESSION's value, so the developer tab would
+ * carry an `OPS` badge and the status line would be confidently wrong. The shell window is the
+ * one that gets none, for the same reason read the other way -- it has no mode to declare, and a
+ * value there would be inherited by a `claude` typed in it.
  */
 const ensureSession = (
   hangar: Hangar,
@@ -460,7 +507,41 @@ const ensureSession = (
       );
     }
     tagWindow(srv, mode);
-    ok(`${mode.padEnd(3)} tab   ${MODE_COLOURS[mode].purpose}`);
+    ok(`${mode.padEnd(TAB_COLUMN)} tab   ${MODE_COLOURS[mode].purpose}`);
+  }
+
+  // Last, and after the loop for a reason: operator's is the creation that makes the session, so
+  // the shell is always a `new-window` and never has to know how to be the first one.
+  //
+  // No command, so tmux starts `default-shell` as a login shell -- the developer's own, rather
+  // than one this CLI picked for them. No per-window format either: with no hue to bake in, the
+  // tab falls back to the conf's neutral entry, which says what it is.
+  //
+  // `-e HANGAR_MODE=` is EMPTY and not omitted, and that is measured rather than tidy. Omitting
+  // it inherits the session's value -- the same tmux 3.7c behaviour that makes the mode windows
+  // pass their own, verified here by reading `printenv HANGAR_MODE` out of the pane: a window
+  // created with no `-e` answered `ops`. So the shell tab would have carried operator's badge,
+  // and a `claude` started in it would have worn a mode it does not have. Empty reaches
+  // `statusline.sh`'s `${HANGAR_MODE:-}` as unset does, which is the honest red `NO MODE`.
+  if (!srv.windows().some((w) => w.shell)) {
+    const target = `${TARGET}${String(SHELL_WINDOW)}`;
+    const res = srv.tmux([
+      'new-window',
+      '-d',
+      '-t',
+      target,
+      '-n',
+      SHELL_NAME,
+      '-c',
+      hangar.root,
+      '-e',
+      'HANGAR_MODE=',
+    ]);
+    if (!res.ok) {
+      throw new CliError('tmux would not create the shell tab', (res.stderr || res.stdout).trim());
+    }
+    srv.tmux(['set', '-w', '-t', target, '@hangar_shell', 'yes']);
+    ok(`${SHELL_NAME.padEnd(TAB_COLUMN)} tab   ${SHELL_PURPOSE}`);
   }
 };
 
@@ -508,8 +589,12 @@ const reportPlan = (
   step(`conf         ${hangar.paths.claudeTmuxConf}`);
   for (const mode of MODES) {
     const has = existing.some((w) => w.mode === mode);
-    step(`${mode.padEnd(3)} tab      ${has ? 'already running' : 'would be created'}`);
+    step(`${mode.padEnd(TAB_COLUMN)} tab      ${has ? 'already running' : 'would be created'}`);
   }
+  const hasShell = existing.some((w) => w.shell);
+  step(
+    `${SHELL_NAME.padEnd(TAB_COLUMN)} tab      ${hasShell ? 'already running' : 'would be created'}`,
+  );
   step(`select       ${inv.mode}`);
   if (inv.passthrough.length > 0) {
     step(
@@ -559,6 +644,30 @@ const refuseFromInsideASession = (): void => {
       'would be a way around its own permissions.',
   );
 };
+
+/**
+ * Already inside this session? Then all the work still applies and only the attach must not.
+ *
+ * The shell tab stands at the hangar root with direnv loaded, so `.local/bin/claude` and `hangar`
+ * are both on its PATH -- which makes a run from inside the session the normal case rather than a
+ * mistake. Everything up to `select-window` works from there and is WANTED: a tab that has been
+ * exited is recreated, the bar is re-applied, and selecting a window moves the client that is
+ * already here, which is precisely "switch to that tab". Only `attach` breaks, and it breaks
+ * badly -- it unsets `TMUX` so tmux cannot see the nesting, and `-d` then detaches this terminal
+ * from inside its own pane.
+ *
+ * So this skips one call and refuses nothing. A refusal would have blocked
+ * `hangar claude -m dev --replace` from the shell tab, which is where restarting a wedged tab is
+ * naturally typed, and would leave an exited tab unreachable without detaching first.
+ *
+ * The escalation guard is elsewhere and is unaffected: `refuseFromInsideASession` reads
+ * `CLAUDECODE`, which is independent of `TMUX` and still fires for a Bash tool call from either
+ * mode tab. This branch only ever admits a human at a shell prompt, where there is nothing to
+ * escalate. Exact equality on the socket name, the comparison `currentSession` in `tmux.ts`
+ * already uses, so it never prefix-matches the clone socket.
+ */
+const alreadyInSession = (hangar: Hangar): boolean =>
+  tmuxSocketOf(process.env['TMUX']) === claudeSocketName(hangar.id);
 
 export type ClaudeOptions = { readonly argv: readonly string[] };
 
@@ -626,5 +735,10 @@ export const claude = (hangar: Hangar, opts: ClaudeOptions): void => {
   ensureSession(hangar, srv, inv.mode, binary, claudeArgvFor(hangar, inv.mode, inv.passthrough));
   applyBar(srv);
   srv.tmux(['select-window', '-t', `${TARGET}${String(SPECS[inv.mode].window)}`]);
+
+  if (alreadyInSession(hangar)) {
+    note(`the ${inv.mode} tab is selected -- this client is already attached, C-b d to leave`);
+    return;
+  }
   attach(srv);
 };

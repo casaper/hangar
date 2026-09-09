@@ -7,9 +7,10 @@ import { claudeCodeSettingLines, quoteTmuxValue } from './tmux-conf.ts';
 /**
  * `.hangar/claude-tmux.conf` -- the config the hangar-ROOT session server starts under.
  *
- * `hangar claude` puts both root modes in one tmux session: operator in window 1, developer in
- * window 2. That is a second server on its own socket (`claudeSocketName`), and `src/tmux.ts`
- * says why -- every session on the clone socket is expected to name a clone.
+ * `hangar claude` puts both root modes in one tmux session, with a plain shell beside them:
+ * operator in window 1, developer in window 2, the shell in window 3. That is a second server on
+ * its own socket (`claudeSocketName`), and `src/tmux.ts` says why -- every session on the clone
+ * socket is expected to name a clone.
  *
  * ## Why this one is not written by `colours sync`
  *
@@ -32,19 +33,22 @@ import { claudeCodeSettingLines, quoteTmuxValue } from './tmux-conf.ts';
  *
  * tmux reserves `status-left-length` and `status-right-length` first and gives the window list
  * whatever remains. So `status-left` is empty with a length of 0: the whole width goes to the
- * tabs, which is where the text saying what each session is FOR lives. Measured on tmux 3.7c,
- * with the formats below:
+ * tabs, which is where the text saying what each session is FOR lives. Measured on tmux 3.7c
+ * with the formats below, reading `#{E:status-format[0]}` back off a live server and counting the
+ * list alone -- the truncation markers are not part of it, the separators between entries are:
  *
- *   operator current    ` ops · run the fleet  dev `           26 columns
- *   developer current   ` ops  dev · change the CLI `          27 columns
+ *   operator current    ` ops · run the fleet  dev  shell `    35 columns
+ *   developer current   ` ops  dev · change the CLI  shell `   36 columns
+ *   shell current       ` ops  dev  shell `                    19 columns
  *
- * and the list is given `columns - 3`, so the worst case fits exactly at a 30-column terminal.
+ * and the list is given `columns - 3`, so the worst case fits exactly at a 39-column terminal.
  * `status` is `on` (one line) and not `2`; tmux truncates a status line rather than wrapping it,
  * so the requirement that it never becomes two lines is a property of that one setting.
  *
  * The per-window `window-status-current-format` carrying the mode's hue is set at RUNTIME, not
  * here: it differs per window, and this file is read once for the whole server. The neutral
- * defaults below are what a server attached to by hand falls back to.
+ * defaults below are what a server attached to by hand falls back to -- and what the shell tab
+ * uses on purpose, since it is not a mode and has no hue of its own.
  */
 
 /** A global session option: renderable into the conf, and writable onto a live server. */
@@ -64,7 +68,7 @@ export const BAR_OPTIONS: readonly BarOption[] = [
   // Empty, with a length of 0, so the tab list gets the entire width. See the header.
   { name: 'status-left', value: '' },
   { name: 'status-left-length', value: '0' },
-  // Zero-width until C-b is pressed, and 3 is what the widest tab pair leaves room for at 30
+  // Zero-width until C-b is pressed, and 3 is what the widest tab row leaves room for at 39
   // columns. The prefix indicator is the one thing worth spending the right-hand side on.
   { name: 'status-right', value: '#{?client_prefix,^B ,}' },
   { name: 'status-right-length', value: '3' },
@@ -105,19 +109,20 @@ export const claudeTmuxConfArtifact = (hangar: Hangar): Artifact => {
       ),
       '',
       '# ---- Claude Code inside tmux ------------------------------------------------------',
-      '# The same four settings the clone server gets, and for the same reason: both windows',
-      '# here run Claude Code. Two of them are SERVER options, which is why this is a server',
-      "# of its own rather than a session on somebody else's.",
+      '# The same four settings the clone server gets, and for the same reason: two of the three',
+      '# windows here run Claude Code. Two of the settings are SERVER options, which is why this',
+      "# is a server of its own rather than a session on somebody else's.",
       ...claudeCodeSettingLines(),
       '',
       '# ---- whose sessions these are -----------------------------------------------------',
       `set -g @hangar_id ${hangar.id}`,
       '',
-      '# ---- the two windows --------------------------------------------------------------',
-      '# `renumber-windows off` is the one that matters: operator is window 1 and developer is',
-      '# window 2, and closing one must not renumber the other. With it on, exiting operator',
-      '# would move developer to index 1 and the next run would recreate operator at 2 -- the',
-      '# tabs would swap places for no reason the developer could see.',
+      '# ---- the three windows ------------------------------------------------------------',
+      '# `renumber-windows off` is the one that matters: operator is window 1, developer is 2 and',
+      '# the shell is 3, and closing one must not renumber the others. With it on, exiting',
+      '# operator would move developer to index 1 and the next run would recreate operator at 2',
+      '# -- the tabs would swap places for no reason the developer could see. The shell is the',
+      '# window this happens to most, since `exit` there is reflex.',
       'set -g  base-index 1',
       'set -gw pane-base-index 1',
       'set -g  renumber-windows off',

@@ -322,7 +322,7 @@ program
   });
 
 /*
- * `hangar claude` -- both hangar-root modes, two tabs of one tmux window.
+ * `hangar claude` -- both hangar-root modes and a shell, three tabs of one tmux window.
  *
  * Registered unlike every other command here, and each departure is forced by what the command
  * IS: a wrapper whose arguments belong to another program.
@@ -341,13 +341,13 @@ program
  */
 program
   .command('claude')
-  .summary('Open both hangar-root Claude sessions in one tmux window')
+  .summary('Open both hangar-root Claude sessions, and a shell, in one tmux window')
   .description(
     [
-      'Start the two sessions a hangar root has — operator, which drives the fleet, and developer, which changes the CLI — as two tabs of one tmux window, and attach this terminal to them. The operator tab is selected; `-m dev` selects the other. Each tab says in the header what it is for.',
+      'Start the two sessions a hangar root has — operator, which drives the fleet, and developer, which changes the CLI — as two tabs of one tmux window, with a third tab holding a plain shell at the hangar root, and attach this terminal to them. The operator tab is selected; `-m dev` selects the other, and `C-b 3` reaches the shell. Each mode tab says in the header what it is for.',
       'Every other argument is passed straight through to `claude`, so `hangar claude --resume <id> -m ops` resumes that session back into operator mode, with its permissions and its remit in force. A bare `claude --resume` of the same session comes back in no mode at all.',
-      'The pair is a singleton: one operator tab and one developer tab, on a tmux socket of their own so a bare `tmux -L hangar-<id> ls` still lists exactly the clones. A tab whose claude has exited is simply gone and is recreated by the next run — which is when passed-through arguments can be honoured. `--replace` is for when it cannot: it ends the claude in that tab, and asks first.',
-      'From the hangar root, a bare `claude` reaches this command. Inside a clone it does not, and neither does this: a clone shell gets the real binary.',
+      'The pair is a singleton: one operator tab and one developer tab, on a tmux socket of their own so a bare `tmux -L hangar-<id> ls` still lists exactly the clones. A tab whose claude has exited is simply gone and is recreated by the next run — which is when passed-through arguments can be honoured. `--replace` is for when it cannot: it ends the claude in that tab, and asks first. The shell tab is not a mode: it takes no `-m`, carries no permission rules, and is recreated the same way after an `exit`.',
+      'From the hangar root, a bare `claude` reaches this command. Inside a clone it does not, and neither does this: a clone shell gets the real binary. Run from the shell tab, where `claude` is also on PATH, it does everything but re-attach — the client is already here, so it selects the tab and says so.',
     ].join('\n\n'),
   )
   .allowUnknownOption()

@@ -30,8 +30,9 @@ Global: `--hangar <path>` (the hangar root to operate on; **only `config show` a
 | `claude` | `[claude-args...]` (passed through untouched) | `-m, --mode <ops\|dev>` (default `ops`) · `--replace` · `--yes` · `--dry-run` | **DENIED to you** — see below |
 
 **`claude` is the one command in this table you cannot run**, and the denial is deliberate rather
-than an oversight in the permission list. It opens the two hangar-root sessions as two tabs of one
-tmux window, and it passes every other argument straight through — so `hangar claude -m dev -p '…'`
+than an oversight in the permission list. It opens the two hangar-root sessions as tabs of one
+tmux window — plus a third tab that is only a shell — and it passes every other argument straight
+through, so `hangar claude -m dev -p '…'`
 would start a session under developer mode's rules, with the writes to `app/**` that this mode is
 denied. `ops.settings.json` denies both `Bash(hangar claude)` and `Bash(hangar claude:*)`, and the
 command refuses a second time on its own when `$CLAUDECODE` is set, so it will not run from here

@@ -6,6 +6,11 @@ developer in window 2 of one session, on a socket of its own, and attaches the t
 typed in. `-m dev` selects the other tab. From the hangar root a bare `claude` reaches it, through
 `.local/bin/claude`.
 
+**Window 3 is a plain shell at the hangar root, and it is a window rather than a third mode.** A
+mode is a composed launch profile; a shell has none of its parts, so `Mode` stays a pair, `-m
+shell` is an error, and `C-b 3` is how the tab is reached. The section below on the shell tab has
+the three reasons it is not in `MODE_COLOURS` and the one thing that would have bitten.
+
 `src/commands/claude.ts` is the command and `.claude/modes/` holds the four files it names, plus
 `statusline.sh`.
 
@@ -106,7 +111,7 @@ tmux window command names claude by absolute path for the same reason, which is 
 change to it — and until it is run the hangar shell has no `hangar` either, because `PATH_add bin`
 is in the same file.
 
-## One session, two windows, and a socket of its own
+## One session, three windows, and a socket of its own
 
 `tmux -L hangar-<id>-claude`, not a session on the clone socket. Every session on that one is
 expected to name a clone: `staleSessions` walks it for sessions whose `@hangar_clone` matches no
@@ -128,26 +133,82 @@ global *session* option rather than a server option.
 closed by tmux, so a tab whose claude you `/exit` is simply gone and the next run recreates it —
 which is also the moment passed-through arguments have somewhere to go. `renumber-windows off`
 is what keeps operator at index 1 when developer's window closes; with it on, the tabs would swap
-places for no reason a reader could see. Arguments aimed at a tab that is still live cannot be
-honoured at all, so they refuse rather than attach to a session the caller did not name;
-`--replace` reaches that cell by ending the tab's claude and asks first through `confirm`, which
-fails closed with no terminal. And attaching uses `-d`, because two clients on one session mirror
-each other's window selection — switching tabs in one moves the other, which reads as the bar
-changing by itself.
+places for no reason a reader could see. The shell is the window this matters most for, since
+`exit` there is reflex — and it is why the session outlives both mode tabs: tmux ends a session
+with no windows, and a live shell is a window. Arguments aimed at a tab that is still
+live cannot be honoured at all, so they refuse rather than attach to a session the caller did not
+name; `--replace` reaches that cell by ending the tab's claude and asks first through `confirm`,
+which fails closed with no terminal. And attaching uses `-d`, because two clients on one session
+mirror each other's window selection — switching tabs in one moves the other, which reads as the
+bar changing by itself.
+
+## The shell tab, and why running the command from inside it is normal
+
+Window 3 is an interactive shell at the hangar root, created with no command at all so tmux starts
+`default-shell` as a login shell — the developer's own, rather than one this CLI picked. It exists
+because the hand-run half of fleet work (`hangar list`, `git log`, `pnpm golden`) otherwise has
+nowhere to live but a tool call inside one of the two sessions.
+
+**Three reasons it is a window and not a third entry in `MODE_COLOURS`,** and the third is the one
+that would actually have bitten:
+
+- A mode is `--settings` + `--append-system-prompt-file` + `-n` in that order, with a test on
+  `claudeArgvFor` pinning the ordering. A shell has none of the three, so widening the type buys a
+  case with no meaning.
+- `MODE_COLOURS` is a hand-maintained duplicate of `statusline.sh`'s two triples under an explicit
+  "change one, change both" rule. A third triple there is one nothing renders and everybody has to
+  maintain.
+- **`HANGAR_MODE` there has to be blanked, not omitted.** Measured on tmux 3.7c by reading
+  `printenv HANGAR_MODE` out of the pane: a window created with no `-e` answered `ops`, the
+  session's value — the same inheritance that makes the mode windows pass `-e` individually, read
+  the other way round. Omitting the flag would therefore have put operator's badge on a shell
+  carrying none of operator's rules, in the one tab where somebody types `claude`. So the window
+  is created with `-e HANGAR_MODE=`, and an empty value reaches `statusline.sh`'s
+  `${HANGAR_MODE:-}` exactly as an unset one does: the honest red `NO MODE`. A third entry in
+  `MODE_COLOURS` would have made that badge a confident lie instead.
+
+It is tagged `@hangar_shell` rather than being folded into `@hangar_mode`, and that is a migration
+question rather than a taste one: renaming the existing tag would leave every window of a server
+that is already running untagged, and the next run would try `new-window -t` on an index tmux
+reports as occupied. A second tag beside the first needs no `kill-server`.
+
+**The attach is SKIPPED from inside the session, and skipping is not refusing.** That tab has
+`.local/bin` and `bin` on its PATH — direnv put them there — so `claude` and `hangar` both reach
+this command from inside the session they would attach to, and that is the normal case rather than
+a mistake. Everything up to `select-window` works from there and is wanted: an exited tab is
+recreated, the bar is re-applied, and selecting a window moves the client that is already present,
+which IS "switch to that tab". Only `attach` breaks — it unsets `TMUX` so tmux cannot see the
+nesting, and `-d` then detaches this terminal from inside its own pane. So one call is skipped and
+a `note` says which tab was selected.
+
+**Do not turn that into a fourth refusal.** It would block `hangar claude -m dev --replace` typed
+in the shell tab, which is where restarting a wedged developer tab is naturally typed, and would
+leave an exited tab unreachable without `C-b d` out to the outer terminal first. The escalation
+guard is elsewhere and is untouched by this: `$CLAUDECODE` is independent of `$TMUX` and still
+fires for a Bash tool call from either mode tab, so the `$TMUX` branch only ever admits a human at
+a shell prompt, where there is nothing to escalate.
 
 ## The header, and the width budget that shapes it
 
 tmux reserves `status-left-length` and `status-right-length` first and gives the window list
 whatever remains. So `status-left` is empty with a length of 0: the whole width goes to the tabs,
 which is where the text saying what each session is FOR lives. Only the CURRENT tab carries that
-text, on a block of its mode's hue; the other shows its bare name. Measured on tmux 3.7c:
+text, on a block of its mode's hue; the others show their bare names, and the shell tab never
+carries any. Measured on tmux 3.7c by reading `#{E:status-format[0]}` back off a live server and
+counting the window list alone — the truncation markers are not part of it, the separators
+between entries are:
 
-    operator current    ` ops · run the fleet  dev `        26 columns
-    developer current   ` ops  dev · change the CLI `        27 columns
+    operator current    ` ops · run the fleet  dev  shell `     35 columns
+    developer current   ` ops  dev · change the CLI  shell `    36 columns
+    shell current       ` ops  dev  shell `                     19 columns
 
-against `columns - 3` given to the list, so the worst case fits exactly at a 30-column terminal.
+against `columns - 3` given to the list, so the worst case fits exactly at a 39-column terminal.
 `status` is `on` and not `2`, which is what keeps it one line — tmux truncates a status line
 rather than wrapping it, so "never two lines" is a property of that one setting.
+
+**Measure it, do not compute it.** The separator tmux puts between entries is easy to leave out of
+a hand count and is a column per gap, which is the whole of the difference between the arithmetic
+and the figures above.
 
 The hue is baked into each window's own `window-status-current-format` rather than read from a
 user option inside the `#[…]` style spec: a per-window format with the value already in it is what
@@ -178,6 +239,10 @@ A third refusal is about intent rather than privilege: `hangar claude` stops whe
 directory is inside a clone, because `hangar` itself is on a clone's PATH by design. A dry run
 runs ahead of all three, because it creates nothing and attaches nothing, so none of them has
 anything to protect.
+
+**There is deliberately no fourth**, and the shell tab is where somebody will be tempted to add
+one — see the section on it. Being inside this hangar's own tmux is not a privilege question:
+`$CLAUDECODE` catches the case that is, whether or not `$TMUX` is set.
 
 ## Which mode you are in shows in the status line
 
