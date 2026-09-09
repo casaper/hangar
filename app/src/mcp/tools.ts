@@ -43,13 +43,32 @@ export type Exposure = {
   readonly fixed?: readonly string[];
   /** Long flags this exposure refuses to offer, on top of `fixed`. */
   readonly hides?: readonly string[];
+  /**
+   * A `.hideHelp()` option this exposure offers anyway.
+   *
+   * Hidden means rare, not dangerous, and the two are worth telling apart: `add-clone --remote`
+   * clones from a different URL, which is a real thing to want and simply not worth a line in
+   * `--help`. Naming it per exposure keeps the default -- hidden is not promised -- while letting
+   * one be promised on purpose.
+   */
+  readonly shows?: readonly string[];
   /** `false` puts it in operator mode's `allow` list; `true` puts it in `ask`. */
   readonly acts: boolean;
   /** Prepended to the registry's own text when the fixed flags change what the command means. */
   readonly lede?: string;
 };
 
-/** Options every exposure hides: they exist for hooks and for the status bar, not for a caller. */
+/**
+ * Offered by no exposure, whichever command carries it.
+ *
+ * `--quiet` exists so a `SessionEnd` hook and the status bar's own detached spawn can say nothing
+ * unless something needs a human. A caller reading the result has the opposite need, and a tool
+ * that could be told to return nothing is one whose silence means two different things.
+ *
+ * A `.hideHelp()` option is dropped too, by `optionIsOffered` rather than by name --
+ * `add-clone --remote` is the only one, and an option kept out of `--help` is not promised to an
+ * operator, so it is not promised to a tool either.
+ */
 const ALWAYS_HIDDEN: readonly string[] = ['--quiet'];
 
 const PREVIEW = '--dry-run';
@@ -89,12 +108,18 @@ const ideExposures: readonly Exposure[] = IDE_KINDS.flatMap((kind) => [
 export const EXPOSURES: readonly Exposure[] = [
   // ---- reports ----------------------------------------------------------------------------
   { name: 'list', path: ['list'], acts: false },
+  /*
+   * `--json` is a PARAMETER and not fixed, and that was a correction. Fixing it looked like a
+   * kindness to a machine reader, but the JSON path returns early: it carries the raw `drift`
+   * array and skips the human form's closing sentence, which is the half that says a repaired
+   * `.env.local` does nothing until `direnv allow` is re-run in that clone. Losing a diagnostic
+   * to make the output tidier is the wrong trade, so the default is what a person sees.
+   */
   {
     name: 'ports',
     path: ['ports'],
-    fixed: ['--json'],
     acts: false,
-    lede: 'Machine-readable: the same map `hangar ports` prints, as JSON.',
+    lede: 'Pass `json: true` for the same map as data — at the cost of the repair guidance.',
   },
   { name: 'status', path: ['status'], acts: false },
   {
@@ -115,13 +140,28 @@ export const EXPOSURES: readonly Exposure[] = [
     acts: false,
     lede: 'Reports whether the tracked `hangar.schema.json` is current. Writes nothing.',
   },
+  /*
+   * `colours sync` is the one command whose two read-only forms answer different questions, so it
+   * gets two tools rather than one. `--check` is a GATE -- non-zero when an artifact is stale --
+   * and `-n` is the REPORT that says which one and what would change in it. `app/CLAUDE.md` names
+   * the dry run as the only staleness check there is for the two gitignored shell helpers, so
+   * leaving it unreachable would have taken away the thing that check is for.
+   */
   {
     name: 'colours_check',
     path: ['colours', 'sync'],
     fixed: ['--check'],
     hides: [PREVIEW],
     acts: false,
-    lede: 'Reports whether the generated colour artifacts are current. Writes nothing.',
+    lede: 'Exits non-zero if any generated colour artifact is out of date. Writes nothing.',
+  },
+  {
+    name: 'colours_sync_preview',
+    path: ['colours', 'sync'],
+    fixed: [PREVIEW],
+    hides: ['--check'],
+    acts: false,
+    lede: previewLede,
   },
   {
     name: 'resume_list',
@@ -129,7 +169,21 @@ export const EXPOSURES: readonly Exposure[] = [
     acts: false,
     lede: "Lists a clone's sessions. With no terminal there is no picker, so this only reports.",
   },
+  /*
+   * `pr refresh` writes a cache file, and `hangar-ops` calls it an act for that reason -- but it
+   * is pre-approved here, and the two are not in conflict. The clone bar spawns this itself,
+   * detached, every time a record passes `forge.prCacheTtlSeconds`; asking a human to approve
+   * what already happens unattended twenty times a minute would be theatre. What it writes is a
+   * cache the next redraw would rewrite anyway.
+   */
   { name: 'pr_refresh', path: ['pr', 'refresh'], hides: [PREVIEW], acts: false },
+  {
+    name: 'pr_refresh_preview',
+    path: ['pr', 'refresh'],
+    fixed: [PREVIEW],
+    acts: false,
+    lede: 'Says which clones would be asked and why the rest are being skipped. Asks nothing.',
+  },
   {
     name: 'browse_preview',
     path: ['browse'],
@@ -179,6 +233,7 @@ export const EXPOSURES: readonly Exposure[] = [
     acts: false,
     lede: previewLede,
   },
+  { name: 'setup_preview', path: ['setup'], fixed: [PREVIEW], acts: false, lede: previewLede },
 
   // ---- acts -------------------------------------------------------------------------------
   { name: 'sync', path: ['sync'], hides: [PREVIEW], acts: true },
@@ -187,7 +242,7 @@ export const EXPOSURES: readonly Exposure[] = [
   { name: 'close', path: ['close'], hides: [PREVIEW], acts: true },
   { name: 'reload', path: ['reload'], hides: [PREVIEW], acts: true },
   { name: 'install', path: ['install'], hides: [PREVIEW], acts: true },
-  { name: 'add_clone', path: ['add-clone'], acts: true },
+  { name: 'add_clone', path: ['add-clone'], shows: ['--remote'], acts: true },
   { name: 'remove_clone', path: ['remove-clone'], acts: true },
   { name: 'colours_change', path: ['colours', 'change'], acts: true },
   { name: 'colours_sync', path: ['colours', 'sync'], hides: [PREVIEW, '--check'], acts: true },
@@ -203,6 +258,13 @@ export const EXPOSURES: readonly Exposure[] = [
   { name: 'plans_stamp', path: ['plans', 'stamp'], hides: [PREVIEW], acts: true },
   { name: 'teach_rg', path: ['teach-rg'], hides: [PREVIEW], acts: true },
   { name: 'browse', path: ['browse'], hides: [PREVIEW], acts: true },
+  /*
+   * `setup` is exposed rather than left out, and that CLOSES a gap rather than opening one.
+   * `modes.md` records it as escalation-adjacent and unlisted: operator mode denies
+   * `Bash(hangar claude)` and `Bash(hangar dev)` but has never named `hangar setup`, so
+   * `setup --force` sits behind one generic prompt today. As a tool it has a rule of its own.
+   */
+  { name: 'setup', path: ['setup'], hides: [PREVIEW], acts: true },
   {
     name: 'config_schema_write',
     path: ['config', 'schema'],
@@ -243,7 +305,8 @@ const isFlag = (option: Option): boolean => !option.required && !option.optional
 
 const optionIsOffered = (option: Option, exposure: Exposure): boolean => {
   const long = option.long;
-  if (long === undefined || option.hidden) return false;
+  if (long === undefined) return false;
+  if (option.hidden && exposure.shows?.includes(long) !== true) return false;
   if (ALWAYS_HIDDEN.includes(long)) return false;
   if (exposure.fixed?.includes(long) === true) return false;
   return exposure.hides?.includes(long) !== true;
@@ -384,15 +447,31 @@ export const argvFor = (
 };
 
 /**
- * Leaf commands with no tool, on purpose. `EXPOSURES`' header says why each of the five is absent;
- * `mcp` is the sixth and is simply this server, which has no business calling itself.
+ * Leaf commands with no tool, and the reason each one earns its place here.
+ *
+ * The bar is high: everything else in this CLI is a tool, `setup` included -- exposed precisely
+ * BECAUSE it was escalation-adjacent and unnamed. These four are not omissions.
+ *
+ * - **`claude`** refuses whenever `$CLAUDECODE` is set, which is every tool call there will ever
+ *   be, so the tool could only ever fail -- and it is the escalation boundary the mode pair
+ *   exists for. A tool that cannot work, on the one command that must not, is worse than none.
+ * - **`dev release`** pushes to origin and cuts a version. Its confirmation reads `/dev/tty` and
+ *   fails closed, so the ONLY way it completes as a tool call is with `-y`, which means exposing
+ *   it is exposing the dangerous form of it. It stays a thing a person types.
+ * - **`dev golden`** writes a capture to `-o <dir>`, and the gate is `pnpm golden`, a script that
+ *   runs the binary once per fixture and normalises the result. One call is a PARTIAL capture
+ *   that would read as the gate without being it -- and aimed at `dev/golden/gated` it would
+ *   half-overwrite the tracked baseline.
+ * - **`jira hook`** reads a `PreToolUse` payload from stdin and fails open when there is none, so
+ *   a tool call reaches it with nothing to do and it correctly says nothing.
+ *
+ * `mcp` is the fifth and is this server, which has no business calling itself.
  */
 export const NOT_EXPOSED: readonly string[] = [
   'claude',
   'dev golden',
   'dev release',
   'jira hook',
-  'setup',
   'mcp',
 ];
 
