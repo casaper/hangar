@@ -25,7 +25,12 @@ export const linuxPlatform = (): PlatformDriver => {
   return {
     id: 'linux',
     label: 'Linux',
-    capabilities: { openExternally: true, openApplicationByName: false, vscodeWindowState: true },
+    capabilities: {
+      openExternally: true,
+      openApplicationByName: false,
+      vscodeWindowState: true,
+      controlAppWindows: false,
+    },
     machineConfigDir,
     vscodeWindowState: (stateDir) =>
       join(machineConfigDir, stateDir, 'User', 'globalStorage', 'storage.json'),
@@ -35,6 +40,14 @@ export const linuxPlatform = (): PlatformDriver => {
     // False for the same reason `openApplicationByName` is: with no lookup from a display name
     // to a desktop entry, there is nothing to ask.
     applicationExists: () => false,
+    /*
+     * Not approximated, because there is nothing here to approximate. Wayland exposes no
+     * cross-application window control at all -- that is a design decision of the protocol, not
+     * a gap -- and the X11 tools that could (`wmctrl`, `xdotool`) are neither installed by
+     * default nor useful under the compositor most desktops now run. A caller gets
+     * `unsupported`, which reads as the fact it is rather than as a failure to try.
+     */
+    closeAppWindow: () => ({ kind: 'unsupported' }),
     installHint: (pkg) =>
       `your package manager, e.g. \`apt install ${pkg}\`, \`dnf install ${pkg}\` or \`pacman -S ${pkg}\``,
   };

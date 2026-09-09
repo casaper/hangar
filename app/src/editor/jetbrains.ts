@@ -143,6 +143,7 @@ export const jetbrainsDriver = (
     syncArtifacts: true,
     // `$PROJECT_DIR$` -- nothing clone-specific to rewrite.
     rewritesRootPaths: false,
+    closeWindow: false,
   },
   /*
    * Exactly the two routes `launchJetbrains` has, in the same order and behind the same guard.

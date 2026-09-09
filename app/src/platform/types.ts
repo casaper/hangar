@@ -41,7 +41,39 @@ export type PlatformCapabilities = {
   readonly openApplicationByName: boolean;
   /** Locate a VS Code-family editor's window-state file. */
   readonly vscodeWindowState: boolean;
+  /**
+   * Reach into another application's windows -- close one, by title.
+   *
+   * macOS alone, through System Events' accessibility interface, and **the one capability whose
+   * presence is not the same as its working**: it also needs Accessibility permission for the
+   * terminal `hangar` runs from, which a person grants by hand in System Settings and which no
+   * command can grant for them. So it reports `denied` as its own outcome rather than folding
+   * that into a failure -- there is a fix, and it belongs in the message.
+   *
+   * Linux has no equivalent worth pretending to. Wayland exposes no cross-application window
+   * control by design, and the X11 route (`wmctrl`, `xdotool`) is neither installed by default
+   * nor available under the compositor most desktops now run.
+   */
+  readonly controlAppWindows: boolean;
 };
+
+/**
+ * What came of asking another application to close one of its windows.
+ *
+ * A union rather than a boolean because every arm here has a different thing to tell the
+ * developer, and a caller that collapses them prints "could not close the window" for a
+ * permission they can grant in ten seconds.
+ */
+export type AppWindowOutcome =
+  | { readonly kind: 'closed' }
+  /** The application is running and has no window whose title matches. */
+  | { readonly kind: 'no-window' }
+  | { readonly kind: 'not-running' }
+  /** Accessibility permission is not granted. `hint` says what to allow, and where. */
+  | { readonly kind: 'denied'; readonly hint: string }
+  /** This platform cannot do it at all -- see `controlAppWindows`. */
+  | { readonly kind: 'unsupported' }
+  | { readonly kind: 'failed'; readonly why: string };
 
 export type PlatformDriver = {
   readonly id: PlatformId;
@@ -88,6 +120,21 @@ export type PlatformDriver = {
    * to check gets a refusal rather than an exception.
    */
   readonly applicationExists: (app: string) => boolean;
+  /**
+   * Close the window of `app` whose title contains `titleContains`.
+   *
+   * Matched on the TITLE because that is the only handle another application's windows offer
+   * from outside, and it is a usable one here: the generated `*.code-workspace` puts the clone's
+   * name at the front of `window.title`, so the clone IS the title's first field.
+   *
+   * Every window that matches is closed, not just the first -- two windows on one clone is a
+   * state `open` works to prevent but cannot rule out, and closing one of them would leave the
+   * command reporting success while the clone is still open.
+   *
+   * Returns an outcome rather than a boolean, and returns `unsupported` rather than throwing
+   * when the capability is false, so a caller that forgot to check gets a refusal it can print.
+   */
+  readonly closeAppWindow: (app: string, titleContains: string) => AppWindowOutcome;
   /**
    * How to tell someone to install `pkg`, as one line.
    *

@@ -77,6 +77,7 @@ export const emacsDriver = (): EditorDriver => ({
     focusExisting: false,
     syncArtifacts: true,
     rewritesRootPaths: false,
+    closeWindow: false,
   },
   isAvailable: () =>
     run('sh', ['-c', 'command -v emacsclient >/dev/null 2>&1 || command -v emacs >/dev/null 2>&1'])

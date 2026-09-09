@@ -11,7 +11,7 @@ fleet-bin-path     PATH_add "%HANGAR%/bin"
 colour-assignments %HANGAR%/.hangar/colour-assignments.json
 memory-dir         %HOME%/.claude/wt-memory
 platform           darwin — %HOME%/Library/Application Support
-platform-caps      openExternally=true openApplicationByName=true vscodeWindowState=true
+platform-caps      openExternally=true openApplicationByName=true vscodeWindowState=true controlAppWindows=true
 vscode-state       %HOME%/Library/Application Support/Code/User/globalStorage/storage.json
 tmux-socket        hangar-wt
 tmux-conf          %HANGAR%/clone-tmux.conf

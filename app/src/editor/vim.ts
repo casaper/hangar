@@ -68,6 +68,7 @@ export const vimDriver = (commandOverride?: string): EditorDriver => {
       focusExisting: false,
       syncArtifacts: false,
       rewritesRootPaths: false,
+      closeWindow: false,
       // Only when there is no GUI vim: a GUI window is the better answer when it exists.
       inTerminalTab: gui === undefined && term !== undefined,
     },

@@ -59,6 +59,7 @@ export const zedDriver = (): EditorDriver => ({
     focusExisting: false,
     syncArtifacts: true,
     rewritesRootPaths: false,
+    closeWindow: false,
   },
   isAvailable: () => run('sh', ['-c', 'command -v zed >/dev/null 2>&1']).ok,
   unavailableHint: () =>

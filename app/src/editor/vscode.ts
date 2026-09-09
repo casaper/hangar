@@ -467,7 +467,7 @@ export const vscodeDriver = (
   fork: VscodeFork = 'vscode',
   rootPathKeys: Readonly<Record<string, string>> = {},
 ): EditorDriver => {
-  const { binary, label, stateDir } = VSCODE_FAMILY[fork];
+  const { binary, label, stateDir, app } = VSCODE_FAMILY[fork];
   return {
     kind: fork,
     label,
@@ -476,11 +476,25 @@ export const vscodeDriver = (
       focusExisting: true,
       syncArtifacts: true,
       rewritesRootPaths: true,
+      closeWindow: platform().capabilities.controlAppWindows,
     },
     isAvailable: () => run('sh', ['-c', `command -v ${binary} >/dev/null 2>&1`]).ok,
     unavailableHint: () =>
       `the \`${binary}\` command is not on PATH — in ${label}, run “Shell Command: Install '${binary}' command in PATH”.`,
     launch: (clone) => launchVscode(binary, label, stateDir, clone),
+    /*
+     * By the clone's NAME, because the generated workspace file puts it at the front of
+     * `window.title` -- so a window can be named from outside without asking the editor
+     * anything. The window-state file could name the workspace path instead, and does not help:
+     * it says which workspace a window HAS, not what that window is CALLED, and System Events
+     * only offers the title.
+     *
+     * The cost of that is worth stating: a clone whose workspace file predates the generated
+     * `window.title` has whatever title the developer's own setting produces, and this returns
+     * `no-window` for it. `doctor --fix` is what puts the title in place, and `no-window` is a
+     * named outcome rather than a silent miss precisely so that case reads as itself.
+     */
+    closeWindow: (clone) => platform().closeAppWindow(app, clone.name),
     artifacts: vscodeArtifacts(rootPathKeys),
   };
 };

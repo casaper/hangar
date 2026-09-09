@@ -1,4 +1,5 @@
 import type { Clone } from '../fleet.ts';
+import type { AppWindowOutcome } from '../platform/index.ts';
 import type { EditorKind } from './kinds.ts';
 
 /**
@@ -51,6 +52,25 @@ export type EditorCapabilities = {
    * keeps it beside the clone's configured roles.
    */
   readonly inTerminalTab?: boolean | undefined;
+  /**
+   * Close the window this clone is open in, from outside the editor.
+   *
+   * True only for the VS Code family, and only because two things happen to line up: the
+   * generated `*.code-workspace` puts the clone's name at the front of `window.title`, so a
+   * window can be NAMED from outside, and `platform.closeAppWindow` can press that window's own
+   * close button. Both halves are needed, which is why this is a capability rather than a method
+   * every driver has to answer for.
+   *
+   * **There is deliberately no `reloadWindow` beside it**, and that is measured rather than
+   * unfinished. `workbench.action.reloadWindow` is registered with
+   * `keybinding:{weight:250,when:isDevelopment,primary:Cmd+R}` in the shipped bundle -- the
+   * when-clause means a release build has NO default keybinding for it -- so the only route left
+   * is typing into the command palette, which is a fuzzy text search rather than an interface: a
+   * near-miss runs whichever command the palette ranked first, in the developer's editor. VS Code
+   * applies a workspace settings change live anyway, so `hangar reload` rewrites the artifacts
+   * and names the gesture instead.
+   */
+  readonly closeWindow: boolean;
 };
 
 /**
@@ -106,6 +126,15 @@ export type EditorDriver = {
    * declined -- a missing workspace file, a launcher that failed.
    */
   readonly launch: (clone: Clone) => LaunchResult | undefined;
+  /**
+   * Close the window this clone is open in. Only called when `capabilities.closeWindow`.
+   *
+   * Returns the platform's own outcome unchanged, because every arm of it has something
+   * different to tell the developer -- a permission to grant, a window that was never open, an
+   * editor that is not running -- and a driver flattening that to a boolean would throw away the
+   * only part worth printing.
+   */
+  readonly closeWindow?: ((clone: Clone) => AppWindowOutcome) | undefined;
   /** What `<kind> sync` keeps in step. Empty when `syncArtifacts` is false. */
   readonly artifacts: readonly EditorArtifact[];
   /** The command a terminal-resident editor runs in its tab. Only read when `inTerminalTab`. */

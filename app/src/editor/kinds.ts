@@ -32,18 +32,32 @@ export type EditorKind = VscodeFork | 'jetbrains' | 'zed' | 'emacs' | 'vim' | 'x
  * and the answer is not merely stale, it is about a different application's windows, which is
  * how you get a second window on identical content while believing you avoided one.
  */
+/**
+ * The forks, and the three names each of them needs.
+ *
+ * `binary` is the launcher on PATH, `stateDir` is the directory its window state lives in under
+ * the platform's config dir, and `app` is what macOS calls the running process -- which is the
+ * bundle's `CFBundleName` and so what System Events answers to when a window has to be closed
+ * from outside.
+ *
+ * `app` and `stateDir` are the same string for every row here, and are still two columns: they
+ * answer different questions and nothing guarantees a fork keeps them equal. Only VS Code's is
+ * verified (`CFBundleName` is `Code`, and `ps` reports the process as `Code`); the rest are the
+ * documented application names, like everything else about the forks nobody here has installed.
+ */
 export const VSCODE_FAMILY = {
-  vscode: { binary: 'code', label: 'VS Code', stateDir: 'Code' },
-  cursor: { binary: 'cursor', label: 'Cursor', stateDir: 'Cursor' },
-  windsurf: { binary: 'windsurf', label: 'Windsurf', stateDir: 'Windsurf' },
-  vscodium: { binary: 'codium', label: 'VSCodium', stateDir: 'VSCodium' },
+  vscode: { binary: 'code', label: 'VS Code', stateDir: 'Code', app: 'Code' },
+  cursor: { binary: 'cursor', label: 'Cursor', stateDir: 'Cursor', app: 'Cursor' },
+  windsurf: { binary: 'windsurf', label: 'Windsurf', stateDir: 'Windsurf', app: 'Windsurf' },
+  vscodium: { binary: 'codium', label: 'VSCodium', stateDir: 'VSCodium', app: 'VSCodium' },
   'code-insiders': {
     binary: 'code-insiders',
     label: 'VS Code Insiders',
     stateDir: 'Code - Insiders',
+    app: 'Code - Insiders',
   },
-  positron: { binary: 'positron', label: 'Positron', stateDir: 'Positron' },
-  trae: { binary: 'trae', label: 'Trae', stateDir: 'Trae' },
+  positron: { binary: 'positron', label: 'Positron', stateDir: 'Positron', app: 'Positron' },
+  trae: { binary: 'trae', label: 'Trae', stateDir: 'Trae', app: 'Trae' },
 } as const;
 
 export const VSCODE_FORKS = Object.keys(VSCODE_FAMILY) as VscodeFork[];

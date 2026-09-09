@@ -46,6 +46,7 @@ export const xcodeDriver = (): EditorDriver => ({
     focusExisting: false,
     syncArtifacts: false,
     rewritesRootPaths: false,
+    closeWindow: false,
   },
   isAvailable: () => run('sh', ['-c', 'command -v xed >/dev/null 2>&1']).ok,
   unavailableHint: () =>
@@ -92,6 +93,7 @@ export const eclipseDriver = (launcherOverride?: string): EditorDriver => {
       focusExisting: false,
       syncArtifacts: false,
       rewritesRootPaths: false,
+      closeWindow: false,
     },
     isAvailable: present,
     unavailableHint: () =>

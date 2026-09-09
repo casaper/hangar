@@ -13,13 +13,19 @@ import type { PlatformDriver } from './types.ts';
 const unsupportedPlatform = (id: string): PlatformDriver => ({
   id: 'unsupported',
   label: `${id} (unsupported)`,
-  capabilities: { openExternally: false, openApplicationByName: false, vscodeWindowState: false },
+  capabilities: {
+    openExternally: false,
+    openApplicationByName: false,
+    vscodeWindowState: false,
+    controlAppWindows: false,
+  },
   // Not a guess at where this platform keeps configuration -- the XDG default is simply the
   // least-wrong place to point a message at, and both capabilities that would USE it are false.
   machineConfigDir: '',
   vscodeWindowState: () => undefined,
   openExternally: () => false,
   applicationExists: () => false,
+  closeAppWindow: () => ({ kind: 'unsupported' }),
   installHint: (pkg) => `install ${pkg} however this platform installs software`,
 });
 
@@ -36,4 +42,9 @@ export const platform = (): PlatformDriver => {
   return unsupportedPlatform(process.platform);
 };
 
-export type { PlatformDriver, PlatformCapabilities, PlatformId } from './types.ts';
+export type {
+  AppWindowOutcome,
+  PlatformCapabilities,
+  PlatformDriver,
+  PlatformId,
+} from './types.ts';
