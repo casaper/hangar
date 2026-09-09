@@ -20,6 +20,7 @@ import {
 } from '../git.ts';
 import { tmuxServer, tmuxSocketName } from '../tmux.ts';
 import { claudeSessionsIn, type ClaudeSession } from '../procs.ts';
+import { forgetCachedPr, writeCachedPr } from '../pr-cache.ts';
 import { resolveWithClaude } from '../resolve-conflicts.ts';
 import { cloneLabel, confirm, fail, heading, note, ok, step, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
@@ -182,6 +183,25 @@ const resolveTarget = async (
     );
   }
   const pr = lookup.pullRequests[0];
+  /*
+   * Remember the answer, so the clone's status bar can name the pull request without asking
+   * Bitbucket itself -- see `pr-cache.ts`. This is the command that was going to ask anyway,
+   * which is the whole reason the cache is written from here rather than by a poll.
+   *
+   * Not on a dry run, for the same reason `requireDefaultBranch` is not persisted on one: `-n`
+   * changes nothing, and this CLI's `-n` output is its regression record.
+   */
+  if (opts.dryRun !== true) {
+    if (pr === undefined) forgetCachedPr(hangar, clone, branch);
+    else {
+      writeCachedPr(hangar, clone, {
+        branch,
+        id: pr.id,
+        url: pr.url,
+        fetchedAt: Math.floor(Date.now() / 1000),
+      });
+    }
+  }
   if (pr === undefined) {
     return onDefault(`no open pull request — the default branch (${defaultBranch})`);
   }
