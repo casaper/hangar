@@ -5,6 +5,9 @@
       "Bash(pnpm lint)",
       "Bash(pnpm format:check)",
       "Bash(pnpm format)",
+      "Bash(pnpm test)",
+      "Bash(pnpm scan)",
+      "Bash(pnpm golden)",
       "Bash(hangar config schema --check)",
       "Bash(hangar colours sync -n)"
     ]
