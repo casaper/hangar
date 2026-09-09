@@ -68,6 +68,30 @@ test('the script is a self-contained sh at the hangar root, naming no machine pa
   }
 });
 
+test('the build state is carried by SHAPE, so the bar reads in monochrome', () => {
+  /*
+   * The property that makes colour safe to use on this line at all. `contrast.test.ts` proves
+   * each build colour is legible ON the bar and records that pass and fail are 1.18:1 against
+   * each OTHER -- the red/green pair, which is no difference at all to a deuteranope. So the
+   * glyphs have to differ, and every one of them has to survive with the colour stripped out.
+   */
+  const script = tmuxStatusArtifact(syntheticHangar()).content;
+  const glyphs = ['pass', 'fail', 'running'].map((state) => {
+    const arm = new RegExp(
+      `\\n\\s*${state}\\) out="\\$out #\\[fg=[^\\]]+\\](.)#\\[default\\]"`,
+    ).exec(script);
+    assert.ok(arm?.[1] !== undefined, `no coloured glyph found for ci state ${state}`);
+    return arm[1];
+  });
+  assert.equal(
+    new Set(glyphs).size,
+    3,
+    `the build glyphs are not all distinct: ${glyphs.join('')}`,
+  );
+  // And none of them is a space or empty, which would make that set trivially satisfiable.
+  for (const glyph of glyphs) assert.match(glyph, /\S/);
+});
+
 test('the pull-request link is the branch search until the number is known', () => {
   const ref = { workspace: 'acme', repo: 'storefront_ui' };
   const cold = pullRequestLink(ref, 'fixes/BE-12_x', undefined);
@@ -77,13 +101,32 @@ test('the pull-request link is the branch search until the number is known', () 
   // makes this function total with no network call in it.
   assert.match(cold.url, /pull-requests\/\?query=fixes%2FBE-12_x/);
 
-  const known = pullRequestLink(ref, 'fixes/BE-12_x', {
+  const record = {
     branch: 'fixes/BE-12_x',
     id: 852,
     url: 'https://example.invalid/852',
     fetchedAt: 1,
-  });
+    state: 'open',
+    draft: false,
+    ci: 'none',
+    review: 'none',
+  } as const;
+  const known = pullRequestLink(ref, 'fixes/BE-12_x', record);
   assert.deepEqual(known, { kind: 'url', url: 'https://example.invalid/852', what: '#852' });
+
+  /*
+   * The negative record -- asked, and this branch has none. Its url IS the search link, so the
+   * click still lands somewhere true; what it must never do is announce `#0`, which is the one
+   * reading that names a pull request nobody has ever opened.
+   */
+  const negative = pullRequestLink(ref, 'fixes/BE-12_x', {
+    ...record,
+    id: 0,
+    url: 'https://example.invalid/search',
+  });
+  assert.equal(negative.kind, 'url');
+  assert.notEqual(negative.what, '#0');
+  assert.match(negative.url, /query=fixes%2FBE-12_x/);
 
   // No forge, and a detached HEAD: a reason, never a URL missing its host.
   assert.equal(pullRequestLink(undefined, 'fixes/BE-12_x', undefined).kind, 'none');

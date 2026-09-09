@@ -10,6 +10,9 @@ ROOT='%HANGAR%'
 PR_DIR='%HANGAR%/.hangar/pr'
 KEY_PATTERN='^(BE)-[0-9]+'
 DEFAULT_BRANCH='trunk'
+HANGAR='%HANGAR%/bin/hangar'
+PR_TTL=90
+PR_LOCK_STALE=300
 BRANCH_MAX=72
 PATH_MAX=36
 
@@ -130,18 +133,80 @@ pr)
   # Nothing to say about the default branch: it has no pull request of its own, and a link
   # to "the pull requests for master" is a link to everything.
   [ "$branch" != "$DEFAULT_BRANCH" ] || exit 0
-  # The number comes off disk because asking Bitbucket for it costs a token and up to eight
-  # seconds -- see `pr-cache.ts`. A cache line for another branch is not this branch's pull
-  # request, so it is ignored rather than shown: that is what keying it on the branch is for.
-  if [ -f "$PR_DIR/$clone" ] &&
-    read -r cached_branch cached_id _rest <"$PR_DIR/$clone" &&
-    [ "$cached_branch" = "$branch" ] && [ -n "$cached_id" ]; then
-    printf ' PR#%s ' "$cached_id"
-  else
-    # A label rather than a claim: the click opens this branch's pull requests, which is a
-    # true statement whether or not one exists. Without it a cold cache would leave nothing
-    # on the bar to click, and the number only ever arrives by someone asking once.
-    printf ' PR '
+
+  # Everything below comes off DISK. Asking Bitbucket costs two round trips and about a
+  # second, and this runs per attached client per interval -- see `pr-cache.ts`. A line
+  # naming another branch is not this branch's pull request, so it is dropped rather than
+  # shown: that is what keying the record on the branch is for.
+  c_branch="" c_id="" c_at="" c_state="" c_draft="" c_ci="" c_review=""
+  if [ -f "$PR_DIR/$clone" ]; then
+    read -r c_branch c_id _c_url c_at c_state c_draft c_ci c_review _rest \
+      <"$PR_DIR/$clone" || c_branch=""
   fi
+  if [ "$c_branch" != "$branch" ]; then
+    c_branch="" c_id="" c_at="" c_state="" c_draft="" c_ci="" c_review=""
+  fi
+  case "$c_at" in "" | *[!0-9]*) c_at=0 ;; esac
+
+  # Past the TTL, hand the question to a detached `hangar pr refresh` and draw the OLD value
+  # now. Nothing here ever waits for the network: the fresh answer lands at the next redraw.
+  # This is also why a hangar nobody is looking at makes no requests -- the only thing that
+  # starts a refresh is a pane being drawn.
+  now=$(date +%s 2>/dev/null) || now=0
+  if [ "$now" -gt 0 ] && [ "$((now - c_at))" -ge "$PR_TTL" ]; then
+    lock="$PR_DIR/.lock-$clone"
+    # A refresher that was killed leaves its lock behind, which would wedge this clone's
+    # field for good. The epoch inside the lock is what lets the next redraw tell a run in
+    # progress from a corpse.
+    if [ -d "$lock" ]; then
+      lock_at=$(cat "$lock/at" 2>/dev/null) || lock_at=0
+      case "$lock_at" in "" | *[!0-9]*) lock_at=0 ;; esac
+      [ "$((now - lock_at))" -ge "$PR_LOCK_STALE" ] && rm -rf "$lock"
+    fi
+    # `mkdir` is the atomic primitive: of every pane in every window drawing this field at
+    # once, exactly one creates the directory, so exactly one refresher is spawned.
+    mkdir -p "$PR_DIR" 2>/dev/null
+    if mkdir "$lock" 2>/dev/null; then
+      printf '%s' "$now" >"$lock/at" 2>/dev/null
+      # Every descriptor is closed: tmux waits for a job's stdout to reach EOF, so a child
+      # holding it open would hang the bar rather than the other way round.
+      ("$HANGAR" pr refresh "$clone" >/dev/null 2>&1; rm -rf "$lock") \
+        </dev/null >/dev/null 2>&1 &
+    fi
+  fi
+
+  # Nothing known, or known to be nothing. Both draw the bare label: the click opens this
+  # branch's pull requests, which is true either way, and a cold cache with nothing on the
+  # bar would leave nothing to click.
+  if [ -z "$c_branch" ] || [ "$c_id" = "0" ]; then
+    printf ' PR '
+    exit 0
+  fi
+
+  case "$c_state" in
+  merged) printf ' ✔#%s ' "$c_id" ;;
+  declined) printf ' ✖#%s ' "$c_id" ;;
+  *)
+    mark=""
+    [ "$c_draft" = "1" ] && mark='✎'
+    out=" $mark#$c_id"
+    # Colour, which the FOOTER may never use -- the two lines of this bar sit on different
+    # backgrounds. Down there it is the clone's hue with ink on it, where a red mark on the
+    # red clone would be invisible; up here it is the one neutral the whole fleet shares, so
+    # `palette.ts` can prove a floor against it. tmux expands `#[...]` out of a job's output
+    # -- measured, not assumed -- which is what makes this reachable from a shell script.
+    case "$c_ci" in
+    pass) out="$out #[fg=#26a641]✓#[default]" ;;
+    fail) out="$out #[fg=#f04343]✗#[default]" ;;
+    running) out="$out #[fg=#d9a800]◌#[default]" ;;
+    esac
+    case "$c_review" in
+    approved) out="$out +" ;;
+    changes) out="$out ≈" ;;
+    *) out="$out ·" ;;
+    esac
+    printf '%s ' "$out"
+    ;;
+  esac
   ;;
 esac

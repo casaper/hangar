@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  barTextFor,
+  CI_COLOURS,
   colourFor,
   contrastRatio,
   CONTRAST_FLOOR,
@@ -148,4 +150,50 @@ test('the bug: tmux’s own default put a clone hue at 1.00:1 against the bar', 
       `${colour.name} is no better off than it was`,
     );
   }
+});
+
+test('the build-state colours clear the floor on the bar they are drawn on', () => {
+  /*
+   * The one place in this fleet where colour carries MEANING rather than identity, and the one
+   * place a golden capture is least able to help: it would happily record an unreadable red for
+   * ever, because it says what the colour is and nothing about whether it can be seen.
+   *
+   * Legal here only because the status bar's background is the fleet's one neutral. The FOOTER
+   * is a clone's hue with ink on it, which is why the git state down there is glyphs and never
+   * colour -- a red mark on the red clone is invisible in exactly the one case out of sixteen
+   * nobody checks.
+   */
+  for (const [state, hex] of Object.entries(CI_COLOURS)) {
+    const ratio = contrastRatio(hex, STATUS_BAR_BG);
+    assert.ok(ratio >= CONTRAST_FLOOR, `the ${state} colour is ${ratio.toFixed(2)}:1 on the bar`);
+  }
+
+  /*
+   * And the reason these go through `barTextFor` rather than being three chosen hex values: the
+   * obvious reds do not clear the floor. Measured -- `#f03e3e` is 4.43:1 and pure red is 4.26:1,
+   * both under 4.5 and both exactly what somebody would write by hand and never measure.
+   */
+  for (const naive of ['#f03e3e', '#ff0000']) {
+    assert.ok(
+      contrastRatio(naive, STATUS_BAR_BG) < CONTRAST_FLOOR,
+      `${naive} clears the floor now, so the lift below is no longer proving anything`,
+    );
+    assert.ok(contrastRatio(barTextFor(naive), STATUS_BAR_BG) >= CONTRAST_FLOOR);
+  }
+
+  /*
+   * And what this file deliberately does NOT assert: that pass and fail can be told apart from
+   * each other. They measure 1.18:1 -- luminance 0.28 against 0.23 -- because a contrast ratio
+   * is a luminance metric and these two differ almost only in hue. That is the textbook
+   * red/green pair, invisible as a difference to the ~8% of men with deuteranopia, and no
+   * arithmetic over two hex values fixes it.
+   *
+   * So colour is REINFORCEMENT here and never the carrier: the three states are `✓`, `✗` and
+   * `◌`, three different shapes, and the bar reads correctly in monochrome. `clone-bar.test.ts`
+   * is where that is held, because the glyphs live with the script that prints them.
+   */
+  assert.ok(
+    contrastRatio(CI_COLOURS.pass, CI_COLOURS.fail) < 1.5,
+    'pass and fail now differ in luminance — the glyphs may no longer be load-bearing, recheck',
+  );
 });

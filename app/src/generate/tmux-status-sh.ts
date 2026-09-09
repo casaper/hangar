@@ -1,4 +1,6 @@
 import type { Hangar } from '../hangar.ts';
+import { CI_COLOURS } from '../palette.ts';
+import { prCacheTtlSeconds } from '../pr-cache.ts';
 import { type Artifact, artifactHeader } from './index.ts';
 
 /**
@@ -112,6 +114,39 @@ const GLYPHS = {
   behind: '⇣',
 } as const;
 
+/**
+ * The pull request's three axes, one glyph each. Kept beside `GLYPHS` and separate from it,
+ * because the two live on different lines of the bar under opposite rules -- see below.
+ *
+ * A merged or declined pull request shows its glyph and its number and NOTHING else: the build
+ * and the reviews are settled, and a green tick beside a merged PR is a fact nobody is deciding
+ * anything on. `open` is the only state where the other two axes are still live.
+ *
+ * `·` for "nobody has reviewed yet" is drawn rather than omitted, so the field has a fixed shape
+ * and a missing review reads as a missing review instead of as a script that stopped early.
+ */
+const PR_GLYPHS = {
+  draft: '✎',
+  merged: '✔',
+  declined: '✖',
+  ciPass: '✓',
+  ciFail: '✗',
+  ciRunning: '◌',
+  approved: '+',
+  changes: '≈',
+  noReview: '·',
+} as const;
+
+/**
+ * How long a refresh may hold the lock before the next redraw assumes it died.
+ *
+ * Fixed rather than derived from the TTL: this bounds a CRASH, not a cadence. Two API calls take
+ * under a second and `openPullRequests` gives up at eight, so five minutes is far past any run
+ * that is still alive -- and the cost of guessing high is one clone's field staying stale a
+ * little longer, against the cost of guessing low, which is two refreshers running at once.
+ */
+const PR_LOCK_STALE_SECONDS = 300;
+
 export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
   path: hangar.paths.tmuxStatusScript,
   mode: 0o755,
@@ -133,6 +168,9 @@ export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
     `PR_DIR=${sq(hangar.paths.prCache)}`,
     `KEY_PATTERN=${sq(issueKeyPattern(hangar))}`,
     `DEFAULT_BRANCH=${sq(hangar.config.forge.defaultBranch ?? '')}`,
+    `HANGAR=${sq(hangar.paths.bin)}`,
+    `PR_TTL=${String(prCacheTtlSeconds(hangar))}`,
+    `PR_LOCK_STALE=${String(PR_LOCK_STALE_SECONDS)}`,
     `BRANCH_MAX=${String(BRANCH_MAX)}`,
     `PATH_MAX=${String(PATH_MAX)}`,
     '',
@@ -251,19 +289,81 @@ export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
     '  # Nothing to say about the default branch: it has no pull request of its own, and a link',
     '  # to "the pull requests for master" is a link to everything.',
     '  [ "$branch" != "$DEFAULT_BRANCH" ] || exit 0',
-    '  # The number comes off disk because asking Bitbucket for it costs a token and up to eight',
-    "  # seconds -- see `pr-cache.ts`. A cache line for another branch is not this branch's pull",
-    '  # request, so it is ignored rather than shown: that is what keying it on the branch is for.',
-    '  if [ -f "$PR_DIR/$clone" ] &&',
-    '    read -r cached_branch cached_id _rest <"$PR_DIR/$clone" &&',
-    '    [ "$cached_branch" = "$branch" ] && [ -n "$cached_id" ]; then',
-    '    printf \' PR#%s \' "$cached_id"',
-    '  else',
-    "    # A label rather than a claim: the click opens this branch's pull requests, which is a",
-    '    # true statement whether or not one exists. Without it a cold cache would leave nothing',
-    '    # on the bar to click, and the number only ever arrives by someone asking once.',
-    "    printf ' PR '",
+    '',
+    '  # Everything below comes off DISK. Asking Bitbucket costs two round trips and about a',
+    '  # second, and this runs per attached client per interval -- see `pr-cache.ts`. A line',
+    "  # naming another branch is not this branch's pull request, so it is dropped rather than",
+    '  # shown: that is what keying the record on the branch is for.',
+    '  c_branch="" c_id="" c_at="" c_state="" c_draft="" c_ci="" c_review=""',
+    '  if [ -f "$PR_DIR/$clone" ]; then',
+    '    read -r c_branch c_id _c_url c_at c_state c_draft c_ci c_review _rest \\',
+    '      <"$PR_DIR/$clone" || c_branch=""',
     '  fi',
+    '  if [ "$c_branch" != "$branch" ]; then',
+    '    c_branch="" c_id="" c_at="" c_state="" c_draft="" c_ci="" c_review=""',
+    '  fi',
+    '  case "$c_at" in "" | *[!0-9]*) c_at=0 ;; esac',
+    '',
+    '  # Past the TTL, hand the question to a detached `hangar pr refresh` and draw the OLD value',
+    '  # now. Nothing here ever waits for the network: the fresh answer lands at the next redraw.',
+    '  # This is also why a hangar nobody is looking at makes no requests -- the only thing that',
+    '  # starts a refresh is a pane being drawn.',
+    '  now=$(date +%s 2>/dev/null) || now=0',
+    '  if [ "$now" -gt 0 ] && [ "$((now - c_at))" -ge "$PR_TTL" ]; then',
+    '    lock="$PR_DIR/.lock-$clone"',
+    "    # A refresher that was killed leaves its lock behind, which would wedge this clone's",
+    '    # field for good. The epoch inside the lock is what lets the next redraw tell a run in',
+    '    # progress from a corpse.',
+    '    if [ -d "$lock" ]; then',
+    '      lock_at=$(cat "$lock/at" 2>/dev/null) || lock_at=0',
+    '      case "$lock_at" in "" | *[!0-9]*) lock_at=0 ;; esac',
+    '      [ "$((now - lock_at))" -ge "$PR_LOCK_STALE" ] && rm -rf "$lock"',
+    '    fi',
+    '    # `mkdir` is the atomic primitive: of every pane in every window drawing this field at',
+    '    # once, exactly one creates the directory, so exactly one refresher is spawned.',
+    '    mkdir -p "$PR_DIR" 2>/dev/null',
+    '    if mkdir "$lock" 2>/dev/null; then',
+    '      printf \'%s\' "$now" >"$lock/at" 2>/dev/null',
+    "      # Every descriptor is closed: tmux waits for a job's stdout to reach EOF, so a child",
+    '      # holding it open would hang the bar rather than the other way round.',
+    '      ("$HANGAR" pr refresh "$clone" >/dev/null 2>&1; rm -rf "$lock") \\',
+    '        </dev/null >/dev/null 2>&1 &',
+    '    fi',
+    '  fi',
+    '',
+    '  # Nothing known, or known to be nothing. Both draw the bare label: the click opens this',
+    "  # branch's pull requests, which is true either way, and a cold cache with nothing on the",
+    '  # bar would leave nothing to click.',
+    '  if [ -z "$c_branch" ] || [ "$c_id" = "0" ]; then',
+    "    printf ' PR '",
+    '    exit 0',
+    '  fi',
+    '',
+    '  case "$c_state" in',
+    `  merged) printf ' ${PR_GLYPHS.merged}#%s ' "$c_id" ;;`,
+    `  declined) printf ' ${PR_GLYPHS.declined}#%s ' "$c_id" ;;`,
+    '  *)',
+    '    mark=""',
+    `    [ "$c_draft" = "1" ] && mark=${sq(PR_GLYPHS.draft)}`,
+    '    out=" $mark#$c_id"',
+    '    # Colour, which the FOOTER may never use -- the two lines of this bar sit on different',
+    "    # backgrounds. Down there it is the clone's hue with ink on it, where a red mark on the",
+    '    # red clone would be invisible; up here it is the one neutral the whole fleet shares, so',
+    "    # `palette.ts` can prove a floor against it. tmux expands `#[...]` out of a job's output",
+    '    # -- measured, not assumed -- which is what makes this reachable from a shell script.',
+    '    case "$c_ci" in',
+    `    pass) out="$out #[fg=${CI_COLOURS.pass}]${PR_GLYPHS.ciPass}#[default]" ;;`,
+    `    fail) out="$out #[fg=${CI_COLOURS.fail}]${PR_GLYPHS.ciFail}#[default]" ;;`,
+    `    running) out="$out #[fg=${CI_COLOURS.running}]${PR_GLYPHS.ciRunning}#[default]" ;;`,
+    '    esac',
+    '    case "$c_review" in',
+    `    approved) out="$out ${PR_GLYPHS.approved}" ;;`,
+    `    changes) out="$out ${PR_GLYPHS.changes}" ;;`,
+    `    *) out="$out ${PR_GLYPHS.noReview}" ;;`,
+    '    esac',
+    `    printf '%s ' "$out"`,
+    '    ;;',
+    '  esac',
     '  ;;',
     'esac',
   ].join('\n')}\n`,

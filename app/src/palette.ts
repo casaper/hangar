@@ -223,7 +223,7 @@ export const MODE_COLOURS: Readonly<Record<'ops' | 'dev', ModeColour>> = {
   dev: { main: '#b35400', ink: inkFor('#b35400'), purpose: 'change the CLI' },
 };
 
-const barTextFor = (main: string): string => {
+export const barTextFor = (main: string): string => {
   const rgb = parseHex(main);
   for (let lift = 0; lift < 100; lift += 1) {
     const candidate = toHex(towardWhite(rgb, lift / 100));
@@ -232,6 +232,35 @@ const barTextFor = (main: string): string => {
   // Unreachable -- white clears any dark bar. Here so the return type needs no assertion.
   return INK_LIGHT;
 };
+
+/**
+ * The build state of a branch's pull request, as text ON the status bar.
+ *
+ * **The one place in this fleet where colour carries meaning rather than identity**, and it is
+ * legal here for a reason that does not hold one line lower: the bar's background is the neutral
+ * `STATUS_BAR_BG`, so a red mark is measured against a known dark grey. The FOOTER is a clone's
+ * hue with `ink` on it, where a red glyph on the red clone would be invisible -- which is why
+ * `tmux-status-sh.ts`'s git state is glyphs and never colour. Same fleet, opposite rule, and the
+ * difference is entirely which background the character lands on.
+ *
+ * Run through `barTextFor` rather than written as three chosen hex values, so the floor is the
+ * same arithmetic every clone hue clears and `test/contrast.test.ts` proves all of it at once.
+ * That is not ceremony: the red asked for here, `#f03e3e`, measures **4.43:1** on this bar and
+ * is lifted to `#f04343` to clear 4.5. Pure `#ff0000` is worse still at 4.26:1 -- both are
+ * exactly the sort of obviously-fine red nobody would have thought to measure.
+ *
+ * **Colour is reinforcement here and never the carrier.** `pass` and `fail` measure 1.18:1
+ * against EACH OTHER -- a contrast ratio is a luminance metric and these differ almost only in
+ * hue, which is the textbook red/green pair that deuteranopia erases. So the bar says which is
+ * which with three different SHAPES (`✓`, `✗`, `◌`) and reads correctly with every colour
+ * stripped; the hue only makes the answer faster for those who can see it. There is no
+ * arithmetic over two hex values that fixes this, which is why the answer is a glyph.
+ */
+export const CI_COLOURS = {
+  pass: barTextFor('#26a641'),
+  fail: barTextFor('#f03e3e'),
+  running: barTextFor('#d9a800'),
+} as const;
 
 /**
  * Nearest entry in xterm-256's 6x6x6 colour cube (indices 16-231).

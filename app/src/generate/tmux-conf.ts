@@ -243,17 +243,20 @@ export const barOptions = (hangar: Hangar): readonly BarOption[] => {
     },
     /*
      * A MAXIMUM, not a width, so headroom is free. The widest right side this can render is a
-     * twelve-character key and a five-digit pull request: ` ABCDEF-12345  PR#12345 ^B 12:34` --
-     * 32 columns, which is also why tmux's own default of 40 is not simply left alone: it is
-     * close enough that a longer key shape would truncate with nothing to say so.
+     * twelve-character key, a five-digit pull request and its three state glyphs:
+     * ` ABCDEF-12345  ✎#12345 ✗ ≈ ^B 12:34` -- 36 columns.
      *
-     * The headroom also covers a question nothing on a running server can answer. This value is
-     * 79 characters of `#[range=…]` and `#(…)` markup around the two facts it draws, and whether
-     * tmux measures the expanded string or only the cells it paints decides whether they fit --
-     * the option holds the format, not the render, so `show-options` cannot be asked. Set past
-     * both readings rather than betting on one.
+     * The headroom also covers a question nothing on a running server can answer. The value is
+     * far more characters of `#[range=…]`, `#(…)` and `#[fg=…]` markup than it is text, and
+     * whether tmux measures the expanded string or only the cells it paints decides whether the
+     * facts fit -- the option holds the format, not the render, so `show-options` cannot be
+     * asked. Set past both readings rather than betting on one.
+     *
+     * **Truncation here is silent and takes the RIGHT side first**, which is the clock and then
+     * the pull request -- so a value that is merely tight does not look wrong, it looks like a
+     * bar that has quietly stopped mentioning things.
      */
-    { name: 'status-right-length', value: '48' },
+    { name: 'status-right-length', value: '64' },
     { name: 'window-status-format', value: ' #I #W ' },
     { name: 'window-status-current-format', value: ' #I #W ' },
     { name: 'pane-border-status', value: 'bottom' },
