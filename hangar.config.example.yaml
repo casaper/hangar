@@ -165,6 +165,24 @@ forge:
   # Repository settings -> Security -> Access tokens (or the workspace equivalent).
   tokenEnvKey: BITBUCKET_TOKEN
 
+  # How many seconds the clone bar may go on showing a pull request's last known state -- its
+  # number, whether it is a draft, its build result and where its reviews stand. Optional;
+  # 90 when absent.
+  #
+  # A CEILING ON HOW WRONG THE BAR MAY BE, not a poll interval. Nothing ever waits for the
+  # network to draw a bar: the status script prints what is on disk and, past this age, spawns
+  # one detached `hangar pr refresh` whose answer lands at the next redraw. So a hangar nobody
+  # is looking at makes no requests at all -- the only thing that starts a refresh is a pane
+  # being drawn -- and a clone whose branch has no pull request is asked once and then left
+  # alone, because "there is none" is itself recorded.
+  #
+  # The default is set by the fastest-moving field. The number never goes stale; a build does,
+  # and a red mark that stays red for five minutes after the rerun went green is the version of
+  # this nobody trusts again. Raise it on a slow link or a rate-limited workspace. To turn the
+  # lookup off entirely, use `kind: none` above -- there is no zero here, because two API calls
+  # per clone per redraw is a rate limit discovered by being throttled.
+  # prCacheTtlSeconds: 90
+
 # --------------------------------------------------------------------------------------------
 # The issue tracker -- ticket links, and the shared ticket cache
 # --------------------------------------------------------------------------------------------

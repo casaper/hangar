@@ -23,6 +23,8 @@
 #     and one without, so both branches of doctor's install row have an input
 #   * `skipIfDirMissing: true` on a symlink
 #   * `ports.offset: 0`
+#   * a non-default `forge.prCacheTtlSeconds`, so the clone bar's refresh interval is shown to
+#     come from the config rather than from the constant behind it
 id: vsfix
 displayName: vscode fixture
 profile: node-web
@@ -40,6 +42,9 @@ forge:
   # Set explicitly so no capture ever asks git or the network for it.
   defaultBranch: release
   tokenEnvKey: VSFIX_FORGE_TOKEN
+  # Non-default (90), because a fixture agreeing with the default proves only that a default
+  # exists. This is the one capture in which the bar's refresh interval is shown to be READ.
+  prCacheTtlSeconds: 45
 
 tracker:
   kind: jira

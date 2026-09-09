@@ -106,6 +106,29 @@ substitution came back empty, the hangar root resolved to `/`, and the bootstrap
 path to somewhere nobody asked about — a wrong answer produced by the very check meant to explain
 a degraded environment.
 
+## `forge.prCacheTtlSeconds` — a ceiling on wrongness, not a poll interval
+
+How long the clone bar may go on showing a pull request's last known state. Optional, 90 when
+absent, floor 10, and there is deliberately **no zero**.
+
+The name would suggest a polling loop and there is none. Nothing ever waits for the network to
+draw a bar: `clone-tmux-status.sh` prints what is on disk and, past this age, spawns one detached
+`hangar pr refresh` whose answer lands at the next redraw. So the value bounds how WRONG the bar
+may be, and a hangar nobody is looking at makes no requests at all — the only thing that starts a
+refresh is a pane being drawn.
+
+**The default is set by the fastest-moving field.** The number and the branch never go stale; a
+build does, and a red mark that stays red for five minutes after the rerun went green is the
+version of this nobody trusts again.
+
+The floor exists because two API calls per clone per redraw is a rate limit discovered by being
+throttled. Turning the lookup off is `forge.kind: 'none'`, which is a different statement from
+asking constantly, and the schema is shaped so the two cannot be confused.
+
+`dev/fixture-vscode.config.yaml` carries a non-default `45`, which is the only capture in which
+this key is shown to be READ — a fixture agreeing with the default proves only that a default
+exists. `terminal-and-sessions.md` has the refresh architecture, the lock and the negative cache.
+
 ## `forge.defaultBranch` — asked once per hangar, not once per command
 
 Every clone in a hangar is a clone of ONE repo, so which branch that repo treats as its default

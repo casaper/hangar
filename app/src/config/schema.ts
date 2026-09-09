@@ -83,6 +83,23 @@ const forgeSchema = z.strictObject({
    */
   defaultBranch: z.string().min(1).optional(),
   tokenEnvKey: z.string().min(1).optional(),
+  /**
+   * How many seconds the clone bar may go on showing a pull request's last known state.
+   *
+   * The bar never blocks on the network: it draws what is on disk and, past this age, spawns one
+   * detached refresh whose answer lands at the next redraw. So this is a ceiling on how WRONG the
+   * bar may be, not a poll interval -- a hangar nobody is looking at makes no requests at all,
+   * because the only thing that starts a refresh is a pane being drawn.
+   *
+   * The default of 90 is set by the fastest-moving field. The id and the branch never go stale;
+   * a build does, and a red mark that stays red for five minutes after the rerun went green is
+   * the version of this nobody trusts again.
+   *
+   * The floor is 10 rather than 0 for the same reason: two API calls per clone per redraw is a
+   * rate limit somebody discovers by being throttled. Turning it OFF is `kind: 'none'`, which
+   * disables the lookup rather than making it constant.
+   */
+  prCacheTtlSeconds: z.int().min(10).optional(),
 });
 
 const trackerSchema = z.strictObject({

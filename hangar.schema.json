@@ -67,6 +67,11 @@
         "tokenEnvKey": {
           "type": "string",
           "minLength": 1
+        },
+        "prCacheTtlSeconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 9007199254740991
         }
       },
       "required": [
