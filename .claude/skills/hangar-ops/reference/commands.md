@@ -105,6 +105,7 @@ rule that cannot tell it from the report.
 | `setup` | — | `-y, --yes` · `--origin <url>` · `--id <name>` · `--preset <name>` · `--force` · `-n, --dry-run` | act |
 | `teach-rg` | `<clone>` | `-n, --dry-run` · `-y, --yes` | act |
 | `claude` | `[claude-args...]` (passed through untouched) | `-m, --mode <ops\|dev>` (default `ops`) · `--replace` · `--yes` · `--dry-run` | **DENIED to you** — see below |
+| `mcp` | — | — | serves the tools; the server itself touches nothing, each call spawns `bin/hangar` |
 
 **`claude` is the one command in this table you cannot run**, and the denial is deliberate rather
 than an oversight in the permission list. It opens the two hangar-root sessions as tabs of one
@@ -122,6 +123,25 @@ not try to open the developer tab. It is already the next window of the session 
 **`--dry-run` is spelled out and `-n` is not available**, because `-n` is claude's own `--name`
 and everything but hangar's four flags belongs to claude. This is the second exception to "every
 `-n` in this CLI is a dry run", after `resume`'s `--limit`.
+
+**`mcp` is where the tools in the mapping above come from, and you will not normally type it.**
+`hangar claude` names `.claude/modes/mcp.json` as `--mcp-config`, so a mode session starts one of
+these for itself and speaks the protocol to it on stdin and stdout. Run by hand it looks hung: with
+no client it waits, which is correct rather than a fault.
+
+**What it is good for by hand is a probe, and that is the first thing to run when `/mcp` says the
+hangar server failed to start.**
+
+```
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}' \
+               '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+  | hangar mcp
+```
+
+Two lines of valid JSON out and nothing on stderr means the server is fine and the problem is at
+Claude Code's end — reconnect it rather than reporting a broken CLI. Every tool named in the
+mapping table above should appear in the second line; one that does not, or a command named on
+stderr as having no tool at all, is the developer tab's to fix, not yours.
 
 ## Groups
 
