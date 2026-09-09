@@ -1,4 +1,5 @@
 import type { Hangar } from '../hangar.ts';
+import { tmuxSocketName } from '../tmux.ts';
 import { type Artifact, artifactHeader } from './index.ts';
 
 export type TerminalColourSettings = {
@@ -39,10 +40,26 @@ export type TerminalColourSettings = {
  * |        | nothing at all                             | Terminal.app, which understands neither   |
  * | title  | OSC 0 (and OSC 30 for Konsole's tab)       | everywhere                                |
  * | env    | `HANGAR_CLONE*` variables                  | everywhere, with no terminal support at all |
+ * | prompt | `PROMPT`/`PS1`, saved and restored         | this hangar's OWN tmux sessions only      |
  *
  * The env layer is the floor and the reason this works on terminals nobody has thought about: a
  * prompt, a starship config or a tmux status line can colour itself from `HANGAR_CLONE_SGR`
  * without the emulator co-operating in any way.
+ *
+ * ## Why the prompt layer alone is gated on the SOCKET
+ *
+ * The other three ask "which clone is this", and the answer is useful in any terminal. The prompt
+ * layer TAKES INFORMATION AWAY -- the user, the host, the path, the git state and the time all go,
+ * down to a single `❯` in the clone's hue -- and that is only safe where something else is saying
+ * them. That something is the pane-border footer, which exists only in sessions on this hangar's
+ * own tmux server. So `$TMUX` is matched against `hangar-<id>` followed by a comma: a shell in a
+ * clone that is not in one of those sessions keeps the prompt the developer configured, because
+ * there it is still the only thing telling them where they are.
+ *
+ * `HANGAR_KEEP_PROMPT` is the escape hatch, in the shape `HANGAR_TERM_BG` already has. Saving and
+ * restoring `PROMPT` plus `RPROMPT` is enough for a theme that only sets those two; a theme that
+ * paints from `precmd_functions` would keep painting over this, and that is a real limit rather
+ * than a claim about every theme.
  *
  * ## tmux is coloured HERE, on every `cd`, and not where the window was opened
  *
@@ -82,6 +99,7 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
   const p = `_hangar_${hangarId}`;
   const tint = Math.round(colour.tint * 100);
   const table = `hangar_${hangarId}_colour`;
+  const socket = tmuxSocketName(hangarId);
 
   const content = [
     artifactHeader(
@@ -150,6 +168,19 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
     '            ;;',
     '    esac',
     'fi',
+    '',
+    '# ---------------------------------------------------------------------------',
+    "# Whether this shell is inside THIS hangar's own tmux server, decided once for the",
+    '# same reason the family is: $TMUX cannot change under a running shell.',
+    '#',
+    '# $TMUX is <socket-path>,<pid>,<session>, so the comma is what makes the match exact --',
+    '# without it the pattern would also catch the hangar-root modes socket, which is',
+    '# `hangar-<id>-claude` and has no clone, no footer and no reason to lose its prompt.',
+    '# ---------------------------------------------------------------------------',
+    `case "\${TMUX:-}" in`,
+    `    */${socket},*) ${p}_ours=1 ;;`,
+    `    *) ${p}_ours=0 ;;`,
+    'esac',
     '',
     '# The hue as #rrggbb, scaled to $2 per cent. The triple is what the colour table stores.',
     '#',
@@ -294,6 +325,61 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
     '    export HANGAR_CLONE_SGR',
     '}',
     '',
+    '# $1 = r;g;b, or empty to put the shell back on the prompt it had.',
+    '#',
+    "# Only inside this hangar's OWN tmux, because that is the only place the footer exists to",
+    '# have made the information redundant. A shell in a clone that is not in one of these',
+    '# sessions keeps whatever prompt the developer configured -- there it is still the only',
+    '# thing saying where they are.',
+    `${p}_prompt_set() {`,
+    '    # Putting a saved prompt BACK comes before either gate, and that ordering is the fix',
+    '    # for a real bug: with the gates first, setting HANGAR_KEEP_PROMPT in a shell that had',
+    '    # already been given the short prompt left it stuck with it for ever -- the hatch would',
+    '    # have blocked the very call that restores. A gate may refuse to take a prompt away; it',
+    '    # may not refuse to give one back.',
+    '    if [ -z "$1" ]; then',
+    `        if [ -n "\${${p}_had_prompt:-}" ]; then`,
+    `            if [ -n "\${ZSH_VERSION:-}" ]; then`,
+    `                PROMPT=\${${p}_old_prompt}`,
+    `                RPROMPT=\${${p}_old_rprompt}`,
+    '            else',
+    `                PS1=\${${p}_old_ps1}`,
+    '            fi',
+    `            unset ${p}_had_prompt`,
+    '        fi',
+    '        return 0',
+    '    fi',
+    `    [ "\${${p}_ours}" = 1 ] || return 0`,
+    '    # The escape hatch, in the shape HANGAR_TERM_BG already has: a prompt is more personal',
+    '    # than a tab colour, so there is a way to keep your own without editing a generated file.',
+    '    [ -n "${HANGAR_KEEP_PROMPT:-}" ] && return 0',
+    '    # Saved ONCE, on the way in, so a `cd` from one clone straight into another does not',
+    '    # save the prompt this function itself installed and then restore THAT on the way out.',
+    `    if [ -z "\${${p}_had_prompt:-}" ]; then`,
+    `        if [ -n "\${ZSH_VERSION:-}" ]; then`,
+    `            ${p}_old_prompt=$PROMPT`,
+    `            ${p}_old_rprompt=\${RPROMPT:-}`,
+    '        else',
+    `            ${p}_old_ps1=$PS1`,
+    '        fi',
+    `        ${p}_had_prompt=1`,
+    '    fi',
+    '    local hue',
+    `    hue=$(${p}_hex "$1" 100)`,
+    `    if [ -n "\${ZSH_VERSION:-}" ]; then`,
+    '        # The hue when the last command succeeded and red when it did not, which is the one',
+    '        # thing a prompt still has to say once the footer carries the rest. `%F{#rrggbb}`',
+    '        # takes 24-bit colour in zsh, and `%(?..)` needs no option set.',
+    `        PROMPT="%(?.%F{$hue}.%F{red})❯%f "`,
+    "        RPROMPT=''",
+    '    else',
+    '        # No exit-status arm in bash: $? has already been replaced by the time',
+    '        # PROMPT_COMMAND runs this hook, and reading it would mean owning the whole of',
+    '        # PROMPT_COMMAND rather than prepending one function to whatever is already there.',
+    `        PS1="\\\\[\\\\033[38;2;$1m\\\\]❯\\\\[\\\\033[0m\\\\] "`,
+    '    fi',
+    '}',
+
     '# ---------------------------------------------------------------------------',
     '# The hook itself. Which clone (if any) is $PWD in, and paint accordingly.',
     '#',
@@ -330,12 +416,14 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
     `        ${p}_chrome_set "$rgb" "$ink" "$bar"`,
     `        ${p}_title_set "$clone · \${${p}_id}"`,
     `        ${p}_env_set "$clone" "$rgb" "$x256" "$name"`,
+    `        ${p}_prompt_set "$rgb"`,
     `        ${p}_active=$clone`,
     `    elif [ -n "\${${p}_active:-}" ]; then`,
     `        if [ -z "\${HANGAR_CLONE:-}" ] || [ "\${HANGAR_CLONE}" = "\${${p}_active}" ]; then`,
     `            ${p}_chrome_set ''`,
     `            ${p}_title_set ''`,
     `            ${p}_env_set ''`,
+    `            ${p}_prompt_set ''`,
     '        fi',
     `        unset ${p}_active`,
     '    fi',

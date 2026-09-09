@@ -161,6 +161,15 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   have just saved — takes a moment to show up on either line.
   A blank field is never an error message — everything behind the bar exits quietly, because a
   status line is no place to report one.
+- **A clone's shells inside hangar's tmux get a short prompt, and only there.** One `❯` in the
+  clone's hue — red instead when the last command failed — with no user, host, path, git state or
+  time, because the footer two lines down is already saying all five. It is gated on the tmux
+  SOCKET rather than on the directory, so a plain terminal in the same clone, and the hangar-root
+  modes tabs, both keep your own prompt. `HANGAR_KEEP_PROMPT=1` in your rc turns it off
+  everywhere. Your `PROMPT` and `RPROMPT` are saved on the way into a clone and put back on the
+  way out — which works for a theme that sets those two, and is defeated by one that paints from
+  `precmd_functions`. **A running shell never picks this up**: it comes from `clone-terminal.sh`
+  at shell start, so it arrives in the next tab `hangar open` makes.
 - **`hangar colours sync` is what puts a bar change onto a server that is already running.** The
   generated conf is read once, when the server starts, so it reaches only sessions opened after
   it was written; `colours sync` writes the same settings straight onto the live server and

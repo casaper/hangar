@@ -65,6 +65,19 @@ else
     esac
 fi
 
+# ---------------------------------------------------------------------------
+# Whether this shell is inside THIS hangar's own tmux server, decided once for the
+# same reason the family is: $TMUX cannot change under a running shell.
+#
+# $TMUX is <socket-path>,<pid>,<session>, so the comma is what makes the match exact --
+# without it the pattern would also catch the hangar-root modes socket, which is
+# `hangar-<id>-claude` and has no clone, no footer and no reason to lose its prompt.
+# ---------------------------------------------------------------------------
+case "${TMUX:-}" in
+    */hangar-vsfix,*) _hangar_vsfix_ours=1 ;;
+    *) _hangar_vsfix_ours=0 ;;
+esac
+
 # The hue as #rrggbb, scaled to $2 per cent. The triple is what the colour table stores.
 #
 # 100 for a tab label or a pane border, where the full strength is exactly what is wanted,
@@ -208,6 +221,60 @@ _hangar_vsfix_env_set() {
     export HANGAR_CLONE_SGR
 }
 
+# $1 = r;g;b, or empty to put the shell back on the prompt it had.
+#
+# Only inside this hangar's OWN tmux, because that is the only place the footer exists to
+# have made the information redundant. A shell in a clone that is not in one of these
+# sessions keeps whatever prompt the developer configured -- there it is still the only
+# thing saying where they are.
+_hangar_vsfix_prompt_set() {
+    # Putting a saved prompt BACK comes before either gate, and that ordering is the fix
+    # for a real bug: with the gates first, setting HANGAR_KEEP_PROMPT in a shell that had
+    # already been given the short prompt left it stuck with it for ever -- the hatch would
+    # have blocked the very call that restores. A gate may refuse to take a prompt away; it
+    # may not refuse to give one back.
+    if [ -z "$1" ]; then
+        if [ -n "${_hangar_vsfix_had_prompt:-}" ]; then
+            if [ -n "${ZSH_VERSION:-}" ]; then
+                PROMPT=${_hangar_vsfix_old_prompt}
+                RPROMPT=${_hangar_vsfix_old_rprompt}
+            else
+                PS1=${_hangar_vsfix_old_ps1}
+            fi
+            unset _hangar_vsfix_had_prompt
+        fi
+        return 0
+    fi
+    [ "${_hangar_vsfix_ours}" = 1 ] || return 0
+    # The escape hatch, in the shape HANGAR_TERM_BG already has: a prompt is more personal
+    # than a tab colour, so there is a way to keep your own without editing a generated file.
+    [ -n "${HANGAR_KEEP_PROMPT:-}" ] && return 0
+    # Saved ONCE, on the way in, so a `cd` from one clone straight into another does not
+    # save the prompt this function itself installed and then restore THAT on the way out.
+    if [ -z "${_hangar_vsfix_had_prompt:-}" ]; then
+        if [ -n "${ZSH_VERSION:-}" ]; then
+            _hangar_vsfix_old_prompt=$PROMPT
+            _hangar_vsfix_old_rprompt=${RPROMPT:-}
+        else
+            _hangar_vsfix_old_ps1=$PS1
+        fi
+        _hangar_vsfix_had_prompt=1
+    fi
+    local hue
+    hue=$(_hangar_vsfix_hex "$1" 100)
+    if [ -n "${ZSH_VERSION:-}" ]; then
+        # The hue when the last command succeeded and red when it did not, which is the one
+        # thing a prompt still has to say once the footer carries the rest. `%F{#rrggbb}`
+        # takes 24-bit colour in zsh, and `%(?..)` needs no option set.
+        PROMPT="%(?.%F{$hue}.%F{red})❯%f "
+        RPROMPT=''
+    else
+        # No exit-status arm in bash: $? has already been replaced by the time
+        # PROMPT_COMMAND runs this hook, and reading it would mean owning the whole of
+        # PROMPT_COMMAND rather than prepending one function to whatever is already there.
+        PS1="\\[\\033[38;2;$1m\\]❯\\[\\033[0m\\] "
+    fi
+}
 # ---------------------------------------------------------------------------
 # The hook itself. Which clone (if any) is $PWD in, and paint accordingly.
 #
@@ -244,12 +311,14 @@ _hangar_vsfix_chpwd() {
         _hangar_vsfix_chrome_set "$rgb" "$ink" "$bar"
         _hangar_vsfix_title_set "$clone · ${_hangar_vsfix_id}"
         _hangar_vsfix_env_set "$clone" "$rgb" "$x256" "$name"
+        _hangar_vsfix_prompt_set "$rgb"
         _hangar_vsfix_active=$clone
     elif [ -n "${_hangar_vsfix_active:-}" ]; then
         if [ -z "${HANGAR_CLONE:-}" ] || [ "${HANGAR_CLONE}" = "${_hangar_vsfix_active}" ]; then
             _hangar_vsfix_chrome_set ''
             _hangar_vsfix_title_set ''
             _hangar_vsfix_env_set ''
+            _hangar_vsfix_prompt_set ''
         fi
         unset _hangar_vsfix_active
     fi
