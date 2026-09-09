@@ -360,17 +360,17 @@ stale on the next commit and nothing checks it, so run `wc -l` when you want one
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | entry point           | `cli.ts` — every command, option and alias is registered here, plus the `preAction` config gate and the `configureHelp` that prints all of a command's aliases                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | maintainer            | `commands/dev.ts` — `hangar dev golden`, the capture behind `pnpm golden`; `commands/release.ts` — `hangar dev release`, the gates and preflight in front of semantic-release, with `release/commits.ts` beside it reading the range. **Both are hidden in `cli.ts`, and that is their interface contract**: nothing about either is promised to an operator, so neither gets a row in `hangar-ops/reference/commands.md`. `dev` is deliberately NOT in `NEEDS_NO_CONFIG` — a capture, or a release, derived from a hangar with no config would be derived from the schema defaults, the one output neither may be mistaken for |
-| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`, `install`, `claude`                                                                                                                                                                                                                                                                                                                                                                               |
+| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`, `install`, `claude`, `browse`                                                                                                                                                                                                                                                                                                                                                                     |
 | config                | `config/schema.ts` (the zod authority), `default-branch.ts`, `load.ts` (discovery + precedence), `derive.ts`, `json-schema.ts`, `drift.ts` (the example-vs-live comparison `config validate` runs)                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | per-clone artifacts   | `clone-config.ts` — the byte-compared builders `doctor` holds every clone to; `colour-assignments.ts`; `ports.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| generators            | `generate/` — `terminal-sh.ts`, `tmux-conf.ts`, `claude-tmux-conf.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| generators            | `generate/` — `terminal-sh.ts`, `tmux-conf.ts`, `tmux-status-sh.ts`, `claude-tmux-conf.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | editor drivers        | `editor/` — `vscode.ts`, `jetbrains.ts`, `index.ts`, `kinds.ts`, `types.ts`, `launch-only.ts`, `emacs.ts`, `vim.ts`, `zed.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | emulator drivers      | `terminal/` — one window-opener each: `iterm2.ts`, `apple-terminal.ts`, `konsole.ts`, `gnome-terminal.ts`, `none.ts`, plus `applescript.ts`, `index.ts`, `types.ts`. Everything a window CONTAINS is `tmux.ts`, in the shared row                                                                                                                                                                                                                                                                                                                                                                                               |
 | platform              | `platform/` — `darwin.ts`, `linux.ts`, `index.ts`, `types.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | git / forge / tracker | `git.ts`, `bitbucket.ts`, `jira-records.ts`, `jira.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | fleet                 | `fleet.ts` — clone discovery, and everything per-clone derived from the index                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | tests                 | `test/**/*.test.ts` — run by `pnpm test`; `test/fixture.ts` builds the synthetic hangar they all use                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| shared                | `dedupe.ts`, `claude-sessions.ts`, `resolve-conflicts.ts`, `procs.ts`, `plans.ts`, `environment.ts`, `install.ts`, `secrets.ts`, `tui.ts`, `palette.ts`, `tmp.ts`, `sessions.ts`, `adopt.ts`, `ui.ts`, `hangar.ts`, `user-paths.ts`, `template.ts`, `exec.ts`                                                                                                                                                                                                                                                                                                                                                                   |
+| shared                | `dedupe.ts`, `pr-cache.ts`, `claude-sessions.ts`, `resolve-conflicts.ts`, `procs.ts`, `plans.ts`, `environment.ts`, `install.ts`, `secrets.ts`, `tui.ts`, `palette.ts`, `tmp.ts`, `sessions.ts`, `adopt.ts`, `ui.ts`, `hangar.ts`, `user-paths.ts`, `template.ts`, `exec.ts`                                                                                                                                                                                                                                                                                                                                                    |
 
 **Five seams**, each a capability record plus a driver interface rather than a pretence that the
 implementations are equivalent. Adding a kind means implementing the interface and registering it;
@@ -557,6 +557,23 @@ to be right the instant the client attaches, which is before any shell has print
 it is a session option the hook could only reach with `-g`. `generate/terminal-sh.ts` carries the
 rest, including why every `tmux set -w` names `$TMUX_PANE`.
 
+**The bar says what the clone is working on, and two of its fields are clickable.** The badge, the
+tabs, then the issue key and the pull request; the branch goes on a line along the bottom of the
+pane, because `pane-border-status bottom` is the only bottom line tmux has — `status-position` is
+one option for the whole status block, so a header at the top and a footer at the bottom is not
+reachable. A window's name is the ROLE alone: the clone is named by the badge and by
+`set-titles-string`, and a third naming would put it in every tab beside a badge already saying
+it. `barOptions` in `generate/tmux-conf.ts` is the one table both the conf and `TmuxServer.restyle`
+read, which is what lets a bar change reach a server that is already running.
+
+Clicking works through `range=user` regions and one `MouseDown1Status` binding that **falls through
+to tmux's own default**, so a click on a tab still switches windows; it runs `hangar browse`, the
+only part of the bar that can afford the CLI. tmux cannot emit an OSC 8 hyperlink into a status
+line at all — measured, the escape is stripped and the rest is drawn as text — so this is the
+mechanism rather than a workaround. `hangar-internals/reference/terminal-and-sessions.md` has the
+four refusals, the job-keying rule that decides where the clone name comes from, and why the pull
+request is read off disk (`pr-cache.ts`) instead of asked for every ten seconds.
+
 **The bar names its own background, and that is not decoration.** With no `status-style` tmux uses
 its built-in `bg=green,fg=black` — a saturated default, not a neutral one — so every hue was being
 drawn as text on green: measured, the whole palette between 1.00:1 and 2.64:1, with the `green`
@@ -606,6 +623,15 @@ four files are **generated by `hangar colours sync` — never hand-edit them**:
   after that space, so an appended field lands inside `$name` and is exported as
   `HANGAR_CLONE_COLOUR`, with every gate still green.
 - `clone-terminal.sh` — the terminal colour hook, sourced from `~/.zshrc` or `~/.bashrc`.
+- `clone-tmux-status.sh` — the one thing on the clone bar tmux cannot answer itself: the branch,
+  the issue key and the pull request, one field per call. Called from `#()` jobs in the conf below,
+  once per field per status refresh, so it is shell rather than the CLI — measured, 0.02-0.04s
+  against 0.24-0.28s for `bin/hangar`. Generated because it carries this hangar's root, its
+  `tracker.keyPrefixes` and its default branch, and **self-contained because every failure in it
+  is a silent `exit 0`**: a status bar redrawn every ten seconds is no place for an error message.
+  The cost of that silence is that a stale copy says nothing, which is why `doctor` byte-compares
+  it like the conf. `hangar-internals/reference/terminal-and-sessions.md` has the four things tmux
+  refuses to do here, each measured.
 - `clone-tmux.conf` — the config this hangar's own tmux server starts under
   (`tmux -L hangar-<id> -f <this>`). It carries no per-clone hue: that is a session option `open`
   sets when it creates a clone's session, and the window options are the hook's. It does carry the
@@ -644,14 +670,14 @@ that needs it — the same reason the rest of this file is here.
 One rule decides every row: _a tracked file that a `hangar` command rewrites is a merge conflict
 on every `git pull` from a published upstream._
 
-| Not tracked                                                | Written by                             |
-| ---------------------------------------------------------- | -------------------------------------- |
-| `hangar.config.yaml` — **the marker file**                 | `hangar setup`                         |
-| `CLAUDE.local.md` — this hangar's identity                 | `setup`, `doctor --fix`                |
-| `.claude/settings.json`                                    | `setup`, `doctor --fix`                |
-| `clone-colours.sh`, `clone-terminal.sh`, `clone-tmux.conf` | `hangar colours sync`                  |
-| `.hangar/colour-assignments.json` — **INPUT**              | `hangar colours change` — nothing else |
-| `.hangar/claude-tmux.conf`                                 | `hangar claude`, every run             |
+| Not tracked                                                                        | Written by                             |
+| ---------------------------------------------------------------------------------- | -------------------------------------- |
+| `hangar.config.yaml` — **the marker file**                                         | `hangar setup`                         |
+| `CLAUDE.local.md` — this hangar's identity                                         | `setup`, `doctor --fix`                |
+| `.claude/settings.json`                                                            | `setup`, `doctor --fix`                |
+| `clone-colours.sh`, `clone-terminal.sh`, `clone-tmux.conf`, `clone-tmux-status.sh` | `hangar colours sync`                  |
+| `.hangar/colour-assignments.json` — **INPUT**                                      | `hangar colours change` — nothing else |
+| `.hangar/claude-tmux.conf`                                                         | `hangar claude`, every run             |
 
 Tracked: this file, the root `CLAUDE.md`, `bin/**`, `.local/bin/**`, `app/**`, `.envrc`,
 `.envrc.hangar`, `.nvmrc`,
@@ -696,11 +722,11 @@ The code is in `app/`, but files one level up are generated out of it — so cha
 and not regenerating them leaves a hangar that contradicts itself. Nothing catches that: there is
 no hook in `.git/hooks`.
 
-| Change this in `app/src/**`                                                                | Regenerate with        | Which rewrites                                                                 |
-| ------------------------------------------------------------------------------------------ | ---------------------- | ------------------------------------------------------------------------------ |
-| `config/schema.ts`                                                                         | `hangar config schema` | `hangar.schema.json` — **tracked**                                             |
-| `palette.ts`, `generate/colours-sh.ts`, `generate/terminal-sh.ts`, `generate/tmux-conf.ts` | `hangar colours sync`  | `clone-colours.sh`, `clone-terminal.sh` **and** `clone-tmux.conf` — gitignored |
-| any new config key                                                                         | by hand                | `hangar.config.example.yaml` — **tracked**                                     |
+| Change this in `app/src/**`                                                                                              | Regenerate with        | Which rewrites                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------ | ---------------------- | ------------------------------------------------------------------------------------------------------ |
+| `config/schema.ts`                                                                                                       | `hangar config schema` | `hangar.schema.json` — **tracked**                                                                     |
+| `palette.ts`, `generate/colours-sh.ts`, `generate/terminal-sh.ts`, `generate/tmux-conf.ts`, `generate/tmux-status-sh.ts` | `hangar colours sync`  | `clone-colours.sh`, `clone-terminal.sh`, `clone-tmux.conf` **and** `clone-tmux-status.sh` — gitignored |
+| any new config key                                                                                                       | by hand                | `hangar.config.example.yaml` — **tracked**                                                             |
 
 **Only one generated root file is still tracked, and the rule that decides it is publication:** a
 tracked file that a `hangar` command rewrites is a merge conflict on every `git pull` from

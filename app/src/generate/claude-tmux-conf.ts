@@ -2,7 +2,7 @@ import type { Hangar } from '../hangar.ts';
 import { MODE_COLOURS, STATUS_BAR_BG, STATUS_BAR_DIM, STATUS_BAR_FG } from '../palette.ts';
 import { claudeSocketName } from '../tmux.ts';
 import { type Artifact, artifactHeader } from './index.ts';
-import { claudeCodeSettingLines, quoteTmuxValue } from './tmux-conf.ts';
+import { type BarOption, claudeCodeSettingLines, quoteTmuxValue } from './tmux-conf.ts';
 
 /**
  * `.hangar/claude-tmux.conf` -- the config the hangar-ROOT session server starts under.
@@ -50,9 +50,6 @@ import { claudeCodeSettingLines, quoteTmuxValue } from './tmux-conf.ts';
  * defaults below are what a server attached to by hand falls back to -- and what the shell tab
  * uses on purpose, since it is not a mode and has no hue of its own.
  */
-
-/** A global session option: renderable into the conf, and writable onto a live server. */
-export type BarOption = { readonly name: string; readonly value: string };
 
 /**
  * The status bar, as data.

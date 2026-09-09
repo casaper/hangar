@@ -66,11 +66,14 @@ test('a session target is exact AND colon-terminated', () => {
   assert.ok(target.endsWith(':'), `set-option rejects '=name' without the colon: ${target}`);
 });
 
-test('a window name says which clone and which role, so the tab bar reads', () => {
+test("a window name is the role alone -- the clone is the badge's job, not every tab's", () => {
   const clone = cloneAt(hangar(), 2);
   const name = tmuxWindowName(clone, 'claude');
-  assert.ok(name.includes(clone.name));
-  assert.ok(name.includes('claude'));
+  assert.equal(name, 'claude');
+  // The decision, not the spelling: the clone is named by the hue badge in `status-left` and by
+  // `set-titles-string`, so a third naming here would put it in every tab beside a badge that
+  // already says it.
+  assert.ok(!name.includes(clone.name), `the bar would say ${clone.name} in every tab`);
 });
 
 test('-L and -f both come BEFORE the subcommand', () => {

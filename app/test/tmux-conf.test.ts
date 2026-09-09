@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { TMUX_SETTINGS, tmuxConfArtifact } from '../src/generate/tmux-conf.ts';
+import {
+  barOptions,
+  statusClickBinding,
+  TMUX_SETTINGS,
+  tmuxConfArtifact,
+} from '../src/generate/tmux-conf.ts';
 import {
   colourFor,
   PALETTE,
@@ -122,4 +127,93 @@ test('each hangar writes its own conf, at its own root', () => {
   // server -- so what has to differ here is the destination, and `dev.ts` captures it.
   assert.notEqual(a.path, b.path);
   assert.ok(a.content.startsWith('# GENERATED'), 'the generated header comes first, as a warning');
+});
+
+/**
+ * The bar table, and what it may not contain.
+ *
+ * These are the properties a golden capture cannot state. It pins the rendered conf byte for
+ * byte, so it would record a server option sitting in a table of session options -- which reads
+ * as correct on a fresh server and can never be applied to a running one -- exactly as happily
+ * as it records the right thing.
+ */
+test('every bar option is rendered into the conf, from the one table', () => {
+  const hangar = syntheticHangar();
+  const { content } = tmuxConfArtifact(hangar);
+  for (const option of barOptions(hangar)) {
+    assert.match(
+      content,
+      new RegExp(`^set -g ${option.name} `, 'm'),
+      `${option.name} is in the table and not in the conf`,
+    );
+  }
+});
+
+test('no SERVER option is in the bar table, because a live server could never be given one', () => {
+  const names = new Set(barOptions(syntheticHangar()).map((o) => o.name));
+  // The table's whole purpose is that `colours sync` can write all of it onto a running server.
+  // A server option in there is a setting that reaches the conf and nothing else, with nothing
+  // to say which happened -- and the repair for one really is `kill-server`, which `doctor`
+  // refuses because it ends every live agent in the fleet.
+  for (const setting of TMUX_SETTINGS.filter((s) => s.set.includes('s'))) {
+    assert.ok(!names.has(setting.name), `${setting.name} is a server option`);
+  }
+  // Literal, for the same reason the four are named literally above: walking the table alone
+  // would pass one somebody had emptied.
+  for (const name of ['extended-keys', 'terminal-features']) assert.ok(!names.has(name));
+});
+
+test('every clickable region is ours by prefix, and inside tmux 15-byte limit', () => {
+  const hangar = syntheticHangar();
+  const right = barOptions(hangar).find((o) => o.name === 'status-right');
+  const ranges = [...(right?.value ?? '').matchAll(/#\[range=user\|([^\]]+)\]/g)].map((m) => m[1]);
+  assert.ok(ranges.length >= 2, 'the ticket and the pull request are both clickable');
+  for (const range of ranges) {
+    assert.ok(range !== undefined);
+    // `X must be at most 15 bytes in length` -- tmux's own documentation, and a longer one is
+    // not reported: the range simply does not fire.
+    assert.ok(range.length <= 15, `range name too long: ${range}`);
+    // The prefix is what the fall-through condition tests, so a range without it would be dead
+    // and a range WITH it that the condition does not expect would swallow a tab click.
+    assert.ok(range.startsWith('hangar-'), `${range} is not distinguishable from tmux's own`);
+  }
+  const binding = statusClickBinding(hangar);
+  assert.ok(
+    binding.some((word) => word.includes('#{m:hangar-*,#{mouse_status_range}}')),
+    'the condition must match exactly the prefix the ranges carry',
+  );
+});
+
+test('a click that is not on one of ours falls through to what tmux does by default', () => {
+  const binding = statusClickBinding(syntheticHangar());
+  // Measured on 3.7c: the default for this key is `switch-client -t =`, which is click-a-tab-to-
+  // switch. A bare rebinding would take that away from every window in the fleet to add a link,
+  // so the else branch restates it -- and this is the assertion that it is still there at all.
+  assert.equal(binding.at(-1), 'switch-client -t =');
+  assert.equal(binding[4], 'if-shell');
+});
+
+test('the branch line renders for the active pane only', () => {
+  const border = barOptions(syntheticHangar()).find((o) => o.name === 'pane-border-format');
+  // A split window draws one border line per pane, and every copy would carry the same branch.
+  assert.match(border?.value ?? '', /^#\{\?pane_active,/);
+  // No comma may appear inside either arm of a `#{?…}`: it splits on the first one, so a
+  // two-part style like `bg=x,fg=y` would cut the format in half and the rest is drawn as text.
+  assert.equal((border?.value ?? '').split('#{?pane_active,')[1]?.split(',').length, 2);
+});
+
+test('both the jobs and the click name their program by absolute path', () => {
+  const hangar = syntheticHangar();
+  const values = barOptions(hangar).map((o) => o.value);
+  // tmux's `#()` jobs and `run-shell` inherit the SERVER's environment, which is whatever shell
+  // started it and need not have direnv's PATH -- the same reason `iterm2.ts` names tmux
+  // absolutely. A bare `clone-tmux-status.sh` would silently print nothing for ever.
+  assert.ok(
+    values.some((v) => v.includes(`#(${hangar.paths.tmuxStatusScript} branch `)),
+    'the branch job must name the generated script by path',
+  );
+  assert.ok(
+    statusClickBinding(hangar).some((word) => word.includes(`${hangar.paths.bin} browse `)),
+    'the click must name bin/hangar by path',
+  );
 });

@@ -20,6 +20,7 @@ Global: `--hangar <path>` (the hangar root to operate on; **only `config show` a
 | `merge-default`, `rebase-default` | — | aliases of `sync`, identical options | **act [user]** |
 | `checkout-default` (alias `checkout`) | `[clone]` | `-a, --all` · `-n, --dry-run` · `--include-busy` | **act [user]** |
 | `open` | `[clones...]` | `--all` · `--no-claude` · `--no-editor` · `-b, --branch <name>` · `--no-checkout` · `--include-busy` · `-n, --dry-run` | **act [user]** |
+| `browse` | `<ticket\|pr> <clone>` | `-n, --dry-run` (print the URL, open nothing) | act (opens a browser; `-n` is report) |
 | `resume` | `[clone]` (defaults to the clone you are in) | `-n, --limit <count>` (default `20`, `0` = all) | report **for you** — with no tty it prints the list instead of the picker; at a terminal it launches `claude --resume` |
 | `add-clone` | — | `--no-install` (+ a hidden `--remote <url>`) | **act [user]**, no `-n` |
 | `install` | `[clone]` | `--all` · `-n, --dry-run` | **act [user]** |
@@ -138,6 +139,26 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   the detection; `terminal.kind: none` opens no window at all and prints the attach line instead,
   which is a mode rather than a failure. `doctor`'s `emulator` and `tmux` rows are where to check
   what it picked and what the server is doing.
+- **The clone bar names the branch, the ticket and the pull request, and two of them are
+  clickable.** Every clone's tmux window carries a one-line bar at the top — the clone's hue badge,
+  its tabs, then the issue key and the pull request — and the branch on a line along the bottom of
+  the pane. A click on the key or on `PR#1234` opens it in the browser; a click on a tab still
+  switches to that window, and a click on a pane border still marks the pane. What a click runs is
+  `hangar browse ticket|pr <clone>`, which is also worth typing directly.
+  Three things to know when a field is blank rather than wrong:
+  **the ticket key comes from the branch name** (a branch without one shows nothing, and there is
+  no fallback to commit subjects here — `hangar status` does that);
+  **the pull request number comes off disk**, written by `sync` and by `browse pr`, so a branch
+  nobody has asked about shows a bare `PR` that links to that branch's pull requests;
+  and **the bar refreshes every ten seconds**, so a branch you have just switched takes a moment.
+  A blank field is never an error message — everything behind the bar exits quietly, because a
+  status line is no place to report one.
+- **`hangar colours sync` is what puts a bar change onto a server that is already running.** The
+  generated conf is read once, when the server starts, so it reaches only sessions opened after
+  it was written; `colours sync` writes the same settings straight onto the live server and
+  repaints each session, with nothing restarted. `doctor` reports both generated files —
+  `clone-tmux.conf` and `clone-tmux-status.sh` — against their builders, and never offers
+  `kill-server` as the fix.
 - **`status`'s `servers` row now finds a server two ways** — a `*.pid` file, or something
   listening on one of the clone's ports. A port-found server is shown as
   `<role> (pid N, listening on P)`. `no pid file — ports not checked (no lsof)` is **not** "nothing

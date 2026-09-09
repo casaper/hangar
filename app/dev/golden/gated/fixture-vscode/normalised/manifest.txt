@@ -77,4 +77,5 @@ artifact clone-colours.sh       -> %HANGAR%/clone-colours.sh
 artifact clone-terminal.sh      -> %HANGAR%/clone-terminal.sh
 artifact vsfix-clone-statusline.sh -> %HOME%/.claude/vsfix-clone-statusline.sh
 artifact clone-tmux.conf        -> %HANGAR%/clone-tmux.conf
+artifact clone-tmux-status.sh   -> %HANGAR%/clone-tmux-status.sh
 artifact claude-tmux.conf       -> %HANGAR%/.hangar/claude-tmux.conf

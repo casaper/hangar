@@ -51,6 +51,8 @@ export type HangarPaths = {
    * developer debugging tmux reads it and `tmux -f`s it by hand. Generated, so gitignored.
    */
   readonly tmuxConf: string;
+  /** The generated shell the status bar's three `#()` jobs call. See `generate/tmux-status-sh.ts`. */
+  readonly tmuxStatusScript: string;
   /** One file per clone, holding the pull request its branch has. See `pr-cache.ts`. */
   readonly prCache: string;
   /**
@@ -161,6 +163,7 @@ export const pathsFor = (
     cloneColoursScript: join(root, 'clone-colours.sh'),
     terminalHookScript: join(root, 'clone-terminal.sh'),
     tmuxConf: join(root, 'clone-tmux.conf'),
+    tmuxStatusScript: join(root, 'clone-tmux-status.sh'),
     prCache: join(root, '.hangar', 'pr'),
     claudeTmuxConf: join(root, '.hangar', 'claude-tmux.conf'),
     colourAssignmentsFile: join(root, '.hangar', 'colour-assignments.json'),

@@ -1,5 +1,5 @@
 import type { Hangar } from '../hangar.ts';
-import { STATUS_BAR_BG, STATUS_BAR_DIM, STATUS_BAR_FG } from '../palette.ts';
+import { STATUS_BAR_BG, STATUS_BAR_DIM, STATUS_BAR_FG, STATUS_LEFT_LENGTH } from '../palette.ts';
 import { type Artifact, artifactHeader } from './index.ts';
 
 /**
@@ -138,6 +138,174 @@ export const claudeCodeSettingLines = (): string[] => {
   return TMUX_SETTINGS.map((s, i) => `${(lhs[i] ?? '').padEnd(width)}   # ${s.why}`);
 };
 
+/**
+ * A global session option: renderable into the conf, and writable onto a live server.
+ *
+ * Shared with `generate/claude-tmux-conf.ts`, which renders the same shape for the other server.
+ */
+export type BarOption = { readonly name: string; readonly value: string };
+
+/** The two clickable regions, and the `hangar-` prefix that keeps them ours. See `barOptions`. */
+const TICKET_RANGE = 'hangar-ticket';
+const PR_RANGE = 'hangar-pr';
+
+/**
+ * How often tmux re-runs the three `#()` jobs below.
+ *
+ * tmux's own default is 15. Ten is chosen against what the line REPORTS rather than against
+ * cost: a branch changes under a developer who is watching, and half a minute of a bar naming
+ * the branch they just left is the kind of wrong that gets believed. Three `sh` forks per
+ * attached client per interval, each one shell plus git at 0.02-0.04s measured -- which is also
+ * why the refresh calls a generated script and never `hangar` itself, at 0.24-0.28s.
+ */
+const STATUS_INTERVAL = 10;
+
+/**
+ * The status bar and the branch line, as data.
+ *
+ * **Every entry is a global SESSION or WINDOW option, deliberately**, and that is what makes the
+ * live-apply pass in `TmuxServer.restyle` possible: `-f` is read once when the server starts, so
+ * an option that lived only in this file would reach nobody who is working right now -- and
+ * `doctor --fix` refuses `kill-server`, because that ends every live agent in the fleet. A SERVER
+ * option in here would be a setting `colours sync` could write into the conf and never onto a
+ * running server, with nothing to say which had happened.
+ *
+ * One table, two consumers, and it has to stay one: a list of globals written out in `restyle`
+ * beside the formats written out here would be two half-copies of the same thing, which is the
+ * drift this repo keeps finding. The symptom is a bar that is right on a fresh server and a
+ * version behind on the one somebody is working in.
+ *
+ * `status-left` is NOT here. It is the clone's own hue badge, written per SESSION by
+ * `paintSession`, and a global would have whichever clone was opened last colour every bar.
+ *
+ * ## What the three `#()` jobs are, and why the clone comes from the session tag
+ *
+ * `#{@hangar_clone}` is expanded into the command TEXT, not read by the script from a pane's
+ * working directory. Two reasons, and the second is a correctness bug rather than a preference:
+ *
+ * - Identity is the session, which is this module's oldest rule. A pane that has been `cd`d out
+ *   of the clone is still that clone's pane, and `#{pane_current_path}` would have it report
+ *   nothing -- or, standing in a sibling clone, report the sibling's branch.
+ * - **A tmux job is keyed on the EXPANDED command**, so two sessions whose formats expand to the
+ *   same shell command share one job and one answer. Measured on 3.7c: with the clone name in
+ *   the text, `clone_01` and `clone_02` rendered their own branches at the same moment on one
+ *   server. Without something session-specific in there, every bar in the fleet would show
+ *   whichever clone's job ran first.
+ */
+export const barOptions = (hangar: Hangar): readonly BarOption[] => {
+  const script = hangar.paths.tmuxStatusScript;
+  // Double quotes around the format, never single: the whole value is single-quoted on the way
+  // into the conf, and tmux processes no escapes inside single quotes -- so one `'` in here would
+  // end the option's value and leave the rest of the line as garbage tmux does not complain
+  // about. Verified expanding inside `#()` either way.
+  const job = (field: string): string => `#(${script} ${field} "#{@hangar_clone}")`;
+  return [
+    { name: 'status', value: 'on' },
+    { name: 'status-position', value: 'top' },
+    { name: 'status-style', value: `bg=${STATUS_BAR_BG},fg=${STATUS_BAR_FG}` },
+    { name: 'status-right-style', value: `fg=${STATUS_BAR_DIM}` },
+    { name: 'window-status-style', value: `fg=${STATUS_BAR_DIM}` },
+    { name: 'window-status-current-style', value: `fg=${STATUS_BAR_FG},bold` },
+    { name: 'status-left-length', value: String(STATUS_LEFT_LENGTH) },
+    { name: 'status-interval', value: String(STATUS_INTERVAL) },
+    /*
+     * The ticket and the pull request, each in its own clickable range, then the prefix
+     * indicator and the clock.
+     *
+     * The ranges are what makes them clickable AT ALL: tmux 3.7c has no hyperlink style, and a
+     * literal OSC 8 sequence in a status format is drawn as visible garbage with the ESC
+     * stripped (measured, and `capture-pane -H` finds no hyperlink) -- so `range=user` plus a
+     * mouse binding is the mechanism rather than a fallback. They are also status-line-only:
+     * `#[range=…]` in `pane-border-format` is accepted and silently does nothing, which is why
+     * the two short clickable facts are up here and the long branch is on the border.
+     *
+     * Each job prints its own surrounding space, or nothing at all -- so a clone with no ticket
+     * key gets a shorter bar rather than a gap, and an empty range is unclickable because there
+     * is nothing of it to click.
+     */
+    {
+      name: 'status-right',
+      value:
+        `#[range=user|${TICKET_RANGE}]${job('ticket')}#[norange]` +
+        `#[range=user|${PR_RANGE}]${job('pr')}#[norange]` +
+        `#{?client_prefix,^B ,}%H:%M`,
+    },
+    /*
+     * A MAXIMUM like `status-left-length`, not a width, so headroom is free. The widest right
+     * side this can render is a twelve-character key and a five-digit pull request:
+     * ` ABCDEF-12345  PR#12345 ^B 12:34` -- 32 columns, which is also why tmux's own default of
+     * 40 is not simply left alone: it is close enough that a longer key shape would truncate
+     * with nothing to say so.
+     */
+    { name: 'status-right-length', value: '48' },
+    { name: 'window-status-format', value: ' #I #W ' },
+    { name: 'window-status-current-format', value: ' #I #W ' },
+    /*
+     * The branch, on the pane border at the BOTTOM of the window.
+     *
+     * Not a second status line: `status-position` is one option for the whole status block, so
+     * `status 2` puts both lines at the top and a header-plus-footer is unreachable. The pane
+     * border is the only bottom line tmux has, and it renders with a single pane -- measured.
+     *
+     * `#{?pane_active,…,}` because a split window draws one border line per pane, and the extra
+     * copies would each carry the same branch. Nothing is drawn for the others, so they keep a
+     * plain border. No comma may appear inside either arm: `#{?…}` splits on the first one, so a
+     * two-part style like `bg=x,fg=y` would cut the format in half.
+     *
+     * The style is explicit rather than inherited. The shell hook paints `pane-border-style`
+     * with the clone's hue at full strength, and that hue is chosen to read on the status bar's
+     * background rather than on the terminal's -- so inheriting it would put an unmeasured pair
+     * on screen.
+     */
+    { name: 'pane-border-status', value: 'bottom' },
+    {
+      name: 'pane-border-format',
+      value: `#{?pane_active,#[fg=${STATUS_BAR_FG}]${job('branch')}#[default],}`,
+    },
+  ];
+};
+
+/**
+ * `bind-key -T root MouseDown1Status …` -- one binding, as argv, for the conf and for `restyle`.
+ *
+ * A key binding is not an option, so it is the one part of the bar the live-apply pass has to
+ * issue as a command rather than write as a value. It is listed beside the table for that reason
+ * instead of hiding in it.
+ *
+ * **The fall-through is the whole shape of it.** tmux's own default for this key is
+ * `switch-client -t =` -- click a tab, go to that window -- and a bare rebinding would take that
+ * away from every window in the fleet to add a link. So the condition tests for OUR ranges by
+ * their `hangar-` prefix and the else branch is tmux's default, restated. `#{m:…}` is a glob
+ * match and `#{s/hangar-//:…}` strips the prefix, so the range name IS the argument and there is
+ * no table mapping one to the other.
+ *
+ * It calls `hangar` and not the generated script, which is the one place in this feature that
+ * can afford to: a click is a human action once in a while, so a quarter of a second of Node
+ * startup is free, and the URLs come from `issueUrl`/`prSearchUrl` in TypeScript rather than
+ * being re-derived in shell. `bin/hangar` by ABSOLUTE path -- tmux's `run-shell` inherits the
+ * server's environment, which is whatever shell started it and need not have direnv's PATH.
+ */
+export const statusClickBinding = (hangar: Hangar): readonly string[] => [
+  'bind-key',
+  '-T',
+  'root',
+  'MouseDown1Status',
+  'if-shell',
+  '-F',
+  '#{m:hangar-*,#{mouse_status_range}}',
+  `run-shell -b "${hangar.paths.bin} browse #{s/hangar-//:mouse_status_range} #{@hangar_clone}"`,
+  'switch-client -t =',
+];
+
+/**
+ * One `bind-key` argv as a line of conf, quoting each word the way `set` values are quoted.
+ *
+ * The binding is argv rather than a string because `restyle` hands it straight to tmux, where
+ * quoting would be part of the argument. Rendering is therefore the derived form, not the
+ * source -- the other direction would need the conf line parsed back apart.
+ */
+const renderBinding = (argv: readonly string[]): string => argv.map(quoteTmuxValue).join(' ');
+
 export const tmuxConfArtifact = (hangar: Hangar): Artifact => {
   const socket = `hangar-${hangar.id}`;
   return {
@@ -166,34 +334,28 @@ export const tmuxConfArtifact = (hangar: Hangar): Artifact => {
       'set -gw pane-base-index 1',
       'set -g  renumber-windows on',
       '',
-      '# ---- the status line --------------------------------------------------------------',
+      '# ---- the status line, and the branch line under it --------------------------------',
       '# The bar names its own background, and carries no hue. Both halves matter -- see the',
-      '# header: without these four lines tmux draws every clone hue on its own saturated',
+      '# header: without a `status-style` tmux draws every clone hue on its own saturated',
       '# green, and a hue in here would paint every clone with whichever was opened last.',
       '#',
       '# So the neutrals are the FLOOR, and a clone lands on top of them: `hangar open` gives',
       "# the session a `status-left` badge in the clone's hue with an ink chosen for it, and the",
       '# shell hook gives the current window the same treatment. Both fall back to exactly these',
       '# values, which is what `set -uw` on the way out restores.',
-      `set -g status-style 'bg=${STATUS_BAR_BG},fg=${STATUS_BAR_FG}'`,
-      `set -g status-right-style 'fg=${STATUS_BAR_DIM}'`,
-      `set -g window-status-style 'fg=${STATUS_BAR_DIM}'`,
-      `set -g window-status-current-style 'fg=${STATUS_BAR_FG},bold'`,
-      'set -g status-position top',
-      // A MAXIMUM, not a width, so headroom costs nothing -- and 40 no longer obviously clears
-      // the badge. `status-left` is now `#[fg=…,bg=…,bold] <clone> #[default] `: 39 characters
-      // of style markup around the name, where the old unbackgrounded form was 28. Whether tmux
-      // measures the expanded string or only what it draws decides whether 40 truncated a
-      // ten-character clone name, and nothing readable off the server answers that -- the option
-      // holds the format, not the render. So this is set past either reading rather than settled,
-      // which leaves room for a clone name of 22 characters on top of the markup.
-      'set -g status-left-length 64',
-      "set -g status-right '#{?client_prefix,^B ,}%H:%M'",
-      "set -g window-status-format ' #I #W '",
-      "set -g window-status-current-format ' #I #W '",
+      '#',
+      '# Every line below is a global session or window option, which is what lets',
+      '# `hangar colours sync` write the same table onto a server that is already running --',
+      '# this file reaches only servers that start after it is written.',
+      ...barOptions(hangar).map((o) => `set -g ${o.name} ${quoteTmuxValue(o.value)}`),
+      '',
+      '# A click on the ticket or the pull request opens it; a click anywhere else on the bar',
+      '# still switches to that window, which is what tmux binds this key to by default.',
+      renderBinding(statusClickBinding(hangar)),
       '',
       '# The clone name in the TERMINAL WINDOW title, which is how a developer with one tab per',
-      '# clone tells them apart at the level the emulator draws.',
+      '# clone tells them apart at the level the emulator draws. A window name is the role alone,',
+      '# so this and the hue badge are the two places the clone is named.',
       'set -g set-titles on',
       "set -g set-titles-string '#{@hangar_clone} - #{window_name}'",
       '',

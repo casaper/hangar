@@ -44,6 +44,7 @@ import { statuslineArtifact } from '../generate/statusline-sh.ts';
 import { terminalHookArtifact } from '../generate/terminal-sh.ts';
 import { claudeTmuxConfArtifact } from '../generate/claude-tmux-conf.ts';
 import { tmuxConfArtifact } from '../generate/tmux-conf.ts';
+import { tmuxStatusArtifact } from '../generate/tmux-status-sh.ts';
 import { claudeSocketName, tmuxSocketName } from '../tmux.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
 
@@ -308,6 +309,7 @@ export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
     terminalHookArtifact(hangar, hangar.config.terminal.colour),
     statuslineArtifact(hangar, clones),
     tmuxConfArtifact(hangar),
+    tmuxStatusArtifact(hangar),
     claudeTmuxConfArtifact(hangar),
   ];
   for (const artifact of shared) {

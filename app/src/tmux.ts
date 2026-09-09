@@ -1,13 +1,8 @@
 import type { Clone } from './fleet.ts';
 import { run } from './exec.ts';
 import type { Hangar } from './hangar.ts';
-import {
-  colourByHex,
-  STATUS_BAR_BG,
-  STATUS_BAR_DIM,
-  STATUS_BAR_FG,
-  STATUS_LEFT_LENGTH,
-} from './palette.ts';
+import { barOptions, statusClickBinding } from './generate/tmux-conf.ts';
+import { colourByHex } from './palette.ts';
 import { orUndefined } from './terminal/types.ts';
 
 /**
@@ -112,8 +107,20 @@ export const tmuxSessionName = (clone: Clone): string => clone.name.replace(/[.:
  */
 export const tmuxTarget = (clone: Clone): string => `=${tmuxSessionName(clone)}:`;
 
-/** Cosmetic. Every `-t` targets a captured `#{window_id}` or `tmuxTarget`, never this. */
-export const tmuxWindowName = (clone: Clone, role: string): string => `${clone.name} ${role}`;
+/**
+ * A window's name: the ROLE, and nothing else.
+ *
+ * Cosmetic -- every `-t` targets a captured `#{window_id}` or `tmuxTarget`, never this -- and it
+ * takes the clone anyway, because what a window is called is a question about a clone's window
+ * even when the answer does not use it.
+ *
+ * The clone is named twice and neither of them is here: the hue badge in `status-left`, which is
+ * a block of colour a developer finds across four near-identical windows, and
+ * `set-titles-string`, because a terminal window in the dock has no bar to read. A third naming
+ * in the window name puts the clone in every tab beside a badge already saying it
+ * (`1 clone_01 claude`, for as many tabs as the clone has roles).
+ */
+export const tmuxWindowName = (_clone: Clone, role: string): string => role;
 
 /**
  * `-L`, and `-f` where the invocation may START the server.
@@ -514,18 +521,23 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
     restyle: (clones) => {
       if (!tmux(['list-sessions']).ok) return 0;
       /*
-       * The globals first, and they are worth writing even with no clone session on the socket:
-       * a window the developer made by hand is on this bar too, and the neutrals are what the
-       * per-window styles fall BACK to when `set -uw` clears them.
+       * The globals first, from the same table `clone-tmux.conf` is rendered from, and they are
+       * worth writing even with no clone session on the socket: a window the developer made by
+       * hand is on this bar too, and the neutrals are what the per-window styles fall BACK to
+       * when `set -uw` clears them.
+       *
+       * `barOptions` is the single source for both, and that is what keeps this honest: a live
+       * server is stuck on whatever its start config gave it until something writes over it,
+       * which is the whole gap this function exists to close. A second list here would close it
+       * for the options somebody remembered to add twice.
        */
-      tmux(['set', '-g', 'status-style', `bg=${STATUS_BAR_BG},fg=${STATUS_BAR_FG}`]);
-      // The badge's own room. A live server is still on whatever its start config gave it, so
-      // raising this in the conf alone would reach an open session only at the next server
-      // start -- which is the gap this whole function exists to close.
-      tmux(['set', '-g', 'status-left-length', String(STATUS_LEFT_LENGTH)]);
-      tmux(['set', '-g', 'status-right-style', `fg=${STATUS_BAR_DIM}`]);
-      tmux(['set', '-g', 'window-status-style', `fg=${STATUS_BAR_DIM}`]);
-      tmux(['set', '-g', 'window-status-current-style', `fg=${STATUS_BAR_FG},bold`]);
+      for (const option of barOptions(hangar)) tmux(['set', '-g', option.name, option.value]);
+      /*
+       * And the click, which is the one part of the bar that is not an option: a key binding is
+       * a command, so there is nothing for `set` to carry it. Applied here rather than left to
+       * the conf for exactly the same reason as the options above.
+       */
+      tmux(statusClickBinding(hangar));
 
       const byName = new Map(clones.map((clone) => [clone.name, clone]));
       let restyled = 0;

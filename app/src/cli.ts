@@ -5,6 +5,7 @@ import pc from 'picocolors';
 
 import { addClone } from './commands/add-clone.ts';
 import { install } from './commands/install.ts';
+import { browse } from './commands/browse.ts';
 import { checkoutDefault } from './commands/checkout-default.ts';
 import { claude, claudeArgvFromProcess } from './commands/claude.ts';
 import { coloursChange, coloursList, coloursSync } from './commands/colours.ts';
@@ -237,6 +238,23 @@ program
   .option('-f, --fetch', 'fetch first, so the sync answer is authoritative')
   .action((clone, options) => {
     status(requireHangar(), clone, options);
+  });
+
+program
+  .command('browse')
+  .summary("Open a clone's ticket or pull request in the browser")
+  .description(
+    [
+      "Opens what a clone's branch says it is working on: the tracker issue whose key is in the branch name, or the pull request for that branch. `hangar status` prints both as text; this one hands them to the browser.",
+      "It is also what a click on the clone's tmux bar runs. tmux cannot put a real hyperlink in a status line, so the bar marks the ticket and the pull request as clickable regions and binds a click to this command — which is why the clone is an argument rather than the one you are standing in.",
+      'The pull request is asked of Bitbucket only when it is not already known, and the answer is remembered per branch. That is what lets the bar name the number without ever making the network call itself, and it means the first `browse pr` on a new branch is the slow one.',
+    ].join('\n\n'),
+  )
+  .argument('<what>', 'ticket or pr')
+  .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
+  .option('-n, --dry-run', 'print the URL and open nothing')
+  .action(async (what, clone, options) => {
+    await browse(requireHangar(), what, clone, options);
   });
 
 program

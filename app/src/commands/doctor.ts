@@ -67,7 +67,7 @@ import { usesBitbucket } from '../bitbucket.ts';
 import { editors, type EditorDriver } from '../editor/index.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
-import { applyArtifact } from '../generate/index.ts';
+import { applyArtifact, type Artifact } from '../generate/index.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
 import {
   defaultBranchFromGit,
@@ -98,6 +98,7 @@ import { platform } from '../platform/index.ts';
 import { claudeSessionDiagnostic } from '../procs.ts';
 import { terminal, type EmulatorCapabilities } from '../terminal/index.ts';
 import { TMUX_SETTINGS, tmuxConfArtifact } from '../generate/tmux-conf.ts';
+import { tmuxStatusArtifact } from '../generate/tmux-status-sh.ts';
 import { tmuxServer, tmuxSocketName, type TmuxSessionRow } from '../tmux.ts';
 import {
   hangarClaudeLocalMdContent,
@@ -767,24 +768,40 @@ const reportTmux = (hangar: Hangar): readonly string[] => {
     return problems;
   }
 
-  const wanted = tmuxConfArtifact(hangar);
-  let onDisk: string | undefined;
-  try {
-    onDisk = readFileSync(wanted.path, 'utf8');
-  } catch {
-    onDisk = undefined;
-  }
-  if (onDisk === undefined) {
-    const text = `no ${basename(wanted.path)}, so the tmux server would start unconfigured`;
-    problems.push(text);
-    warn(text);
+  /*
+   * Both generated files this server needs, compared byte for byte against their builders.
+   *
+   * The status script gets a row for the same reason the conf does: `colours sync` writes it and
+   * nothing else would notice it going stale -- and a stale one is silent by construction, since
+   * every failure in it is `exit 0` with nothing printed. A bar that has simply stopped naming
+   * the branch reads as tmux being tmux.
+   *
+   * (`.hangar/claude-tmux.conf` deliberately has no row anywhere: `hangar claude` rewrites it
+   * immediately before starting the server that reads it, so stale is not a state it reaches.)
+   */
+  const generated: readonly (readonly [Artifact, string])[] = [
     // tmux ignores a missing `-f` file silently -- measured -- so nothing but this row would say.
-    note('Run `hangar colours sync`. tmux ignores a missing -f file without a word.');
-  } else if (onDisk !== wanted.content) {
-    const text = `${basename(wanted.path)} is not what the builder renders`;
-    problems.push(text);
-    warn(text);
-    note('Run `hangar colours sync`; it is generated, so hand edits are reverted anyway.');
+    [tmuxConfArtifact(hangar), 'so the tmux server would start unconfigured'],
+    [tmuxStatusArtifact(hangar), 'so the bar names no branch, ticket or pull request'],
+  ];
+  for (const [wanted, cost] of generated) {
+    let onDisk: string | undefined;
+    try {
+      onDisk = readFileSync(wanted.path, 'utf8');
+    } catch {
+      onDisk = undefined;
+    }
+    if (onDisk === undefined) {
+      const text = `no ${basename(wanted.path)}, ${cost}`;
+      problems.push(text);
+      warn(text);
+      note('Run `hangar colours sync`. tmux ignores a missing -f file without a word.');
+    } else if (onDisk !== wanted.content) {
+      const text = `${basename(wanted.path)} is not what the builder renders`;
+      problems.push(text);
+      warn(text);
+      note('Run `hangar colours sync`; it is generated, so hand edits are reverted anyway.');
+    }
   }
 
   if (!server.running()) {

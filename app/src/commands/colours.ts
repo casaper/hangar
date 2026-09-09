@@ -21,6 +21,7 @@ import { applyArtifact, type Artifact, type ArtifactOutcome } from '../generate/
 import { statuslineArtifact } from '../generate/statusline-sh.ts';
 import { terminalHookArtifact } from '../generate/terminal-sh.ts';
 import { tmuxConfArtifact } from '../generate/tmux-conf.ts';
+import { tmuxStatusArtifact } from '../generate/tmux-status-sh.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
 import { colourFor, paint, paletteEntry, PALETTE, PALETTE_NAMES } from '../palette.ts';
 import { tmuxServer, tmuxSocketName } from '../tmux.ts';
@@ -37,6 +38,7 @@ export const colourArtifacts = (hangar: Hangar): Artifact[] => {
     cloneColoursArtifact(hangar, clones),
     terminalHookArtifact(hangar, hangar.config.terminal.colour),
     tmuxConfArtifact(hangar),
+    tmuxStatusArtifact(hangar),
     statuslineArtifact(hangar, clones),
     ...clones.map((clone) => themeArtifact(clone)),
   ];

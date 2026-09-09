@@ -304,17 +304,156 @@ whether one reads on the other. `test/contrast.test.ts` asserts the arithmetic i
 whole palette, so an unreadable hue appended in future fails `pnpm test` rather than arriving as a
 screenshot.
 
+## What the clone bar says, and the four things tmux would not let it say
+
+`generate/tmux-conf.ts`'s `barOptions`, `generate/tmux-status-sh.ts`, `pr-cache.ts` and
+`commands/browse.ts`. The bar carries the clone's hue badge, its tabs, then the issue key and the
+pull request; the branch is on a line along the bottom of the pane. Everything below was measured
+on tmux 3.7c, and four of the measurements are the reason the design is shaped the way it is
+rather than the obvious way.
+
+**A window's name is the ROLE alone.** The clone is named by the badge -- a block of colour, which
+is what a developer actually finds across four near-identical windows -- and by
+`set-titles-string`, for a window in the dock with no bar to read. A third naming in the window
+name puts it in every tab beside a badge already saying it, once per `terminal.tabs[]` role.
+Nothing looks a window up by name: identity is the session, and every `-t` targets a captured
+`#{window_id}`.
+
+### The four refusals, each measured
+
+- **A status line cannot carry an OSC 8 hyperlink.** There is no `link=` style attribute, and a
+  literal sequence in `status-left` is drawn as visible text with the `ESC` stripped --
+  `L[]8;;https://example.com/T-1\T-1]8;;\` -- with `capture-pane -H` finding no hyperlink at all.
+  tmux supports OSC 8 in PANE content only (the `hyperlinks` terminal feature, `mouse_hyperlink`,
+  `capture-pane -H`). So a clickable region running a command is the mechanism here, not a
+  fallback for one.
+- **`#[range=user|X]` works in `status-format` and is silently ignored in `pane-border-format`.**
+  Ranges are a status-line feature; the border accepts the style, renders nothing for it and
+  fires no `Status` key. That is what splits the bar in two: the short clickable facts belong up
+  top, and the long branch belongs on the border, which can only ever be text.
+- **A header at the top and a footer at the bottom is unreachable.** `status-position` is one
+  option for the whole status block, so `status 2` gives a second line with both at the top.
+  `pane-border-status bottom` is the only bottom line tmux has, and it renders with a single pane.
+  Its cost is one row of the pane, and one line per pane once a window is split -- so the format
+  is wrapped in `#{?pane_active,…,}` and the other panes keep a plain border. **No comma may
+  appear inside either arm**: `#{?…}` splits on the first one, so a two-part style like
+  `bg=x,fg=y` cuts the format in half and the rest is drawn as text.
+- **A `range=user|X` argument is at most 15 bytes**, documented and not reported: a longer one
+  simply never fires. `hangar-ticket` is 13. The prefix is not decoration -- it is what the click
+  binding tests, so our regions can be told from tmux's own `window`, `session` and `pane` ones.
+
+### The click preserves the key it takes
+
+The default binding for `MouseDown1Status` is `switch-client -t =`, which is click-a-tab-to-switch,
+and `MouseDown1Border` is `select-pane -M`. A bare rebinding of either takes that away from every
+window in the fleet in order to add a link. So there is one binding and it falls through:
+
+```
+bind-key -T root MouseDown1Status if-shell -F '#{m:hangar-*,#{mouse_status_range}}' \
+  'run-shell -b "<hangar>/bin/hangar browse #{s/hangar-//:mouse_status_range} #{@hangar_clone}"' \
+  'switch-client -t ='
+```
+
+`#{m:…}` is a glob match and `#{s/hangar-//:…}` strips the prefix, so **the range name IS the
+argument** and there is no table mapping one to the other. `run-shell` expands formats in its
+command before running it -- verified, `#{@hangar_clone}` arriving as `clone_01` -- and `-b` keeps
+tmux from blocking on a browser. `bin/hangar` by absolute path, because `run-shell` inherits the
+SERVER's environment, which is whatever shell started it and need not have direnv's PATH; the same
+reason `iterm2.ts` names tmux absolutely.
+
+**The click is the one part of this that calls the CLI**, and it can afford to: a click is a
+person, once. Measured on this machine, `bin/hangar --version` costs 0.24-0.28s against 0.02-0.04s
+for shell plus git -- so everything the bar REFRESHES is a generated script, and in exchange the
+URLs come from `issueUrl` and `prSearchUrl` rather than being spelled a second time in shell.
+
+### The clone comes from the session tag, and that is a correctness property
+
+Each field is a `#(…)` job calling `clone-tmux-status.sh <field> "#{@hangar_clone}"`. The tag is
+expanded into the command TEXT rather than the script reading a pane's working directory, for two
+reasons and the second is a bug rather than a preference:
+
+- Identity is the session, which is this module's oldest rule. A pane `cd`'d out of the clone is
+  still that clone's pane, and `#{pane_current_path}` would have it report nothing -- or, standing
+  in a sibling clone's directory, report the sibling's branch.
+- **A tmux job is keyed on the EXPANDED command**, so two sessions whose formats expand to the
+  same shell command share one job and one answer. With the clone name in the text, `clone_01` and
+  `clone_02` rendered their own branches at the same moment on one server (measured, two clients).
+  Without something session-specific in there, every bar in the fleet would show whichever clone's
+  job ran first.
+
+`#{…}` does expand inside `#()`, with either quoting -- but the format value is single-quoted on
+the way into the conf and tmux processes no escapes inside single quotes, so the job uses DOUBLE
+quotes around the tag. One `'` in there would end the option's value and leave the rest of the
+line as garbage tmux does not complain about.
+
+### The script is generated so the key pattern is not a second definition
+
+`jira.ts` is the authority on what an issue key is, and the script is a second READER of the same
+config: the prefixes come from `tracker.keyPrefixes`, so adding one reaches both. What shell
+cannot reproduce is `KEY_IN_TEXT_RE`'s lookarounds -- `grep -E` has no lookahead -- so a
+tokenising `tr` plus a `^`-anchored match stands in for them. Verified against this fleet's own
+branch shapes: `fixes/ABC-1323_x` and `fixes/ui/ABC-1401_y` both answer, `feature/XABC-99_z` does
+not (which is exactly what the lookbehind is for), and it differs from `jira.ts` only where a
+digit run is followed immediately by a letter.
+
+**With no configured prefixes there is no ticket field at all.** `jira.ts`'s untargeted matcher
+leans on a sixteen-entry denylist of key-shaped things that are not keys (`UTF-8`, `SHA-256`), and
+its own comment says why: a confident link to a ticket that does not exist is worse than saying
+nothing. Reimplementing that list in shell is precisely the "change one, change both" duplicate
+the generated script exists to avoid, so the bar stays quiet instead.
+
+Every failure in the script is `exit 0` with nothing printed -- no clone tag, no such directory,
+a detached HEAD, no git. A status bar is redrawn every ten seconds in a place nothing can be
+dismissed from, so an error message there is worse than a shorter bar. The cost is that a stale
+script is SILENT, which is why `doctor` byte-compares it like the conf.
+
+### The pull request is on disk, keyed on the branch
+
+`openPullRequests` is a Bitbucket call with a token and an eight-second timeout, so it cannot be
+behind a ten-second refresh at all. It is answered by the commands that were going to ask anyway
+-- `sync` resolves a PR's target branch on every run -- and by `hangar browse pr`, which fetches
+when the cache is cold and writes what it learns. Neither writes on `-n`.
+
+**Keyed on the branch, which removes the freshness question rather than answering it.** A pull
+request's id never changes for a branch, so a line whose branch is not the branch checked out
+right now is simply not this branch's pull request and is ignored: no TTL, and the specific
+failure ruled out is a clone showing the number of the PR it was on last week. What it does not
+rule out is a PR closed and reopened as a new one on the same branch; the next `sync` corrects
+that, and `fetchedAt` is recorded so a reader that wants to care can.
+
+One line, space-separated, no JSON: the only reader that matters is generated shell, reading it
+with one `read -r` and no `jq`. A JSON parser in a status bar is a dependency whose failure mode
+is a bar that has quietly stopped saying anything. Neither a branch name nor a URL may contain a
+space, so a space is a separator no value can forge.
+
+A cold or mismatched cache shows a bare ` PR ` rather than nothing, and that is a label rather
+than a claim: it links to `prSearchUrl`, which is the branch's pull-request list and is a true
+statement whether or not one exists. Without it a cold cache would leave nothing on the bar to
+click, and the number could only ever arrive by someone knowing to ask.
+
 ### Reaching a server that is already running
 
 `-f` is read ONCE, when the server starts, so all of the above reached nothing that was already
 open -- four sessions and eleven windows kept the green bar, and `doctor` could only name
 `kill-server`, which it refuses to run because that ends every live agent in the fleet.
 
-It did not have to. Every option the bar needs is a global **session** option rather than a server
-option, so `colours sync` writes them onto the live server, then re-paints each session's badge
-through the same `paintSession` builder `open` uses, then each of its windows. That is the actual
-line between these and the four settings in `TMUX_SETTINGS`: two of those are server options, and
-for them `kill-server` really is the only repair.
+It did not have to. Every option the bar needs is a global **session** or **window** option rather
+than a server option, so `colours sync` writes them onto the live server, then re-paints each
+session's badge through the same `paintSession` builder `open` uses, then each of its windows. That
+is the actual line between these and the four settings in `TMUX_SETTINGS`: two of those are server
+options, and for them `kill-server` really is the only repair.
+
+**One table feeds both, and it has to.** `barOptions` is rendered into the conf and written onto
+the live server by `TmuxServer.restyle`; a list of globals written out in `restyle` beside the
+formats written out in the conf would be two half-copies of the same thing, and the symptom is a
+bar that is right on a fresh server and a version behind on the one somebody is working in.
+`test/tmux-conf.test.ts` asserts every entry reaches the conf, and that no entry is one of
+`TMUX_SETTINGS`' server options -- a server option in that table is a setting that reaches the
+file and nothing else, with nothing to say which happened.
+
+The **click binding is the exception to the table**, because a key binding is a command and there
+is nothing for `set` to carry it. `restyle` issues it as a command for exactly the same reason it
+writes the options: a live server would otherwise keep the bar and lose the link.
 
 A window's own `@hangar_colour` tag wins over its session's clone, looked up by hex because
 `colours change` means a clone's hue need not be the one its index implies. That is the case the
