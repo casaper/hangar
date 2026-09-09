@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.19.0](https://github.com/casaper/hangar/compare/v0.18.0...v0.19.0) (2026-09-09)
+
+### Features
+
+* **cli:** Add hangar close, and collect the plans a killed session cannot ([6081913](https://github.com/casaper/hangar/commit/6081913446cf38f6c9662e255f5238ff941db5da))
+* **cli:** Add hangar reload, the fresh-conf path kill-server was needed for ([bac520b](https://github.com/casaper/hangar/commit/bac520ba9f65c3d624108da30286b61e6fcde26d))
+* **cli:** Say what the context costs and which session it is, on the status line ([cdedf5e](https://github.com/casaper/hangar/commit/cdedf5ef94e66b91c7a062f7b737566accd67ddb))
+* **editor:** Let a driver close the window one clone is open in ([c122d74](https://github.com/casaper/hangar/commit/c122d74b55712ad256f545e16d19dcb8d3110089))
+* **editor:** Put the clone, its branch and its hue in the VS Code window ([7a426d0](https://github.com/casaper/hangar/commit/7a426d072ea8e6564649fdefd5ddf9a64b07e0ca))
+* **modes:** Give the hangar-root session a third tab that is just a shell ([de68a7d](https://github.com/casaper/hangar/commit/de68a7d0e675c00d7cd630e1fbcea1cfdef3a3e6))
+* **sync:** Cache which pull request a branch has, keyed on the branch ([7646e26](https://github.com/casaper/hangar/commit/7646e26ed6965979d541032572c2f0f924183ab4))
+* **terminal:** Give a clone's shells a prompt the footer does not repeat ([dd5cfcc](https://github.com/casaper/hangar/commit/dd5cfcc51ce6bc76a389e0ed703f6a18f827ddd7))
+* **terminal:** Name the branch, the ticket and the pull request on the clone bar ([1ffa341](https://github.com/casaper/hangar/commit/1ffa341f160b2957b83c181ab18bdb7f8512b983)), closes [PR#1204](https://github.com/casaper/PR/issues/1204)
+* **terminal:** Put the clone, its path and its git state on the pane footer ([332f6c6](https://github.com/casaper/hangar/commit/332f6c688879668b6e41ba59999fefc31c348e71))
+
+### Bug Fixes
+
+* **editor:** Keep a padded workspace folder label padded through a sync ([10838ac](https://github.com/casaper/hangar/commit/10838ace5ed31bd7ffea77a493a9c55bef796e1e))
+* **terminal:** Draw the footer on every window, not only the current one ([2120ba0](https://github.com/casaper/hangar/commit/2120ba0033e1f9ec7d0bfd65d35495929ec2b927))
+* **terminal:** Make the Accessibility hint a path you can actually paste ([b07b1a6](https://github.com/casaper/hangar/commit/b07b1a6cee112480e4b07c5a2200deb66890770c))
+* **terminal:** Name tmux in the Accessibility hint, not just the terminal ([b1cb688](https://github.com/casaper/hangar/commit/b1cb6880e9823f1accc24df9e6e7e8ec09e50c66))
+
+### Build & Dependencies
+
+* **cli:** Keep a plugin's scratch directory out of lint ([331f611](https://github.com/casaper/hangar/commit/331f6114e06ec8b1ee997fab75d5131b11f3a385))
+
 ## [0.18.0](https://github.com/casaper/hangar/compare/v0.17.0...v0.18.0) (2026-09-08)
 
 ### Features
