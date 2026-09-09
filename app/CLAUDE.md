@@ -360,7 +360,7 @@ stale on the next commit and nothing checks it, so run `wc -l` when you want one
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | entry point           | `cli.ts` — every command, option and alias is registered here, plus the `preAction` config gate and the `configureHelp` that prints all of a command's aliases                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | maintainer            | `commands/dev.ts` — `hangar dev golden`, the capture behind `pnpm golden`; `commands/release.ts` — `hangar dev release`, the gates and preflight in front of semantic-release, with `release/commits.ts` beside it reading the range. **Both are hidden in `cli.ts`, and that is their interface contract**: nothing about either is promised to an operator, so neither gets a row in `hangar-ops/reference/commands.md`. `dev` is deliberately NOT in `NEEDS_NO_CONFIG` — a capture, or a release, derived from a hangar with no config would be derived from the schema defaults, the one output neither may be mistaken for |
-| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`, `install`, `claude`, `browse`, `close`, `reload`                                                                                                                                                                                                                                                                                                                                                  |
+| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`, `install`, `claude`, `browse`, `close`, `reload`, `pr`                                                                                                                                                                                                                                                                                                                                            |
 | config                | `config/schema.ts` (the zod authority), `default-branch.ts`, `load.ts` (discovery + precedence), `derive.ts`, `json-schema.ts`, `drift.ts` (the example-vs-live comparison `config validate` runs)                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | per-clone artifacts   | `clone-config.ts` — the byte-compared builders `doctor` holds every clone to; `colour-assignments.ts`; `ports.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | generators            | `generate/` — `terminal-sh.ts`, `tmux-conf.ts`, `tmux-status-sh.ts`, `claude-tmux-conf.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -589,6 +589,21 @@ nobody checks. One `git status --porcelain=v1 -b --no-optional-locks` answers th
 ahead and behind counts and every file state together, and the flag is load-bearing — a plain
 `git status` takes `index.lock`, ten seconds apart, in every attached pane.
 
+**The TOP line may use colour, and that is the same property rather than an exception**: it sits on
+`STATUS_BAR_BG`, the one neutral the whole fleet shares, so a floor can be proved against it. The
+build state of the pull request is the one thing that takes it — through `barTextFor`, never a
+hand-picked hex, because the obvious red measures 4.43:1 and fails. Even there colour is
+reinforcement and not the carrier: pass and fail are 1.18:1 against _each other_, the red/green
+pair, so the three states are three different SHAPES and the bar reads in monochrome.
+
+**The pull request's state is fetched by nobody in the redraw path.** `pr-cache.ts` holds one
+record per clone — number, state, draft, build, review — and the bar draws it and, past
+`forge.prCacheTtlSeconds`, spawns a detached `hangar pr refresh` under an atomic `mkdir` lock. So
+the bar is current without ever blocking, a branch with no pull request is asked once (`id` 0 is
+a real record, not an absence), and `refreshPullRequest` is the ONE writer — a caller assembling
+its own record would stamp `fetchedAt` on missing fields and suppress the refresh that would fill
+them in.
+
 Clicking works through `range=user` regions and one `MouseDown1Status` binding that **falls through
 to tmux's own default**, so a click on a tab still switches windows; it runs `hangar browse`, the
 only part of the bar that can afford the CLI. tmux cannot emit an OSC 8 hyperlink into a status
@@ -662,7 +677,10 @@ four files are **generated by `hangar colours sync` — never hand-edit them**:
   a clone both keep the developer's own prompt. `PROMPT`/`RPROMPT` (or `PS1`) are saved on the way
   in and put back on the way out, and `HANGAR_KEEP_PROMPT` turns the layer off.
 - `clone-tmux-status.sh` — everything on the clone bar tmux cannot answer itself: the whole footer,
-  the issue key and the pull request, one field per call. Called from `#()` jobs in the conf below,
+  the issue key and the pull request with its state, one field per call. It is also the one
+  generated artifact that STARTS something: past the pull-request cache's TTL it spawns a detached
+  `hangar pr refresh`, which is the single place the bar is allowed to cost a Node startup, and
+  only because nothing waits for it. Called from `#()` jobs in the conf below,
   once per field per status refresh — the pane border re-expands exactly as often as the status
   line, measured, which is what makes a git-state glyph down there worth drawing. So it is shell
   rather than the CLI: 0.02-0.14s measured, against 0.24-0.28s for `bin/hangar`. Generated because

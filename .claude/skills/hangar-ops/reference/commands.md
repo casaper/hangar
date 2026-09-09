@@ -23,6 +23,7 @@ Global: `--hangar <path>` (the hangar root to operate on; **only `config show` a
 | `close` | `[clones...]` | `--all` · `--no-editor` · `-y, --yes` · `--force` · `-n, --dry-run` | **act [user]** |
 | `reload` | `[clones...]` | `--all` · `--no-shells` · `--no-claude` · `--no-editor` · `-y, --yes` · `-n, --dry-run` | **act [user]** |
 | `browse` | `<ticket\|pr> <clone>` | `-n, --dry-run` (print the URL, open nothing) | act (opens a browser; `-n` is report) |
+| `pr refresh` | `[clones...]` | `-a, --all` · `--force` · `-q, --quiet` · `-n, --dry-run` | act (writes a cache; the bar spawns it for you) |
 | `resume` | `[clone]` (defaults to the clone you are in) | `-n, --limit <count>` (default `20`, `0` = all) | report **for you** — with no tty it prints the list instead of the picker; at a terminal it launches `claude --resume` |
 | `add-clone` | — | `--no-install` (+ a hidden `--remote <url>`) | **act [user]**, no `-n` |
 | `install` | `[clone]` | `--all` · `-n, --dry-run` | **act [user]** |
@@ -154,12 +155,38 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   finish, `✚✱?` is work in three states at once. They are glyphs rather than colours on purpose:
   the footer sits on the clone's hue, and a red mark on the red clone would be invisible.
 
+  **The pull request says what it is doing, not just its number.** `✎#862 ✗ ≈` is draft, build
+  failing, changes requested. Three axes, one glyph each:
+
+  | | |
+  | --- | --- |
+  | pull request | `✎` draft · *(nothing)* open and ready · `✔` merged · `✖` declined |
+  | build | `✓` pass · `✗` fail · `◌` running · *(nothing)* no build reported |
+  | review | `+` approved · `≈` changes requested · `·` nobody has reviewed yet |
+
+  A merged or declined one shows its glyph and number alone — the build and the reviews are
+  settled. The build glyph is the one coloured thing on the bar, and it is green or red *as well
+  as* a different shape, so the line reads correctly in monochrome or with colour-blindness.
+  `≈` beats `+`: one outstanding change request blocks the merge however many approvals sit
+  beside it, so the bar shows the blocking half of a mixed answer.
+
+  **It keeps itself current, and nothing ever waits for the network to draw a bar.** The bar
+  prints what it last knew and, when that is older than `forge.prCacheTtlSeconds` (90 by default),
+  spawns a `hangar pr refresh` in the background whose answer appears a few seconds later. So a
+  brand-new branch shows a bare `PR` for one refresh and then the real number, with nobody having
+  asked. A hangar nobody is looking at makes no requests at all. `hangar pr refresh <clone>` is
+  the same thing by hand, and prints what it found — worth running when the bar says something
+  surprising and you want to see the answer come back. **That is also the diagnostic when the
+  field never changes at all:** the background refresh writes its errors to `/dev/null`, so a
+  tmux server started in a shell direnv never touched (no `node` on PATH) leaves the bar looking
+  merely stale. Typed by hand, the same command says what is wrong.
+
   Three things to know when a field is blank rather than wrong:
   **the ticket key comes from the branch name** (a branch without one shows nothing, and there is
   no fallback to commit subjects here — `hangar status` does that);
-  **the pull request number comes off disk**, written by `sync` and by `browse pr`, so a branch
-  nobody has asked about shows a bare `PR` that links to that branch's pull requests;
-  and **the bar refreshes every ten seconds**, so a branch you have just switched — or a file you
+  **a bare `PR`** means either nobody has asked yet or the branch genuinely has none — either way
+  it links to that branch's pull requests, so it is worth clicking;
+  and **the bar refreshes every few seconds**, so a branch you have just switched — or a file you
   have just saved — takes a moment to show up on either line.
   A blank field is never an error message — everything behind the bar exits quietly, because a
   status line is no place to report one.

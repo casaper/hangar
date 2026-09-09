@@ -402,7 +402,7 @@ screenshot.
 much width it needs:
 
 ```
- 1 claude  2 shell                                        ABC-1376  PR#862 12:24
+ 1 claude  2 shell                                       ABC-1376  ✎#862 ✗ ≈ 12:24
  clone_02 · angular/src/app · ✚✱⇡2 · fixes/msd/ABC-1376_formly_column_selector
 ```
 
@@ -578,29 +578,141 @@ a detached HEAD, no git. A status bar is redrawn every ten seconds in a place no
 dismissed from, so an error message there is worse than a shorter bar. The cost is that a stale
 script is SILENT, which is why `doctor` byte-compares it like the conf.
 
-### The pull request is on disk, keyed on the branch
+### The pull request is on disk, keyed on the branch AND on time
 
-`openPullRequests` is a Bitbucket call with a token and an eight-second timeout, so it cannot be
-behind a ten-second refresh at all. It is answered by the commands that were going to ask anyway
--- `sync` resolves a PR's target branch on every run -- and by `hangar browse pr`, which fetches
-when the cache is cold and writes what it learns. Neither writes on `-n`.
+Two Bitbucket calls with a token and an eight-second timeout each, so the question cannot be
+behind a five-second refresh at all. `pr-cache.ts` holds the answer and
+`generate/tmux-status-sh.ts` reads that file and nothing else.
 
-**Keyed on the branch, which removes the freshness question rather than answering it.** A pull
-request's id never changes for a branch, so a line whose branch is not the branch checked out
-right now is simply not this branch's pull request and is ignored: no TTL, and the specific
-failure ruled out is a clone showing the number of the PR it was on last week. What it does not
-rule out is a PR closed and reopened as a new one on the same branch; the next `sync` corrects
-that, and `fetchedAt` is recorded so a reader that wants to care can.
+The record is one line, space-separated, no JSON: the only reader that matters is generated
+shell, reading it with one `read -r` and no `jq`. A JSON parser in a status bar is a dependency
+whose failure mode is a bar that has quietly stopped saying anything. Neither a branch name nor a
+URL may contain a space, so a space is a separator no value can forge.
 
-One line, space-separated, no JSON: the only reader that matters is generated shell, reading it
-with one `read -r` and no `jq`. A JSON parser in a status bar is a dependency whose failure mode
-is a bar that has quietly stopped saying anything. Neither a branch name nor a URL may contain a
-space, so a space is a separator no value can forge.
+```
+<branch> <id> <url> <fetchedAt> <state> <draft> <ci> <review>
+```
 
-A cold or mismatched cache shows a bare ` PR ` rather than nothing, and that is a label rather
-than a claim: it links to `prSearchUrl`, which is the branch's pull-request list and is a true
-statement whether or not one exists. Without it a cold cache would leave nothing on the bar to
-click, and the number could only ever arrive by someone knowing to ask.
+**Keyed on the branch, which is still the correctness property.** A line whose branch is not the
+branch checked out right now is simply not this branch's pull request and is ignored -- the
+specific failure ruled out is a clone showing the number of the PR it was on last week, which is
+exactly the shape of wrong that gets believed.
+
+**But branch-keying alone stopped being enough when the record grew past the id.** *A pull
+request's id never changes for a branch*, which is why this file once needed no TTL at all; the
+four fields after it are the volatile ones, and CI turns over inside a minute. So `fetchedAt` went
+from recorded-but-unenforced to load-bearing, measured against `forge.prCacheTtlSeconds`
+(default 90, floor 10, no zero).
+
+#### The refresh never blocks a redraw, and that is the whole design
+
+The `pr` arm draws what is on disk, and only then, if the record is past its TTL, spawns a
+detached `hangar pr refresh <clone>` whose answer lands at the next redraw. Three consequences
+worth stating, because each one is a property somebody would otherwise have to rediscover:
+
+- **A hangar nobody is looking at makes no requests.** The only thing that starts a refresh is a
+  pane being drawn, so this is demand-driven rather than a poll, and there is no daemon.
+- **`mkdir` is the stampede guard**, because it is the atomic primitive every POSIX shell has.
+  Six clones times three windows times every few seconds is a real stampede; measured, 24
+  concurrent redraws against one stale record spawn exactly ONE refresher.
+- **It is the one place the bar spends a Node startup, and the one place that can fail
+  silently.** `bin/hangar` needs `node` on PATH, and a tmux server inherits the environment of
+  whatever shell started it -- which is why `bin/hangar` carries its own no-node check and why
+  `app/.husky/commit-msg` reaches commitlint by path. Here that check writes into `/dev/null`, so
+  a server started outside direnv would take the lock, release it and never update the record,
+  with the bar looking merely stale. Baking an absolute node path would be worse, not better: fnm
+  moves it with the Node version, which is the whole reason `hangar_use_node` exists. **The
+  diagnostic is to type `hangar pr refresh <clone>` yourself** -- the same command, with its
+  output attached. Verified end to end here: a record planted with `fetchedAt=1` and a marker URL
+  was rewritten with the real answer in about ten seconds, with nothing running but tmux.
+- **The lock carries its own epoch, in a file inside the lock directory.** A refresher that is
+  killed leaves the directory behind and would wedge that clone's field for good, so a lock older
+  than five minutes is removed by the next redraw. Five minutes bounds a CRASH, not a cadence:
+  the two calls take under a second and the API gives up at eight. A lock directory with no epoch
+  in it -- a crash between the `mkdir` and the write -- reads as 0 and so as stale, which is the
+  safe direction.
+
+#### `id` of 0 is "asked, and there is none"
+
+The negative cache, and it is not an optimisation. Without a way to record it, a branch that has
+no pull request is indistinguishable from a branch nobody has looked up, so every redraw re-asks,
+for ever, for every such clone. Its `url` is the branch's `prSearchUrl`, so the field stays
+clickable and lands somewhere true -- and `pullRequestLink` special-cases it, because the one
+thing that record must never render as is `#0`.
+
+A cold cache and a negative one both draw the bare ` PR `, which is a label rather than a claim
+for the same reason: the search URL is the branch's pull-request list and is true whether or not
+one exists. Without it a cold cache would leave nothing on the bar to click.
+
+#### One writer, because a half-filled record is worse than none
+
+`refreshPullRequest` is the only thing that writes the record, and `sync`, `browse` and
+`hangar pr refresh` all go through it. The failure it exists to prevent is a caller assembling its
+own record from what it happened to have: `sync` looks up only OPEN pull requests and never asks
+CI at all, so a record built there would be short of exactly the volatile fields while carrying a
+fresh `fetchedAt` -- which reads as current to the bar and suppresses the refresh that would have
+completed it.
+
+That is also why `openPullRequests` takes `anyState` as an opt-in rather than simply widening.
+The bar wants to say "declined", which needs the closed ones; `sync` picks `pullRequests[0]` as
+the branch to rebase ONTO, and handing it a pull request merged last spring would rebase onto a
+stale base and resolve conflicts against it.
+
+#### The glyphs, and the one place colour is allowed
+
+| axis | glyphs |
+| --- | --- |
+| pull request | `✎` draft · *(nothing)* open and ready · `✔` merged · `✖` declined |
+| build | `✓` pass · `✗` fail · `◌` running · *(nothing)* no build reported |
+| review | `+` approved · `≈` changes requested · `·` nobody yet |
+
+A merged or declined pull request draws its glyph and its number and nothing else: the build and
+the reviews are settled, and a green tick beside a merged PR is a fact nobody is deciding anything
+on.
+
+**The build glyph is the one coloured thing on either line, and the footer may never do this.**
+The two lines sit on different backgrounds and that is the whole of it: the top bar is the
+fleet's one neutral (`STATUS_BAR_BG`), so `palette.ts` can prove a floor against it, while the
+footer is a clone's hue with ink on it, where a red mark on the red clone is invisible in exactly
+the one case out of sixteen nobody checks. That is why the footer's git state is glyphs and never
+colour, and why this is not an inconsistency.
+
+Two measurements hold that up:
+
+- **tmux expands `#[...]` that comes OUT of a `#()` job.** Measured rather than assumed, by
+  capturing an attached client from an outer tmux: the job's `#[fg=#26a641]` reaches the terminal
+  as `ESC[38;2;38;166;65m`, and `#[default]` restores the enclosing `status-right-style` rather
+  than the terminal default. Without this the whole scheme would have to be drawn from the conf.
+- **Colour is REINFORCEMENT and never the carrier.** The pass and fail colours measure 1.18:1
+  against *each other* -- a contrast ratio is a luminance metric and these differ almost only in
+  hue, which is the red/green pair deuteranopia erases. So the three states are three different
+  SHAPES and the bar reads correctly in monochrome. No arithmetic over two hex values fixes that,
+  which is why the answer is a glyph. `test/contrast.test.ts` records the number and
+  `test/clone-bar.test.ts` holds the shapes distinct.
+
+Nor are the colours chosen by hand: they go through `barTextFor`, the same lift every clone hue
+already clears. The red asked for, `#f03e3e`, measures 4.43:1 on the bar and is lifted to
+`#f04343`; pure red is worse at 4.26:1. Both are exactly the sort of obviously-fine red nobody
+would have thought to measure.
+
+#### Why not the `bkt` CLI
+
+There is a Bitbucket CLI, and it was measured against this repo before being set aside -- so that
+the question is answered rather than reopened. Everything the bar needs is in the Cloud REST API
+`bitbucket.ts` already calls with the token already configured: one list call returns the id, the
+state, `draft` and every participant's review, and one more returns the build status.
+
+Against that, `bkt status pr` is Data Center only, and `bkt pipeline` is Bitbucket Pipelines only
+-- while a Jenkins-backed repo posts into the generic commit-status API, so those commands answer
+nothing there. Every `bkt` path including `bkt api` fails until a one-time
+`bkt context create --set-active`, which is machine-local state hangar cannot generate. And its
+auth is OAuth in the OS keychain with an hourly expiry, which is the wrong shape for an unattended
+refresher next to a long-lived token.
+
+Its one genuine advantage is real and is the reason this paragraph exists rather than a deletion:
+**it speaks Bitbucket Data Center**, which `forge.kind: 'bitbucketCloud' | 'none'` does not. If a
+DC hangar ever needs this, a `bkt`-backed fetch behind the same record is the way in -- the record
+and the bar are forge-agnostic, and only the fetch is not.
 
 ### Reaching a server that is already running
 
