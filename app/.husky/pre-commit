@@ -5,8 +5,9 @@
 # gitleaks is called by name, not by path: it is a developer tool installed per machine
 # (`brew install gitleaks`), not a dependency of this package. When it is absent the hook SAYS SO
 # and continues rather than failing -- a missing scanner must not block a commit on a machine that
-# never installed it, and `.github/workflows/release.yml` runs the same scan where it cannot be
-# skipped. The literal scan below has no such dependency and always runs.
+# never installed it, and `hangar dev release` runs the same scan where it cannot be skipped:
+# there an absent gitleaks is an error, not this skip. The literal scan below has no such
+# dependency and always runs.
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks git . --config .gitleaks.toml --staged --no-banner --redact || exit 1
 else
