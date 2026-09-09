@@ -19,6 +19,7 @@ import { closeClones, type CloseOptions } from './commands/close.ts';
 import { open } from './commands/open.ts';
 import { reloadClones, type ReloadOptions } from './commands/reload.ts';
 import { plansCollect, plansStamp } from './commands/plans.ts';
+import { prRefresh } from './commands/pr.ts';
 import { ports } from './commands/ports.ts';
 import { removeClone } from './commands/remove-clone.ts';
 import { resume } from './commands/resume.ts';
@@ -575,6 +576,24 @@ plans
   )
   .action((options) => {
     plansCollect(requireHangar(), options);
+  });
+
+const pr = program
+  .command('pr')
+  .description("What each clone's branch has open on the forge, for the clone bar to draw");
+
+pr.command('refresh')
+  .summary("Ask the forge about a clone's pull request and cache the answer")
+  .description(
+    "Asks Bitbucket what the clone's current branch has open -- the number, whether it is a draft, its build status and where its reviews stand -- and writes it where the clone bar reads it.\n\nThe bar spawns this itself, detached, whenever what it has is older than `forge.prCacheTtlSeconds`, so it is rarely typed. Run it by hand when the bar is saying something surprising and you want to see the answer come back.",
+  )
+  .argument('[clones...]', 'clone names or indices')
+  .option('-a, --all', 'every clone')
+  .option('--force', 'ask even when the cached answer is still fresh')
+  .option('-n, --dry-run', 'show which clones would be asked, change nothing')
+  .option('-q, --quiet', "say nothing but warnings (for the status bar's own spawn)")
+  .action(async (clones: string[], options) => {
+    await prRefresh(requireHangar(), clones, options);
   });
 
 plans

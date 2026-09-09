@@ -20,7 +20,7 @@ import {
 } from '../git.ts';
 import { tmuxServer, tmuxSocketName } from '../tmux.ts';
 import { claudeSessionsIn, type ClaudeSession } from '../procs.ts';
-import { forgetCachedPr, writeCachedPr } from '../pr-cache.ts';
+import { refreshPullRequest } from '../pr-cache.ts';
 import { resolveWithClaude } from '../resolve-conflicts.ts';
 import { cloneLabel, confirm, fail, heading, note, ok, step, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
@@ -192,15 +192,15 @@ const resolveTarget = async (
    * changes nothing, and this CLI's `-n` output is its regression record.
    */
   if (opts.dryRun !== true) {
-    if (pr === undefined) forgetCachedPr(hangar, clone, branch);
-    else {
-      writeCachedPr(hangar, clone, {
-        branch,
-        id: pr.id,
-        url: pr.url,
-        fetchedAt: Math.floor(Date.now() / 1000),
-      });
-    }
+    /*
+     * Through the one writer, and NOT by assembling a record here from the `pr` above. That
+     * lookup is deliberately OPEN-only (see `openPullRequests`), and it never asked CI at all --
+     * so a record built from it would be short of exactly the volatile fields while carrying a
+     * fresh `fetchedAt`, which reads as current to the bar and suppresses the refresh that would
+     * have filled them in. One extra pair of requests on a command that already waits for the
+     * network is the cheap side of that trade.
+     */
+    await refreshPullRequest(hangar, clone, branch);
   }
   if (pr === undefined) {
     return onDefault(`no open pull request — the default branch (${defaultBranch})`);

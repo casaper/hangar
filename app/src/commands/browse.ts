@@ -1,18 +1,12 @@
 import pc from 'picocolors';
 
-import {
-  openPullRequests,
-  prSearchUrl,
-  repoRef,
-  usesBitbucket,
-  type RepoRef,
-} from '../bitbucket.ts';
+import { prSearchUrl, repoRef, usesBitbucket, type RepoRef } from '../bitbucket.ts';
 import { CliError } from '../exec.ts';
 import { currentBranch, DETACHED } from '../git.ts';
 import { requireClone, type Clone } from '../fleet.ts';
 import { inferTicket, issueUrl } from '../jira.ts';
 import { platform } from '../platform/index.ts';
-import { readCachedPr, writeCachedPr, type CachedPullRequest } from '../pr-cache.ts';
+import { readCachedPr, refreshPullRequest, type CachedPullRequest } from '../pr-cache.ts';
 import { note, ok, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
 
@@ -85,7 +79,15 @@ export const pullRequestLink = (
   if (branch === DETACHED) {
     return { kind: 'none', why: 'detached HEAD — no branch to look a pull request up by' };
   }
-  if (cached !== undefined) return { kind: 'url', url: cached.url, what: `#${String(cached.id)}` };
+  /*
+   * `id` 0 is the negative record -- asked, and this branch has no pull request. Its url is
+   * already the search link, so the click still lands somewhere true; what it must NOT do is
+   * announce "#0", which is the one reading of the record that names a pull request that has
+   * never existed.
+   */
+  if (cached !== undefined && cached.id !== 0) {
+    return { kind: 'url', url: cached.url, what: `#${String(cached.id)}` };
+  }
   const search = prSearchUrl(ref, branch);
   if (search === undefined) {
     return { kind: 'none', why: 'forge.originUrl is not a Bitbucket repository' };
@@ -121,13 +123,11 @@ export const browse = async (
      */
     let cached = readCachedPr(hangar, clone, branch);
     if (cached === undefined && branch !== DETACHED && usesBitbucket(hangar.config.forge)) {
-      const lookup = await openPullRequests(hangar, repoRef(hangar, clone.path), branch);
-      const pr = lookup.ok ? lookup.pullRequests[0] : undefined;
-      if (!lookup.ok) warn(`could not ask Bitbucket: ${lookup.reason}`);
-      if (pr !== undefined) {
-        cached = { branch, id: pr.id, url: pr.url, fetchedAt: Math.floor(Date.now() / 1000) };
-        if (opts.dryRun !== true) writeCachedPr(hangar, clone, cached);
-      }
+      const found = await refreshPullRequest(hangar, clone, branch, {
+        write: opts.dryRun !== true,
+      });
+      if (found.reason !== undefined) warn(`could not ask Bitbucket: ${found.reason}`);
+      cached = found.record;
     }
     link = pullRequestLink(repoRef(hangar, clone.path), branch, cached);
   }
