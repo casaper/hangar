@@ -56,11 +56,13 @@ under any of its three names, `checkout-default`, `open`, `close`, `reload`, `ad
 `install`, `remove-clone`, `colours change` and `doctor --fix`. They move git state, move files
 between live working trees, or end a live session.
 
-So the default for those ten is: **run the preview yourself, report what it says, and hand the real
-command over** — a copy-pasteable shell line, not a description of one. The preview is the tool
-whose name ends `_preview` (or `doctor`, or `colours_check`), and it is pre-approved precisely so
-this costs you nothing. If the user has told you in this session to go ahead and run the real one,
-do that instead; this is a default, not a refusal. Say which you are doing.
+So the default for those ten is: **run the preview yourself and report what it says.** The preview
+is the tool whose name ends `_preview` (or `doctor`, or `colours_check`), and it is pre-approved
+precisely so this costs you nothing. What comes next depends on whether you have the tools: **in a
+mode, call the real tool** — its `ask` rule is the confirmation, and the prompt is where the user
+says yes. **With no mode, hand the real command over** — a copy-pasteable shell line, not a
+description of one. If the user has told you in this session to go ahead, do that instead; this is
+a default, not a refusal. Say which you are doing.
 
 **`doctor --fix` deserves its own sentence.** `doctor` bare is a report and safe. `--fix` writes
 into every clone's working directory, so it is the user's.
@@ -76,10 +78,10 @@ one, and `hangar doctor --fix` typed at a shell is still reachable under the coa
 ## Habits
 
 - **Preview first, always, on anything that acts** — it prints every decision the real run would
-  make and changes nothing. Report it before proposing the real thing. In the shell that is `-n`;
-  as a tool it is a *different tool*, `<thing>_preview`, because an MCP permission rule cannot
-  match on arguments and a `dry-run` parameter would put the preview and the real run under one
-  rule. That is also why the preview is the one that is pre-approved.
+  make and changes nothing. Report it before the real one runs, whoever runs it. In the shell that
+  is `-n`; as a tool it is a *different tool*, `<thing>_preview`, because an MCP permission rule
+  cannot match on arguments and a `dry-run` parameter would put the preview and the real run under
+  one rule. That is also why the preview is the one that is pre-approved.
 - **Three acting commands have no preview:** `add-clone`, `remove-clone`, `colours change` — and
   so neither do their tools. For those, the report is `hangar list` / `hangar status <n>` /
   `hangar colours list` beforehand. For `doctor`, the bare command *is* the dry run (`doctor`, the
@@ -119,7 +121,8 @@ Run it with `run_in_background: true`, or `timeout: 600000`. **Never bare.** The
 **These two are the exception to preferring the tool.** A tool call has no timeout you can set and
 no background mode; it runs under Claude Code's own MCP timeout, and a `sync` cut off there leaves
 exactly the half-applied rebase described above. So use `mcp__hangar__sync_preview` to report, and
-hand the real `sync` to the user as a shell line — which is what you were going to do anyway.
+hand the real `sync` over as a shell line rather than calling `mcp__hangar__sync` — the one place
+where a shell line the user runs beats a prompt they answer.
 
 While the resolver runs it streams a dim line per tool call. That is progress, not a hang.
 

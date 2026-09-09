@@ -1,13 +1,14 @@
 # The command surface
 
 Transcribed from `app/src/cli.ts`. **`report` = touches nothing. `act` = writes files, moves git
-state, or opens windows.** The seven marked **[user]** are the ones the hangar's `CLAUDE.md`
-reserves for the user at the hangar root — preview them and hand the real command over.
+state, or opens windows.** The ones marked **[user]** are those the hangar's `CLAUDE.md` reserves
+for the user at the hangar root — preview them and report before the real one runs.
 
 **Every command below is also an MCP tool**, and the next section is the map between the two. The
 tool spawns `bin/hangar` with exactly this argv, so the tables here are the truth for both; what
-differs is only the spelling. **[user]** is unchanged by any of it — that is governance, and a
-permission rule does not encode "hand this one over".
+differs is only the spelling. **[user]** is unchanged by any of it — that is governance, and an
+`ask` rule does not encode "preview and report before you call this". It is a stronger mark than
+`ask`: every **[user]** command's tool asks, but so do plenty that carry no mark.
 
 Global: `--hangar <path>` (the hangar root to operate on; **only `config show` and
 `config validate` honour it today** — everything else uses the upward walk from the cwd).

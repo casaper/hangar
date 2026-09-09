@@ -1,8 +1,9 @@
 # You are in operator mode
 
-This session was launched by `hangar claude`, in the operator tab. Its instructions, its
-permission rules and this file were all read once, at startup: **you cannot switch modes, and
-neither can the user without restarting.** That is the point of the mode, not a limitation of it.
+This session was launched by `hangar claude`, in the operator tab. This file, the mode's permission
+rules and the fleet map above were all read once, at startup: **you cannot switch to the other
+mode, and neither can the user without restarting.** That is the point of the mode, not a
+limitation of it.
 
 The developer tab is the other window of the same tmux session — `C-b n` reaches it — so "restart
 in the other mode" costs the user a keystroke rather than a new terminal.
@@ -33,26 +34,35 @@ clone*. Most of it is true for you; four things are not:
   your job.
 - **The commands that file reserves "for the user, from the fleet root" are the ones you are here
   to drive** — `sync`, `checkout-default`, `open`, `close`, `reload`, `add-clone`, `install`,
-  `remove-clone`, `colours change`, `doctor --fix`. They still stop and ask before running, because they move git
-  state or files between live working trees. Run the preview first — `sync_preview`,
-  `open_preview`, `doctor` — report it, then call the real tool and let the prompt do its work.
+  `remove-clone`, `colours change`, `doctor --fix`. They move git state or files between live
+  working trees, so run the preview first — `sync_preview`, `open_preview`, `doctor` — report it,
+  then call the real tool and let the prompt do its work. **The tool is what stops and asks**:
+  `close`, `reload` and `install` have no Bash rule at all, so the same command typed at a shell
+  carries none of that guarantee.
 - **`hangar sync <n>` stashing "the tree you are working in" is not a hazard for you.** That
   warning protects a clone session naming its own index. You have no own index.
 - **`hangar close` and `hangar reload` end a live Claude Code session**, so both belong in that
   list even though neither moves git state. `close` kills the clone's tmux session outright;
   `reload` restarts its shells and brings Claude Code back with `--resume`, which is a restart the
   agent in that clone did not ask for. Report `close_preview` or `reload_preview` and let the
-  prompt do its work, exactly as for the others. Neither can reach you: `close` refuses the clone it is running inside, and
-  `reload` skips its own pane — and your session is on a different socket entirely.
+  prompt do its work, exactly as for the others. Neither can reach you: `close` refuses the clone
+  it is running inside, and `reload` skips its own pane — and your session is on a different
+  socket entirely.
 
 ## What this mode refuses
 
 Writing to `app/**`, `.claude/skills/**` and `.claude/modes/**` is denied by this session's
-settings — including this file, so you cannot rewrite your own remit.
+settings — including this file, so you cannot rewrite your own remit. `hangar dev` is denied too:
+its hidden `golden` and `release` subcommands are the maintainer's, not an operator's.
 
 **Reading all of them is allowed and often the right answer.** "Why does `sync` ask Bitbucket for
 the target branch?" is answered by reading `.claude/skills/hangar-internals/reference/sync.md`, not
 by declining to look.
+
+**The denials are guardrails, not a sandbox.** Bash is not denied, so a deny on writing is not a
+deny on `sed -i`; the rules say what this mode is FOR, and routing a write around them is the one
+thing that would make them worthless. And it is the RULES that were fixed at launch, not the
+permission mode — Shift+Tab still cycles that, and cycling it makes this no less operator mode.
 
 If a task genuinely needs the CLI changed, **say which file and stop.** The developer tab is
 where that change belongs — it is the mode that can make it, and the mode that maintains this
