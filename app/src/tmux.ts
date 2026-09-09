@@ -2,7 +2,7 @@ import type { Clone } from './fleet.ts';
 import { run } from './exec.ts';
 import type { Hangar } from './hangar.ts';
 import { barOptions, paneBorderFormat, statusClickBinding } from './generate/tmux-conf.ts';
-import { colourByHex } from './palette.ts';
+import { type CloneColour, colourByHex } from './palette.ts';
 import { orUndefined } from './terminal/types.ts';
 
 /**
@@ -400,6 +400,19 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
   };
 
   /**
+   * The footer, on ONE window, with that window's hue baked in.
+   *
+   * `pane-border-format` is a WINDOW option, which is the whole reason this is separate from
+   * `paintSession`: writing it at session scope reaches the session's CURRENT window and no
+   * other, so every tab but one fell back to the global neutral format and drew the footer in
+   * grey instead of in the clone's ink. Measured on the live server -- one window per session
+   * carried the hue and the rest carried nothing.
+   */
+  const paintWindow = (window: string, colour: CloneColour): void => {
+    tmux(['set', '-w', '-t', window, 'pane-border-format', paneBorderFormat(hangar, colour)]);
+  };
+
+  /**
    * Session-scope options: whose session this is, and its hue BEHIND the footer.
    *
    * Session scope and not the window scope the shell hook uses, for two reasons. The bar has to
@@ -423,7 +436,6 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
   const paintSession = (clone: Clone): void => {
     const target = tmuxTarget(clone);
     tmux(['set', '-t', target, '@hangar_clone', clone.name]);
-    tmux(['set', '-t', target, 'pane-border-format', paneBorderFormat(hangar, clone.colour)]);
     /*
      * `status-left` is the global's to decide, so any value this session carries is cleared.
      *
@@ -503,6 +515,7 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
       const [, window] = created.out.split(SEP);
       if (window === undefined || window === '') return false;
       paintSession(clone);
+      paintWindow(window, clone.colour);
       tagWindow(window, first);
       runIn(window, first);
       return true;
@@ -524,6 +537,7 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
         '#{window_id}',
       ]);
       if (!created.ok || created.out === '') return false;
+      paintWindow(created.out, clone.colour);
       tagWindow(created.out, tab);
       runIn(created.out, tab);
       return true;
@@ -608,6 +622,9 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
           const style = `bg=${colour.main},fg=${colour.ink}`;
           tmux(['set', '-w', '-t', id, 'window-status-current-style', `${style},bold`]);
           tmux(['set', '-w', '-t', id, 'window-status-style', `fg=${colour.barText}`]);
+          // The footer too, from the same per-window hue: it is a window option, so a session
+          // that has been open since before this loop existed has it on one window at most.
+          paintWindow(id, colour);
         }
         restyled += 1;
       }

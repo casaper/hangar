@@ -208,11 +208,11 @@ test('the hue footer escapes the comma its two-part style needs', () => {
   const hangar = syntheticHangar();
   const clone = cloneAt(hangar, 1);
   const hued = paneBorderFormat(hangar, clone.colour);
-  // The neutral fallback needs one attribute and the hue version needs two, which is the only
+  // The neutral fallback needs one attribute and the hue version needs three, which is the only
   // reason this format has a comma in it at all. `#,` is how tmux is told the comma is content
   // rather than the separator between the conditional's arms -- and getting it wrong does not
   // error, it silently draws the second half of the style as text on the border.
-  assert.ok(hued.includes(`#[bg=${clone.colour.main}#,fg=${clone.colour.ink}]`));
+  assert.ok(hued.includes(`#[bg=${clone.colour.main}#,fg=${clone.colour.ink}#,bold]`));
   // The LAST comma is the separator before the empty else arm and is meant to be bare. Every
   // other one is inside the true arm, so a bare one there would end it early.
   const trueArm = (hued.split('#{?pane_active,')[1] ?? '').replace(/,\}$/, '');

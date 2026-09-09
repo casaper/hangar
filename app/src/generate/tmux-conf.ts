@@ -292,8 +292,16 @@ export const barOptions = (hangar: Hangar): readonly BarOption[] => {
  */
 export const paneBorderFormat = (hangar: Hangar, colour?: CloneColour): string => {
   const job = statusJob(hangar)('footer', '#{pane_current_path}');
+  /*
+   * `bold` on the hue version, and it is legibility rather than emphasis: `colour.ink` is pure
+   * black on most of the palette, and pure black at normal weight on a saturated hue is thinner
+   * on screen than its contrast ratio suggests. The neutral fallback stays unbold -- grey text on
+   * the terminal's own background has the opposite problem.
+   */
   const style =
-    colour === undefined ? `#[fg=${STATUS_BAR_FG}]` : `#[bg=${colour.main}#,fg=${colour.ink}]`;
+    colour === undefined
+      ? `#[fg=${STATUS_BAR_FG}]`
+      : `#[bg=${colour.main}#,fg=${colour.ink}#,bold]`;
   return `#{?pane_active,${style}${job}#[default],}`;
 };
 
