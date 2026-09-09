@@ -139,18 +139,26 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   the detection; `terminal.kind: none` opens no window at all and prints the attach line instead,
   which is a mode rather than a failure. `doctor`'s `emulator` and `tmux` rows are where to check
   what it picked and what the server is doing.
-- **The clone bar names the branch, the ticket and the pull request, and two of them are
-  clickable.** Every clone's tmux window carries a one-line bar at the top — the clone's hue badge,
-  its tabs, then the issue key and the pull request — and the branch on a line along the bottom of
-  the pane. A click on the key or on `PR#1234` opens it in the browser; a click on a tab still
-  switches to that window, and a click on a pane border still marks the pane. What a click runs is
-  `hangar browse ticket|pr <clone>`, which is also worth typing directly.
+- **The clone bar is two lines, and two of its fields are clickable.** Across the top: the tabs,
+  then the issue key and the pull request. Along the bottom, on a band of the clone's own hue: the
+  clone, where in it the pane is standing, its git state and its branch. A click on the key or on
+  `PR#1234` opens it in the browser; a click on a tab still switches to that window, and a click
+  on a pane border still marks the pane. What a click runs is `hangar browse ticket|pr <clone>`,
+  which is also worth typing directly.
+
+  The git state is glyphs, and there are seven: `✔` nothing to report, `⚑` a half-applied rebase
+  or merge, `‼` conflicts, `✚` staged, `✱` changed and not staged, `?` untracked, and `⇡n` / `⇣n`
+  ahead of and behind the upstream. They combine, most urgent first — `⚑‼` is a merge you have to
+  finish, `✚✱?` is work in three states at once. They are glyphs rather than colours on purpose:
+  the footer sits on the clone's hue, and a red mark on the red clone would be invisible.
+
   Three things to know when a field is blank rather than wrong:
   **the ticket key comes from the branch name** (a branch without one shows nothing, and there is
   no fallback to commit subjects here — `hangar status` does that);
   **the pull request number comes off disk**, written by `sync` and by `browse pr`, so a branch
   nobody has asked about shows a bare `PR` that links to that branch's pull requests;
-  and **the bar refreshes every ten seconds**, so a branch you have just switched takes a moment.
+  and **the bar refreshes every ten seconds**, so a branch you have just switched — or a file you
+  have just saved — takes a moment to show up on either line.
   A blank field is never an error message — everything behind the bar exits quietly, because a
   status line is no place to report one.
 - **`hangar colours sync` is what puts a bar change onto a server that is already running.** The

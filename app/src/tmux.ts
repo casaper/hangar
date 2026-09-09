@@ -1,7 +1,7 @@
 import type { Clone } from './fleet.ts';
 import { run } from './exec.ts';
 import type { Hangar } from './hangar.ts';
-import { barOptions, statusClickBinding } from './generate/tmux-conf.ts';
+import { barOptions, paneBorderFormat, statusClickBinding } from './generate/tmux-conf.ts';
 import { colourByHex } from './palette.ts';
 import { orUndefined } from './terminal/types.ts';
 
@@ -361,19 +361,20 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
   };
 
   /**
-   * Session-scope options: whose session this is, and its hue BEHIND the status line's name.
+   * Session-scope options: whose session this is, and its hue BEHIND the footer.
    *
-   * Session scope and not the window scope the shell hook uses, for two reasons. The status bar
-   * has to be right the instant the client attaches, which is before any shell has printed a
-   * prompt and so before the hook has run once. And `status-left` IS a session option -- the hook
-   * could only reach it with `-g`, which would have whichever clone was entered last recolour the
-   * status bar of every other session on the socket.
+   * Session scope and not the window scope the shell hook uses, for two reasons. The bar has to
+   * be right the instant the client attaches, which is before any shell has printed a prompt and
+   * so before the hook has run once. And `pane-border-format` carries ONE clone's hue -- the hook
+   * could only reach it with `-g`, which would have whichever clone was entered last recolour
+   * every other session on the socket.
    *
-   * The hue is the badge's BACKGROUND rather than its text, with `colour.ink` -- pure black or
-   * pure white, whichever reads on that hue -- in front of it. A solid block of colour is far
-   * easier to find across four near-identical windows than coloured text is, and the ink is
-   * what makes it legible without anybody pairing the two by hand. `palette.ts` has the proof
-   * that best-of-black-or-white cannot fall below 4.58:1 for any hue.
+   * The hue is the footer's BACKGROUND rather than its text, with `colour.ink` -- pure black or
+   * pure white, whichever reads on that hue -- in front of it. A solid band of colour along the
+   * bottom of the window is far easier to find across four near-identical windows than coloured
+   * text is, and the ink is what makes every character on it legible without anybody pairing the
+   * two by hand. `palette.ts` has the proof that best-of-black-or-white cannot fall below 4.58:1
+   * for any hue, which is also why the git state on that band is glyphs and never colour.
    *
    * `@hangar_clone` needs only this one write: measured on tmux 3.7c, a session-scope user option
    * is visible from a pane-context format too (`list-panes -a -F '#{@hangar_clone}'` answered for
@@ -383,13 +384,17 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
   const paintSession = (clone: Clone): void => {
     const target = tmuxTarget(clone);
     tmux(['set', '-t', target, '@hangar_clone', clone.name]);
-    tmux([
-      'set',
-      '-t',
-      target,
-      'status-left',
-      `#[fg=${clone.colour.ink},bg=${clone.colour.main},bold] ${clone.name} #[default] `,
-    ]);
+    tmux(['set', '-t', target, 'pane-border-format', paneBorderFormat(hangar, clone.colour)]);
+    /*
+     * `status-left` is the global's to decide, so any value this session carries is cleared.
+     *
+     * `-u`, and not an empty value: unsetting is what lets `barOptions`' global through, while
+     * writing `''` here would pin the session to a value of its own that no later global could
+     * reach. That matters because `restyle` runs against servers that have been up for days --
+     * a session carrying a session-scope `status-left` is one whose bar was painted by an
+     * earlier build, and this is the write that hands it back to the table.
+     */
+    tmux(['set', '-u', '-t', target, 'status-left']);
   };
 
   return {

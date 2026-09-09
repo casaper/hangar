@@ -175,18 +175,6 @@ export const STATUS_BAR_FG = '#bbbbbb';
 export const STATUS_BAR_DIM = '#8a8a8a';
 /** WCAG 2.1 AA for normal text, which is the size a status bar draws at. */
 export const CONTRAST_FLOOR = 4.5;
-/**
- * Room for the clone badge, as a MAXIMUM rather than a width -- so headroom is free.
- *
- * Set past both readings of an unsettled question instead of answering it. `status-left` is
- * `#[fg=...,bg=...,bold] <clone> #[default] `, which is 39 characters of style markup around the
- * name, and whether tmux measures the expanded string or only what it draws decides whether a
- * ten-character clone name fits in 40. Nothing readable off a running server answers it: the
- * option holds the format, not the render. This leaves 22 characters for a clone name either
- * way, and it is written here because both the conf and `restyle` have to agree on it.
- */
-export const STATUS_LEFT_LENGTH = 64;
-
 const INK_DARK = '#000000';
 const INK_LIGHT = '#ffffff';
 

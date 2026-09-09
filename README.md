@@ -47,15 +47,15 @@ browser test run — that isolation is the entire reason the fleet exists.
   a second one, and a clone whose tab you closed reattaches with whatever was still running in it.
   The tmux server is Hangar's own, on a private socket, so none of it disturbs the tmux you
   already run.
-- **The window says what that clone is on.** A bar across the top carries the clone's hue badge,
-  its tabs, and the issue key and pull request its branch is working on; the branch itself runs
-  along the bottom. Click the key or the pull request to open it in the browser — clicking a tab
-  still switches to it.
+- **The window says what that clone is on.** A bar across the top carries its tabs and the issue
+  key and pull request its branch is working on; a footer along the bottom, in the clone's own
+  hue, names the clone, where in it you are standing, its git state and its branch. Click the key
+  or the pull request to open it in the browser — clicking a tab still switches to it.
 
   ```
-   clone_01 │ 1 claude  2 shell │ ABC-1323  PR#1204  14:20
+   1 claude  2 shell                              ABC-1323  PR#1204  14:20
    $
-   ─ fixes/ABC-1323_i_can_close_the_browser_tab_even_changes… ─
+   clone_01 · src/app · ✚✱⇡2 · fixes/ABC-1323_i_can_close_the_browser_tab…
   ```
 - **Colour identity.** Near-identical terminal windows are the fleet's usability problem, so every
   clone gets a hue that shows up in its Claude Code status line, its prompt border, and the

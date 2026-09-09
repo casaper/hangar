@@ -306,18 +306,34 @@ screenshot.
 
 ## What the clone bar says, and the four things tmux would not let it say
 
-`generate/tmux-conf.ts`'s `barOptions`, `generate/tmux-status-sh.ts`, `pr-cache.ts` and
-`commands/browse.ts`. The bar carries the clone's hue badge, its tabs, then the issue key and the
-pull request; the branch is on a line along the bottom of the pane. Everything below was measured
-on tmux 3.7c, and four of the measurements are the reason the design is shaped the way it is
-rather than the obvious way.
+`generate/tmux-conf.ts`'s `barOptions` and `paneBorderFormat`, `generate/tmux-status-sh.ts`,
+`pr-cache.ts` and `commands/browse.ts`. Two lines, and which fact goes on which is decided by how
+much width it needs:
 
-**A window's name is the ROLE alone.** The clone is named by the badge -- a block of colour, which
-is what a developer actually finds across four near-identical windows -- and by
+```
+ 1 claude  2 shell                                        ABC-1376  PR#862 12:24
+ clone_02 · angular/src/app · ✚✱⇡2 · fixes/msd/ABC-1376_formly_column_selector
+```
+
+The top line is `status-right`, and the two facts on it are the two SHORT ones -- because they are
+also the two clickable ones, and clicking is a status-line feature the border does not have. The
+bottom line is the pane border, in the clone's own hue, and it carries everything that needs room:
+the clone, where in it this pane is standing, its git state and its branch. Everything below was
+measured on tmux 3.7c, and five of the measurements are the reason the design is shaped the way it
+is rather than the obvious way.
+
+**The clone is named on the footer, and `status-left` is empty.** A badge up top as well would be
+the third place one window says which clone it is -- after the footer and `set-titles-string` --
+and the two facts with no other home, the issue key and the pull request, are the ones that were
+being squeezed for it. The hue did not move with the name: it is the footer's whole background
+now, which is a bigger block of colour to find across four near-identical windows than a badge
+was. `status-left` is written as an explicit empty string rather than left unset, because tmux's
+own default is `[#S] ` and that would put the raw session name back.
+
+**A window's name is the ROLE alone.** The clone is named by the footer and by
 `set-titles-string`, for a window in the dock with no bar to read. A third naming in the window
-name puts it in every tab beside a badge already saying it, once per `terminal.tabs[]` role.
-Nothing looks a window up by name: identity is the session, and every `-t` targets a captured
-`#{window_id}`.
+name puts it in every tab, once per `terminal.tabs[]` role. Nothing looks a window up by name:
+identity is the session, and every `-t` targets a captured `#{window_id}`.
 
 ### The four refusals, each measured
 
@@ -330,7 +346,7 @@ Nothing looks a window up by name: identity is the session, and every `-t` targe
 - **`#[range=user|X]` works in `status-format` and is silently ignored in `pane-border-format`.**
   Ranges are a status-line feature; the border accepts the style, renders nothing for it and
   fires no `Status` key. That is what splits the bar in two: the short clickable facts belong up
-  top, and the long branch belongs on the border, which can only ever be text.
+  top, and the footer belongs on the border, which can only ever be text.
 - **A header at the top and a footer at the bottom is unreachable.** `status-position` is one
   option for the whole status block, so `status 2` gives a second line with both at the top.
   `pane-border-status bottom` is the only bottom line tmux has, and it renders with a single pane.
@@ -341,6 +357,15 @@ Nothing looks a window up by name: identity is the session, and every `-t` targe
 - **A `range=user|X` argument is at most 15 bytes**, documented and not reported: a longer one
   simply never fires. `hangar-ticket` is 13. The prefix is not decoration -- it is what the click
   binding tests, so our regions can be told from tmux's own `window`, `session` and `pane` ones.
+- **The border re-expands at `status-interval`, exactly as often as the status line does.** This
+  is the one that decides whether the footer can carry a git state at all, and it had to be
+  measured rather than assumed: a branch changes once an hour and would hide a format that only
+  redraws on a resize, while a `✱` changes on every save and would not. On a scratch socket with
+  one attached client, a counting `#()` job in `pane-border-format` and another in `status-right`
+  ran 6 and 6 times at five seconds, 13 and 12 at fifteen, 19 and 19 at twenty-five. So no
+  `refresh-client` plumbing is needed anywhere -- which is worth recording, because the obvious
+  fallback (a `precmd` hook calling `tmux refresh-client`) would have reached every shell pane and
+  missed the one that matters, the pane running Claude Code, which prints no prompt.
 
 ### The click preserves the key it takes
 
@@ -385,6 +410,61 @@ reasons and the second is a bug rather than a preference:
 the way into the conf and tmux processes no escapes inside single quotes, so the job uses DOUBLE
 quotes around the tag. One `'` in there would end the option's value and leave the rest of the
 line as garbage tmux does not complain about.
+
+**The footer's job takes the pane path too, and that is not the rule above being broken.** Which
+CLONE this is comes from the session, because a pane can wander and the session cannot. Where in
+the clone this PANE is standing is a different question, and `#{pane_current_path}` is the only
+thing that can answer it -- so it is passed as a second argument, and a pane that has wandered
+outside the clone gets a footer saying where it actually is rather than one quietly naming the
+wrong tree.
+
+It is also the ONLY other `#{…}` in that command, and the budget is the reason. A job is keyed on
+its expanded command, so every expansion in the text multiplies the jobs: the clone name buys one
+per session, which is the point, and the path buys one per pane per directory, which is what the
+footer is for. `#{pane_width}` was considered for padding the hue band to the full width and
+rejected on exactly this -- it would fork a shell per column while a pane is being dragged. The
+band comes from `pane-border-style` instead, which the shell hook sets to `bg=$hue,fg=$hue` so the
+whole line is solid hue with the `─` glyphs invisible inside it.
+
+### What the footer says, and why the git state is glyphs
+
+One `git --no-optional-locks status --porcelain=v1 -b` answers four things at once -- the branch,
+the ahead and behind counts, and every file state -- so the footer costs one process rather than
+four. Measured in a real clone of this fleet's repo: 0.14s, against 0.045s for the `symbolic-ref`
+the ticket and pull-request fields still use.
+
+**`--no-optional-locks` is load-bearing rather than tidy.** A plain `git status` refreshes the
+index and takes `index.lock` to write it back, and this runs every ten seconds in every attached
+pane -- so without the flag the bar would contend for that lock with whatever the developer, or an
+agent, is doing in the same clone. The flag exists for this exact caller and makes the walk
+read-only.
+
+**The state is glyphs and never colour, and that is a contrast property rather than a style.** The
+footer is `colour.ink` on the clone's hue, and ink is pure black or pure white, so `palette.ts`'s
+proof that it clears 4.58:1 on any hue covers every character on the line. A coloured mark would
+throw that away for one clone out of sixteen -- a red `✗` on the red clone is invisible, and
+nothing in a review catches it, because it looks right in fifteen of the sixteen cases somebody
+might check.
+
+| glyph | means | from |
+| ----- | ----- | ---- |
+| `✔` | nothing else to say | no other mark applies |
+| `⚑` | a rebase or merge is half-applied | `rebase-merge`, `rebase-apply`, `MERGE_HEAD` |
+| `‼` | conflicts | a `U` on either side, or `AA`/`DD` |
+| `✚` | staged | a non-space index column |
+| `✱` | changed and not staged | `M` or `D` in the work-tree column |
+| `?` | untracked | `??` |
+| `⇡n` `⇣n` | ahead of, behind its upstream | the `## ` line's `[ahead n, behind n]` |
+
+`✔` is decided BEFORE the arrows, so a tree that is clean and merely ahead reads `✔⇡6` rather than
+a lone `⇡6` that looks like an answer with its first half missing. Both counts are checked to be
+digits before they are shown: they are parsed out of the same line as the branch name, so a branch
+called `something_behind_x` would otherwise be read as a count.
+
+The branch also comes off that `## ` line rather than from `symbolic-ref`, which is what lets the
+footer say `HEAD (no branch)` on a detached HEAD instead of going quiet. The path is shown from its
+END when it is long, since the leaf directory says where you are and the segments in front of it
+are the ones the clone name has already implied.
 
 ### The script is generated so the key pattern is not a second definition
 

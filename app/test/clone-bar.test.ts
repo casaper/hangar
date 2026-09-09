@@ -63,7 +63,7 @@ test('the script is a self-contained sh at the hangar root, naming no machine pa
   assert.ok(namesNoMachinePath(artifact.content));
   // One arm per field the conf asks for. A missing one is silent by construction -- every
   // failure in this script is `exit 0` with nothing printed, so the bar just goes quiet.
-  for (const field of ['branch)', 'ticket)', 'pr)']) {
+  for (const field of ['footer)', 'ticket)', 'pr)']) {
     assert.ok(artifact.content.includes(`\n${field}\n`), `no case arm for ${field}`);
   }
 });

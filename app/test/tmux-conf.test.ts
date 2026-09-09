@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 import {
   barOptions,
+  paneBorderFormat,
   statusClickBinding,
   TMUX_SETTINGS,
   tmuxConfArtifact,
@@ -14,6 +15,7 @@ import {
   STATUS_BAR_DIM,
   STATUS_BAR_FG,
 } from '../src/palette.ts';
+import { cloneAt } from '../src/fleet.ts';
 import { namesNoMachinePath, syntheticHangar } from './fixture.ts';
 
 /**
@@ -193,13 +195,44 @@ test('a click that is not on one of ours falls through to what tmux does by defa
   assert.equal(binding[4], 'if-shell');
 });
 
-test('the branch line renders for the active pane only', () => {
+test('the footer renders for the active pane only', () => {
   const border = barOptions(syntheticHangar()).find((o) => o.name === 'pane-border-format');
-  // A split window draws one border line per pane, and every copy would carry the same branch.
+  // A split window draws one border line per pane, and every copy would carry the same answer.
   assert.match(border?.value ?? '', /^#\{\?pane_active,/);
-  // No comma may appear inside either arm of a `#{?…}`: it splits on the first one, so a
+  // No BARE comma may appear inside either arm of a `#{?…}`: it splits on the first one, so a
   // two-part style like `bg=x,fg=y` would cut the format in half and the rest is drawn as text.
   assert.equal((border?.value ?? '').split('#{?pane_active,')[1]?.split(',').length, 2);
+});
+
+test('the hue footer escapes the comma its two-part style needs', () => {
+  const hangar = syntheticHangar();
+  const clone = cloneAt(hangar, 1);
+  const hued = paneBorderFormat(hangar, clone.colour);
+  // The neutral fallback needs one attribute and the hue version needs two, which is the only
+  // reason this format has a comma in it at all. `#,` is how tmux is told the comma is content
+  // rather than the separator between the conditional's arms -- and getting it wrong does not
+  // error, it silently draws the second half of the style as text on the border.
+  assert.ok(hued.includes(`#[bg=${clone.colour.main}#,fg=${clone.colour.ink}]`));
+  // The LAST comma is the separator before the empty else arm and is meant to be bare. Every
+  // other one is inside the true arm, so a bare one there would end it early.
+  const trueArm = (hued.split('#{?pane_active,')[1] ?? '').replace(/,\}$/, '');
+  for (let i = trueArm.indexOf(','); i !== -1; i = trueArm.indexOf(',', i + 1)) {
+    assert.equal(trueArm[i - 1], '#', `bare comma at ${String(i)} would end the arm: ${trueArm}`);
+  }
+});
+
+test('the per-session options reach a live server too, or the table is the only half applied', () => {
+  const hangar = syntheticHangar();
+  const clone = cloneAt(hangar, 1);
+  // `barOptions` is written globally by `restyle`; `paneBorderFormat` is written per session by
+  // `paintSession`, from the same pass. The split is what lets one clone's hue onto its own
+  // footer without painting every session on the socket -- and the risk it carries is that an
+  // option moving from the table to the session takes itself out of the live-apply guarantee
+  // with nothing to say so. So both halves are asserted here, not just the table.
+  const global = barOptions(hangar).find((o) => o.name === 'pane-border-format');
+  assert.ok(global !== undefined, 'the neutral fallback belongs in the table');
+  assert.ok(!global.value.includes(clone.colour.main), 'a global must carry no clone hue');
+  assert.ok(paneBorderFormat(hangar, clone.colour).includes(clone.colour.main));
 });
 
 test('both the jobs and the click name their program by absolute path', () => {
@@ -208,10 +241,12 @@ test('both the jobs and the click name their program by absolute path', () => {
   // tmux's `#()` jobs and `run-shell` inherit the SERVER's environment, which is whatever shell
   // started it and need not have direnv's PATH -- the same reason `iterm2.ts` names tmux
   // absolutely. A bare `clone-tmux-status.sh` would silently print nothing for ever.
-  assert.ok(
-    values.some((v) => v.includes(`#(${hangar.paths.tmuxStatusScript} branch `)),
-    'the branch job must name the generated script by path',
-  );
+  for (const field of ['footer', 'ticket', 'pr']) {
+    assert.ok(
+      values.some((v) => v.includes(`#(${hangar.paths.tmuxStatusScript} ${field} `)),
+      `the ${field} job must name the generated script by path`,
+    );
+  }
   assert.ok(
     statusClickBinding(hangar).some((word) => word.includes(`${hangar.paths.bin} browse `)),
     'the click must name bin/hangar by path',

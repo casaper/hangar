@@ -142,9 +142,14 @@ _hangar_wt_chrome_set() {
             # on the bar, and the lift is per-hue rather than lightening all sixteen.
             command tmux set -w -t "$TMUX_PANE" window-status-current-style "bg=$hue,fg=$2,bold" 2>/dev/null
             command tmux set -w -t "$TMUX_PANE" window-status-style "fg=$3" 2>/dev/null
-            # The borders carry it too, for a status line that is switched off or too full.
-            command tmux set -w -t "$TMUX_PANE" pane-border-style "fg=$hue" 2>/dev/null
-            command tmux set -w -t "$TMUX_PANE" pane-active-border-style "fg=$hue" 2>/dev/null
+            # The borders carry it as a solid BAND -- background and line character both
+            # the hue -- because the bottom one is the clone's footer. `pane-border-format`
+            # draws the clone, the path, the git state and the branch onto it in
+            # `colour.ink`, and a band is what puts those characters ON the hue rather than
+            # in a gap in it. The borders a split adds take the same style, which is the
+            # hue in more places rather than a different colour anywhere.
+            command tmux set -w -t "$TMUX_PANE" pane-border-style "bg=$hue,fg=$hue" 2>/dev/null
+            command tmux set -w -t "$TMUX_PANE" pane-active-border-style "bg=$hue,fg=$hue" 2>/dev/null
             ;;
         konsole|osc11)
             if [ -z "$1" ]; then
