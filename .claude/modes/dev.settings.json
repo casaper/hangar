@@ -8,6 +8,7 @@
       "Bash(pnpm test)",
       "Bash(pnpm scan)",
       "Bash(pnpm golden)",
+      "Bash(git diff --exit-code dev/golden/gated)",
       "Bash(hangar config schema --check)",
       "Bash(hangar colours sync -n)"
     ]
