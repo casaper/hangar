@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.21.0](https://github.com/casaper/hangar/compare/v0.20.0...v0.21.0) (2026-09-09)
+
+### Features
+
+* **mcp:** Expose every command and flag a tool can usefully carry ([522d866](https://github.com/casaper/hangar/commit/522d8664acf9c5464673ef0f82e33bfe64ef970a))
+* **mcp:** Serve the hangar's own commands to a mode session as tools ([fb10cf5](https://github.com/casaper/hangar/commit/fb10cf5a09b9f2b22a5f4741e75a2cfce0c98f66))
+* **modes:** Give both mode sessions the hangar tool server ([7f0de7b](https://github.com/casaper/hangar/commit/7f0de7b0d37929ef7cfd26959e7356c38b74fd6d))
+
+### Documentation
+
+* **cli:** Drop the code map's counts, and give two modules a row ([1fe8827](https://github.com/casaper/hangar/commit/1fe88274bd86ed86a6bb42e1bb087d43910e431d))
+* **mcp:** Say what a tool separates that a Bash prefix cannot ([f1c2f95](https://github.com/casaper/hangar/commit/f1c2f9574b28c6b85462882c2e06e379c57d7464))
+* **modes:** Correct both modes' instructions for a session that has the tools ([52e6aa7](https://github.com/casaper/hangar/commit/52e6aa79ff09e643ca86075ae5fe507e75cb11e3))
+* **modes:** Correct developer mode's tab, its gates and what a tool call is not ([9801eb5](https://github.com/casaper/hangar/commit/9801eb56469fdee80c8dc793ab66e3c26b2f994e))
+* **modes:** Say what stops and asks, and what the write deny does not cover ([a4d4994](https://github.com/casaper/hangar/commit/a4d4994ecc9b3ccaa070774668f0d624ba94617d))
+* **modes:** Say where the probe's tool count comes from, rather than writing it down ([303e665](https://github.com/casaper/hangar/commit/303e665ff164fe494ded6a3fd33da1ec4bc6a5e3))
+* **modes:** Trim operator mode's tool note, and say why developer mode has no rules ([a781cf5](https://github.com/casaper/hangar/commit/a781cf589a6091162822b848c607e46355dfb12a))
+
+### Tests
+
+* **mcp:** Hold every exposed tool to a permission rule of its own ([85a0e82](https://github.com/casaper/hangar/commit/85a0e829f82a8cb1c21b53c33247dc6d67c1419c))
+
+### Chores
+
+* **modes:** Pre-approve the gates developer mode runs after every change ([4c630c0](https://github.com/casaper/hangar/commit/4c630c031a1bcdb62b6c77cfbb9d4e4d534eb925))
+
 ## [0.20.0](https://github.com/casaper/hangar/compare/v0.19.0...v0.20.0) (2026-09-09)
 
 ### Features
