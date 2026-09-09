@@ -230,10 +230,22 @@ const namesSession = (passthrough: readonly string[]): boolean =>
  * The argv claude is launched with.
  *
  * **The ordering is what makes resuming into a mode work**, and it is the reason this is a pure
- * builder with a test rather than a template string: `--settings` and
- * `--append-system-prompt-file` come FIRST, so a passed-through `--resume <id>` is resumed with
- * the mode's permissions and remit already in force. Reversed, a resumed session would come back
- * as a mode-less one wearing the right badge, which is the failure that looks like success.
+ * builder with a test rather than a template string: `--settings`,
+ * `--append-system-prompt-file` and `--mcp-config` come FIRST, so a passed-through
+ * `--resume <id>` is resumed with the mode's permissions, remit and tools already in force.
+ * Reversed, a resumed session would come back as a mode-less one wearing the right badge, which
+ * is the failure that looks like success.
+ *
+ * **`--mcp-config` rather than a `.mcp.json` for Claude Code to discover**, and the reason is
+ * developer mode: its working directory is `app/`, so a file at the hangar root may or may not
+ * be found from there, and "may or may not" is not a thing to build a tool surface on. An
+ * absolute path built from `hangar.root` reaches both modes for the same reason `--settings`
+ * already does. Keeping it out of a discovered path also means it is loaded once, by the
+ * sessions that ask for it, and never approved twice.
+ *
+ * **`--strict-mcp-config` is deliberately not passed.** It would confine the session to this one
+ * file and so silently drop whatever MCP servers the developer configured for themselves, which
+ * is a removal nobody asked for.
  */
 export const claudeArgvFor = (
   hangar: Hangar,
@@ -244,6 +256,8 @@ export const claudeArgvFor = (
   join(hangar.root, '.claude', 'modes', `${mode}.settings.json`),
   '--append-system-prompt-file',
   join(hangar.root, '.claude', 'modes', `${mode}.md`),
+  '--mcp-config',
+  join(hangar.root, '.claude', 'modes', 'mcp.json'),
   ...(namesSession(passthrough) ? [] : ['-n', `hangar ${mode}`]),
   ...passthrough,
 ];

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "hangar": {
+      "command": "hangar",
+      "args": ["mcp"]
+    }
+  }
+}

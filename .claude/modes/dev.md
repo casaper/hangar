@@ -18,6 +18,12 @@ nothing else, so for the two-thirds of this CLI that touches a live working tree
 because it caught something" notes are still the only surviving record of a fixed bug. Take the one
 reference file that matches what you are touching; they are not all loaded at once.
 
+**You have the `hangar` tools too, and a caution comes with them.** `mcp__hangar__*` is one tool
+per command, served by `hangar mcp` from this same working tree — so an edit under `app/src/mcp/`
+reaches the server at its next start, which is the next `hangar claude`, not now. Use them to look
+around. **Do not use them to test a change**: a tool call is not what a user types, and this mode's
+job is the thing that gets typed. Run the real command.
+
 ## You are not in a clone
 
 The `CLAUDE.md` above the app one is the fleet map, addressed to sessions running inside a clone.

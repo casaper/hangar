@@ -127,16 +127,32 @@ test('the subcommand boundary survives a hangar directory named claude', () => {
 // claudeArgvFor -- the ordering that makes resuming into a mode work
 // ---------------------------------------------------------------------------------------------
 
-test('the mode’s settings and remit precede anything passed through', () => {
+test('the mode’s settings, remit and tools precede anything passed through', () => {
   const argv = claudeArgvFor(hangar, 'ops', ['--resume', 'abc']);
-  const settings = argv.indexOf('--settings');
-  const prompt = argv.indexOf('--append-system-prompt-file');
   const resume = argv.indexOf('--resume');
-  assert.ok(settings !== -1 && prompt !== -1 && resume !== -1);
-  // Reversed, `--resume` would be honoured with no permissions and no remit, and the session
-  // would come back wearing the badge of a mode it is not in.
-  assert.ok(settings < resume, '--settings must precede --resume');
-  assert.ok(prompt < resume, '--append-system-prompt-file must precede --resume');
+  assert.ok(resume !== -1);
+  // Reversed, `--resume` would be honoured with no permissions, no remit and no tools, and the
+  // session would come back wearing the badge of a mode it is not in.
+  for (const flag of ['--settings', '--append-system-prompt-file', '--mcp-config']) {
+    const at = argv.indexOf(flag);
+    assert.ok(at !== -1, `${flag} is missing`);
+    assert.ok(at < resume, `${flag} must precede --resume`);
+  }
+});
+
+test('both modes are handed the one MCP config, and it is an absolute path', () => {
+  /*
+   * Absolute rather than discovered, because developer mode's working directory is `app/` and a
+   * `.mcp.json` at the hangar root may not be found from there. The two modes differ in what
+   * their permission rules let the tools do, never in whether the tools are present.
+   */
+  const expected = join(hangar.root, '.claude', 'modes', 'mcp.json');
+  for (const mode of ['ops', 'dev'] as const) {
+    const argv = claudeArgvFor(hangar, mode, []);
+    assert.equal(argv[argv.indexOf('--mcp-config') + 1], expected);
+  }
+  // It would confine the session to this file and drop the developer's own servers with it.
+  assert.ok(!claudeArgvFor(hangar, 'ops', []).includes('--strict-mcp-config'));
 });
 
 test('each mode names its own settings file and its own remit', () => {
