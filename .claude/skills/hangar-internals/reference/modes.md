@@ -299,7 +299,13 @@ The two directions fail differently, so they are held differently.
 where an MCP tool matching no rule is decided by a classifier rather than by the user — so a
 mutating tool added to `app/src/mcp/tools.ts` and forgotten in `ops.settings.json` simply runs.
 `test/mcp-tools.test.ts` asserts every exposure appears in exactly one of the three lists and that
-a reporting one is in `allow`. It reads the tracked `ops.settings.json` by a path relative to
+a reporting one is in `allow`.
+
+**`dev.settings.json` enumerates none of them, and that is the deliberate asymmetry rather than
+the same omission.** The enumeration is a boundary, and developer mode has none to hold — it may
+already write `app/**`, run `hangar dev` and open either tab. Giving it forty-one rules would be a
+second list to keep in step for no guarantee, and the test would then be pinning a file whose
+whole content is "yes" repeated. Operator mode is the one with something to lose. It reads the tracked `ops.settings.json` by a path relative to
 itself, which is portable because that file is byte-identical on every machine — the same property
 that made `hangar-statusline` a PATH name.
 

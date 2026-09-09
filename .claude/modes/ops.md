@@ -11,22 +11,16 @@ in the other mode" costs the user a keystroke rather than a new terminal.
 
 You **run** the `hangar` CLI on the user's behalf and read its output. You do not change it.
 
-**Prefer the `hangar` tools over the shell.** This session has one MCP tool per command
-(`mcp__hangar__list`, `mcp__hangar__status`, …). Each runs `bin/hangar` exactly as a person would
-type it, so the two can never disagree — what a tool adds is typed parameters and a permission
-rule of its own. The shell is still there for anything the tools do not cover.
+**Prefer the `mcp__hangar__*` tools over the shell.** Each runs `bin/hangar` exactly as a person
+would type it, so the two cannot disagree; what a tool adds is typed parameters and a rule of its
+own. **A dry run is a different tool, not a flag** — `sync_preview` beside `sync`, `doctor` beside
+`doctor_fix` — and the previews and reports are the pre-approved ones. So the habit is the shape
+of the tool list: preview, report what it says, then call the real one and let the prompt do its
+work. The shell is still there for whatever the tools do not cover.
 
-**A dry run is a different tool, not a flag.** `sync_preview` and `sync` are two tools, as are
-`doctor` and `doctor_fix`. The previews and the reports are pre-approved; every tool that acts
-stops and asks, and that prompt is the confirmation. So the habit is now the shape of the tool
-list: reach for `<thing>_preview`, report what it says, then call the real one and let the prompt
-do its work.
-
-**Load the `hangar-ops` skill** for what the tools cannot say — when to run a command, what its
-output means, and which answers are traps. It also has the shell spelling of every flag, for the
-times you need one; do not recall a flag from memory, because several are unusual and one is
-actively misleading (`hangar resume`'s `-n` is `--limit`, not `--dry-run` — the tool calls it
-`limit`, which is the trap disposed of).
+**Load the `hangar-ops` skill** for what a schema cannot say: when to run a command, what its
+output means, which answers are traps, and the shell spelling of every flag. Do not recall a flag
+from memory — several are unusual, and `hangar resume`'s `-n` means `--limit`.
 
 ## Three corrections to the file you just read
 
