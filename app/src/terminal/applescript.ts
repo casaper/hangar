@@ -1,11 +1,13 @@
+import { realpathSync } from 'node:fs';
+
 import { run } from '../exec.ts';
 
 /**
  * The macOS AppleScript helpers, shared by every driver that talks to an app that way.
  *
  * Both mac terminal drivers do, and so does `platform/darwin.ts`'s `closeAppWindow` -- so these
- * live here rather than being written three times. It is a leaf: no seam semantics, no imports
- * beyond `run`.
+ * live here rather than being written three times. It is a leaf: no seam semantics, and nothing
+ * imported beyond `run` and `node:fs`.
  */
 export type OsaResult = { readonly ok: boolean; readonly out: string; readonly err: string };
 
@@ -42,11 +44,11 @@ export const isAccessibilityDenial = (err: string): boolean =>
   err.includes('-1719') || err.includes('assistive access') || err.includes('not allowed');
 
 /**
- * What to allow, and where -- with the part that is not obvious.
+ * What to allow, and where -- with the two parts that are not obvious.
  *
- * "Allow your terminal" is the answer everyone gives and it is only half of one here. macOS
- * attributes an Apple Event to the RESPONSIBLE process, which for a command typed in a terminal
- * is that terminal -- but hangar's commands run inside its own tmux server, and a tmux server is
+ * "Allow your terminal" is the answer everyone gives and it is half of one here. macOS attributes
+ * an Apple Event to the RESPONSIBLE process, which for a command typed in a terminal is that
+ * terminal -- but hangar's commands run inside its own tmux server, and a tmux server is
  * reparented to launchd. A detached chain has no terminal to be responsible for it, so the
  * attribution falls to the executable itself.
  *
@@ -57,8 +59,44 @@ export const isAccessibilityDenial = (err: string): boolean =>
  * bare executables of its own accord (`uv`, and hangar's own launcher script), which is what
  * attribution-to-the-executable looks like from the outside.
  *
+ * Two things make the instruction actionable rather than merely correct:
+ *
+ * - **The REAL path, not the one on PATH.** `tmuxBinary()` answers `command -v`, which here is
+ *   `/opt/homebrew/bin/tmux` -- a symlink. TCC records the resolved target, so the symlink is the
+ *   one path that will not work, and this resolves it. Homebrew's target carries the version, so
+ *   `brew upgrade tmux` moves it and the grant has to be made again; that is said rather than
+ *   left to be discovered.
+ * - **How to reach it in the picker.** `/opt` is hidden in the `+` file dialog and cannot be
+ *   browsed to, which is where this stalls. Cmd-Shift-G takes a path.
+ *
  * A granted process also keeps the answer it was given until it restarts, so a tmux server that
- * has already been refused stays refused -- which is why the last clause is there.
+ * has already been refused stays refused.
  */
-export const ACCESSIBILITY_HINT =
-  'System Settings → Privacy & Security → Accessibility: allow the terminal you run `hangar` from, and — because hangar runs inside its own tmux server, which is detached from that terminal — the `tmux` binary too. A tmux server that was already refused keeps that answer until it restarts.';
+export const accessibilityHint = (): string => {
+  const lines = [
+    'System Settings → Privacy & Security → Accessibility, then:',
+    '  • allow the terminal you run `hangar` from;',
+    `  • allow ${resolvedTmuxPath()} — hangar runs inside its own tmux server, which is detached from that terminal, so macOS attributes the request to the binary rather than to the terminal;`,
+    '  • in that `+` file picker, press Cmd-Shift-G and paste the path — /opt is hidden and cannot be browsed to;',
+    '  • then restart the tmux server: one that has already been refused keeps that answer until it does.',
+  ];
+  return lines.join('\n');
+};
+
+/**
+ * Where tmux really lives, with every symlink resolved, or the bare name if it cannot be found.
+ *
+ * Deliberately not `tmuxBinary()` from `src/tmux.ts`: that returns what `command -v` says, which
+ * is what you want to EXECUTE and exactly what you must not paste into TCC. Keeping this here
+ * also keeps this module the leaf its header claims it is.
+ */
+const resolvedTmuxPath = (): string => {
+  const found = run('sh', ['-c', 'command -v tmux 2>/dev/null']);
+  const path = found.ok ? found.stdout.trim() : '';
+  if (path === '') return 'the `tmux` binary';
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+};

@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 
 import {
-  ACCESSIBILITY_HINT,
+  accessibilityHint,
   asString,
   isAccessibilityDenial,
   osascript,
@@ -85,7 +85,7 @@ const closeWindowByTitle = (app: string, titleContains: string): AppWindowOutcom
   ].join('\n');
   const res = osascript(script);
   if (!res.ok) {
-    if (isAccessibilityDenial(res.err)) return { kind: 'denied', hint: ACCESSIBILITY_HINT };
+    if (isAccessibilityDenial(res.err)) return { kind: 'denied', hint: accessibilityHint() };
     return { kind: 'failed', why: res.err };
   }
   if (res.out === 'not-running') return { kind: 'not-running' };

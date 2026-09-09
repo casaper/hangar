@@ -1,5 +1,5 @@
 import {
-  ACCESSIBILITY_HINT,
+  accessibilityHint,
   appIsRunning,
   asString,
   isAccessibilityDenial,
@@ -79,11 +79,11 @@ export const appleTerminalDriver = (): EmulatorDriver => {
       ].join('\n'),
     );
     if (!res.ok && isAccessibilityDenial(res.err)) {
-      note = `Terminal.app needs Accessibility permission to open a tab. ${ACCESSIBILITY_HINT}`;
+      note = `Terminal.app needs Accessibility permission to open a tab.\n${accessibilityHint()}`;
       return false;
     }
     if (tabCount() <= before) {
-      note = `Terminal.app opened no tab — it likely needs Accessibility permission. ${ACCESSIBILITY_HINT}`;
+      note = `Terminal.app opened no tab — it likely needs Accessibility permission.\n${accessibilityHint()}`;
       return false;
     }
     const lines = ['tell application "Terminal"', '  set theTab to (selected tab of front window)'];

@@ -196,13 +196,20 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   `--no-claude` declines the whole step; `--no-shells` declines the other half.
   A workspace file that differs from its builder is **reported, never written** — that belongs to
   `hangar doctor --fix`.
-- **Closing an editor window needs macOS and Accessibility, and reloading one is not possible.**
-  `close` presses the window's own close button through System Events, which needs Accessibility
-  granted for the terminal `hangar` runs from (System Settings → Privacy & Security →
-  Accessibility). Without it — or on Linux — the window stays open, the command says so in one
-  line and does everything else. There is no editor reload at all: VS Code's `Reload Window` has
-  no default keybinding outside a development build, so `reload` names the gesture instead, and VS
-  Code applies a settings change live anyway.
+- **Closing an editor window needs macOS and Accessibility, and the grant is not just your
+  terminal.** hangar's commands run inside its own tmux server, which is reparented to launchd —
+  so the chain is detached from the terminal, and macOS attributes the request to the tmux binary
+  instead. Allow **both**, in System Settings → Privacy & Security → Accessibility: the terminal
+  you run `hangar` from, and tmux's REAL path — `readlink -f "$(command -v tmux)"`, because the
+  one on PATH is a symlink and TCC records the target, which makes the symlink the one path that
+  will not work. In the `+` file picker, Cmd-Shift-G takes a path; `/opt` is hidden and cannot be
+  browsed to. Then **restart the tmux server**: one that has already been refused keeps that
+  answer until it does. Homebrew's target carries the version, so `brew upgrade tmux` moves it and
+  the grant has to be made again.
+  Without all of that — or on Linux — the window stays open, `hangar close` prints these steps and
+  does everything else. Reloading a window is not possible at all: VS Code's `Reload Window` has
+  no default keybinding outside a development build, and VS Code applies a settings change live
+  anyway.
 - **A clone's shells inside hangar's tmux get a short prompt, and only there.** One `❯` in the
   clone's hue — red instead when the last command failed — with no user, host, path, git state or
   time, because the footer two lines down is already saying all five. It is gated on the tmux
