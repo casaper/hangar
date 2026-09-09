@@ -20,6 +20,7 @@ Global: `--hangar <path>` (the hangar root to operate on; **only `config show` a
 | `merge-default`, `rebase-default` | — | aliases of `sync`, identical options | **act [user]** |
 | `checkout-default` (alias `checkout`) | `[clone]` | `-a, --all` · `-n, --dry-run` · `--include-busy` | **act [user]** |
 | `open` | `[clones...]` | `--all` · `--no-claude` · `--no-editor` · `-b, --branch <name>` · `--no-checkout` · `--include-busy` · `-n, --dry-run` | **act [user]** |
+| `close` | `[clones...]` | `--all` · `--no-editor` · `-y, --yes` · `--force` · `-n, --dry-run` | **act [user]** |
 | `browse` | `<ticket\|pr> <clone>` | `-n, --dry-run` (print the URL, open nothing) | act (opens a browser; `-n` is report) |
 | `resume` | `[clone]` (defaults to the clone you are in) | `-n, --limit <count>` (default `20`, `0` = all) | report **for you** — with no tty it prints the list instead of the picker; at a terminal it launches `claude --resume` |
 | `add-clone` | — | `--no-install` (+ a hidden `--remote <url>`) | **act [user]**, no `-n` |
@@ -172,6 +173,23 @@ The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positr
   setting to hide or reformat. The humanised figure is beside that badge, not instead of it, and
   it counts the same tokens with the window size and percentage added.
   **A theme or status-line change needs Claude Code restarted in that clone.**
+- **`hangar close <clone>` is the other end of `open`, and it kills a live Claude Code session.**
+  The editor window is closed, the clone's tmux session goes with every window in it, and the
+  plans that session cannot collect for itself are collected — a killed Claude Code process skips
+  its `SessionEnd` hook, so this command does that work instead.
+  **There is one tmux server per hangar, not one per clone**, so it kills the clone's SESSION;
+  `kill-server` would end every other clone in the fleet. The server exits on its own once its
+  last session closes, which is what makes the next `hangar open` read a fresh conf.
+  It **refuses** to close the clone whose own session you typed the command in — that kills the
+  terminal mid-command — and `--force` is the way past. Everything else worth knowing (a live
+  session, a dev server that dies with it) is named in one confirmation, which `-y` skips.
+- **Closing an editor window needs macOS and Accessibility.**
+  `close` presses the window's own close button through System Events, which needs Accessibility
+  granted for the terminal `hangar` runs from (System Settings → Privacy & Security →
+  Accessibility). Without it — or on Linux — the window stays open, the command says so in one
+  line and does everything else. Reloading one is not possible either: VS Code's `Reload Window`
+  has no default keybinding outside a development build, and VS Code applies a settings change
+  live anyway.
 - **A clone's shells inside hangar's tmux get a short prompt, and only there.** One `❯` in the
   clone's hue — red instead when the last command failed — with no user, host, path, git state or
   time, because the footer two lines down is already saying all five. It is gated on the tmux

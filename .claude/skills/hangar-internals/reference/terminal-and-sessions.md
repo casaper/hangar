@@ -38,6 +38,60 @@ in `app/CLAUDE.md`; this is what the two commands do with it.
   nothing can tell which transcript a running session owns, and resuming the one already open
   puts two Claude Code sessions in one clone.
 
+## Taking a clone down
+
+`app/src/commands/close.ts`. It ends processes somebody is working in, so it is a pure planner
+over read facts plus a switch over its output -- `-n` renders exactly the list the real run
+performs, and every branch, the refusal included, is asserted in `test/close.test.ts` without a
+tmux server or a live session.
+
+**There is one tmux server per HANGAR, not one per clone**, which is the first thing to get right
+about `close`. A clone is a SESSION on the one socket, so closing it is `kill-session`; a
+`kill-server` would end every other clone in the fleet. The server going away afterwards is
+tmux's own doing -- `exit-empty` is on by default, so it exits when its last session closes, which
+is also what makes the next `hangar open` read a freshly generated conf with nothing arranging it.
+
+**`close` collects the plans itself, and only after the kill.** A killed Claude Code process does
+not run its `SessionEnd` hook, so `plans collect` and `tmp merge` would never run for that
+session and its plan would stay in the clone it was written in. The ordering is the correctness
+part: the root `CLAUDE.md` states that session end is *also the first moment a plan is safe to
+move, because nothing can rewrite it any more*, so collecting first races the session being
+closed.
+
+**One refusal in `close`, and everything else is a warning inside one confirmation.** The refusal
+is closing the clone whose own session the command is running inside, which kills the terminal
+mid-command; `--force` is the way past it. A dev server dying with the session is named rather
+than treated as a guard -- it is recoverable by restarting it, which is the asymmetry with
+`remove-clone`, where the same fact blocks because the directory is about to be deleted.
+
+### Closing an editor window: what the two halves cost
+
+`platform.closeAppWindow(app, titleContains)` is macOS-only and needs Accessibility permission
+for the terminal `hangar` runs from -- **the one capability whose presence is not the same as its
+working**, which is why it returns an outcome union with `denied` in it rather than a boolean. A
+permission a person can grant in ten seconds must not be printed as "could not close the window".
+
+- It presses the window's own close button (`AXCloseButton` by subrole, `button 1` as the
+  fallback) and never sends a keystroke. Both routes exist -- VS Code binds
+  `workbench.action.closeWindow` to Cmd+Shift+W with no when-clause, read out of the shipped
+  bundle -- and a keystroke has to go to whatever is focused, so it means raising the window first
+  and getting it wrong if focus moves in between.
+- The window is found by TITLE, because that is the only handle another application's windows
+  offer from outside, and the generated `*.code-workspace` puts the clone's name at the front of
+  `window.title`. A clone whose workspace file predates that gets `no-window`, which is a named
+  outcome precisely so that case reads as itself.
+- **Accessibility is denied on this fleet's machine**, measured:
+  `System Events got an error: osascript is not allowed assistive access. (-1728)`. So the AX path
+  is written from the interfaces and unexercised, the same standing the Konsole and GNOME Terminal
+  window-openers have. Note the number: -1728 also means "can't get that object", which is what
+  `applicationExists` relies on for "no such app", so `isAccessibilityDenial` matches on the TEXT
+  and adding -1728 to its numeric test would report a missing window as a permission problem.
+- **There is no `reloadWindow` beside it, and that is measured.**
+  `workbench.action.reloadWindow` is registered `keybinding:{weight:250,when:isDevelopment,
+  primary:Cmd+R}`, so a release build has no default keybinding at all and the only route left is
+  the command palette -- a fuzzy text search that would run whichever command it ranked first, in
+  the developer's editor. VS Code applies a workspace settings change live anyway.
+
 ## Finding what is running: the two detectors, and what each one assumes
 
 `app/src/procs.ts`. Everything above rests on it — the busy-clone skip, the `SYNC PAUSE`
@@ -109,6 +163,10 @@ there.
 | `openExternally`       | `open` | `xdg-open` | nothing hands a path to the desktop                            |
 | `openApplicationByName`| yes    | **no**    | a JetBrains install with no launcher on PATH has no fallback    |
 | `vscodeWindowState`    | yes    | yes       | `open` cannot tell a clone's workspace is already open          |
+| `controlAppWindows`    | yes*   | **no**    | `close` leaves the editor window open and names the gesture     |
+
+`*` and the asterisk is the point: on macOS it also needs Accessibility granted by hand, so this
+is the one capability that can be true and still answer `denied`.
 
 `vscodeWindowState` is the one that matters and the one that moved. It lived in `user-paths.ts`,
 whose stated test is *would two hangars disagree about this path* — which it passes, and which is

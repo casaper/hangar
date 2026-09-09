@@ -115,8 +115,12 @@ place in this CLI where `-n` does not mean "change nothing". A clone session is 
 them, and `plans collect` and `tmp merge --quiet` already run there from `SessionEnd` hooks.
 The ones that move git state, files between clones or terminal windows are the **user's, from
 the hangar root**:
-`sync` (under any of its three names), `checkout-default`, `open`, `add-clone`, `install`,
-`remove-clone`, `colours change` and `doctor --fix`.
+`sync` (under any of its three names), `checkout-default`, `open`, `close`, `add-clone`,
+`install`, `remove-clone`, `colours change` and `doctor --fix`.
+
+**`hangar close` ends a live Claude Code session**, which is what makes it the user's rather than
+yours even though it touches no git state. It kills the clone's whole tmux session, and refuses
+when that is the one the command is running inside.
 
 **`hangar install <clone>` runs the repo's declared install steps, and a step can delete work** —
 `npm ci` removes the installed dependencies before refetching them, so a clone with a dev server

@@ -25,11 +25,15 @@ clone*. Most of it is true for you; three things are not:
   session. You are at the hangar root, you belong to no clone, and acting across all of them is
   your job.
 - **The commands that file reserves "for the user, from the fleet root" are the ones you are here
-  to drive** — `sync`, `checkout-default`, `open`, `add-clone`, `remove-clone`, `colours change`,
-  `doctor --fix`. They still stop and ask before running, because they move git state or files
+  to drive** — `sync`, `checkout-default`, `open`, `close`, `add-clone`, `remove-clone`,
+  `colours change`, `doctor --fix`. They still stop and ask before running, because they move git state or files
   between live working trees. Run the dry run first, report it, then let the prompt do its work.
 - **`hangar sync <n>` stashing "the tree you are working in" is not a hazard for you.** That
   warning protects a clone session naming its own index. You have no own index.
+- **`hangar close` ends a live Claude Code session**, so it belongs in that list even though it
+  moves no git state: it kills the clone's tmux session outright, agent and all. Report the dry
+  run and let the prompt do its work, exactly as for the others. It cannot reach you — it refuses
+  the clone it is running inside, and your session is on a different socket entirely.
 
 ## What this mode refuses
 

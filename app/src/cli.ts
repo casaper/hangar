@@ -15,6 +15,7 @@ import { jiraHook } from './commands/jira.ts';
 import { golden } from './commands/dev.ts';
 import { release } from './commands/release.ts';
 import { list } from './commands/list.ts';
+import { closeClones, type CloseOptions } from './commands/close.ts';
 import { open } from './commands/open.ts';
 import { plansCollect, plansStamp } from './commands/plans.ts';
 import { ports } from './commands/ports.ts';
@@ -337,6 +338,27 @@ program
       ...options,
       ...(placement === undefined ? {} : { placement }),
     });
+  });
+
+program
+  .command('close')
+  .summary('Close a clone: its editor window, its Claude session and its tmux session')
+  .description(
+    [
+      "The other end of `hangar open`. The editor window is closed, the clone's tmux session is killed — every window in it, and the Claude Code session running in one of them — and the plans that session cannot collect for itself are collected.",
+      'There is **one tmux server per hangar, not one per clone**, so this kills the clone SESSION and never the server: `kill-server` would end every other clone in the fleet. The server goes away on its own once its last session closes, which is also what makes the next `hangar open` read a freshly generated conf.',
+      'It refuses to close the clone whose own session you typed this in — that would kill the terminal mid-command — and `--force` is the way past that. Anything else worth knowing (a live Claude session, a dev server that dies with it) is named in one confirmation, which `-y` skips.',
+      'Closing an editor window needs macOS and Accessibility permission for the terminal `hangar` runs from. Without either, the window stays open and the command says so, in one line, and does everything else.',
+    ].join('\n\n'),
+  )
+  .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2) — closed in ascending order')
+  .option('--all', 'close every clone in the fleet')
+  .option('--no-editor', 'leave every editor window open')
+  .option('-y, --yes', 'do not ask, even when a live session or a dev server dies with it')
+  .option('--force', "close it even when this command is running inside that clone's session")
+  .option('-n, --dry-run', 'print every decision and close nothing')
+  .action((clones: string[], options: CloseOptions) => {
+    closeClones(requireHangar(), clones, options);
   });
 
 /*
