@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.20.0](https://github.com/casaper/hangar/compare/v0.19.0...v0.20.0) (2026-09-09)
+
+### Features
+
+* **cli:** Read a pull request's state, review and build status, not just its number ([2c96537](https://github.com/casaper/hangar/commit/2c9653742e75217785d1126c92594387c75f4334))
+* **config:** Give the pull-request cache a refresh interval ([e8a073b](https://github.com/casaper/hangar/commit/e8a073ba124a28d665bb8c2ef823e6aa51040ffb))
+* **terminal:** Keep the bar's pull request current without ever blocking a redraw ([7bddda2](https://github.com/casaper/hangar/commit/7bddda2592806f2ca9218b39fbb53bf75faf1e2c)), closes [#26a641](https://github.com/casaper/hangar/issues/26a641)
+
+### Documentation
+
+* **cli:** Say why the bar asks Bitbucket directly rather than through a CLI ([b029fe8](https://github.com/casaper/hangar/commit/b029fe84a63e6a88b106747f19303e0c99847858))
+
 ## [0.19.0](https://github.com/casaper/hangar/compare/v0.18.0...v0.19.0) (2026-09-09)
 
 ### Features
