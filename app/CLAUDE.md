@@ -360,10 +360,11 @@ stale on the next commit and nothing checks it, so run `wc -l` when you want one
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | entry point           | `cli.ts` — every command, option and alias is registered here, plus the `preAction` config gate and the `configureHelp` that prints all of a command's aliases                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | maintainer            | `commands/dev.ts` — `hangar dev golden`, the capture behind `pnpm golden`; `commands/release.ts` — `hangar dev release`, the gates and preflight in front of semantic-release, with `release/commits.ts` beside it reading the range. **Both are hidden in `cli.ts`, and that is their interface contract**: nothing about either is promised to an operator, so neither gets a row in `hangar-ops/reference/commands.md`. `dev` is deliberately NOT in `NEEDS_NO_CONFIG` — a capture, or a release, derived from a hangar with no config would be derived from the schema defaults, the one output neither may be mistaken for |
-| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`, `install`, `claude`, `browse`, `close`, `reload`, `pr`                                                                                                                                                                                                                                                                                                                                            |
+| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`, `install`, `claude`, `browse`, `close`, `reload`, `pr`, `mcp`                                                                                                                                                                                                                                                                                                                                     |
 | config                | `config/schema.ts` (the zod authority), `default-branch.ts`, `load.ts` (discovery + precedence), `derive.ts`, `json-schema.ts`, `drift.ts` (the example-vs-live comparison `config validate` runs)                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | per-clone artifacts   | `clone-config.ts` — the byte-compared builders `doctor` holds every clone to; `colour-assignments.ts`; `ports.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | generators            | `generate/` — `terminal-sh.ts`, `tmux-conf.ts`, `tmux-status-sh.ts`, `claude-tmux-conf.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| tool server           | `mcp/` — `tools.ts` (which commands are exposed, and the schema read off the commander registry), `server.ts` (the stdio JSON-RPC loop). **Nothing here may import `ui.ts`**: stdout is the protocol                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | editor drivers        | `editor/` — `vscode.ts`, `jetbrains.ts`, `index.ts`, `kinds.ts`, `types.ts`, `launch-only.ts`, `emacs.ts`, `vim.ts`, `zed.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | emulator drivers      | `terminal/` — one window-opener each: `iterm2.ts`, `apple-terminal.ts`, `konsole.ts`, `gnome-terminal.ts`, `none.ts`, plus `applescript.ts`, `index.ts`, `types.ts`. Everything a window CONTAINS is `tmux.ts`, in the shared row                                                                                                                                                                                                                                                                                                                                                                                               |
 | platform              | `platform/` — `darwin.ts`, `linux.ts`, `index.ts`, `types.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -635,6 +636,34 @@ runs on, and what is unverified there is which window comes up, not what happens
 is tmux either way. `hangar doctor` prints the detected emulator and the state of the tmux server,
 which is the first thing to look at.
 
+## What operator mode reaches instead of a shell
+
+`hangar mcp` serves one MCP tool per command over stdio, and `hangar claude` hands both modes
+`.claude/modes/mcp.json` as `--mcp-config`. **It exists for one reason and it is a permission
+one:** `Bash(hangar doctor:*)` cannot separate the report from the writer, whereas an MCP rule has
+no arguments to widen across — so `doctor` and `doctor_fix` are two names with two rules, and so
+is every `<thing>_preview` against the command it previews. That is what makes "run the dry run
+first" a property of the tool list rather than a habit.
+
+Three things about it belong here rather than only in the skill:
+
+- **A tool call spawns `bin/hangar`; it never calls the command in-process.** `sync` recovers its
+  strategy from `process.argv`, about twenty `console.log` sites bypass `ui.ts`'s `emit`, and
+  `captureOutput()` is a module-level global — so an in-process server would silently mis-run
+  `sync` and corrupt its own protocol stream. **Nothing under `src/mcp/` may import `ui.ts`.**
+- **`src/mcp/tools.ts` is the table and the commander registry is the schema.** Descriptions,
+  arguments and `.choices()` are read off `cli.ts`'s own entries, so a flag is declared once; what
+  the table adds is the two facts the registry cannot carry — whether an exposure only reports,
+  and which flags it fixes. `cli.ts` cannot be imported to reach that registry, because its last
+  statement is `program.parseAsync()`; it is handed in from the action instead.
+- **Adding a command means adding an exposure.** `hangar mcp` prints the ones it found no tool for
+  on stderr when it starts, and refuses outright only for the two errors that would be wrong
+  rather than missing: a table naming a command that is not there, and an acting tool whose schema
+  offers `dry-run`.
+
+`hangar-internals/reference/modes.md` has the rest — the measured separation, why the Bash path
+stays open, and why the enumeration is a test while the coverage is a warning.
+
 ## What `colours sync` generates
 
 **The rule that settles every naming question here: what a hangar writes OUTSIDE its own root
@@ -839,13 +868,14 @@ Five more root files are hand-maintained and belong to this package rather than 
   `resolveBrewPrefix` does the same three in the same order, deliberately. The probe is last and
   conditional in both: an Intel Mac without `brew shellenv` in its profile has the variable unset,
   and stopping at the default aborted the whole `.envrc` on a machine that has Homebrew.
-- **`.local/bin/claude` and `bin/hangar-statusline`, plus the five files in `.claude/modes/`** —
-  `ops.md`, `dev.md`, a `*.settings.json` beside each, and `statusline.sh`. **`hangar claude` is
+- **`.local/bin/claude` and `bin/hangar-statusline`, plus the six files in `.claude/modes/`** —
+  `ops.md`, `dev.md`, a `*.settings.json` beside each, the shared `mcp.json`, and `statusline.sh`. **`hangar claude` is
   the one way into either mode** (`src/commands/claude.ts`): it opens both as tabs of one tmux
   session on its own socket — with a third tab holding a plain shell at the hangar root, which is
   not a mode and takes no `-m` — and a bare `claude` at the hangar root reaches it through the
-  shim. A mode is `--settings` + `--append-system-prompt-file` + `-n`, read once at startup, and
-  `dev`'s working directory is `app/` so that THIS file is loaded from its first turn.
+  shim. A mode is `--settings` + `--append-system-prompt-file` + `--mcp-config` + `-n`, read once at
+  startup, and `dev`'s working directory is `app/` so that THIS file is loaded from its first
+  turn.
   **`statusline.sh` badges the window `OPS` / `DEV` / a red `NO MODE`**, taking the mode from its
   own argv or from `$HANGAR_MODE` — which `hangar claude` sets per tmux window and nothing else
   may, since from `.envrc` it would reach every shell in the hangar and make the badge
@@ -859,9 +889,12 @@ Five more root files are hand-maintained and belong to this package rather than 
   `PATH_add` in the hangar's `.envrc` alone. That same mechanism is why the two settings files say
   **`hangar-statusline <mode>` rather than an absolute path**: a tracked file cannot name one
   machine's home directory, and a session running in a mode is proof direnv loaded, because the
-  `hangar` that started it was found the same way. All seven are **hand-maintained, so they add no
+  `hangar` that started it was found the same way. All eight are **hand-maintained, so they add no
   row to the derivation table above and need no `--check`** — nothing derives them from
-  `app/src/**`. Operator mode is denied writes to `app/**`, `.claude/skills/**` and
+  `app/src/**`. The one thing that IS derived is the `mcp__hangar__*` half of
+  `ops.settings.json`, and it is held to `src/mcp/tools.ts` by `test/mcp-tools.test.ts` rather
+  than by a writer, because a command that regenerated that file would let operator mode rewrite
+  its own permission list. Operator mode is denied writes to `app/**`, `.claude/skills/**` and
   `.claude/modes/**`, **and is denied `hangar claude` itself**, which means **developer mode is
   the only one that can improve operator mode's instructions**; that asymmetry is the reason the
   pair exists, and the denial is what stops a pass-through `-p` from getting around it.

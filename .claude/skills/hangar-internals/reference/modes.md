@@ -11,8 +11,9 @@ mode is a composed launch profile; a shell has none of its parts, so `Mode` stay
 shell` is an error, and `C-b 3` is how the tab is reached. The section below on the shell tab has
 the three reasons it is not in `MODE_COLOURS` and the one thing that would have bitten.
 
-`src/commands/claude.ts` is the command and `.claude/modes/` holds the four files it names, plus
-`statusline.sh`.
+`src/commands/claude.ts` is the command and `.claude/modes/` holds the five files it names — a
+`.md` and a `.settings.json` per mode, plus the shared `mcp.json` — and `statusline.sh` beside
+them.
 
 ## What they are for
 
@@ -31,13 +32,13 @@ prevent — a session that does not know which context it is in.
 ## Why it is a composed launch profile and not one switch
 
 There is no mode feature. Each mode is `--settings <file>` plus `--append-system-prompt-file
-<file>` plus `-n <name>`, and for `dev` a working directory of `app/` so that `app/CLAUDE.md` is
-loaded from the first turn instead of lazily on first read beneath it.
+<file>` plus `--mcp-config <file>` plus `-n <name>`, and for `dev` a working directory of `app/` so
+that `app/CLAUDE.md` is loaded from the first turn instead of lazily on first read beneath it.
 
-**`claudeArgvFor` puts those three AHEAD of anything passed through, and that ordering is the
+**`claudeArgvFor` puts those four AHEAD of anything passed through, and that ordering is the
 whole of what resuming into a mode is.** `hangar claude --resume <id> -m ops` reaches claude as
-`--settings … --append-system-prompt-file … -n … --resume <id>`; reversed, the session resumes
-with the badge of a mode whose rules it does not have. It was a comment for as long as the
+`--settings … --append-system-prompt-file … --mcp-config … -n … --resume <id>`; reversed, the
+session resumes with the badge of a mode whose rules and tools it does not have. It was a comment for as long as the
 launchers existed and is now a pure builder with a test on it, because it is the one property
 here whose failure looks exactly like success.
 
@@ -229,7 +230,9 @@ is broken. Change one, change both.
 under `dev.settings.json`, with everything developer mode may do including writes to `app/**`.
 The pre-existing `Bash(hangar dev)` denial does not match a `claude` subcommand.
 
-- **`ops.settings.json` denies `Bash(hangar claude)` and `Bash(hangar claude:*)`.**
+- **`ops.settings.json` denies `Bash(hangar claude)` and `Bash(hangar claude:*)`**, and the MCP
+  tool surface simply has no `claude` in it — an absence rather than a rule, because a tool that
+  does not exist cannot be reached by one.
 - **The command refuses when `$CLAUDECODE` is set**, which no editable file can turn off. That
   variable is set in every tool subprocess — measured alongside `CLAUDE_CODE_ENTRYPOINT` and
   `CLAUDE_CODE_SESSION_ID`, and unlike `$CLAUDE_PROJECT_DIR`, which is injected per hook. There is
@@ -243,6 +246,97 @@ anything to protect.
 **There is deliberately no fourth**, and the shell tab is where somebody will be tempted to add
 one — see the section on it. Being inside this hangar's own tmux is not a privilege question:
 `$CLAUDECODE` catches the case that is, whether or not `$TMUX` is set.
+
+## The tool server, and the one thing a Bash rule cannot say
+
+`hangar mcp` serves one MCP tool per command over stdio, and both modes get it. It exists for a
+single reason, which this file had already written down as unsolved:
+
+> `hangar doctor` and `hangar doctor --fix` differ by one flag, so there is no way to pre-approve
+> one without the other.
+
+That is why the `allow` list below contains only commands whose prefix cannot widen into something
+that acts, and why operator mode asks about twenty things it could safely be given. **MCP
+permission rules have no argument matching at all** — Claude Code skips any `mcp__` rule that
+contains parentheses, silently, when the settings file loads — so the granularity is exactly the
+tool name. Two names, two rules, nothing to widen.
+
+**So a dry run is a separate TOOL, not a parameter.** `sync_preview` fixes `--dry-run` and removes
+it from its own schema; `sync` hides it. A `dry-run` boolean would have put both under one rule,
+and pre-approving the preview would have pre-approved the sync — the same bug as `doctor:*`, moved
+rather than fixed. `serveMcp` refuses to start if an acting tool's generated schema offers
+`dry-run`, because only the live registry knows which commands have the flag.
+
+Measured, not assumed, with `--settings` and `--mcp-config` both loaded and a `-p` session:
+`mcp__hangar__doctor` ran with no prompt and `permission_denials` empty; `mcp__hangar__ide_emacs_sync`
+came back denied and named in `permission_denials`. That is the separation, working.
+
+### Three reasons a tool call is a subprocess
+
+`hangar mcp` spawns `bin/hangar` rather than importing the command and calling it, and each reason
+is load-bearing rather than cautious:
+
+- **`sync` recovers its strategy from `process.argv`.** `forcedStrategy` scans for `merge-default`
+  or `rebase-default` before it reaches `sync`; commander parses none of it into options. An
+  in-process call would take the auto-decide branch every time, silently and correctly-looking.
+- **About twenty `console.log` and `process.stdout.write` calls bypass `ui.ts`'s `emit`.** On a
+  stdio server stdout *is* the protocol, so one of those lands in the middle of a JSON-RPC frame
+  and the client reports a broken server with no clue why. `captureOutput()` catches the rest and
+  is a module-level global besides, with no isolation between concurrent calls.
+- **`process.exit`** anywhere in a command would take the server with it.
+
+The cost is one Node start per call, 0.24-0.28s, against a tool call's own latency — and it buys
+behaviour byte-identical with what a person types, which is what lets `reference/commands.md`
+document both spellings from one table. Colour escapes are stripped on the way out and `NO_COLOR`
+is set for the child: `paint()` writes 24-bit escapes unconditionally, because a clone's hue is
+its identity rather than styling, and a model reading a tool result has no use for them.
+
+### The enumeration is a test, and the coverage is only a warning
+
+The two directions fail differently, so they are held differently.
+
+**A tool with no permission rule is not a tool that fails safe.** Sessions here start in `auto`,
+where an MCP tool matching no rule is decided by a classifier rather than by the user — so a
+mutating tool added to `app/src/mcp/tools.ts` and forgotten in `ops.settings.json` simply runs.
+`test/mcp-tools.test.ts` asserts every exposure appears in exactly one of the three lists and that
+a reporting one is in `allow`. It reads the tracked `ops.settings.json` by a path relative to
+itself, which is portable because that file is byte-identical on every machine — the same property
+that made `hangar-statusline` a PATH name.
+
+**A command with no tool is merely missing**, and is visible the moment somebody looks for it. So
+that direction is a line on stderr when the server starts, listing what `unexposedCommands` found.
+It is deliberately not a refusal: the omission would be made in the developer tab and the outage
+would land in the operator one, next door.
+
+`cli.ts` cannot be imported to check either from a test, because its last statement is
+`program.parseAsync()`. The registry is handed IN instead, from the one place that already has it,
+which is also how every tool schema is generated — descriptions, arguments and `.choices()` read
+off the commander entry rather than written a second time.
+
+### Why `--mcp-config` and not a `.mcp.json`
+
+Developer mode's working directory is `app/`, so a file at the hangar root may or may not be found
+by project-root discovery from there, and "may or may not" is not a footing for a tool surface.
+`--mcp-config` takes an absolute path built from `hangar.root`, which reaches both modes for the
+same reason `--settings` already does, and keeps the file out of a discovered path so it is loaded
+once by the sessions that ask for it.
+
+**Verified to be honoured and not merely to parse** — this file records two flags that were only
+ever proven to parse, and the lesson was taken: a `-p` session launched with both `--settings` and
+`--mcp-config` called `mcp__hangar__list` and answered with the right number of clones.
+
+**`--strict-mcp-config` is deliberately not passed.** It confines the session to this one file,
+which would silently drop whatever MCP servers the developer configured for themselves — a removal
+nobody asked for, and the kind that is noticed weeks later.
+
+### What it does not buy
+
+**The Bash path stays open**, by decision. Every rule operator mode had still stands, so
+`hangar doctor --fix` typed at a shell prompt is still governed by the coarse
+`Bash(hangar doctor:*)` rule that cannot tell it from the report. The tools are a better default
+door, not a wall, and the prefix-widening problem is routed around rather than removed. Closing it
+(`deny: Bash(hangar:*)`) is available and is a separate decision, worth taking only once the tool
+surface has been used enough to know what it does not cover.
 
 ## Which mode you are in shows in the status line
 
@@ -334,12 +428,17 @@ What that does **not** buy, and what must not be claimed for it:
   Shift+Tab still cycles it, and `disableBypassPermissionsMode` binds only through managed
   settings, which this machine does not use.
 
-**`hangar doctor` is deliberately absent from operator mode's `allow` list** and sits in `ask`
-instead, even though a bare `doctor` only reports. `doctor` and `doctor --fix` differ by one flag,
-and the `hangar-ops` skill's `reference/settings-layering.md` records the reason this hangar carries
-no permission allowlist at all: a Bash pattern that pre-approves the report may pre-approve the
-writer. Until that is actually verified (see below), the `allow` list contains only commands whose
-prefix cannot widen into something that acts.
+**`Bash(hangar doctor)` is deliberately absent from operator mode's `allow` list** and sits in
+`ask` instead, even though a bare `doctor` only reports. `doctor` and `doctor --fix` differ by one
+flag, and the `hangar-ops` skill's `reference/settings-layering.md` records the reason this hangar
+carries no permission allowlist at all: a Bash pattern that pre-approves the report may pre-approve
+the writer. Until that is actually verified (see below), the Bash `allow` list contains only
+commands whose prefix cannot widen into something that acts.
+
+**`mcp__hangar__doctor` IS in `allow`, and that is not a contradiction** — it is the whole point of
+the section above. A tool name has no arguments for a pattern to widen across, so the report and
+the writer are two names with two rules. The Bash entry stays exactly as it is, because the shell
+path stays open.
 
 ## The mode files are hand-maintained, not generated
 
@@ -347,8 +446,15 @@ They sit beside `bin/hangar`, `.envrc.hangar` and the `.nvmrc` pair as hangar-ro
 package owns by hand. So they add **no** row to `app/CLAUDE.md`'s derivation table and need no
 `--check` gate: nothing derives them from `app/src/**`, and the "compare generated content, never
 presence" rule in `reference/doctor.md` does not apply. A `doctor` row for them should check that
-the five files exist, that the two JSON files parse, and that `statusline.sh` is executable —
+the six files exist, that the three JSON files parse, and that `statusline.sh` is executable —
 presence and validity, never content — and that is the deliberate exception, stated out loud.
+
+**`mcp.json` is hand-maintained for the same reason and one more of its own.** It carries no
+per-hangar value at all — `{"mcpServers":{"hangar":{"command":"hangar","args":["mcp"]}}}` is
+byte-identical everywhere — so there is nothing to generate. `ops.settings.json`'s tool rules ARE
+derived from `app/src/mcp/tools.ts`, and they are held to it by `test/mcp-tools.test.ts` rather
+than by a writer, for exactly the escalation reason the next section gives: a command that
+regenerated that file would let operator mode rewrite its own permission list.
 
 ## Why the mode settings are the one generated-file candidate that stays tracked
 

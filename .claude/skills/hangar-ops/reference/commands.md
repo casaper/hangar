@@ -2,12 +2,70 @@
 
 Transcribed from `app/src/cli.ts`. **`report` = touches nothing. `act` = writes files, moves git
 state, or opens windows.** The seven marked **[user]** are the ones the hangar's `CLAUDE.md`
-reserves for the user at the hangar root — dry-run them and hand the real command over.
+reserves for the user at the hangar root — preview them and hand the real command over.
+
+**Every command below is also an MCP tool**, and the next section is the map between the two. The
+tool spawns `bin/hangar` with exactly this argv, so the tables here are the truth for both; what
+differs is only the spelling. **[user]** is unchanged by any of it — that is governance, and a
+permission rule does not encode "hand this one over".
 
 Global: `--hangar <path>` (the hangar root to operate on; **only `config show` and
 `config validate` honour it today** — everything else uses the upward walk from the cwd).
 
 `<clone>` accepts an index (`2`), a padded name (`clone_02`), or `02`.
+
+## The tools, against the commands
+
+One `mcp__hangar__<name>` per row. A tool's parameters are the command's own long flags without
+their `--`, plus its positional arguments by name — never a short flag, which is what disposes of
+`resume -n`.
+
+**A dry run is a separate tool rather than a parameter, and that is the whole design.** An MCP
+permission rule cannot match on arguments — Claude Code skips any `mcp__` rule with parentheses in
+it — so a `dry-run` parameter would put the preview and the real run under one rule and
+pre-approving the safe one would pre-approve the other. Split in two, the preview is in operator
+mode's `allow` list and the act is in `ask`. `doctor` and `doctor_fix` are the same split by
+another name.
+
+| Command | preview / report tool | acting tool |
+| --- | --- | --- |
+| `list` | `list` | — |
+| `ports` | `ports` (always `--json`) | — |
+| `status` | `status` | — |
+| `doctor` | `doctor` | `doctor_fix` |
+| `sync` | `sync_preview` | `sync` (`strategy` picks rebase or merge) |
+| `checkout-default` | `checkout_default_preview` | `checkout_default` |
+| `open` | `open_preview` | `open` |
+| `close` | `close_preview` | `close` |
+| `reload` | `reload_preview` | `reload` |
+| `install` | `install_preview` | `install` |
+| `browse` | `browse_preview` | `browse` |
+| `pr refresh` | `pr_refresh` | — |
+| `resume` | `resume_list` | — |
+| `teach-rg` | `teach_rg_preview` | `teach_rg` |
+| `add-clone` | — | `add_clone` |
+| `remove-clone` | — | `remove_clone` |
+| `config show` | `config_show` | — |
+| `config validate` | `config_validate` | — |
+| `config schema` | `config_schema_check` | `config_schema_write` |
+| `colours list` | `colours_list` | — |
+| `colours sync` | `colours_check` | `colours_sync` |
+| `colours change` | — | `colours_change` |
+| `tmp merge` | `tmp_merge_preview` | `tmp_merge` |
+| `plans collect` | `plans_collect_preview` | `plans_collect` |
+| `plans stamp` | `plans_stamp_preview` | `plans_stamp` |
+| `ide <kind> sync` | `ide_<kind>_sync_preview` | `ide_<kind>_sync` |
+
+**Five commands have no tool, on purpose.** `claude` is the escalation boundary and is denied to
+you twice over; `dev golden` and `dev release` are maintainer commands promised to no operator;
+`jira hook` is a `PreToolUse` hook rather than something to call; and `setup` writes
+`hangar.config.yaml`, which a running hangar already has. For those, the shell is the only path
+and its own rules apply.
+
+**The shell is not closed.** Every Bash rule this mode had still stands, so anything the tools do
+not cover is still reachable by typing it. The tools are the better default door, not a wall —
+`hangar doctor --fix` at a shell prompt is still governed by the coarse `Bash(hangar doctor:*)`
+rule that cannot tell it from the report.
 
 ## Top level
 
