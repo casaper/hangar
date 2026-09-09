@@ -12,7 +12,15 @@ import tseslint from 'typescript-eslint';
  * rules are on, which is affordable here because the whole CLI is a few hundred lines.
  */
 export default defineConfig([
-  globalIgnores(['node_modules/']),
+  /*
+   * `dist/`-shaped output has none here, so this list is short -- and the second entry is the
+   * one worth explaining. `.remember/` is a plugin's scratch directory: gitignored, outside the
+   * tsconfig, and it drops `.ts` files into `.remember/tmp/`. `projectService` then refuses them
+   * with "was not found by the project service", which is a lint error on a file nobody wrote
+   * and git does not track -- red in normal operation, and `hangar dev release` runs lint as a
+   * gate, so it blocked releases rather than merely being noise.
+   */
+  globalIgnores(['node_modules/', '.remember/']),
   eslint.configs.recommended,
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,
