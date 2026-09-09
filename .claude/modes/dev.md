@@ -79,8 +79,9 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol
   | hangar mcp | jq -c '[.result.tools[]?.name] | length'
 ```
 
-Two lines out — `0` for the handshake, then the tool count — and nothing on stderr. It is 51
-today; if that number moved, it should be because you moved it.
+Two lines out — `0` for the handshake, then the tool count — and nothing on stderr. That count
+is `EXPOSURES.length` in `src/mcp/tools.ts` and nothing holds the two together, so read it off the
+table rather than off a number written here.
 
 `pnpm test` is a **seed** suite over the pure core, not a safety net — it holds what a golden
 capture structurally cannot (two hangars in one process, input that is wrong rather than right,
