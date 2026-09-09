@@ -15,6 +15,7 @@ import { jiraHook } from './commands/jira.ts';
 import { golden } from './commands/dev.ts';
 import { release } from './commands/release.ts';
 import { list } from './commands/list.ts';
+import { mcp } from './commands/mcp.ts';
 import { closeClones, type CloseOptions } from './commands/close.ts';
 import { open } from './commands/open.ts';
 import { reloadClones, type ReloadOptions } from './commands/reload.ts';
@@ -721,6 +722,20 @@ colours
   .description('Show the palette, painted, and which clone holds each hue')
   .action(() => {
     coloursList(requireHangar());
+  });
+
+program
+  .command('mcp')
+  .summary("Serve this hangar's commands to a Claude Code session as MCP tools")
+  .description(
+    [
+      'Speaks the Model Context Protocol on stdin and stdout, offering one tool per hangar command. `.claude/modes/mcp.json` names it and `hangar claude` hands that file to Claude Code as `--mcp-config`, so a mode session starts one of these itself.',
+      'There is nothing to read here at a terminal: with no client speaking to it, it waits. What it is useful for by hand is a probe -- pipe it an `initialize` and a `tools/list` line and read the replies.',
+      'A tool is not a second way to do anything. Each one runs `bin/hangar` exactly as a person would type it, which is why the two can never disagree; what a tool adds is a name of its own, so a permission rule can separate a report from the command that writes.',
+    ].join('\n\n'),
+  )
+  .action(async () => {
+    await mcp(requireHangar(), program);
   });
 
 /**
