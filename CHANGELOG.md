@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.2](https://github.com/casaper/hangar/compare/v0.21.1...v0.21.2) (2026-09-10)
+
+### Build & Dependencies
+
+* Move eslint and typescript-eslint past the cooldown, not to latest ([f07c679](https://github.com/casaper/hangar/commit/f07c679c6f38a38759102e7313cc2f8c10b927f4))
+* Take commander 15, and its extra-typings peer with it ([eadbfd7](https://github.com/casaper/hangar/commit/eadbfd79d60af460f94d050e673fe30f6cda9ac7))
+
 ## [0.21.1](https://github.com/casaper/hangar/compare/v0.21.0...v0.21.1) (2026-09-10)
 
 ### Documentation
