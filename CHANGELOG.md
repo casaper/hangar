@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.23.0](https://github.com/casaper/hangar/compare/v0.22.0...v0.23.0) (2026-09-10)
+
+### Features
+
+* **pr:** Open and rewrite a Bitbucket pull request from a clone's branch ([6833bd0](https://github.com/casaper/hangar/commit/6833bd03be4aa12446e2eaab3adb8808653aad2b))
+
+### Bug Fixes
+
+* **modes:** Keep developer mode's plans in the hangar instead of ~/.claude/plans ([e946ed5](https://github.com/casaper/hangar/commit/e946ed5450accee74039c713e577a98c69b667ff))
+
+### Refactoring
+
+* **sync:** Lift the headless Claude Code runner out of the conflict resolver ([7bb3571](https://github.com/casaper/hangar/commit/7bb3571261d66ccc7906f86710e73a75ba4a81af))
+
+### Documentation
+
+* **pr:** Say what the two forge writes refuse, and where the API spec is not the authority ([3d4ed82](https://github.com/casaper/hangar/commit/3d4ed827f07d8045964ccb21c06040dfcffeeb3b))
+
+### Build & Dependencies
+
+* Keep developer mode's plan files out of the format gate ([b1b6055](https://github.com/casaper/hangar/commit/b1b60559414d48ff8c726e0a3a6efce57581be39))
+
 ## [0.22.0](https://github.com/casaper/hangar/compare/v0.21.2...v0.22.0) (2026-09-10)
 
 ### Features
