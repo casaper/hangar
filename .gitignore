@@ -30,7 +30,10 @@ hangar.config.yaml
 #   tmp/   -- the shared per-ticket Jira cache and per-clone scratch. Each clone's `tmp` is a
 #             symlink to it. Holds Jira attachments and live PID files; never committable.
 /plans/
-/tmp/
+# `/tmp/*` rather than `/tmp/`: git will not descend into an excluded DIRECTORY, so a `!` line
+# for one file inside it matches nothing. The `*` form ignores every entry just as before and
+# is the only form a negation can override -- see the one exception at the bottom of this file.
+/tmp/*
 
 # Developer mode's own plan directory. `hangar claude -m dev` runs in `app/`, and Claude Code
 # reads project settings from the session's own directory rather than walking up -- so the
@@ -104,3 +107,6 @@ app/dev/golden/advisory/
 # stopped it being committed.
 .env.local
 /.env
+# The one tracked file under the otherwise ignored shared scratch directory: the fleet's
+# Playwright screenshot backup, which is run by hand and from cron and is worth versioning.
+!/tmp/rsync_hardlink_versioning_backup_screenshots.sh
