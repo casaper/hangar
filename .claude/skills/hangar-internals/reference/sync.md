@@ -1,8 +1,10 @@
-# `sync`, its two other names, and `checkout-default`
+# `sync`, its two other names, `checkout-default`, and the two forge writes
 
 The most dangerous command in the CLI and the two that share its machinery.
 `app/src/commands/sync.ts` (882 lines) and `checkout-default.ts` (328); the shared landing step is
-`landOnBranch`.
+`landOnBranch`. `pr create` and `pr update` are here too, at the end: they are the only commands
+that write to the FORGE rather than to a working tree, which is a different blast radius reached
+through the same Bitbucket adapter.
 
 - **`hangar sync` types into a live Claude session.** There is no CLI mechanism to message a running
   interactive session, so it finds the session's tty, maps it to the tmux pane on that tty and
@@ -143,3 +145,132 @@ The most dangerous command in the CLI and the two that share its machinery.
   same degradation `open` already applies to an editor that will not launch. `--branch <name>`
   overrides the default-branch resolution and nothing else about the landing; `--no-checkout`
   skips it entirely.
+
+## `pr create` and `pr update`: the only writes that leave the machine
+
+`app/src/commands/pr.ts`, with `pr-description.ts` beside it for the body and `bitbucket.ts` for
+the two requests. Everything above this heading can be undone in the clone it happened in. A pull
+request cannot: it is visible to the whole team the moment it exists, and a pull request opened
+ready for review has already notified its reviewers by the time anybody reads the command's output.
+Every decision below follows from that one asymmetry.
+
+- **The existence guard is the one place a soft lookup failure becomes an abort.**
+  `openPullRequests` never throws -- offline, tokenless, a 401 and malformed JSON all arrive as
+  `{ok: false, reason}` -- and every other caller in the CLI treats that as "carry on without it",
+  which is right for a read: `sync` falls back to the default branch and says the target is a
+  guess. As an EXISTENCE guard the same value means "we do not know whether one exists", and
+  carrying on there turns a network timeout into a duplicate pull request somebody has to decline.
+  So `pr create` stops and prints the reason. The query is deliberately OPEN-only, so a branch
+  reused after its first pull request merged can still get a second -- `pickPullRequest`'s own
+  reasoning, from the other direction.
+- **A branch that already has one open is reported at exit 0, not refused.** "Unless one already
+  exists" is what makes the command safe to re-run without first working out whether the last run
+  got that far, and an error exit would make every wrapper treat the idempotent case as a failure.
+- **What Bitbucket answered is what gets reported, never what was sent.** That API silently accepts
+  and drops fields it does not recognise: the create FORM's `title=` and `description=` query
+  parameters were documented as working for months, on a probe whose source branch had nothing for
+  Bitbucket to derive a title from, and they had never worked at all. So both writes parse the
+  response through the same parser a read uses (`parseDetail`, shared by the list, the `POST` and
+  the `PUT` -- a second parser would be free to disagree about a field, which is exactly what the
+  read-back is looking for), and `readBackDisagreements` compares the answer with the request.
+- **`draft` is the one disagreement that is fatal, and it has a ladder** -- kept even though the
+  create call's `draft` field is documented, because a documented field is not a measured one and
+  the cost of being wrong here is one-way. A wrong title is worth a
+  warning and is fixable on the page; a pull request that opened ready for review is not. So
+  `pr create` opens a DRAFT by default (`--ready` is the positive opt-in, so the safe state is the
+  one you get by saying nothing), reads `draft` back, asks a second time through an update if it
+  came back wrong, reads it back again, and only then fails -- naming the pull request that now
+  exists and is not a draft. `pr update` leaves the draft state exactly as it is unless `--draft`
+  or `--ready` names it: silently publishing a draft while fixing a typo in its description is the
+  surprise that rule exists to prevent.
+- **The `PUT` is a read-modify-write, and `reviewers` is why.** Atlassian's documentation for the
+  update call is three sentences long and says nothing about what happens to a field the body
+  omits, so whether a partial update preserves or clears `reviewers` is not answered by either
+  published spec -- and finding out costs somebody's review assignments. So `PullRequestEdit`
+  names every field it sends and `pr update` fills the unchanged ones from `pullRequestDetail`. The
+  one optional member is `draft`, absent meaning "leave it alone", which also keeps an ordinary
+  update from tripping over that field at all if it turns out not to be writable here.
+- **The body is read from `summary.raw` and only then from `description`.** The two published
+  specs declare `summary` -- a rendered-content object -- on the way out, while `description` is
+  the name the create and update calls TAKE and appears only in the prose of `POST /pullrequests`.
+  The live API returns both, byte-identical (same sha256 over 3235 characters, `markup: markdown`).
+  Preferring the documented one matters here because this is a read-modify-write: a body that read
+  as empty would replace somebody's description with nothing.
+- **Every endpoint, field and enum these two commands use was checked against the published
+  OpenAPI document**, and it is worth knowing which one: `api.bitbucket.org/swagger.json` is
+  Swagger 2.0 and `developer.atlassian.com/cloud/bitbucket/swagger.v3.json` is the same content
+  as OpenAPI 3.0 (171 paths in both, and identical on every point checked -- the second is not a
+  newer or better-maintained source). `draft` on the create call is documented there, as are
+  `close_source_branch`, `reviewers` and `description`; `state` on the pull-request list is
+  documented with the four-value enum this code now maps in full. Two things these documents do
+  NOT carry, both established by measurement rather than reading: that `q` overrides the `state`
+  parameter, and that `fields` -- which every call here uses -- is not declared as a parameter
+  anywhere in either document, only in the REST intro's prose.
+- **`pr update` rewrites only pull requests the token owner authored, and that is enforced HERE.**
+  The API permits anyone with write access to rewrite anyone's, so there is no permission to
+  delegate this to: `tokenOwner` asks `GET /2.0/user` and the answer is compared with the pull
+  request's `author.uuid`. Both go through `bareUuid`, because Bitbucket brackets uuids in some
+  payloads and not in others and comparing the raw strings fails in the SAFE direction -- "not
+  yours" for your own pull request, which nobody would investigate. A token that cannot answer
+  `/2.0/user` at all (a repository-scoped access token) is a REFUSAL rather than a skipped check.
+- **Which clone comes from where the command was run, and inside a clone it cannot be overridden.**
+  `cloneForCwd` first; an argument naming a different clone is refused, and from the hangar root
+  the argument is required. This is the fleet's own "stay in your own clone" rule reaching the one
+  command whose mistake is published -- a pull request opened for the branch next door is on
+  somebody's review queue before anybody notices. It is also why there is no `--all`.
+- **Origin is fetched before it is judged, on the dry run too.** `onOrigin` and `ahead` read
+  remote-tracking refs, and a stale one gives exactly the wrong answer: a branch reported as
+  unpushed that was pushed an hour ago, or -- far worse -- as pushed while the last three commits
+  are local, which opens a pull request that reads as complete and is missing the work its
+  description describes. Only `refs/remotes` moves, so no local branch and no file in the working
+  tree is touched, which is what makes it acceptable under `-n`. Both refusals print the `push`
+  command and neither offers to run it: pushing is the user's own action.
+
+### The description is delegated, and the freshness rule is the shared store's fault
+
+A reviewer-facing description is not something a deterministic CLI can write, so `pr create` does
+not try. The repo's own agent writes one into the shared `tmp/` store and `pr-description.ts`
+FINDS it -- the same split `resolve-conflicts.ts` makes for a merge conflict, through the same
+`claude-headless.ts` runner, which was extracted from that file rather than copied when this
+became its second caller.
+
+- **The root searched is the CLONE's own `tmp/`, not the hangar's shared store**, and that is the
+  difference between this working and not. Every entry under a clone's `tmp/` is a symlink into the
+  store, so the clone root reaches everything the store holds -- but a ticket directory the clone's
+  agent created during the session that is still running is a REAL directory there, unmerged:
+  `tmp merge` runs at `SessionEnd`, which is strictly after the moment somebody wants a pull
+  request for the branch they have just had described. Searching the shared store instead finds
+  nothing in exactly the normal case, spawns a run, and then reports that the run left no
+  description. It is also the narrower read -- another clone's description for the same ticket is
+  the last-writer-wins hazard, and this way it is not consulted until that clone's session has
+  ended.
+- **The filename is matched, never constructed.** Hangar manages any repo: this fleet alone has
+  used `pr-ABC-1323.md` at the top level and `ABC-1323/pr_description_ABC-1323.md` in the ticket's
+  own directory. So both are matched by pattern against the issue key `inferTicket` already derives
+  from the branch, in exactly two places -- the top level and the key's own directory -- because
+  the shared store here holds a couple of hundred ticket directories and a walk would be paid on
+  every invocation. A `.from-<clone>` conflict copy is skipped: `tmp merge` writes one for the copy
+  that did NOT win, so picking one up would publish the losing half of a conflict.
+- **A branch with no issue key gets the flat fallback, marked UNTRUSTED.** That name belongs to no
+  branch in particular and every clone writes into this store, so the command prints the path and
+  the title it read and warns before anything is published. Refusing outright would leave a chore
+  branch no route through the command at all.
+- **Stale is the description's mtime against the branch tip's committer timestamp**, and it is a
+  real failure rather than a corner: `tmp/` is shared across every clone and last-writer-wins, so a
+  description written before the last commit is the normal way this goes wrong. The units are the
+  trap -- `git log --format=%ct` is SECONDS and an mtime is milliseconds, and a caller that forgot
+  to multiply makes every description on disk read as fresh for ever, which looks exactly like the
+  feature working. `test/pr-create.test.ts` pins what that mistake would look like.
+- **`forge.prDescriptionPrompt` is optional with no default**, and absent means the delegation is
+  off. A built-in default would put one repository's slash command in a published CLI and make
+  every other hangar spawn a run with nothing to do.
+- **A clone with a live session is not regenerated into.** Two agents in one working directory is
+  this fleet's worst failure, and the session already there has the conversation that produced the
+  branch, so it is better placed to write the description anyway. `--include-busy` is for when the
+  "live session" is a shell somebody left open.
+- **`-n` never spawns the run**, and the MCP tools cannot reach it at all: `pr_create` and
+  `pr_update` fix `--no-describe`. A regeneration is one to three minutes of streamed progress
+  with a line the operator can type into it; through a tool call that is a request which blocks for
+  minutes and then dies at the caller's timeout mid-run, with none of the stream reaching anybody
+  -- and being able to watch it is the whole reason it streams. The tool refuses and names the
+  command to type, the same trade `ALWAYS_HIDDEN` already makes for `--quiet`.

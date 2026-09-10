@@ -33,7 +33,7 @@ take the one that matches what you are touching:
 
 | If you are… | Read |
 | --- | --- |
-| changing `sync`, `merge-default`, `rebase-default` or `checkout-default`; debugging a `SYNC PAUSE`, a stash that did not come back, or the headless conflict resolver | `reference/sync.md` |
+| changing `sync`, `merge-default`, `rebase-default`, `checkout-default`, `pr create` or `pr update`; debugging a `SYNC PAUSE`, a stash that did not come back, a headless run, or a pull request that opened wrong | `reference/sync.md` |
 | changing `tmp merge`, `plans collect`, `jira hook` or the ticket record store; explaining a `.from-<clone>` copy, a lost `relation:` key or a denied fetch | `reference/jira-cache.md` |
 | changing `ide <kind> sync`, any `editor/*.ts` driver, or the per-clone absolute-path rewriting | `reference/editors.md` |
 | changing `open`'s window handling or `resume`'s session discovery | `reference/terminal-and-sessions.md` |

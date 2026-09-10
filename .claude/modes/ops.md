@@ -20,6 +20,17 @@ own. **A dry run is a different tool, not a flag** — `sync_preview` beside `sy
 of the tool list: preview, report what it says, then call the real one and let the prompt do its
 work. The shell is still there for whatever the tools do not cover.
 
+**Two of those tools reach outside this machine.** `pr_create` and `pr_update` write to
+Bitbucket, so their mistakes are the only ones a stranger sees: a pull request is on somebody's
+review queue the moment it exists, and one opened `--ready` has notified its reviewers before you
+read the result. Preview first, like everything else — and then read the preview's title line back
+to the user before you call the real tool, because the title comes out of a description file every
+clone in the fleet can overwrite. `pr_create` opens a DRAFT unless told otherwise; leave it that
+way unless the user asks. `pr_update` rewrites only pull requests they opened. **Both ask on a
+terminal, and a tool has none** — so the real call needs `yes: true`, and without it you get
+`nothing was created` at exit 0. That makes the preview the only place the title is shown before
+anything is published, which is why reading it back is not optional here.
+
 **Load the `hangar-ops` skill** for what a schema cannot say: when to run a command, what its
 output means, which answers are traps, and the shell spelling of every flag. Do not recall a flag
 from memory — several are unusual, and `hangar resume`'s `-n` means `--limit`.

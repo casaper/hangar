@@ -42,6 +42,8 @@ another name.
 | `install` | `install_preview` | `install` |
 | `browse` | `browse_preview` | `browse` |
 | `pr refresh` | `pr_refresh_preview`, and `pr_refresh` itself | — |
+| `pr create` | `pr_create_preview` | `pr_create` (with `--no-describe` fixed — see below) |
+| `pr update` | `pr_update_preview` | `pr_update` (same) |
 | `resume` | `resume_list` | — |
 | `teach-rg` | `teach_rg_preview` | `teach_rg` |
 | `setup` | `setup_preview` | `setup` |
@@ -98,6 +100,8 @@ rule that cannot tell it from the report.
 | `reload` | `[clones...]` | `--all` · `--no-shells` · `--no-claude` · `--no-editor` · `-y, --yes` · `-n, --dry-run` | **act [user]** |
 | `browse` | `<ticket\|pr> <clone>` | `-n, --dry-run` (print the URL, open nothing) | act (opens a browser; `-n` is report) |
 | `pr refresh` | `[clones...]` | `-a, --all` · `--force` · `-q, --quiet` · `-n, --dry-run` | act (writes a cache; the bar spawns it for you) |
+| `pr create` | `[clone]` (defaults to the clone you are in; naming ANOTHER is refused) | `--onto <branch>` · `--title <text>` · `--file <path>` · `--ready` · `--no-describe` · `--include-busy` · `-y, --yes` · `-n, --dry-run` | **act — writes to the forge.** Opens a DRAFT unless `--ready` |
+| `pr update` | `[clone]` (same rule) | `--title <text>` · `--file <path>` · `--keep-title` · `--keep-body` · `--draft` \| `--ready` · `--no-describe` · `--include-busy` · `-y, --yes` · `-n, --dry-run` | **act — writes to the forge.** Only on pull requests you opened |
 | `resume` | `[clone]` (defaults to the clone you are in) | `-n, --limit <count>` (default `20`, `0` = all) | report **for you** — with no tty it prints the list instead of the picker; at a terminal it launches `claude --resume` |
 | `add-clone` | — | `--no-install` (+ a hidden `--remote <url>`) | **act [user]**, no `-n` |
 | `install` | `[clone]` | `--all` · `-n, --dry-run` | **act [user]** |
@@ -188,6 +192,33 @@ above says which — with one substitution throughout: where a note says `-n`, t
 separate `<thing>_preview`.
 
 
+- **`pr create` and `pr update` are the only commands that write to the FORGE**, which makes their
+  mistakes the only ones the whole team can see. Four things follow, and each one is a refusal
+  rather than a warning:
+  - **The clone comes from where the command runs.** In a clone's own shell the argument may be
+    left out; naming a DIFFERENT clone is refused, and from the hangar root the argument is
+    required. There is no `--all` — one pull request at a time, on purpose.
+  - **`pr create` opens a DRAFT.** `--ready` opens it ready for review, which notifies its
+    reviewers and cannot be taken back. It is also idempotent: a branch that already has one open
+    is reported, exit 0, and nothing is created — so re-running it is safe.
+  - **`pr update` rewrites only pull requests the token owner authored**, and refuses when it
+    cannot tell whose it is. With neither `--draft` nor `--ready` it leaves the draft state alone.
+  - **It refuses when the branch, or its latest commits, are not on origin** and prints the `push`
+    command. Pushing stays the user's own action; do not offer to do it.
+- **The title and body come from the description the repo's own agent writes**, found in that
+  clone's own `tmp/`, and a description written BEFORE the branch's last commit counts as out of
+  date.
+  In the terminal that is repaired for you — `forge.prDescriptionPrompt` runs as a headless Claude
+  Code session in the clone, one to three minutes with progress streaming. **Through the tool it is
+  not**: `pr_create` and `pr_update` fix `--no-describe`, so they refuse and name the command to
+  type. That is deliberate — a tool call cannot show a stream and would die at its own timeout
+  mid-run. `--file <path>` and `--title <text>` bypass the search entirely.
+- **Both commands ASK before they act, on the terminal, and there is no terminal behind a tool.**
+  So a tool call needs `yes: true` or it reports that nothing was created and exits 0 — which is
+  why the preview matters here more than anywhere else: it is where the title is printed, and
+  reading that back to the user before you pass `yes: true` is how a human sees what will be
+  published. In the terminal `-y` is the same thing. Writing a description asks separately, before
+  the run starts.
 - **The editor commands live under `ide`, aliased `editor`, so the top level carries one entry for
   the editors rather than one per editor.** `colours` is aliased `colors`, and `checkout-default`
   is aliased `checkout`.
