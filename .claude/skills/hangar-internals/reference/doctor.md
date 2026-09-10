@@ -356,6 +356,19 @@ other projects. That is not a check to work around: `../plans`, an absolute the 
 absolute `~/.claude/dvb-gn-plans` was configured in all three clones and did exactly that,
 unnoticed, for a day.
 
+**The same rule decides where each hangar-root MODE writes, and the two answers differ.**
+Operator mode runs at the hangar root, so the generated `.claude/settings.json` beside it is the
+session's own project settings and its `plansDirectory: "plans"` writes straight into the
+archive. Developer mode runs in `app/`, and Claude Code reads project settings from the
+session's own directory rather than walking up — so that file reaches it not at all, and its
+plans fell back to `~/.claude/plans` for as long as the mode has existed, with the shared memory
+directory going the same way. `app/.claude/settings.json` is the fix and it is one key,
+`plansDirectory: ".claude/plans"`. It cannot be pointed at the hangar root for the reason above:
+`app/` is the project root here, so `../plans`, `<hangar>/.claude/dev-plans` and a symlink to
+either are all outside it. Tracked, because the value is relative and names no machine path;
+`app/.claude/plans/` itself is gitignored. **`doctor` gets no row for it** — that file is in
+git, and `doctor` is the net for what lives outside it.
+
 Dates come from the filename, then the file's own birthtime/mtime, then the first transcript that
 mentions it. **`stat` alone is not trustworthy here:** an earlier consolidation copied 157 plans
 without preserving times, so they all carry one identical second, and Claude Code's atomic rewrite

@@ -900,6 +900,17 @@ Five more root files are hand-maintained and belong to this package rather than 
   shim. A mode is `--settings` + `--append-system-prompt-file` + `--mcp-config` + `-n`, read once at
   startup, and `dev`'s working directory is `app/` so that THIS file is loaded from its first
   turn.
+  **That working directory is also why `app/.claude/settings.json` exists.** Claude Code reads
+  project settings from the session's OWN directory and does not walk up, so the hangar root's
+  generated `.claude/settings.json` — the shared memory, the mode badge, `plansDirectory` —
+  reaches operator mode and not this one. Developer mode's plans were falling back to
+  `~/.claude/plans`, in with every other project on the machine; that file carries the one key
+  that points them at `app/.claude/plans/` instead, and is tracked because a relative value
+  names no machine path. **They stay there** — nothing collects them into `plans/` the way a
+  clone's are, and nowhere outside `app/` is reachable to write them to in the first place:
+  `plansDirectory` is resolved against the project root and rejected if it escapes, symlinks
+  followed, so `../plans` and an absolute hangar path both fall back silently.
+  `hangar-internals/reference/doctor.md` has the measurement.
   **`statusline.sh` badges the window `OPS` / `DEV` / a red `NO MODE`**, taking the mode from its
   own argv or from `$HANGAR_MODE` — which `hangar claude` sets per tmux window and nothing else
   may, since from `.envrc` it would reach every shell in the hangar and make the badge
@@ -951,9 +962,9 @@ session in the clone instead. The CLI's own checks are the exception and are the
 `app/`.
 
 `.gitignore` here is load-bearing, not leftover: `clone_*/`, `.env.shared`, `node_modules/`,
-`plans/`, `tmp/` and `hangar.config.yaml` are the only reason the clones, the secrets, the CLI's
-dependencies, the plan archive, the shared scratch directory and this machine's own config stay
-out of the hangar repo. Do not remove any of those lines. (`clone_*/`, not `clone_0*/`: the old
+`plans/`, `app/.claude/plans/`, `tmp/` and `hangar.config.yaml` are the only reason the clones,
+the secrets, the CLI's dependencies, the plan archive, developer mode's own plans, the shared
+scratch directory and this machine's own config stay out of the hangar repo. Do not remove any of those lines. (`clone_*/`, not `clone_0*/`: the old
 glob stopped matching at `clone_10`. And `hangar.schema.json` stays TRACKED — it is generated
 from the zod schema, and both YAML files point at it for editor validation.)
 

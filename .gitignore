@@ -32,6 +32,18 @@ hangar.config.yaml
 /plans/
 /tmp/
 
+# Developer mode's own plan directory. `hangar claude -m dev` runs in `app/`, and Claude Code
+# reads project settings from the session's own directory rather than walking up -- so the
+# hangar root's `.claude/settings.json` reaches OPERATOR mode and not this one, and developer
+# mode's plans were falling back to `~/.claude/plans`, mixed in with every other project on this
+# machine. `app/.claude/settings.json` is what points them back in here, and that file is
+# TRACKED because its one value is relative and names no machine path. The plans written there
+# are one developer's and are not, and nothing moves them anywhere else: `plansDirectory` must
+# resolve INSIDE the project root, which for this mode is `app/` and not the hangar root, so
+# this is the only place they can go. Claude Code creates the directory when it writes the
+# first plan, which is why there is no `.gitkeep` in it.
+/app/.claude/plans/
+
 # Generated per-machine state (corepack pnpm shims, Eclipse workspace data). Never committed.
 .hangar/
 

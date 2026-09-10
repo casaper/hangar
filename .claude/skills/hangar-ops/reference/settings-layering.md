@@ -25,12 +25,20 @@ every clone (verify with `jq -S 'del(.theme)|del(.permissions.allow)' … | shas
 
 ## The hangar root's own settings
 
-`.claude/settings.json` at the hangar root is **tracked and committed** — it holds no personal
-values, which is why it is not a `.local.json`. It carries exactly two keys:
+`.claude/settings.json` at the hangar root is **generated and gitignored** — two of its three
+values are absolute paths on one machine, and Claude Code fails silently on both, so a tracked
+copy would give a colleague no shared memory and no mode badge with nothing said.
+`hangar setup` writes it and `hangar doctor --fix` repairs it. The three keys are
 `autoMemoryDirectory` (the shared fleet memory, which every clone also points at, so a memory
-written from either side is immediately visible on the other) and `plansDirectory: "plans"` (the
-fleet root *is* the project root for a session started there, so it writes straight into the shared
-archive).
+written from either side is immediately visible on the other), `plansDirectory: "plans"` (the
+fleet root *is* the project root for a session started there, so it writes straight into the
+shared archive) and `statusLine` (the mode badge).
+
+**Only operator mode gets it.** Claude Code reads project settings from the session's own
+directory and does not walk up, and developer mode runs in `app/` — so that mode has its own
+tracked `app/.claude/settings.json`, carrying `plansDirectory: ".claude/plans"` and nothing
+else. Its plans stay in `app/.claude/plans/`, which is gitignored; they cannot be pointed at the
+shared archive, because `plansDirectory` is rejected when it resolves outside the project root.
 
 **It carries no `permissions` block, deliberately.** Every `hangar` command typed at a shell
 prompts, including `hangar list`. That is the fleet's choice, and the reason is a limit of the
