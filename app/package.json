@@ -27,8 +27,8 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
-    "@commander-js/extra-typings": "^14.0.0",
-    "commander": "^14.0.1",
+    "@commander-js/extra-typings": "^15.0.0",
+    "commander": "^15.0.0",
     "dotenv": "^17.2.3",
     "picocolors": "^1.1.1",
     "yaml": "2.9.0",
