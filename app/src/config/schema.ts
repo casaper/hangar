@@ -100,6 +100,21 @@ const forgeSchema = z.strictObject({
    * disables the lookup rather than making it constant.
    */
   prCacheTtlSeconds: z.int().min(10).optional(),
+  /**
+   * What to hand a headless Claude Code run in a clone when a pull-request description is
+   * missing or out of date. A slash command of the repo's own is the normal value.
+   *
+   * **Optional with no default, and that is the whole point.** A reviewer-facing description is
+   * not something this CLI can write, so `pr create` delegates -- but WHICH prompt writes one is
+   * a property of the repo being managed, not of Hangar. Defaulting it to any particular slash
+   * command would put one repository's skill name in a published tool, and every other hangar
+   * would silently spawn a run that has nothing to do.
+   *
+   * So absent means the delegation is OFF: a description that is missing or older than the
+   * branch's last commit is then a refusal naming the path it looked for, which is a fine place
+   * for a hangar whose agent writes descriptions some other way to stop.
+   */
+  prDescriptionPrompt: z.string().min(1).optional(),
 });
 
 const trackerSchema = z.strictObject({

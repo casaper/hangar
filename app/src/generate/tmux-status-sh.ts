@@ -118,9 +118,9 @@ const GLYPHS = {
  * The pull request's three axes, one glyph each. Kept beside `GLYPHS` and separate from it,
  * because the two live on different lines of the bar under opposite rules -- see below.
  *
- * A merged or declined pull request shows its glyph and its number and NOTHING else: the build
- * and the reviews are settled, and a green tick beside a merged PR is a fact nobody is deciding
- * anything on. `open` is the only state where the other two axes are still live.
+ * A merged, declined or superseded pull request shows its glyph and its number and NOTHING else:
+ * the build and the reviews are settled, and a green tick beside a merged PR is a fact nobody is
+ * deciding anything on. `open` is the only state where the other two axes are still live.
  *
  * `·` for "nobody has reviewed yet" is drawn rather than omitted, so the field has a fixed shape
  * and a missing review reads as a missing review instead of as a script that stopped early.
@@ -129,6 +129,7 @@ const PR_GLYPHS = {
   draft: '✎',
   merged: '✔',
   declined: '✖',
+  superseded: '⊘',
   ciPass: '✓',
   ciFail: '✗',
   ciRunning: '◌',
@@ -342,6 +343,7 @@ export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
     '  case "$c_state" in',
     `  merged) printf ' ${PR_GLYPHS.merged}#%s ' "$c_id" ;;`,
     `  declined) printf ' ${PR_GLYPHS.declined}#%s ' "$c_id" ;;`,
+    `  superseded) printf ' ${PR_GLYPHS.superseded}#%s ' "$c_id" ;;`,
     '  *)',
     '    mark=""',
     `    [ "$c_draft" = "1" ] && mark=${sq(PR_GLYPHS.draft)}`,

@@ -75,9 +75,18 @@ const move = (from: string, to: string): void => {
   }
 };
 
+/**
+ * What marks a copy as the half that lost a `tmp merge` conflict.
+ *
+ * Exported because a second reader now exists (`pr-description.ts` skips these when it looks for a
+ * pull-request description) and the two must agree by construction: a reader spelling it itself
+ * would go on finding conflict copies the day this suffix changes, and would publish one.
+ */
+export const CONFLICT_MARKER = '.from-';
+
 const conflictName = (name: string, label: string): string => {
   const ext = extname(name);
-  return `${basename(name, ext)}.from-${label}${ext}`;
+  return `${basename(name, ext)}${CONFLICT_MARKER}${label}${ext}`;
 };
 
 /**

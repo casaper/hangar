@@ -72,6 +72,10 @@
           "type": "integer",
           "minimum": 10,
           "maximum": 9007199254740991
+        },
+        "prDescriptionPrompt": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [

@@ -186,6 +186,7 @@ pr)
   case "$c_state" in
   merged) printf ' ✔#%s ' "$c_id" ;;
   declined) printf ' ✖#%s ' "$c_id" ;;
+  superseded) printf ' ⊘#%s ' "$c_id" ;;
   *)
     mark=""
     [ "$c_draft" = "1" ] && mark='✎'

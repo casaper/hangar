@@ -21,7 +21,7 @@ import { closeClones, type CloseOptions } from './commands/close.ts';
 import { open } from './commands/open.ts';
 import { reloadClones, type ReloadOptions } from './commands/reload.ts';
 import { plansCollect, plansStamp } from './commands/plans.ts';
-import { prRefresh } from './commands/pr.ts';
+import { prCreate, prRefresh, prUpdate } from './commands/pr.ts';
 import { ports } from './commands/ports.ts';
 import { removeClone } from './commands/remove-clone.ts';
 import { resume } from './commands/resume.ts';
@@ -634,7 +634,9 @@ plans
 
 const pr = program
   .command('pr')
-  .description("What each clone's branch has open on the forge, for the clone bar to draw");
+  .description(
+    "A clone branch's pull request: open one, rewrite your own, or refresh what is known",
+  );
 
 pr.command('refresh')
   .summary("Ask the forge about a clone's pull request and cache the answer")
@@ -648,6 +650,50 @@ pr.command('refresh')
   .option('-q, --quiet', "say nothing but warnings (for the status bar's own spawn)")
   .action(async (clones: string[], options) => {
     await prRefresh(requireHangar(), clones, options);
+  });
+
+/*
+ * `create` and `update` take ONE clone and default to the clone you are standing in, unlike
+ * `refresh` above, which takes a list and an `--all`. That is not an inconsistency: refreshing a
+ * cache six times is six harmless reads, and opening six pull requests is not something anybody
+ * means by one command. `src/commands/pr.ts` has the rest of the reasoning.
+ */
+pr.command('create')
+  .summary('Open the pull request this branch does not have yet')
+  .description(
+    "Opens a pull request on Bitbucket from the clone's current branch, unless the branch already has one open -- in which case it says which and changes nothing, so it is safe to run twice.\n\nThe title and description come from the description file the repo's own agent writes into the shared tmp/ store; when there is none, or it was written before the branch's last commit, `forge.prDescriptionPrompt` is run as a headless Claude Code session in that clone to write one. IT OPENS A DRAFT: pass --ready to open it ready for review, which notifies its reviewers.\n\nThe clone comes from where the command is run: inside a clone the argument may be left out, and naming a DIFFERENT clone is refused.",
+  )
+  .argument('[clone]', 'clone name or index — defaults to the clone you are in')
+  .option('--onto <branch>', 'target branch (default: the repo default branch)')
+  .option('--title <text>', "use this title instead of the description file's heading")
+  .option('--file <path>', 'take the title and body from this file instead')
+  .option('--ready', 'open it ready for review instead of as a draft')
+  .option('--no-describe', 'refuse instead of writing a missing or out-of-date description')
+  .option('--include-busy', 'write a description in a clone that has a live session')
+  .option('-y, --yes', 'do not ask before opening it')
+  .option('-n, --dry-run', 'say what would be opened, create nothing')
+  .action(async (clone: string | undefined, options) => {
+    await prCreate(requireHangar(), clone, options);
+  });
+
+pr.command('update')
+  .summary('Rewrite the title, description or draft state of your OWN pull request')
+  .description(
+    "Replaces the title and description of the pull request open for this clone's branch, from the same description file `pr create` uses.\n\nONLY ON PULL REQUESTS YOU OPENED. Bitbucket lets anyone with write access rewrite anyone's; this refuses unless the token owner is the author, and refuses too when it cannot tell whose it is.\n\nThe draft state is left exactly as it is unless --draft or --ready says otherwise. --keep-title and --keep-body each hold one half back.",
+  )
+  .argument('[clone]', 'clone name or index — defaults to the clone you are in')
+  .option('--title <text>', "use this title instead of the description file's heading")
+  .option('--file <path>', 'take the title and body from this file instead')
+  .option('--keep-title', 'leave the title as it is')
+  .option('--keep-body', 'leave the description as it is')
+  .option('--draft', 'mark it a draft')
+  .option('--ready', 'mark it ready for review')
+  .option('--no-describe', 'refuse instead of writing a missing or out-of-date description')
+  .option('--include-busy', 'write a description in a clone that has a live session')
+  .option('-y, --yes', 'do not ask before rewriting it')
+  .option('-n, --dry-run', 'say what would change, change nothing')
+  .action(async (clone: string | undefined, options) => {
+    await prUpdate(requireHangar(), clone, options);
   });
 
 plans

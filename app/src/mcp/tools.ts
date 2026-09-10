@@ -191,6 +191,20 @@ export const EXPOSURES: readonly Exposure[] = [
     acts: false,
     lede: 'Prints the URL and opens nothing.',
   },
+  {
+    name: 'pr_create_preview',
+    path: ['pr', 'create'],
+    fixed: [PREVIEW],
+    acts: false,
+    lede: `${previewLede} Names the description it found and the title it read out of it, and opens no pull request. It DOES fetch the branch from origin, because "is this branch pushed" cannot be answered off a stale remote-tracking ref.`,
+  },
+  {
+    name: 'pr_update_preview',
+    path: ['pr', 'update'],
+    fixed: [PREVIEW],
+    acts: false,
+    lede: `${previewLede} Says which fields would change and rewrites nothing.`,
+  },
 
   // ---- previews ---------------------------------------------------------------------------
   { name: 'sync_preview', path: ['sync'], fixed: [PREVIEW], acts: false, lede: previewLede },
@@ -257,6 +271,30 @@ export const EXPOSURES: readonly Exposure[] = [
   { name: 'plans_collect', path: ['plans', 'collect'], hides: [PREVIEW], acts: true },
   { name: 'plans_stamp', path: ['plans', 'stamp'], hides: [PREVIEW], acts: true },
   { name: 'teach_rg', path: ['teach-rg'], hides: [PREVIEW], acts: true },
+  /*
+   * `--no-describe` is FIXED on both, which is a limit on the tool rather than on the command.
+   *
+   * Writing a missing description means a headless `claude -p` inside the clone: one to three
+   * minutes of streamed progress, with a line the operator can type into it. Through a tool call
+   * that is a request that blocks for minutes and then dies at whatever timeout the caller has,
+   * mid-run, with none of the stream ever reaching anybody -- and the value of watching it is the
+   * whole reason it streams. So a tool refuses on a stale description and names the command to
+   * type, exactly as `ALWAYS_HIDDEN` keeps `--quiet` away from a caller that wants an answer.
+   */
+  {
+    name: 'pr_create',
+    path: ['pr', 'create'],
+    hides: [PREVIEW],
+    fixed: ['--no-describe'],
+    acts: true,
+  },
+  {
+    name: 'pr_update',
+    path: ['pr', 'update'],
+    hides: [PREVIEW],
+    fixed: ['--no-describe'],
+    acts: true,
+  },
   { name: 'browse', path: ['browse'], hides: [PREVIEW], acts: true },
   /*
    * `setup` is exposed rather than left out, and that CLOSES a gap rather than opening one.
@@ -450,7 +488,7 @@ export const argvFor = (
  * Leaf commands with no tool, and the reason each one earns its place here.
  *
  * The bar is high: everything else in this CLI is a tool, `setup` included -- exposed precisely
- * BECAUSE it was escalation-adjacent and unnamed. These four are not omissions.
+ * BECAUSE it was escalation-adjacent and unnamed. These six are not omissions.
  *
  * - **`claude`** refuses whenever `$CLAUDECODE` is set, which is every tool call there will ever
  *   be, so the tool could only ever fail -- and it is the escalation boundary the mode pair
@@ -465,12 +503,14 @@ export const argvFor = (
  * - **`jira hook`** reads a `PreToolUse` payload from stdin and fails open when there is none, so
  *   a tool call reaches it with nothing to do and it correctly says nothing.
  *
- * `mcp` is the fifth and is this server, which has no business calling itself.
+ * `exec` is the fifth, excluded for a permission reason rather than a mechanical one: everything
+ * after its `--` is a shell snippet, so a schema could describe it and never constrain it, and one
+ * `--all` reaches every clone's working tree at once. The Bash path is denied too, by a hook.
+ *
+ * `mcp` is the sixth and is this server, which has no business calling itself.
  */
 export const NOT_EXPOSED: readonly string[] = [
   'claude',
-  // Runs an arbitrary shell snippet in every clone, so an MCP schema could describe it but
-  // never constrain it -- the one thing a tool rule is for. The Bash path is the only one.
   'exec',
   'dev golden',
   'dev release',

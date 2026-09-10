@@ -90,7 +90,7 @@ export const prCacheLine = (pr: CachedPullRequest): string =>
     pr.review,
   ].join(' ') + '\n';
 
-const PR_STATES = new Set<string>(['open', 'merged', 'declined']);
+const PR_STATES = new Set<string>(['open', 'merged', 'declined', 'superseded']);
 const CI_STATES = new Set<string>(['pass', 'fail', 'running', 'none']);
 const REVIEW_STATES = new Set<string>(['approved', 'changes', 'none']);
 

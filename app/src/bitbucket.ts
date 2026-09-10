@@ -5,10 +5,16 @@ import { tildify } from './user-paths.ts';
 import type { Hangar } from './hangar.ts';
 
 /**
- * Bitbucket: links that need no auth, and the one lookup that does.
+ * Bitbucket: links that need no auth, the lookups that do, and the two writes.
  *
  * A pull request is LINKED by a search URL keyed on the branch -- no credential, no request,
  * and an empty result list is itself a readable answer. That is all `status` needs.
+ *
+ * **Everything that reads here soft-fails and everything that WRITES does not**, and that
+ * inversion is the rule to keep in mind before adding to this file. A failed read means a
+ * `status` row with less on it or a `sync` that says its target is a guess; a failed write is a
+ * pull request that may or may not now exist on somebody else's screen, so `createPullRequest`
+ * and `setPullRequest` return a reason their caller aborts on rather than a soft `undefined`.
  *
  * Resolving a pull request's TARGET branch is different: nothing local knows it. A branch
  * forked from `master` can perfectly well have a PR onto `release9` or onto another branch in
@@ -72,8 +78,16 @@ export const prSearchUrl = (ref: RepoRef | undefined, branch: string): string | 
     ? undefined
     : `${repoUrl(ref)}/pull-requests/?query=${encodeURIComponent(branch)}`;
 
-/** Where a pull request is in its life. `open` covers a draft; `draft` is a separate axis. */
-export type PrState = 'open' | 'merged' | 'declined';
+/**
+ * Where a pull request is in its life. `open` covers a draft; `draft` is a separate axis.
+ *
+ * Four values, because the published API schema says four (`OPEN`, `MERGED`, `DECLINED`,
+ * `SUPERSEDED`). `superseded` was missing here and fell through to `open`, which is the wrong
+ * default in both directions: the bar drew a dead pull request as live, and `pr update` -- which
+ * the API allows on OPEN ones only -- would try to rewrite it and hand back Bitbucket's refusal
+ * instead of its own.
+ */
+export type PrState = 'open' | 'merged' | 'declined' | 'superseded';
 
 /**
  * What the reviewers have said, collapsed to one answer.
@@ -97,7 +111,26 @@ export type PullRequest = {
   /** The source commit CI reports against. `''` when the API did not say. */
   readonly headCommit: string;
   readonly review: ReviewState;
+  /**
+   * The author's account uuid, bare. `''` when the API did not say.
+   *
+   * Read for one purpose: `pr update` rewrites only pull requests the token owner authored. The
+   * API itself permits rewriting anybody's, so that restriction has to be enforced by comparing
+   * this against `tokenOwner` -- there is no permission to delegate it to.
+   */
+  readonly author: string;
+  /** The author's display name, for a refusal a human can act on. `''` when unsaid. */
+  readonly authorName: string;
 };
+
+/**
+ * Bitbucket wraps account uuids in braces (`{9d0c...}`) in some payloads and not in others.
+ *
+ * So both sides of the ownership comparison go through this. Comparing the raw strings would make
+ * the check answer "not yours" for your own pull request whenever the two payloads disagreed about
+ * the braces -- which fails in the safe direction and would therefore never be investigated.
+ */
+export const bareUuid = (raw: string): string => raw.replace(/^\{/, '').replace(/\}$/, '');
 
 /**
  * The reviewers' verdict, and **`changes_requested` beats `approved`**.
@@ -190,9 +223,22 @@ const quoted = (value: string): string => `"${value.replace(/(["\\])/g, '\\$1')}
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
   typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
 
-/** Bitbucket's `state` strings, mapped to ours. Anything unrecognised reads as still open. */
+/**
+ * Bitbucket's `state` strings, mapped to ours. Anything unrecognised reads as still open.
+ *
+ * The four cases are the enum in the published schema, checked against it rather than collected
+ * from what this fleet happened to return. The `open` fallback stays for a fifth value nobody has
+ * seen yet: a pull request whose state we cannot name is more usefully treated as live than as
+ * settled, because that is the reading under which somebody looks at it.
+ */
 const prStateOf = (raw: unknown): PrState =>
-  raw === 'MERGED' ? 'merged' : raw === 'DECLINED' ? 'declined' : 'open';
+  raw === 'MERGED'
+    ? 'merged'
+    : raw === 'DECLINED'
+      ? 'declined'
+      : raw === 'SUPERSEDED'
+        ? 'superseded'
+        : 'open';
 
 const parseParticipants = (raw: unknown): ReviewState => {
   if (!Array.isArray(raw)) return 'none';
@@ -212,30 +258,44 @@ const parseParticipants = (raw: unknown): ReviewState => {
   );
 };
 
+/**
+ * One pull request out of whatever shape it arrived in, or nothing.
+ *
+ * The single parser, because there are now three payloads carrying a pull request -- the list, the
+ * `POST` response and the `PUT` response -- and the whole point of reading the write responses back
+ * is that they are parsed exactly as a read is. A second parser for the write path would be free to
+ * disagree with this one about a field, which is the one thing the read-back cannot afford.
+ */
+const parseOnePullRequest = (value: unknown, ref: RepoRef): PullRequest | undefined => {
+  const pr = asRecord(value);
+  const id = pr?.['id'];
+  const destination = asRecord(asRecord(pr?.['destination'])?.['branch'])?.['name'];
+  if (typeof id !== 'number' || typeof destination !== 'string' || destination === '') {
+    return undefined;
+  }
+  const title = pr?.['title'];
+  const href = asRecord(asRecord(pr?.['links'])?.['html'])?.['href'];
+  const head = asRecord(asRecord(pr?.['source'])?.['commit'])?.['hash'];
+  const author = asRecord(pr?.['author'])?.['uuid'];
+  const authorName = asRecord(pr?.['author'])?.['display_name'];
+  return {
+    id,
+    title: typeof title === 'string' ? title : '',
+    destination,
+    url: typeof href === 'string' ? href : `${repoUrl(ref)}/pull-requests/${String(id)}`,
+    state: prStateOf(pr?.['state']),
+    draft: pr?.['draft'] === true,
+    headCommit: typeof head === 'string' ? head : '',
+    review: parseParticipants(pr?.['participants']),
+    author: typeof author === 'string' ? bareUuid(author) : '',
+    authorName: typeof authorName === 'string' ? authorName : '',
+  };
+};
+
 const parsePullRequests = (body: unknown, ref: RepoRef): PullRequest[] => {
   const values = asRecord(body)?.['values'];
   if (!Array.isArray(values)) return [];
-  return values.flatMap((value: unknown): PullRequest[] => {
-    const pr = asRecord(value);
-    const id = pr?.['id'];
-    const destination = asRecord(asRecord(pr?.['destination'])?.['branch'])?.['name'];
-    if (typeof id !== 'number' || typeof destination !== 'string' || destination === '') return [];
-    const title = pr?.['title'];
-    const href = asRecord(asRecord(pr?.['links'])?.['html'])?.['href'];
-    const head = asRecord(asRecord(pr?.['source'])?.['commit'])?.['hash'];
-    return [
-      {
-        id,
-        title: typeof title === 'string' ? title : '',
-        destination,
-        url: typeof href === 'string' ? href : `${repoUrl(ref)}/pull-requests/${String(id)}`,
-        state: prStateOf(pr?.['state']),
-        draft: pr?.['draft'] === true,
-        headCommit: typeof head === 'string' ? head : '',
-        review: parseParticipants(pr?.['participants']),
-      },
-    ];
-  });
+  return values.flatMap((value: unknown) => parseOnePullRequest(value, ref) ?? []);
 };
 
 /** Enough for one API call over a VPN, short enough that an offline `sync --all` still ends. */
@@ -247,6 +307,18 @@ const TIMEOUT_MS = 8000;
  * `state` goes inside `q`, not beside it: as its own parameter it is silently ignored whenever
  * `q` is present, and a query for `master` then comes back full of PRs merged years ago --
  * which as a sync target would be catastrophic and would look deliberate.
+ *
+ * **The published schema is right about `state` and silent about the PRECEDENCE**, which is the
+ * part that bites. `state` is a documented query parameter with a four-value enum and it works
+ * exactly as written on its own -- measured, `state=OPEN` answers 4 and `state=MERGED` answers
+ * 748 on this repo. What no published document says is that `q` REPLACES it: with a `q` present
+ * the `state` parameter is ignored, measured on a branch carrying a single MERGED pull request
+ * where `q=source.branch.name="x"` plus `state=OPEN` returned the merged one and
+ * `q=source.branch.name="x" AND state="OPEN"` returned nothing.
+ *
+ * So an audit that reads the spec and "corrects" this to the documented parameter would be
+ * following the documentation and would hand `sync` a base that was merged last spring. The
+ * filter has to live inside `q` because `q` is what this call already uses to select the branch.
  *
  * **`anyState` is opt-in for exactly that reason.** The bar wants to say "declined", which needs
  * the closed ones; `sync` picks `pullRequests[0]` as the branch to rebase ONTO, so handing it a
@@ -288,6 +360,7 @@ export const openPullRequests = async (
     'fields',
     'values.id,values.title,values.destination.branch.name,values.links.html.href,' +
       'values.state,values.draft,values.source.commit.hash,' +
+      'values.author.uuid,values.author.display_name,' +
       'values.participants.role,values.participants.state,values.updated_on',
   );
   try {
@@ -349,4 +422,295 @@ export const pullRequestCiState = async (
   } catch {
     return 'none';
   }
+};
+
+/**
+ * Either the answer, or one sentence saying why there is none.
+ *
+ * The write path's counterpart to `PullRequestLookup`, and deliberately NOT the same shape as a
+ * soft failure: `openPullRequests` returning `ok: false` means "carry on without it", and every
+ * caller does. A write returning `ok: false` means STOP, and its reason is what the command
+ * prints before it does.
+ */
+export type ForgeResult<T> =
+  { readonly ok: true; readonly value: T } | { readonly ok: false; readonly reason: string };
+
+const apiUrl = (ref: RepoRef, path: string): URL =>
+  new URL(`https://api.bitbucket.org/2.0/repositories/${ref.workspace}/${ref.repo}${path}`);
+
+/**
+ * Bitbucket's own error text, which is the half of a 400 worth reading.
+ *
+ * `POST /pullrequests` answers a missing source branch, a destination that does not exist and a
+ * duplicate with three different messages under one status code, and the status alone would send
+ * the operator to look at the wrong thing.
+ */
+const errorMessageIn = (body: unknown): string | undefined => {
+  const message = asRecord(asRecord(body)?.['error'])?.['message'];
+  return typeof message === 'string' && message !== '' ? message : undefined;
+};
+
+/**
+ * One authenticated JSON request, and the one place a write's failure becomes a sentence.
+ *
+ * Every failure is caught: an unroutable host, a timeout, a 401, a 400 with Bitbucket's own
+ * explanation, and a body that is not JSON at all. What it never does is throw -- a caller that
+ * has just posted needs to report what happened, and an exception thrown past it would lose the
+ * one thing it knows.
+ */
+const request = async (
+  hangar: Hangar,
+  url: URL,
+  init: { readonly method: string; readonly body?: unknown } = { method: 'GET' },
+): Promise<ForgeResult<unknown>> => {
+  const token = bitbucketToken(hangar);
+  if (token === undefined) {
+    return {
+      ok: false,
+      reason: `no ${hangar.config.forge.tokenEnvKey ?? DEFAULT_BITBUCKET_TOKEN_ENV_KEY} in the environment or ${tildify(hangar.paths.envShared)}`,
+    };
+  }
+  try {
+    const res = await fetch(url, {
+      method: init.method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+        ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      },
+      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    /*
+     * The body is read before the status is judged, because that is where the explanation is.
+     * A `.json()` on an error response can itself fail (Bitbucket answers HTML for some
+     * gateway errors), which is why it is inside the try and why the status is still reported
+     * when it does.
+     */
+    let body: unknown;
+    try {
+      body = await res.json();
+    } catch {
+      body = undefined;
+    }
+    if (!res.ok) {
+      const detail = errorMessageIn(body);
+      return {
+        ok: false,
+        reason: `Bitbucket answered ${String(res.status)} ${res.statusText}${detail === undefined ? '' : ` — ${detail}`}`,
+      };
+    }
+    return { ok: true, value: body };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+  }
+};
+
+/**
+ * Whose token this is, as a bare account uuid.
+ *
+ * The other half of `pr update`'s ownership rule, and it has to be able to FAIL: an access token
+ * scoped to a repository rather than to a person is a perfectly valid credential for everything
+ * else in this module and answers 401 here. That is not permission to skip the check -- a command
+ * that cannot tell whose pull request it is looking at has no business rewriting it -- so this
+ * returns a reason and the command stops on it.
+ */
+export const tokenOwner = async (hangar: Hangar): Promise<ForgeResult<string>> => {
+  const res = await request(hangar, new URL('https://api.bitbucket.org/2.0/user'));
+  if (!res.ok) return res;
+  const uuid = asRecord(res.value)?.['uuid'];
+  if (typeof uuid !== 'string' || uuid === '') {
+    return { ok: false, reason: 'Bitbucket did not say who this token belongs to' };
+  }
+  return { ok: true, value: bareUuid(uuid) };
+};
+
+/**
+ * One pull request in full, including the fields a rewrite has to put back.
+ *
+ * Separate from `openPullRequests` rather than an option on it, because `description` is the
+ * expensive field: the list is asked for by `sync` and by the bar's own refresh, and carrying
+ * every pull request's whole body through those would be paid on a path that never reads it.
+ */
+export type PullRequestDetail = {
+  readonly pr: PullRequest;
+  readonly description: string;
+  /** The source branch, bare. Read back so an edit cannot retarget a pull request by accident. */
+  readonly source: string;
+  readonly closeSourceBranch: boolean;
+  readonly reviewerUuids: readonly string[];
+};
+
+/**
+ * One pull request's full record out of any of the three payloads that carry one.
+ *
+ * The same parser for the read and for both writes, which is what makes the read-back mean
+ * something: a second parser for the write responses would be free to disagree with this one
+ * about a field, and disagreeing about a field is precisely what the read-back is looking for.
+ */
+const parseDetail = (value: unknown, ref: RepoRef): PullRequestDetail | undefined => {
+  const pr = parseOnePullRequest(value, ref);
+  if (pr === undefined) return undefined;
+  const record = asRecord(value);
+  /*
+   * `summary.raw` FIRST, `description` second, and both are asked for.
+   *
+   * The body of a pull request is documented under two names and the published schema carries
+   * only one of them: `description` is the field the create and update calls TAKE (documented in
+   * the prose of `POST /pullrequests`, and absent from the `pullrequest` schema), while `summary`
+   * -- a rendered-content object with `raw`, `markup` and `html` -- is what the schema declares on
+   * the way out. The live API returns both, byte-identical: same sha256 over 3235 characters on
+   * the pull request this was checked against, `markup: markdown`.
+   *
+   * So the documented read is preferred and the undocumented one is the fallback, which is the
+   * right way round for a field this code sends straight back: `pr update` is a read-modify-write,
+   * and a body that read as empty would REPLACE somebody's description with nothing.
+   */
+  const summaryRaw = asRecord(record?.['summary'])?.['raw'];
+  const description = typeof summaryRaw === 'string' ? summaryRaw : record?.['description'];
+  const source = asRecord(asRecord(record?.['source'])?.['branch'])?.['name'];
+  const reviewers = record?.['reviewers'];
+  return {
+    pr,
+    description: typeof description === 'string' ? description : '',
+    source: typeof source === 'string' ? source : '',
+    closeSourceBranch: record?.['close_source_branch'] === true,
+    reviewerUuids: Array.isArray(reviewers)
+      ? reviewers.flatMap((entry: unknown) => {
+          const uuid = asRecord(entry)?.['uuid'];
+          return typeof uuid === 'string' ? [uuid] : [];
+        })
+      : [],
+  };
+};
+
+/** The fields a full record needs. One list, so a read and a write read back the same shape. */
+const DETAIL_FIELDS =
+  'id,title,description,summary.raw,state,draft,close_source_branch,destination.branch.name,' +
+  'source.branch.name,source.commit.hash,links.html.href,author.uuid,author.display_name,' +
+  'reviewers.uuid,participants.role,participants.state';
+
+export const pullRequestDetail = async (
+  hangar: Hangar,
+  ref: RepoRef | undefined,
+  id: number,
+): Promise<ForgeResult<PullRequestDetail>> => {
+  if (ref === undefined) {
+    return { ok: false, reason: 'forge.originUrl is not a Bitbucket repository' };
+  }
+  const url = apiUrl(ref, `/pullrequests/${String(id)}`);
+  url.searchParams.set('fields', DETAIL_FIELDS);
+  const res = await request(hangar, url);
+  if (!res.ok) return res;
+  const detail = parseDetail(res.value, ref);
+  return detail === undefined
+    ? { ok: false, reason: `Bitbucket's answer for #${String(id)} named no destination branch` }
+    : { ok: true, value: detail };
+};
+
+export type NewPullRequest = {
+  readonly source: string;
+  readonly destination: string;
+  readonly title: string;
+  readonly body: string;
+  readonly draft: boolean;
+};
+
+/**
+ * Open one, and hand back what Bitbucket says it made.
+ *
+ * **The returned record is PARSED FROM THE RESPONSE, never assembled from the input**, and that is
+ * the whole design of this function. Bitbucket silently accepts and drops fields it does not
+ * recognise -- the reason the create form's `title=` parameter was documented as working for months
+ * when it never was -- so a caller that reported its own inputs back would be unable to tell a
+ * field that took from one that was thrown away. Handing back the parsed answer makes the
+ * comparison the caller's, and it has the information to make it.
+ */
+export const createPullRequest = async (
+  hangar: Hangar,
+  ref: RepoRef | undefined,
+  input: NewPullRequest,
+): Promise<ForgeResult<PullRequestDetail>> => {
+  if (ref === undefined) {
+    return { ok: false, reason: 'forge.originUrl is not a Bitbucket repository' };
+  }
+  const url = apiUrl(ref, '/pullrequests');
+  url.searchParams.set('fields', DETAIL_FIELDS);
+  const res = await request(hangar, url, {
+    method: 'POST',
+    body: {
+      title: input.title,
+      description: input.body,
+      source: { branch: { name: input.source } },
+      destination: { branch: { name: input.destination } },
+      draft: input.draft,
+    },
+  });
+  if (!res.ok) return res;
+  const detail = parseDetail(res.value, ref);
+  return detail === undefined
+    ? {
+        ok: false,
+        reason:
+          'Bitbucket accepted the pull request but its answer could not be read — check the repository before retrying',
+      }
+    : { ok: true, value: detail };
+};
+
+/**
+ * Every field a rewrite sends, named -- which is what makes read-modify-write checkable.
+ *
+ * The published documentation for the update call is three sentences long and says nothing about
+ * what happens to a field the body omits -- so whether a partial `PUT` preserves or clears
+ * `reviewers` is not something either spec answers, and finding out costs somebody's review
+ * assignments. A description edit that silently un-assigned three reviewers is a change nobody
+ * asked for and nobody would attribute to this command, so every field is sent every time: the
+ * type has no optional members except the one that genuinely means "leave it alone", and a caller
+ * builds it from `pullRequestDetail` with its own changes layered on top.
+ */
+export type PullRequestEdit = {
+  readonly title: string;
+  readonly description: string;
+  readonly destination: string;
+  readonly closeSourceBranch: boolean;
+  readonly reviewerUuids: readonly string[];
+  /**
+   * Present only to CHANGE the draft state; absent leaves it as it is.
+   *
+   * Absent rather than carried, unlike everything else here, and the asymmetry is deliberate: an
+   * update is about the title and the body, and a `draft` key on every rewrite would make this
+   * command able to publish a draft as a side effect of fixing a typo in it. Absent is also the
+   * safer bet against the API -- if `draft` turns out not to be writable through this endpoint at
+   * all, an ordinary update never carries it and so never trips over that.
+   */
+  readonly draft?: boolean | undefined;
+};
+
+export const setPullRequest = async (
+  hangar: Hangar,
+  ref: RepoRef | undefined,
+  id: number,
+  edit: PullRequestEdit,
+): Promise<ForgeResult<PullRequestDetail>> => {
+  if (ref === undefined) {
+    return { ok: false, reason: 'forge.originUrl is not a Bitbucket repository' };
+  }
+  const url = apiUrl(ref, `/pullrequests/${String(id)}`);
+  url.searchParams.set('fields', DETAIL_FIELDS);
+  const res = await request(hangar, url, {
+    method: 'PUT',
+    body: {
+      title: edit.title,
+      description: edit.description,
+      destination: { branch: { name: edit.destination } },
+      close_source_branch: edit.closeSourceBranch,
+      reviewers: edit.reviewerUuids.map((uuid) => ({ uuid })),
+      ...(edit.draft === undefined ? {} : { draft: edit.draft }),
+    },
+  });
+  if (!res.ok) return res;
+  const detail = parseDetail(res.value, ref);
+  return detail === undefined
+    ? { ok: false, reason: `Bitbucket's answer for #${String(id)} could not be read` }
+    : { ok: true, value: detail };
 };

@@ -183,6 +183,22 @@ forge:
   # per clone per redraw is a rate limit discovered by being throttled.
   # prCacheTtlSeconds: 90
 
+  # What to hand a headless Claude Code run inside the clone when `hangar pr create` finds no
+  # pull-request description for the branch, or one written before the branch's last commit.
+  # Absent when omitted, and absent means the delegation is OFF: a missing or stale description
+  # is then a refusal naming the path it looked for.
+  #
+  # OPTIONAL WITH NO DEFAULT, on purpose. A reviewer-facing description is not something a
+  # deterministic CLI can write, so this one step is delegated to something that can read a
+  # diff -- but WHICH prompt writes one belongs to the repo being managed, not to Hangar.
+  # A built-in default would name one repository's own slash command, and every other hangar
+  # would spawn a run with nothing to do. So the repo names it here, and Hangar names nothing.
+  #
+  # The value is passed through untouched, so a slash command, a file reference or a sentence
+  # all work; what it must do is leave a description behind where `pr create` looks for it --
+  # a `pr…<KEY>….md` in the shared tmp/ store, or the ticket's own directory in it.
+  prDescriptionPrompt: /pr-description
+
 # --------------------------------------------------------------------------------------------
 # The issue tracker -- ticket links, and the shared ticket cache
 # --------------------------------------------------------------------------------------------

@@ -41,7 +41,7 @@ test('a cache line round-trips, and anything else is not a cache line', () => {
   // a file written without one is a cache the bar can never use.
   assert.ok(prCacheLine(RECORD).endsWith('\n'));
   // Every field has to survive the trip, or the bar draws a state nobody is in.
-  for (const state of ['open', 'merged', 'declined'] as const) {
+  for (const state of ['open', 'merged', 'declined', 'superseded'] as const) {
     for (const ci of ['pass', 'fail', 'running', 'none'] as const) {
       for (const review of ['approved', 'changes', 'none'] as const) {
         const record = { ...RECORD, state, ci, review, draft: false };
@@ -49,6 +49,15 @@ test('a cache line round-trips, and anything else is not a cache line', () => {
       }
     }
   }
+  /*
+   * `superseded` is the fourth state the published API schema declares, and it was missing here
+   * and in `PrState` -- so it fell through to `open`, drawing a dead pull request as a live one.
+   * A record written by a newer CLI carrying it must survive the round trip, not read as junk.
+   */
+  assert.equal(
+    parsePrCacheLine(prCacheLine({ ...RECORD, state: 'superseded' }))?.state,
+    'superseded',
+  );
   for (const junk of ['', 'branch', 'branch x url 1', '{"id":1}']) {
     assert.equal(parsePrCacheLine(junk), undefined, `parsed junk: ${junk}`);
   }
@@ -158,6 +167,8 @@ test('an open pull request wins over a closed one on the same branch', () => {
     url: '',
     headCommit: '',
     review: 'none',
+    author: '',
+    authorName: '',
   } as const;
   const merged = { ...base, id: 1, state: 'merged' as const, draft: false };
   const open = { ...base, id: 2, state: 'open' as const, draft: false };
