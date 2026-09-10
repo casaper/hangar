@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.21.1](https://github.com/casaper/hangar/compare/v0.21.0...v0.21.1) (2026-09-10)
+
+### Documentation
+
+* **mcp:** Give hangar mcp a row in the operator's command reference ([9f7232b](https://github.com/casaper/hangar/commit/9f7232b947af3c0a9570c9ade4530ce9dc3d64a9))
+* **modes:** Name the developer tab's window, now that there are three of them ([fb8b96a](https://github.com/casaper/hangar/commit/fb8b96aa1650f66fc39a39c126fc764bced9937b))
+
+### Chores
+
+* **modes:** Pre-approve the other half of developer mode's golden gate ([acb58b7](https://github.com/casaper/hangar/commit/acb58b7b451b17159adc817afbfa82b95a4bd4a4))
+
+### Styles
+
+* **fleet:** Wrap the two skills' prose at the width the rest of it uses ([4319435](https://github.com/casaper/hangar/commit/4319435833568206c7f18753daec23ba4ae939c7))
+
 ## [0.21.0](https://github.com/casaper/hangar/compare/v0.20.0...v0.21.0) (2026-09-09)
 
 ### Features
