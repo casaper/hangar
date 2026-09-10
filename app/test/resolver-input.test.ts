@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { userMessageLine } from '../src/resolve-conflicts.ts';
+import { userMessageLine } from '../src/claude-headless.ts';
 
 /**
  * The line protocol the resolver's stdin speaks.
