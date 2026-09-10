@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.22.0](https://github.com/casaper/hangar/compare/v0.21.2...v0.22.0) (2026-09-10)
+
+### Features
+
+* **exec:** Run a shell snippet in selected or all clones, in the user's own shell ([aef12ec](https://github.com/casaper/hangar/commit/aef12ecfee92b7d5a9d575b842477a36e1ed6bad))
+
 ## [0.21.2](https://github.com/casaper/hangar/compare/v0.21.1...v0.21.2) (2026-09-10)
 
 ### Build & Dependencies
