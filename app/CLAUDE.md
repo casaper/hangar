@@ -215,7 +215,7 @@ the README or the skills and nothing else.
 
 **Scopes** are the subsystem: `sync` `doctor` `open` `tmp` `plans` `jira` `colours` `config`
 `editor` `terminal` `platform` `setup` `add-clone` `install` `resume` `ide` `status` `golden`
-`cli` `fleet` `modes` `test`. That list is documented and deliberately **not** enforced — a
+`cli` `fleet` `modes` `exec` `test`. That list is documented and deliberately **not** enforced — a
 `scope-enum` rule goes red the first time somebody adds a subsystem, and this repo already knows
 what a check that is red in normal operation is worth.
 
@@ -360,7 +360,7 @@ count here goes stale on the next commit and nothing checks it, so run `wc -l` w
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | entry point           | `cli.ts` — every command, option and alias is registered here, plus the `preAction` config gate and the `configureHelp` that prints all of a command's aliases                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | maintainer            | `commands/dev.ts` — `hangar dev golden`, the capture behind `pnpm golden`; `commands/release.ts` — `hangar dev release`, the gates and preflight in front of semantic-release, with `release/commits.ts` beside it reading the range. **Both are hidden in `cli.ts`, and that is their interface contract**: nothing about either is promised to an operator, so neither gets a row in `hangar-ops/reference/commands.md`. `dev` is deliberately NOT in `NEEDS_NO_CONFIG` — a capture, or a release, derived from a hangar with no config would be derived from the schema defaults, the one output neither may be mistaken for |
-| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`, `install`, `claude`, `browse`, `close`, `reload`, `pr`, `mcp`                                                                                                                                                                                                                                                                                                                                     |
+| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`, `install`, `claude`, `browse`, `close`, `reload`, `pr`, `mcp`, `exec`                                                                                                                                                                                                                                                                                                                             |
 | config                | `config/schema.ts` (the zod authority), `default-branch.ts`, `load.ts` (discovery + precedence), `derive.ts`, `json-schema.ts`, `drift.ts` (the example-vs-live comparison `config validate` runs), `presets.ts` (what `setup` SUGGESTS for the two questions no checkout can answer)                                                                                                                                                                                                                                                                                                                                           |
 | per-clone artifacts   | `clone-config.ts` — the byte-compared builders `doctor` holds every clone to; `colour-assignments.ts`; `ports.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | hangar-root artifacts | `hangar-files.ts` — the pair to `clone-config.ts`, for the files a hangar writes into its OWN root. Every one of them names this machine's home directory, which is what puts them on the untracked side of the inventory below                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -662,10 +662,23 @@ Three things about it belong here rather than only in the skill:
   rather than missing: a table naming a command that is not there, and an acting tool whose schema
   offers `dry-run`.
 
-**Coverage is every command but four, and every documented flag but one.** `claude` could only
+**Coverage is every command but six, and every documented flag but one.** `claude` could only
 ever fail (`$CLAUDECODE` refuses on every tool call) and is the boundary the mode pair exists for;
 `dev release` completes as a tool only in its `-y` form; `dev golden` would be a partial capture
-reading as the gate; `jira hook` takes its payload on stdin. `setup` IS exposed, and that closes a
+reading as the gate; `jira hook` takes its payload on stdin; `mcp` is the server itself. **`exec`
+is the one excluded for a permission reason rather than a mechanical one**: everything after its
+`--` is a shell snippet, so a schema could describe it and never constrain it — which is the only
+thing a per-tool rule buys.
+
+**`exec` is also the one command no agent may run at all**, and that is enforced by a hook rather
+than by a rule. `bin/hangar-exec-guard` is a `PreToolUse` matcher on `Bash`, wired into both mode
+settings files and into every clone's `settings.local.json`; it reads the whole command line and
+refuses any invocation of `hangar exec`. The `Bash(hangar exec)` deny entries in both modes stay
+beside it, but they are the weaker half and cannot be the only one: a permission rule matches the
+START of the command string, so `cd /elsewhere && hangar exec ...` never matches it. The reason
+the bar is higher here than for `remove-clone` is not blast radius but generality — a command
+that takes an arbitrary snippet can spell every other command that is denied, and it reaches every
+clone in one call, which is the rule the fleet's own `CLAUDE.md` is built around. `setup` IS exposed, and that closes a
 hole rather than opening one — `modes.md` had it recorded as escalation-adjacent and unlisted, and
 it now has a rule in both spellings. The one flag no tool offers is `--quiet`, which exists so a
 `SessionEnd` hook and the bar's own spawn can stay silent; a caller reading the result wants the
@@ -879,7 +892,7 @@ Five more root files are hand-maintained and belong to this package rather than 
   `resolveBrewPrefix` does the same three in the same order, deliberately. The probe is last and
   conditional in both: an Intel Mac without `brew shellenv` in its profile has the variable unset,
   and stopping at the default aborted the whole `.envrc` on a machine that has Homebrew.
-- **`.local/bin/claude` and `bin/hangar-statusline`, plus the six files in `.claude/modes/`** —
+- **`.local/bin/claude`, `bin/hangar-statusline` and `bin/hangar-exec-guard`, plus the six files in `.claude/modes/`** —
   `ops.md`, `dev.md`, a `*.settings.json` beside each, the shared `mcp.json`, and `statusline.sh`. **`hangar claude` is
   the one way into either mode** (`src/commands/claude.ts`): it opens both as tabs of one tmux
   session on its own socket — with a third tab holding a plain shell at the hangar root, which is
@@ -898,9 +911,12 @@ Five more root files are hand-maintained and belong to this package rather than 
   so a `claude` there would have been on PATH in every clone shell, where `terminal.tabs[]`'s
   default `command: 'claude'` starts each clone's own session. `.local/bin` gets its own
   `PATH_add` in the hangar's `.envrc` alone. That same mechanism is why the two settings files say
-  **`hangar-statusline <mode>` rather than an absolute path**: a tracked file cannot name one
-  machine's home directory, and a session running in a mode is proof direnv loaded, because the
-  `hangar` that started it was found the same way. All eight are **hand-maintained, so they add no
+  **`hangar-statusline <mode>` and `hangar-exec-guard` rather than absolute paths**: a tracked
+  file cannot name one machine's home directory, and a session running in a mode is proof direnv
+  loaded, because the `hangar` that started it was found the same way. **A clone's settings name
+  the guard absolutely instead**, and that is not an inconsistency — that file is untracked, and
+  a clone session may have been started by something other than `hangar open`, so its PATH proves
+  nothing. All nine are **hand-maintained, so they add no
   row to the derivation table above and need no `--check`** — nothing derives them from
   `app/src/**`. The one thing that IS derived is the `mcp__hangar__*` half of
   `ops.settings.json`, and it is held to `src/mcp/tools.ts` by `test/mcp-tools.test.ts` rather

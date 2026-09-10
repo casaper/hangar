@@ -432,6 +432,57 @@ itself `OPS` while carrying none of operator mode's rules. Same class as the res
 The CLI's own nested launches are unaffected — `resolve-conflicts.ts` is headless, and
 `teach-rg.ts` runs inside a clone, where the clone's own statusline applies.
 
+## `hangar exec` is the one hard denial, and a permission rule could not deliver it
+
+Every other refusal in the two modes is a guardrail: Bash is open, so a deny on writing is not a
+deny on `sed -i`, and the rules say what a mode is FOR. `hangar exec` is the exception, and the
+reason is generality rather than blast radius. `remove-clone --force --delete` destroys more and
+is merely `ask`. What `exec` does that nothing else does is take an **arbitrary shell snippet**
+and run it in **every clone named, in one call** — so it is at once a spelling for every command
+denied elsewhere and a way into working trees other agents are live in, which is the one rule the
+fleet's own `CLAUDE.md` is built around.
+
+**A permission rule cannot hold that line, and this is the measured part.** `Bash(hangar exec:*)`
+matches the START of the command string. `cd /elsewhere && hangar exec --all -- …` does not match
+it and runs. So the rules stay — a refusal from a rule reads better than one from a hook, and the
+two fail differently — but the half that actually holds is `bin/hangar-exec-guard`, a `PreToolUse`
+matcher on `Bash` that parses the whole command line.
+
+Four things about that script are deliberate:
+
+- **It is not part of the CLI.** It runs before every Bash tool call in every clone and both
+  modes. `bin/hangar` costs ~0.25s to load (type stripping over the whole CLI); the guard is a few
+  hundred bytes of plain JS and measures ~32ms. It is also why it imports nothing from `app/`: a
+  guard that fails to load is a guard that is not guarding.
+- **It matches tokens, not substrings.** Both mistakes are real and one of them is fatal to the
+  whole idea: blocking `docker exec` or `cat src/commands/exec.ts` gets the guard switched off
+  within a day, after which it protects nothing. So it finds tokens naming this CLI — bare
+  `hangar`, anything ending `/hangar`, or a direct `cli.ts` — steps over the global
+  `--hangar <path>` and its value, and asks whether the next non-flag token is `exec`.
+- **It fails CLOSED on an unreadable command and OPEN on an unparseable payload.** Not a
+  contradiction: a payload it cannot parse means Claude Code changed shape, where blocking every
+  Bash call in the fleet is far worse than the thing being guarded. A missing command inside a
+  well-formed payload is the shape of somebody hiding something.
+- **The modes name it bare and the clones name it absolutely.** The mode settings are tracked and
+  may not carry one machine's home directory, and a session running in a mode is proof direnv
+  loaded — the same argument `hangar-statusline` already rests on. A clone's `settings.local.json`
+  is untracked and its session may have been started by something other than `hangar open`, so
+  there its PATH proves nothing and the absolute path is the only reliable form.
+
+  **The bare form was verified rather than argued**, because it is the load-bearing half: in a
+  live mode session `command -v hangar-exec-guard` answers `<hangar>/bin/hangar-exec-guard`,
+  from the same inherited environment Claude Code spawns a hook with. That is worth checking
+  again if the launch path ever changes, since **a hook that cannot be found does not deny** —
+  Claude Code reports a hook error and the call proceeds. The `Bash(hangar exec)` deny entries
+  are what stands underneath that, which is the second reason they are not redundant.
+
+`doctor` carries a row for it, unconditionally — unlike the tracker hook, no config makes this
+one unwanted — and `--fix` writes it. **Developer mode is denied it too**, which is the one place
+this differs from every other asymmetry in the pair: dev mode may freely CHANGE `exec`, since it
+is code under `app/src/**`, and still may not run it. There is no way to test it from inside a
+mode, and that is correct rather than awkward — what the command does is reproduce the user's own
+interactive shell, which no agent session has.
+
 ## The boundary is a guardrail, not a sandbox — say so
 
 Operator mode denies `Edit`/`Write` under `app/**`, `.claude/skills/**` and `.claude/modes/**`.

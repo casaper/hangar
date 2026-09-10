@@ -11,6 +11,24 @@
       "Bash(git diff --exit-code dev/golden/gated)",
       "Bash(hangar config schema --check)",
       "Bash(hangar colours sync -n)"
+    ],
+    "deny": [
+      "Bash(hangar exec)",
+      "Bash(hangar exec:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hangar-exec-guard",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   },
   "statusLine": {

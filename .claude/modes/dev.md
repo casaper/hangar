@@ -44,6 +44,14 @@ The `CLAUDE.md` above the app one is the fleet map, addressed to sessions runnin
 You are at the hangar root. "Stay in your own clone" is not about you — but **the clones are still
 other agents' live working directories**, and reading them is fine while writing to them is not.
 
+**`hangar exec` is denied to you, and it is the command you would most plausibly reach for**: it
+runs a shell snippet in every clone at once, so "check X across the fleet" is exactly the thought
+that leads to it. A `PreToolUse` hook refuses it however it is spelled, `cd /elsewhere &&` and
+`node app/src/cli.ts exec` included. **You may change it freely** — it is code under `app/src/**`
+like any other, and this is the mode that maintains it — you simply may not RUN it. To try a
+change by hand, ask the user to run the line and report back; that is also the only honest test,
+since the point of the command is the user's own shell.
+
 ## The gates
 
 From `app/`, after any change:

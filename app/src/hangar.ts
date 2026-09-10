@@ -29,6 +29,13 @@ export type HangarPaths = {
   readonly configFile: string;
   /** `bin/hangar` -- baked into the clone hooks, which run with an unpredictable PATH. */
   readonly bin: string;
+  /**
+   * `bin/hangar-exec-guard` -- the `PreToolUse` hook that keeps `hangar exec` the user's.
+   *
+   * Absolute for the same reason `bin` is: a hook runs with whatever PATH the session happened
+   * to start with, and a guard that cannot be found is a guard that is not guarding.
+   */
+  readonly execGuard: string;
   readonly plans: string;
   readonly tmp: string;
   /**
@@ -156,6 +163,7 @@ export const pathsFor = (
     root,
     configFile: join(root, 'hangar.config.yaml'),
     bin: join(root, 'bin', 'hangar'),
+    execGuard: join(root, 'bin', 'hangar-exec-guard'),
     plans: join(root, 'plans'),
     tmp,
     jiraTickets: join(tmp, 'jira-tickets'),

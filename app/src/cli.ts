@@ -4,6 +4,7 @@ import { Argument, Command, Option, type CommandUnknownOpts } from '@commander-j
 import pc from 'picocolors';
 
 import { addClone } from './commands/add-clone.ts';
+import { exec, splitExecArgv } from './commands/exec.ts';
 import { install } from './commands/install.ts';
 import { browse } from './commands/browse.ts';
 import { checkoutDefault } from './commands/checkout-default.ts';
@@ -455,6 +456,58 @@ program
   .option('-n, --dry-run', 'print the steps without running any of them')
   .action((clone, options) => {
     install(requireHangar(), clone, options);
+  });
+
+/*
+ * Registered with a variadic positional it deliberately does NOT read for the snippet.
+ *
+ * Commander swallows `--` and merges everything after it into `[clones...]`, so
+ * `exec 1 3 -- git status -sb` reaches the action as `["1","3","git","status","-sb"]` -- a clone
+ * ref and a snippet word are the same thing to it. `splitExecArgv` re-reads `process.argv` and
+ * splits at the `--` itself, which is the house route for pass-through argv (`claude`, `sync`'s
+ * `forcedStrategy`, `merge-default`).
+ *
+ * No `.allowUnknownOption()`: measured, commander already treats `--oneline` and `--watch` AFTER
+ * a `--` as operands rather than unknown options, so the ordinary registration is enough.
+ */
+program
+  .command('exec')
+  .description("Run a shell snippet in selected or all clones, in each clone's root")
+  .argument(
+    '[clones...]',
+    'clone names or indexes, e.g. 1 3 (everything after `--` is the snippet)',
+  )
+  .option('-a, --all', 'every clone')
+  .option('-n, --dry-run', 'print what would run, and where, without running it')
+  .option('--no-direnv', "do not load each clone's own direnv environment first")
+  .option('--serial', 'one clone at a time, streaming live, in index order')
+  .option('-j, --jobs <n>', 'how many clones to run at once (default: all of them)')
+  .addHelpText(
+    'after',
+    [
+      '',
+      'Everything after `--` is the snippet, joined with single spaces and handed to your',
+      'own $SHELL with -i, so your shell functions and aliases are available.',
+      '',
+      '  hangar exec --all -- git status -sb',
+      '  hangar exec 1 3 -- git fetch --prune',
+      '',
+      'Quote the whole snippet as one argument when spacing matters -- your shell splits argv',
+      'before hangar sees it:',
+      '',
+      '  hangar exec --all -- \'grep "two words" .\'',
+      '',
+      'An interactive shell costs several seconds to start, so clones run in parallel and each',
+      "clone's output is printed as a block when it finishes. --serial streams instead.",
+      'Snippets that prompt for input are not supported: stdin is closed in both modes.',
+    ].join('\n'),
+  )
+  .action(async (_clones: string[], options) => {
+    // Not `slice(3)`: the global `--hangar <path>` may precede the command, which would shift
+    // it. The command token is the first bare `exec` in argv, and any `exec` inside the snippet
+    // necessarily comes after it.
+    const { refs, snippet } = splitExecArgv(process.argv.slice(process.argv.indexOf('exec') + 1));
+    await exec(requireHangar(), refs, snippet, options);
   });
 
 program

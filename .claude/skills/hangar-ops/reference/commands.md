@@ -45,6 +45,7 @@ another name.
 | `resume` | `resume_list` | — |
 | `teach-rg` | `teach_rg_preview` | `teach_rg` |
 | `setup` | `setup_preview` | `setup` |
+| `exec` | — | **none — and the Bash path is denied too** |
 | `add-clone` | — | `add_clone` (offers the undocumented `remote`) |
 | `remove-clone` | — | `remove_clone` |
 | `config show` | `config_show` | — |
@@ -100,6 +101,7 @@ rule that cannot tell it from the report.
 | `resume` | `[clone]` (defaults to the clone you are in) | `-n, --limit <count>` (default `20`, `0` = all) | report **for you** — with no tty it prints the list instead of the picker; at a terminal it launches `claude --resume` |
 | `add-clone` | — | `--no-install` (+ a hidden `--remote <url>`) | **act [user]**, no `-n` |
 | `install` | `[clone]` | `--all` · `-n, --dry-run` | **act [user]** |
+| `exec` | `[clones...] -- <snippet>` | `-a, --all` · `-n, --dry-run` · `--no-direnv` · `--serial` · `-j, --jobs <n>` | **[user] ONLY — denied to you, hook-enforced** |
 | `remove-clone` | `<clone>` | `--delete` · `--force` | **act [user]**, no `-n` |
 | `doctor` | `[clone]` (defaults to every clone) | `-a, --all` · `--fix` | report bare; **act [user]** with `--fix` |
 | `setup` | — | `-y, --yes` · `--origin <url>` · `--id <name>` · `--preset <name>` · `--force` · `-n, --dry-run` | act |
@@ -189,6 +191,25 @@ separate `<thing>_preview`.
 - **The editor commands live under `ide`, aliased `editor`, so the top level carries one entry for
   the editors rather than one per editor.** `colours` is aliased `colors`, and `checkout-default`
   is aliased `checkout`.
+- **`hangar exec` is the user's, and you cannot run it at all.** It is not `ask` — it is denied
+  in both modes AND blocked by a `PreToolUse` hook that reads the whole command line, so
+  `cd /somewhere && hangar exec ...` is refused too. Do not go looking for a spelling that gets
+  through; there is no tool either, and that is deliberate rather than a gap. Everything after
+  `--` is a shell snippet, so a schema could describe it and never constrain it, and it reaches
+  every clone in one call — including working trees other agents are live in. **When it is the
+  right answer, hand the user the exact line and let them run it**, `-n` first.
+- **Everything after `--` is the snippet; everything before it selects clones.** So
+  `hangar exec 1 3 -- git status -sb` runs in two clones and `hangar exec --all -- git fetch` in
+  all of them. Your shell splits argv before hangar sees it and hangar rejoins it with single
+  spaces, so **quote the whole snippet as one argument whenever spacing or an operator matters**:
+  `hangar exec --all -- 'grep "two words" .'`. Without the quotes the doubled space is lost.
+- **The snippet runs in the user's own `$SHELL` with `-i`, in each clone's ROOT**, so their shell
+  functions and aliases are available and each clone's own direnv environment — its ports, its
+  pinned Node — is loaded first. `--no-direnv` turns that off. An interactive shell costs several
+  seconds to start, which is why clones run in parallel by default and each clone's output is
+  printed as one block when it finishes; `--serial` streams live instead, and `-j` bounds the
+  fan-out. **A snippet that prompts for input will not work** — stdin is closed in both modes.
+  Expect a couple of lines of noise per clone from the user's own rc files.
 - **`sync`, `merge-default` and `rebase-default` are one command.** All three resolve the same
   target — whatever the branch's open pull request points at, which is often *not* the default
   branch — and only the strategy differs. `--strategy` outranks the name.

@@ -60,7 +60,14 @@ its hidden `golden` and `release` subcommands are the maintainer's, not an opera
 the target branch?" is answered by reading `.claude/skills/hangar-internals/reference/sync.md`, not
 by declining to look.
 
-**The denials are guardrails, not a sandbox.** Bash is not denied, so a deny on writing is not a
+**`hangar exec` is the one denial that is not a guardrail.** It runs a shell snippet in every
+clone you name, so it is simultaneously a way to spell any command denied above and a way into
+working trees other agents are live in. It is denied AND enforced by a `PreToolUse` hook that
+reads the whole command line, so no spelling gets past it and none should be attempted. There is
+no tool for it either. When the fleet needs one, hand the user the exact line — `-n` first — and
+let them run it from the hangar root.
+
+**Every other denial is a guardrail, not a sandbox.** Bash is not denied, so a deny on writing is not a
 deny on `sed -i`; the rules say what this mode is FOR, and routing a write around them is the one
 thing that would make them worthless. And it is the RULES that were fixed at launch, not the
 permission mode — Shift+Tab still cycles that, and cycling it makes this no less operator mode.

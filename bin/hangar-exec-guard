@@ -1,0 +1,89 @@
+#!/usr/bin/env node
+/*
+ * PreToolUse guard: `hangar exec` is the human's, and no agent may run it.
+ *
+ * `hangar exec` hands an arbitrary shell snippet to every clone at once. That is a fine thing
+ * for the person at the keyboard and the wrong thing for an agent, for two reasons that are
+ * different in kind: it reaches every sibling's live working tree in one call, which is the
+ * rule the fleet's own CLAUDE.md is built around; and it is a general-purpose escape from every
+ * OTHER rule, since anything denied directly can be spelled as a snippet.
+ *
+ * **Why a hook and not just a deny rule.** A `Bash(hangar exec:*)` entry matches the literal
+ * prefix of the command string, so `cd /somewhere && hangar exec ...` does not match it and
+ * runs. The permission rules are still there -- being told "no" by a rule is a clearer answer
+ * than being told by a hook -- but this is the half that actually holds, because it sees the
+ * whole command line rather than its first token.
+ *
+ * **Self-contained, and deliberately not part of the CLI.** This runs before EVERY Bash tool
+ * call in every clone and both hangar-root modes. Loading `app/src/cli.ts` costs ~0.25s of type
+ * stripping; this file is a few hundred bytes of plain JS and costs a bare node start. It is
+ * also the reason it cannot import the CLI's own helpers: a guard that fails to load is a guard
+ * that is not guarding.
+ *
+ * **It fails CLOSED on a command it cannot read, and OPEN on a payload it cannot parse.** Those
+ * are not in tension: an unparseable payload is Claude Code changing shape, where blocking every
+ * Bash call in the fleet would be far worse than the thing being guarded; an unreadable COMMAND
+ * inside a well-formed payload is the case somebody is trying to hide something.
+ */
+
+let raw = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => (raw += chunk));
+process.stdin.on('end', () => {
+  let payload;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    process.exit(0); // Fail open: see the header.
+  }
+  if (payload?.tool_name !== 'Bash') process.exit(0);
+  const command = payload?.tool_input?.command;
+  if (typeof command !== 'string' || command === '') process.exit(0);
+
+  if (!invokesHangarExec(command)) process.exit(0);
+
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason:
+          '`hangar exec` runs a shell snippet in every clone you name, and is reserved for the ' +
+          'user at a terminal — it reaches other agents’ live working trees, and it can ' +
+          'spell any command that is denied on its own. Ask the user to run it, and give them ' +
+          'the exact line. `hangar exec -n` prints the plan and is also theirs, not yours. To ' +
+          'act on ONE clone you may already have a permitted command for, use that instead.',
+      },
+    }) + '\n',
+  );
+});
+
+/**
+ * Does this command line invoke `hangar exec` anywhere in it?
+ *
+ * Token-based rather than a substring search, because both mistakes are real: `docker exec` and
+ * a file called `exec.ts` must not be blocked, and `cd /x && hangar exec -- rm -rf .` must not
+ * be missed. So it finds each token that names this CLI -- bare `hangar`, any path ending
+ * `/hangar`, or a direct `node .../cli.ts` -- and asks whether the first thing that follows,
+ * once the global `--hangar <path>` is stepped over, is the word `exec`.
+ */
+function invokesHangarExec(command) {
+  // Split on shell separators as well as whitespace, so `a;hangar exec` is two invocations.
+  const tokens = command.split(/[\s;&|()`]+/).filter(Boolean);
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i].replace(/^["']|["']$/g, '');
+    const isCli = /(^|\/)hangar$/.test(token) || /(^|\/)cli\.ts$/.test(token);
+    if (!isCli) continue;
+    for (let j = i + 1; j < tokens.length; j += 1) {
+      const next = tokens[j].replace(/^["']|["']$/g, '');
+      if (next === '--hangar') {
+        j += 1; // its value
+        continue;
+      }
+      if (next.startsWith('-')) continue; // any other global flag
+      if (next === 'exec') return true;
+      break; // a different subcommand: this invocation is not the one
+    }
+  }
+  return false;
+}

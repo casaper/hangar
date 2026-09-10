@@ -49,12 +49,20 @@ tool call goes through without stopping, it reported.
 
 | Reports only | Acts |
 | --- | --- |
-| `list`, `ports`, `status` (`--fetch` reaches the network but touches no tree), `doctor` **bare**, `colours list`, `config show`, `config validate`, `resume` (see below) | `sync` / `merge-default` / `rebase-default`, `checkout-default`, `open`, `add-clone`, `install`, `remove-clone`, `colours change`, `doctor --fix`, `setup`, `teach-rg`, `config schema`, `ide <kind> sync`, `colours sync`, `tmp merge`, `plans collect`, `plans stamp` |
+| `list`, `ports`, `status` (`--fetch` reaches the network but touches no tree), `doctor` **bare**, `colours list`, `config show`, `config validate`, `resume` (see below) | `sync` / `merge-default` / `rebase-default`, `checkout-default`, `open`, `add-clone`, `install`, `remove-clone`, `exec` (**never yours**), `colours change`, `doctor --fix`, `setup`, `teach-rg`, `config schema`, `ide <kind> sync`, `colours sync`, `tmp merge`, `plans collect`, `plans stamp` |
 
 **The hangar's own `CLAUDE.md` reserves ten of those for the user, from the hangar root:** `sync`
 under any of its three names, `checkout-default`, `open`, `close`, `reload`, `add-clone`,
 `install`, `remove-clone`, `colours change` and `doctor --fix`. They move git state, move files
 between live working trees, or end a live session.
+
+**`hangar exec` is a step beyond all ten and is not in that list, because the list is things you
+may run after a preview and this is a thing you may never run.** It is denied in both modes and
+blocked by a `PreToolUse` hook that reads the whole command line, so no spelling of it gets
+through — `cd /elsewhere && hangar exec …` included. It takes an arbitrary shell snippet and runs
+it in every clone you name, which makes it both a way to spell any other denied command and a way
+to reach working trees other agents are live in. When it is the right answer, **give the user the
+exact line and let them run it.**
 
 So the default for those ten is: **run the preview yourself and report what it says.** The preview
 is the tool whose name ends `_preview` (or `doctor`, or `colours_check`), and it is pre-approved

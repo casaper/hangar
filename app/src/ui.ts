@@ -72,6 +72,18 @@ export const note = (msg: string): void => {
   emit(`    ${pc.dim(msg)}`);
 };
 
+/**
+ * A subprocess's own output, verbatim and ungarnished.
+ *
+ * Every other helper here owns its formatting; this one owns none, because the text is another
+ * program's and reformatting it would be a lie about what ran. It still goes through `emit`
+ * rather than `console.log` so that `--quiet` capture keeps working -- that is the whole reason
+ * it lives here instead of the caller.
+ */
+export const raw = (text: string): void => {
+  for (const line of text.split('\n')) emit(line);
+};
+
 export const heading = (msg: string): void => {
   emit(`\n${pc.bold(msg)}`);
 };

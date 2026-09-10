@@ -116,7 +116,7 @@ them, and `plans collect` and `tmp merge --quiet` already run there from `Sessio
 The ones that move git state, files between clones or terminal windows are the **user's, from
 the hangar root**:
 `sync` (under any of its three names), `checkout-default`, `open`, `close`, `reload`,
-`add-clone`, `install`, `remove-clone`, `colours change` and `doctor --fix`.
+`add-clone`, `install`, `remove-clone`, `exec`, `colours change` and `doctor --fix`.
 
 **`hangar close` and `hangar reload` both end a live Claude Code session**, which is what makes
 them the user's rather than yours. `close` kills the clone's whole tmux session and refuses when
@@ -124,6 +124,13 @@ it is the one the command is running inside; `reload` restarts each idle shell a
 Code back under `--resume`, and skips the one pane the command is running in rather than killing
 itself. Neither touches git state, and neither is a reason to reach for `-n` and act on the
 result: naming your own index still ends the session next door to you.
+
+**`hangar exec` runs an arbitrary shell snippet in every clone you name, in that clone's root.**
+It is the fastest way to break the rule below: one `--all` reaches every sibling's working tree at
+once, and the snippet is whatever you typed, so nothing about it is safe by construction. **It is
+the user's alone, and a `PreToolUse` hook in this clone refuses it** however it is spelled — so
+this is not a judgement call you have to make. If you want the same answer for every clone, ask
+them to run it; `-n` prints the plan without running anything.
 
 **`hangar install <clone>` runs the repo's declared install steps, and a step can delete work** —
 `npm ci` removes the installed dependencies before refetching them, so a clone with a dev server

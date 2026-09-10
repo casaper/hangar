@@ -469,6 +469,9 @@ export const argvFor = (
  */
 export const NOT_EXPOSED: readonly string[] = [
   'claude',
+  // Runs an arbitrary shell snippet in every clone, so an MCP schema could describe it but
+  // never constrain it -- the one thing a tool rule is for. The Bash path is the only one.
+  'exec',
   'dev golden',
   'dev release',
   'jira hook',

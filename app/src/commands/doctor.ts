@@ -18,9 +18,11 @@ import {
   claudeLocalMdContent,
   effectivePlansDirectory,
   hasAnyJiraHook,
+  hasExecGuardHook,
   hasJiraHook,
   hasPlansHook,
   hasTmpHook,
+  withExecGuardHook,
   withJiraHook,
   withPlansHook,
   withTmpHook,
@@ -570,6 +572,24 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
       settings === undefined
         ? undefined
         : reconcileHook(hangar, clone, (s) => withTmpHook(hangar, s)),
+  });
+
+  /*
+   * Unconditional, unlike the tracker hook above: no config makes this one unwanted, because
+   * what it protects is not a feature of this hangar but a rule about every hangar -- an agent
+   * stays in its own clone, and `hangar exec` is the one command that reaches all of them.
+   */
+  const execGuardOk = hasExecGuardHook(hangar, settings);
+  checks.push({
+    name: 'exec guard hook',
+    ok: execGuardOk,
+    detail: execGuardOk
+      ? "`hangar exec` is refused in this clone — it is the user's, from the hangar root"
+      : 'missing — an agent in this clone could run `hangar exec` and reach every sibling working tree',
+    repair:
+      settings === undefined
+        ? undefined
+        : reconcileHook(hangar, clone, (s) => withExecGuardHook(hangar, s)),
   });
 
   const strayPlanDirs = planDirsIn(clone).filter(

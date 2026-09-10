@@ -7,7 +7,9 @@
       "Bash(hangar dev)",
       "Bash(hangar dev:*)",
       "Bash(hangar claude)",
-      "Bash(hangar claude:*)"
+      "Bash(hangar claude:*)",
+      "Bash(hangar exec)",
+      "Bash(hangar exec:*)"
     ],
     "ask": [
       "Bash(hangar sync)",
@@ -99,6 +101,20 @@
       "mcp__hangar__ide_jetbrains_sync_preview",
       "mcp__hangar__ide_zed_sync_preview",
       "mcp__hangar__ide_emacs_sync_preview"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hangar-exec-guard",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   },
   "statusLine": {

@@ -728,6 +728,45 @@ export const withTmpHook = (hangar: Hangar, settings: SettingsJson): SettingsJso
  * says `.claude/plans`, which is the only value that works, so a per-clone copy of it is one
  * more place to drift.
  */
+/**
+ * The `PreToolUse` hook that keeps `hangar exec` the user's alone.
+ *
+ * **`hangar exec` is the one command in this CLI an agent may never run**, and the reason is
+ * not that it is destructive -- `sync` and `remove-clone` are more so, and both are merely
+ * `ask`. It is that it reaches EVERY clone in one call, which is the rule the fleet's own
+ * `CLAUDE.md` is built around, and that a shell snippet can spell anything else that is denied.
+ * A rule per command cannot survive a command that takes arbitrary commands.
+ *
+ * **A permission rule alone does not hold, which is why this is a hook.** `Bash(hangar exec:*)`
+ * matches the start of the command string, so `cd /elsewhere && hangar exec ...` sails past it.
+ * The guard reads the whole command line instead. The deny rules in the two mode settings files
+ * stay anyway: a rule gives a clearer refusal than a hook does, and the two fail differently.
+ *
+ * Unconditional, unlike the jira hook -- no config makes this unwanted -- and it names the
+ * script by ABSOLUTE path, because a hook's PATH is whatever the session started with.
+ */
+export const execGuardHookCommand = (hangar: Hangar): string => hangar.paths.execGuard;
+
+const execGuardHook = (hangar: Hangar): HookMatcher => ({
+  matcher: 'Bash',
+  hooks: [{ type: 'command', command: execGuardHookCommand(hangar), timeout: 10 }],
+});
+
+export const hasExecGuardHook = (hangar: Hangar, settings: SettingsJson | undefined): boolean =>
+  (settings?.hooks?.['PreToolUse'] ?? []).some((matcher) =>
+    matcher.hooks.some((hook) => hook.command === execGuardHookCommand(hangar)),
+  );
+
+/** Reconciles like the others: one guard, at the path this hangar would write today. */
+export const withExecGuardHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
+  const hooks = { ...settings.hooks };
+  const existing = (hooks['PreToolUse'] ?? []).filter(
+    (matcher) => !matcher.hooks.some((hook) => hook.command.endsWith('hangar-exec-guard')),
+  );
+  hooks['PreToolUse'] = [...existing, execGuardHook(hangar)];
+  return { ...settings, hooks };
+};
+
 export const withPlansHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
   const { plansDirectory: _dropped, ...rest } = settings;
   const hooks = { ...rest.hooks };
@@ -749,7 +788,7 @@ export const withPlansHook = (hangar: Hangar, settings: SettingsJson): SettingsJ
  * The split between this and the sibling copy is the interesting part, and it is deliberate:
  *
  * - **DERIVED, here**: the shared secrets deny rule, the read allow for the hangar root, one
- *   health-check allow per role that declares one, the three `SessionEnd`/`PreToolUse` hooks, the
+ *   health-check allow per role that declares one, the four `SessionEnd`/`PreToolUse` hooks, the
  *   statusline, the shared memory directory and the theme. Every one of them is a function of the
  *   hangar and the clone index, and every one lives outside git -- which is exactly what
  *   `doctor` exists to hold in place.
@@ -787,7 +826,10 @@ export const defaultSettings = (clone: Clone): SettingsJson => {
     statusLine: { type: 'command', command: hangar.paths.statuslineScript },
     autoMemoryDirectory: hangar.paths.memory,
   };
-  return withTmpHook(hangar, withPlansHook(hangar, withJiraHook(hangar, base)));
+  return withExecGuardHook(
+    hangar,
+    withTmpHook(hangar, withPlansHook(hangar, withJiraHook(hangar, base))),
+  );
 };
 
 /**
@@ -855,7 +897,10 @@ export const settingsContentFor = (clone: Clone, template: SettingsJson): string
    * silently. Letting this builder strip it would undo that repair on the next `--fix`.
    */
   const plansDirectory = settings.plansDirectory;
-  const withHooks = withTmpHook(hangar, withPlansHook(hangar, withJiraHook(hangar, settings)));
+  const withHooks = withExecGuardHook(
+    hangar,
+    withTmpHook(hangar, withPlansHook(hangar, withJiraHook(hangar, settings))),
+  );
   const final: SettingsJson =
     plansDirectory === undefined ? withHooks : { ...withHooks, plansDirectory };
   return `${JSON.stringify(final, null, 2)}\n`;

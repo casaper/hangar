@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   defaultSettings,
   hasAnyJiraHook,
+  hasExecGuardHook,
   hasJiraHook,
   jiraHookCommand,
   withJiraHook,
@@ -161,9 +162,12 @@ test('a clone of a tracker-less hangar is built with no jira hook and no empty k
   for (const hangar of [disabledHangar(), noTrackerHangar()]) {
     const settings = defaultSettings(cloneAt(hangar, 1));
     assert.deepEqual(jiraMatchers(settings), [], 'a hook was wired for a hangar with no tracker');
-    // Not `"PreToolUse": []`. An empty array is a key promising a hook that is not there, and it
-    // would differ from a clone that never had one -- two shapes for one state.
-    assert.equal(preToolUse(settings), undefined);
+    // `PreToolUse` still exists, and holds the exec guard alone. That guard is unconditional --
+    // it protects a rule about every hangar rather than a feature of this one -- so the old
+    // assertion here (no key at all) would now pass only by deleting it. What must still be
+    // true is that no EMPTY matcher is left behind, which is what the length check holds.
+    assert.equal(preToolUse(settings)?.length, 1);
+    assert.ok(hasExecGuardHook(hangar, settings));
   }
 });
 
@@ -192,7 +196,9 @@ test('switching a tracker off REMOVES the hook the clone already carries', () =>
 
   const off = disabledHangar();
   assert.deepEqual(jiraMatchers(withJiraHook(off, wired)), []);
-  assert.equal(preToolUse(withJiraHook(off, wired)), undefined);
+  // The exec guard is not the tracker's and must survive the tracker being switched off.
+  assert.equal(preToolUse(withJiraHook(off, wired))?.length, 1);
+  assert.ok(hasExecGuardHook(enabled, withJiraHook(off, wired)));
 });
 
 test('removal matches an OLD hook form, which exact equality would miss', () => {

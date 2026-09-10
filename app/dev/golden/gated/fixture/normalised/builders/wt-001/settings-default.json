@@ -24,6 +24,16 @@
             "timeout": 30
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%HANGAR%/bin/hangar-exec-guard",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SessionEnd": [
