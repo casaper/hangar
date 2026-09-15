@@ -101,8 +101,14 @@ export const plansCollect = (hangar: Hangar, opts: CollectOptions): void => {
   }
   const archive = planFilesIn(hangar.paths.plans, 'plans');
   const bulk = bulkCopySeconds([...candidates, ...archive]);
-  const attributed = fleetAttribution(hangar);
   const userLabel = tildify(userPlans);
+  // Only the shared user plans directory needs attributing, and often nothing came from it --
+  // so the question is asked about those files, and only when there are some. Answering it in
+  // full means reading every transcript this fleet has ever written.
+  const attributed = fleetAttribution(
+    hangar,
+    candidates.filter((file) => file.source === userLabel).map((file) => file.name),
+  );
 
   // Skip what is not ours to move, before grouping: an unattributed file in the shared user
   // plans directory belongs to one of this machine's other projects.

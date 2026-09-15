@@ -62,6 +62,19 @@ const transcriptsIn = (dir: string, modifiedAfterMs: number): string[] => {
 const PLAN_PATH = '[^"\\\\ ]*/plans/[^"\\\\ ]+\\.md';
 
 /**
+ * A plan path whose basename is one of `names` -- the same shape as `PLAN_PATH`, asked about
+ * named files.
+ *
+ * **Plain groups, never `(?:`.** POSIX ERE has no non-capturing group, and the fallback matcher
+ * below is `grep -E`: GNU grep rejects such a pattern outright ("? at start of expression",
+ * exit 1) and hands back an empty result -- which reads here as "no fleet session ever mentions
+ * it" and SKIPS every file it was asked about. Nothing is captured out of the match anyway; the
+ * whole match is what gets a basename taken off it.
+ */
+const PLAN_PATH_NAMED = (names: readonly string[]): string =>
+  `/plans/([^"\\\\ ]*/)?(${names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`;
+
+/**
  * A path Claude Code recorded as WRITTEN, not merely mentioned. A plan path can appear in a
  * transcript for uninteresting reasons -- a directory listing, a grep result, prose about
  * plans -- and counting those as "in use" leaves months-old plans uncollectable for as long
@@ -70,13 +83,30 @@ const PLAN_PATH = '[^"\\\\ ]*/plans/[^"\\\\ ]+\\.md';
  */
 const TRACKED_PLAN_PATH = `"trackingPath":"${PLAN_PATH}"`;
 
+/**
+ * `rg` when the machine has it, `grep` otherwise -- the same matches either way.
+ *
+ * Measured over this fleet's 500 MB of transcripts, all three agreeing on 4,888 matches:
+ * `rg -oNI` 0.18s, BSD `grep -ohE` 20.7s. It is not a locale problem -- `LC_ALL=C` changes
+ * nothing for BSD grep, and GNU grep in a UTF-8 locale is worse again at 54s. `environment.ts`
+ * already reports ripgrep as an OPTIONAL tool, so the fallback is the contract and not a
+ * courtesy: a machine without it gets the same answer, slowly.
+ *
+ * Probed once per process. The answer is about this machine's PATH rather than about a hangar,
+ * so it is not the kind of cache two hangars in one process can be handed the wrong entry from.
+ */
+let rgAvailable: boolean | undefined;
+const hasRg = (): boolean => (rgAvailable ??= run('rg', ['--version']).ok);
+
 /** Every `.../plans/<name>.md` path matching `pattern` in these transcripts, as basenames. */
 const planFilesMatching = (transcripts: readonly string[], pattern: string): Set<string> => {
   const names = new Set<string>();
   if (transcripts.length === 0) return names;
-  // One grep over the transcripts rather than reading them into memory: the largest are
-  // several hundred MB, and `-o` keeps only the matches.
-  const res = run('grep', ['-ohE', pattern, ...transcripts]);
+  // One search over the transcripts rather than reading them into memory: the largest are
+  // several hundred MB, and only the matches are kept.
+  const res = hasRg()
+    ? run('rg', ['-oNI', '-e', pattern, ...transcripts])
+    : run('grep', ['-ohE', pattern, ...transcripts]);
   for (const line of res.stdout.split('\n')) {
     const name = line.trim().replace(/"$/, '').split('/').pop();
     if (name?.endsWith('.md') !== true) continue;
@@ -133,12 +163,27 @@ export const planFilesInUse = (hangar: Hangar, windowMinutes = 30): InUsePlans =
   return { names, sessions };
 };
 
-/** Every plan file this fleet's transcripts have EVER mentioned -- the attribution signal. */
-export const planFilesEverMentioned = (hangar: Hangar): Set<string> =>
-  planFilesMatching(
+/**
+ * Which of `names` this fleet's transcripts have EVER mentioned -- the attribution signal.
+ *
+ * **Asked about named files rather than answered in full.** Building the set of every plan name
+ * any transcript ever mentioned reads the whole corpus, which only grows, to classify the
+ * handful of files that came from the shared user plans directory. Asking about those names is
+ * the same question with a bounded answer, and an empty list is answered without touching disk.
+ *
+ * The scan has NO mtime floor, deliberately. The obvious one -- a transcript last written before
+ * a candidate was created cannot mention it -- derives from the very timestamps `plans.ts`'s
+ * header calls untrustworthy (a bulk copy that preserved none of them, and an atomic rewrite
+ * that resets birthtime). A floored-out scan comes back empty, the file is classified "no fleet
+ * session ever mentions it", and that is a SKIP -- so the failure would be silent.
+ */
+export const planFilesEverMentioned = (hangar: Hangar, names: readonly string[]): Set<string> => {
+  if (names.length === 0) return new Set();
+  return planFilesMatching(
     fleetTranscriptDirs(hangar).flatMap((dir) => transcriptsIn(dir, 0)),
-    PLAN_PATH,
+    PLAN_PATH_NAMED(names),
   );
+};
 
 /**
  * When a fleet transcript first mentioned this plan file -- the last resort for a plan whose

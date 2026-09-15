@@ -92,17 +92,27 @@ export const planFilesIn = (dir: string, source: string): PlanFile[] => {
  */
 export const planDirsIn = (clone: Clone): string[] => {
   const root = join(clone.path, '.claude', 'plans');
+  // `-prune`, not `-not -path`: the latter filters the OUTPUT and descends the directory
+  // anyway, so this walked every clone's `node_modules` to print nothing -- 6.8s across six
+  // clones, on the exit path of every session, for a result then discarded as equal to `root`.
+  // Pruning gives the same answer in 0.3s.
   const nested = run('find', [
     clone.path,
     '-maxdepth',
     '4',
+    '-name',
+    'node_modules',
+    '-prune',
+    '-o',
+    '-name',
+    '.git',
+    '-prune',
+    '-o',
     '-type',
     'd',
     '-path',
     '*/.claude/plans',
-    '-not',
-    '-path',
-    '*/node_modules/*',
+    '-print',
   ]);
   const found = nested.stdout
     .split('\n')
@@ -170,9 +180,14 @@ export const resolveDay = (
   return undefined;
 };
 
-/** True when a fleet session has ever mentioned this plan file -- the attribution signal. */
-export const fleetAttribution = (hangar: Hangar): ReadonlySet<string> =>
-  planFilesEverMentioned(hangar);
+/**
+ * Which of these plan files a fleet session has ever mentioned -- the attribution signal.
+ *
+ * It takes the names it is asked about, because that is all its one caller does with the answer,
+ * and the corpus behind it is every transcript this fleet has ever written.
+ */
+export const fleetAttribution = (hangar: Hangar, names: readonly string[]): ReadonlySet<string> =>
+  planFilesEverMentioned(hangar, names);
 
 /**
  * Set the resolved date as the file's mtime, so it survives in the archive. Without this, a
