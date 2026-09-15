@@ -1,4 +1,4 @@
-import { lstatSync, readdirSync, readlinkSync, statSync, symlinkSync } from 'node:fs';
+import { lstatSync, readdirSync, readlinkSync, symlinkSync, type Dirent } from 'node:fs';
 import { basename, join } from 'node:path';
 
 import type { Clone } from './fleet.ts';
@@ -44,24 +44,44 @@ const lstatOrUndefined = (path: string): ReturnType<typeof lstatSync> | undefine
 
 export const isPidFile = (name: string): boolean => name.endsWith('.pid');
 
-/** Every file under `dir`, at any depth -- enough to recognise a directory of only PID files. */
-const filesUnder = (dir: string): string[] => {
-  let entries: string[];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return [];
-  }
-  return entries.flatMap((entry) => {
-    const path = join(dir, entry);
-    let isDir: boolean;
+/**
+ * A REAL directory holding at least one file, all of them PID files.
+ *
+ * Two things it deliberately will not do, both of them paid for at every store this fleet has
+ * grown:
+ *
+ * - **It does not follow a symlink.** Nearly every entry of a clone's `tmp/` IS one -- that is
+ *   the whole sharing mechanism -- so a `stat` walk descended each of them through the entire
+ *   shared cache to answer a question about the clone's own private state. Measured at a
+ *   59,000-file store: 7.8s of the 15s `tmp merge` took, once per entry per clone. A symlink is
+ *   never private state anyway; `adoptCloneEntries` decides one by its recorded target, in the
+ *   branch immediately after the call to this.
+ * - **It does not collect the paths first.** The question is whether anything here is not a PID
+ *   file, so the first one that is not ends it -- a directory of screenshots costs one readdir
+ *   rather than a full traversal of itself.
+ */
+const holdsOnlyPidFiles = (dir: string): boolean => {
+  if (lstatOrUndefined(dir)?.isDirectory() !== true) return false;
+  let files = 0;
+  const onlyPids = (at: string): boolean => {
+    let entries: Dirent[];
     try {
-      isDir = statSync(path).isDirectory();
+      // Unreadable is not evidence of anything; the emptiness check below still applies.
+      entries = readdirSync(at, { withFileTypes: true });
     } catch {
-      isDir = false;
+      return true;
     }
-    return isDir ? filesUnder(path) : [path];
-  });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (!onlyPids(join(at, entry.name))) return false;
+        continue;
+      }
+      files += 1;
+      if (!isPidFile(entry.name)) return false;
+    }
+    return true;
+  };
+  return onlyPids(dir) && files > 0;
 };
 
 /**
@@ -80,8 +100,7 @@ export const isPrivateTmpEntry = (clone: Clone, name: string): boolean => {
   if (name === `_${clone.name}`) return true;
   // A directory holding nothing but PID files: `_<clone>/` under a name this fleet no longer
   // generates, or one left behind by a clone that has since been renumbered.
-  const files = filesUnder(join(cloneTmpPath(clone), name));
-  return files.length > 0 && files.every((path) => isPidFile(path));
+  return holdsOnlyPidFiles(join(cloneTmpPath(clone), name));
 };
 
 /**
