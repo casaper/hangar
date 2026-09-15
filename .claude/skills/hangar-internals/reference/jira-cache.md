@@ -34,6 +34,51 @@
   re-fetch in a sibling and never a wrong answer — `jira hook` reads `fetched_at:` out of the file
   and refuses to hand back anything older than the copy the clone already holds.
 
+## Both hooks are on the exit path, and the exit is as slow as the slowest
+
+`tmp merge --quiet` and `plans collect --quiet` are two SessionEnd hooks in every clone, and
+Claude Code runs the hooks for one event in parallel and waits for all of them before the session
+terminates. So a developer's wait on `exit` is whichever of the two is slower, and neither may be
+deferred or backgrounded to fix that: the whole point of collecting at SessionEnd is that it is
+the first moment nothing can rewrite a plan any more.
+
+Three things here are shaped by that, and each guards against the same mistake — answering a
+bounded question by traversing something unbounded. Together they are the difference between a
+half-minute exit and a one-second one, at this fleet's sizes.
+
+- **`fleetAttribution` is asked about NAMED files.** Its one consumer classifies the handful of
+  plans that came from the shared user plans directory, and an unattributed one belongs to
+  another project on this machine. Answered in full it builds the set of every plan name any
+  fleet transcript has ever mentioned — 500 MB across 246 files here, 20.7s, growing with every
+  session. The names make the answer bounded, and an empty list needs no scan at all.
+- **The matcher is `rg` where the machine has it.** Over that same corpus, all agreeing on 4,888
+  matches: `rg -oNI` 0.18s, BSD `grep -ohE` 20.7s, `LC_ALL=C` GNU `grep -ohE` 5.2s, and GNU grep
+  in a UTF-8 locale 54s. `grep` stays as the fallback because `environment.ts` reports ripgrep as
+  optional, which puts a constraint on the PATTERN: **POSIX ERE has no `(?:`**, GNU grep rejects
+  one outright and returns nothing, and nothing here distinguishes "matched nothing" from "could
+  not run" — so on a machine without `rg` a non-capturing group would silently skip every file it
+  was asked about.
+- **`isPrivateTmpEntry` does not follow a symlink.** It asks whether a clone's `tmp/` entry is a
+  directory of nothing but PID files, and nearly every entry there is a symlink into the store —
+  so a `stat` walk descended each one through the whole shared cache, once per entry per clone.
+  At a 59,000-file store that was 7.8s of the 15s `tmp merge` took. A symlink is never the clone's
+  own private state: `adoptCloneEntries` decides one by its recorded target, in the branch
+  immediately after this call. The test also stops at the first file that is not a PID file
+  rather than collecting every path and checking them afterwards.
+
+`planDirsIn`'s `find` is the same mistake in shell: `-not -path '*/node_modules/*'` filters the
+output and descends the directory anyway, so it walked every clone's dependencies to print
+nothing. `-prune` is what stops the descent, and the two spellings return the same directories —
+including the nested `<clone>/<appDir>/.claude/plans` the search exists for.
+
+**What remains is proportional to the store, and that is a data question rather than a code one.**
+`tmp merge` traverses `tmp/` three times over — the record walk, the same-ticket grouping and
+`jdupes` — and each is bounded by what is in there. A fleet whose shared cache has grown a
+screenshot archive pays for it at every session exit, and the answer is to decide whether that
+archive belongs in the ticket cache, not to teach the walkers a second opinion about what a ticket
+record is. `ticketNameOf` is the one owner of that question for the reason stated below, and a
+directory filter beside it would be a second place for it to be wrong silently.
+
 ## Shared `tmp/`
 
 Every clone **keeps its own `tmp/` directory**. What is shared is the content in it that belongs
