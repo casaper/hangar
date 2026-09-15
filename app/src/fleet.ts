@@ -62,6 +62,23 @@ export type Clone = {
 export const cloneNameFor = (hangar: Hangar, index: number): string =>
   `${hangar.config.clones.prefix}${String(index).padStart(hangar.config.clones.pad, '0')}`;
 
+/**
+ * A clone's directory name with the prefix taken off it -- the padded index, and nothing else.
+ *
+ * For the places that name a clone in a WIDTH somebody else decides: the terminal window title,
+ * which the emulator truncates, and the title an emulator is handed when it opens a tab. The
+ * prefix is the same on every clone in the fleet, so it carries no information there and costs
+ * the characters that do.
+ *
+ * Padded, and so the exact digits of the directory name rather than `String(clone.index)`: this
+ * is the name shortened, not the index printed, which is what keeps it in step with
+ * `cloneNameFor` for any `clones.pad`. Nowhere that ADDRESSES a clone uses it -- `hangar list`
+ * and every "which clone?" hint print the bare index, because the bare index is what `findClone`
+ * takes.
+ */
+export const cloneShortName = (clone: Clone): string =>
+  String(clone.index).padStart(clone.hangar.config.clones.pad, '0');
+
 const makeClone = (hangar: Hangar, index: number): Clone => ({
   name: cloneNameFor(hangar, index),
   index,

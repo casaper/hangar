@@ -4,7 +4,13 @@ import { join } from 'node:path';
 import { landOnBranch } from './checkout-default.ts';
 import { editors, type EditorDriver } from '../editor/index.ts';
 import { CliError } from '../exec.ts';
-import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
+import {
+  cloneShortName,
+  discoverClones,
+  knownClonesHint,
+  requireClone,
+  type Clone,
+} from '../fleet.ts';
 import { currentBranch } from '../git.ts';
 import {
   attachCommand,
@@ -278,7 +284,9 @@ const perform = (
         !driver.open({
           command: action.command,
           placement: action.placement,
-          title: `${clone.name} · ${clone.hangar.id}`,
+          // The same shortening tmux's `set-titles-string` uses, so the title an emulator is
+          // handed at creation and the one tmux writes over it a moment later agree.
+          title: `${cloneShortName(clone)} · ${clone.hangar.id}`,
         })
       ) {
         return false;

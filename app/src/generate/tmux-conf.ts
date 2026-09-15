@@ -161,7 +161,7 @@ const PR_RANGE = 'hangar-pr';
 const STATUS_INTERVAL = 10;
 
 /**
- * The status bar and the branch line, as data.
+ * The status bar, the branch line under it and the window title, as data.
  *
  * **Every entry is a global SESSION or WINDOW option, deliberately**, and that is what makes the
  * live-apply pass in `TmuxServer.restyle` possible: `-f` is read once when the server starts, so
@@ -265,6 +265,21 @@ export const barOptions = (hangar: Hangar): readonly BarOption[] => {
      * session gets the hue version from `paintSession`; see `paneBorderFormat`.
      */
     { name: 'pane-border-format', value: paneBorderFormat(hangar) },
+    /*
+     * The clone in the TERMINAL WINDOW title, which is how a developer with one tab per clone
+     * tells them apart at the level the emulator draws. A window name is the role alone, so this
+     * and the hue badge are the two places the clone is named.
+     *
+     * `@hangar_clone_label` and not `@hangar_clone`: the title is drawn in a width the emulator
+     * decides and then truncates from the right, and the directory prefix is the same on every
+     * tab in the fleet, so it spends characters on nothing. `paintSession` writes both.
+     *
+     * In the table rather than hand-written into the conf below because both are ordinary global
+     * session options -- so `colours sync` can put a title change onto a server that is already
+     * running, which is the whole reason this table exists.
+     */
+    { name: 'set-titles', value: 'on' },
+    { name: 'set-titles-string', value: '#{@hangar_clone_label} - #{window_name}' },
   ];
 };
 
@@ -392,7 +407,7 @@ export const tmuxConfArtifact = (hangar: Hangar): Artifact => {
       'set -gw pane-base-index 1',
       'set -g  renumber-windows on',
       '',
-      '# ---- the status line, and the footer under it -------------------------------------',
+      '# ---- the status line, the footer under it, and the window title -------------------',
       '# The bar names its own background, and carries no hue. Both halves matter -- see the',
       '# header: without a `status-style` tmux draws every clone hue on its own saturated',
       '# green, and a hue in here would paint every clone with whichever was opened last.',
@@ -402,6 +417,10 @@ export const tmuxConfArtifact = (hangar: Hangar): Artifact => {
       '# the shell hook gives the current window and its borders the same treatment. Both fall',
       '# back to exactly these values, which is what `set -uw` on the way out restores.',
       '#',
+      '# The last two are the clone in the TERMINAL WINDOW title, for a window in the dock with',
+      '# no bar to read -- shortened to the index, because the emulator decides that width and',
+      '# truncates from the right.',
+      '#',
       '# Every line below is a global session or window option, which is what lets',
       '# `hangar colours sync` write the same table onto a server that is already running --',
       '# this file reaches only servers that start after it is written.',
@@ -410,12 +429,6 @@ export const tmuxConfArtifact = (hangar: Hangar): Artifact => {
       '# A click on the ticket or the pull request opens it; a click anywhere else on the bar',
       '# still switches to that window, which is what tmux binds this key to by default.',
       renderBinding(statusClickBinding(hangar)),
-      '',
-      '# The clone name in the TERMINAL WINDOW title, which is how a developer with one tab per',
-      '# clone tells them apart at the level the emulator draws. A window name is the role alone,',
-      '# so this and the hue badge are the two places the clone is named.',
-      'set -g set-titles on',
-      "set -g set-titles-string '#{@hangar_clone} - #{window_name}'",
       '',
       '# ---- the rest ---------------------------------------------------------------------',
       "set -g default-terminal 'tmux-256color'",

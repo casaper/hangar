@@ -1,4 +1,4 @@
-import type { Clone } from './fleet.ts';
+import { cloneShortName, type Clone } from './fleet.ts';
 import { run } from './exec.ts';
 import type { Hangar } from './hangar.ts';
 import { barOptions, paneBorderFormat, statusClickBinding } from './generate/tmux-conf.ts';
@@ -116,9 +116,10 @@ export const tmuxTarget = (clone: Clone): string => `=${tmuxSessionName(clone)}:
  *
  * The clone is named twice and neither of them is here: the hue badge in `status-left`, which is
  * a block of colour a developer finds across four near-identical windows, and
- * `set-titles-string`, because a terminal window in the dock has no bar to read. A third naming
- * in the window name puts the clone in every tab beside a badge already saying it
- * (`1 clone_01 claude`, for as many tabs as the clone has roles).
+ * `set-titles-string`, because a terminal window in the dock has no bar to read -- and that one
+ * names it by `cloneShortName`, since the title is drawn at a width the emulator decides. A third
+ * naming in the window name puts the clone in every tab beside a badge already saying it
+ * (`1 01 claude`, for as many tabs as the clone has roles).
  */
 export const tmuxWindowName = (_clone: Clone, role: string): string => role;
 
@@ -436,6 +437,16 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
   const paintSession = (clone: Clone): void => {
     const target = tmuxTarget(clone);
     tmux(['set', '-t', target, '@hangar_clone', clone.name]);
+    /*
+     * And the same clone shortened, for the window TITLE and nothing else.
+     *
+     * A second option rather than a shorter `@hangar_clone`, because that one is the directory
+     * name to every other reader: the three `clone-tmux-status.sh` jobs build paths out of it,
+     * the click binding hands it to `hangar browse`, and `staleSessions` matches it against the
+     * clones that exist. A display form is a different fact from an identity, and this is the
+     * cheap half of the pair -- one more `set` per session, on a path that already runs one.
+     */
+    tmux(['set', '-t', target, '@hangar_clone_label', cloneShortName(clone)]);
     /*
      * `status-left` is the global's to decide, so any value this session carries is cleared.
      *

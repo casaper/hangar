@@ -60,7 +60,9 @@ export type WindowSpec = {
    *
    * Cosmetic and best effort. The title that actually shows is tmux's, through the generated
    * conf's `set-titles-string` -- which is how a developer with one tab per clone tells them
-   * apart at the level the emulator draws.
+   * apart at the level the emulator draws. Both name the clone by `cloneShortName`: the emulator
+   * decides this width and truncates from the right, so a prefix every tab shares costs the
+   * characters that distinguish them.
    */
   readonly title?: string | undefined;
 };

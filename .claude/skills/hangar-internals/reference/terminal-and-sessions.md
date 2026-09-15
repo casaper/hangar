@@ -426,6 +426,22 @@ own default is `[#S] ` and that would put the raw session name back.
 name puts it in every tab, once per `terminal.tabs[]` role. Nothing looks a window up by name:
 identity is the session, and every `-t` targets a captured `#{window_id}`.
 
+**The title names the clone SHORT -- `01 - claude`, not `clone_01 - claude`.** It is the one place
+a clone is named in a width somebody else decides: the emulator draws the title in the room a tab
+has and truncates it from the right, so the directory prefix, which is the same on every tab in
+the fleet, is spent on nothing while the two facts that differ are the ones cut off. The format
+reads `@hangar_clone_label`, a second session option `paintSession` writes beside `@hangar_clone`
+from `cloneShortName` -- a separate value rather than a shorter one, because `@hangar_clone` is
+the DIRECTORY name to its three other readers: the `clone-tmux-status.sh` jobs build paths out of
+it, the click binding hands it to `hangar browse`, and `staleSessions` matches it against the
+clones that exist.
+
+Both title options are entries in `barOptions` rather than lines of their own in the conf, which
+is what lets `hangar colours sync` put a title change onto a server that is already running. The
+bare index is still what every command that ADDRESSES a clone prints, because the bare index is
+what `findClone` takes; this is a label, and the padded form is the directory name with its
+prefix taken off.
+
 ### The four refusals, each measured
 
 - **A status line cannot carry an OSC 8 hyperlink.** There is no `link=` style attribute, and a

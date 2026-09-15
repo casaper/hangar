@@ -10,7 +10,7 @@ import {
   tmuxTarget,
   tmuxWindowName,
 } from '../src/tmux.ts';
-import { cloneAt } from '../src/fleet.ts';
+import { cloneAt, cloneNameFor, cloneShortName } from '../src/fleet.ts';
 import { syntheticHangar } from './fixture.ts';
 
 /**
@@ -71,9 +71,23 @@ test("a window name is the role alone -- the clone is the badge's job, not every
   const name = tmuxWindowName(clone, 'claude');
   assert.equal(name, 'claude');
   // The decision, not the spelling: the clone is named by the hue badge in `status-left` and by
-  // `set-titles-string`, so a third naming here would put it in every tab beside a badge that
-  // already says it.
+  // `set-titles-string` -- there as `cloneShortName` -- so a third naming here would put it in
+  // every tab beside a badge that already says it.
   assert.ok(!name.includes(clone.name), `the bar would say ${clone.name} in every tab`);
+});
+
+test('the short name is the directory name with the prefix taken off, for any pad', () => {
+  const h = hangar();
+  for (const index of [1, 2, 9, 10, 99, 100]) {
+    // The property, not the digits: `cloneShortName` is the NAME shortened rather than the index
+    // printed, so the two have to be spellable as one concatenation at every width. Asserting
+    // `'01'` here would pass a builder that had stopped reading `clones.pad` at all.
+    assert.equal(
+      cloneNameFor(h, index),
+      h.config.clones.prefix + cloneShortName(cloneAt(h, index)),
+      `the title would name a clone that is not ${cloneNameFor(h, index)}`,
+    );
+  }
 });
 
 test('-L and -f both come BEFORE the subcommand', () => {
