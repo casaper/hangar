@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.24.0](https://github.com/casaper/hangar/compare/v0.23.0...v0.24.0) (2026-09-15)
+
+### Features
+
+* **status:** Report every clone when no clone is named ([32ef26c](https://github.com/casaper/hangar/commit/32ef26c1d2e91a780e6df486a5190e9be4a5ad12))
+
+### Performance
+
+* **plans:** Ask the transcripts about named plans, and prune the find ([e7d741a](https://github.com/casaper/hangar/commit/e7d741af3181b8810a29804621f993a3ff17b3cc))
+* **tmp:** Stop walking the shared store through every clone's symlinks ([8b10314](https://github.com/casaper/hangar/commit/8b10314ef2dc0ffc8228ad169ce1a39da553e786))
+
+### Documentation
+
+* **tmp:** Say what the two SessionEnd hooks cost, and what still bounds them ([a1b8ea3](https://github.com/casaper/hangar/commit/a1b8ea39fcaacde7cfb22b822b06e5460860efbc))
+
+### Chores
+
+* **fleet:** Track the Playwright screenshot backup, rewritten to accumulate rather than mirror ([4fda95f](https://github.com/casaper/hangar/commit/4fda95f1593bb3f1c8d3bbe3eebbb9bf1dbe993b))
+
 ## [0.23.0](https://github.com/casaper/hangar/compare/v0.22.0...v0.23.0) (2026-09-10)
 
 ### Features
