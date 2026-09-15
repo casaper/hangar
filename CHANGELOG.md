@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.25.0](https://github.com/casaper/hangar/compare/v0.24.0...v0.25.0) (2026-09-15)
+
+### Features
+
+* **terminal:** Name a clone by its index in the terminal window title ([d5e52d6](https://github.com/casaper/hangar/commit/d5e52d6b975bd9eb44f68186096d294510ee1113))
+
 ## [0.24.0](https://github.com/casaper/hangar/compare/v0.23.0...v0.24.0) (2026-09-15)
 
 ### Features
