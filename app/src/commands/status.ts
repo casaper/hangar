@@ -2,8 +2,7 @@ import pc from 'picocolors';
 
 import { prSearchUrl, repoRef } from '../bitbucket.ts';
 import { tryDefaultBranch } from '../config/default-branch.ts';
-import { CliError } from '../exec.ts';
-import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
+import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import {
   currentBranch,
   git,
@@ -197,7 +196,17 @@ export const statusOf = (clone: Clone, fetched: boolean): void => {
 };
 
 export const status = (hangar: Hangar, ref: string | undefined, opts: StatusOptions): void => {
-  const clones = opts.all === true ? discoverClones(hangar) : resolveOne(hangar, ref);
+  // Naming no clone means the whole fleet -- the same pair `doctor` reads, and for the same
+  // reason. This command only reports, so a default has nothing to damage, and the fleet is what
+  // somebody typing a bare `hangar status` is after. Every other command taking `[clone]` and
+  // `--all` refuses to guess and says so instead, and that stays: each of them MOVES something,
+  // where "every clone" has to be a decision somebody typed rather than one they fell into.
+  //
+  // `--all` is kept here even so. It is the explicit spelling, it is what the flag means beside
+  // a named clone (the flag wins, as it does in `doctor`), and dropping it would make this the
+  // one command in the family whose flag set disagrees with the rest.
+  const clones =
+    opts.all === true || ref === undefined ? discoverClones(hangar) : [requireClone(hangar, ref)];
 
   if (opts.fetch === true) {
     for (const clone of clones) {
@@ -214,13 +223,6 @@ export const status = (hangar: Hangar, ref: string | undefined, opts: StatusOpti
     note('Remote state was not refreshed. Add --fetch for an authoritative sync answer.');
   }
   warnOnDuplicateBranches(hangar, clones);
-};
-
-const resolveOne = (hangar: Hangar, ref: string | undefined): Clone[] => {
-  if (ref === undefined) {
-    throw new CliError('status needs a clone name, or --all', knownClonesHint(hangar));
-  }
-  return [requireClone(hangar, ref)];
 };
 
 /** Two clones on one branch is legal but almost always a mistake worth surfacing. */

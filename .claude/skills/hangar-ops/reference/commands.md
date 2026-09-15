@@ -91,7 +91,7 @@ rule that cannot tell it from the report.
 | --- | --- | --- | --- |
 | `list` | — | — | report |
 | `ports` | — | `--json` | report |
-| `status` | `[clone]` | `-a, --all` · `-f, --fetch` | report (`--fetch` reaches the network, touches no tree) |
+| `status` | `[clone]` (defaults to every clone) | `-a, --all` · `-f, --fetch` | report (`--fetch` reaches the network, touches no tree) |
 | `sync` | `[clone]` | `-a, --all` · `-n, --dry-run` · `--no-session-notify` · `--include-busy` · `--onto <ref>` · `--strategy <rebase\|merge>` | **act [user]** |
 | `merge-default`, `rebase-default` | — | aliases of `sync`, identical options | **act [user]** |
 | `checkout-default` (alias `checkout`) | `[clone]` | `-a, --all` · `-n, --dry-run` · `--include-busy` | **act [user]** |

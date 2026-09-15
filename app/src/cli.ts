@@ -237,8 +237,10 @@ program
 
 program
   .command('status')
-  .description('Show the status and setup of a clone: branch, sync, Jira, PR, ports, servers')
-  .argument('[clone]', 'clone name, e.g. clone_02 (or just 2)')
+  .description(
+    'Show the status and setup of a clone, or of every clone: branch, sync, Jira, PR, ports, servers',
+  )
+  .argument('[clone]', 'clone name, e.g. clone_02 (or just 2); defaults to every clone')
   .option('-a, --all', 'show every clone')
   .option('-f, --fetch', 'fetch first, so the sync answer is authoritative')
   .action((clone, options) => {
