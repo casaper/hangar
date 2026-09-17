@@ -6,6 +6,7 @@ import pc from 'picocolors';
 import { CliError } from '../exec.ts';
 import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import type { Hangar } from '../hangar.ts';
+import { roleUrl } from '../ports.ts';
 import {
   allClaudeSessions,
   allListeners,
@@ -18,8 +19,20 @@ import {
   type PidFile,
   type ProcessRow,
 } from '../procs.ts';
+import { paint } from '../palette.ts';
 import { tmuxServer } from '../tmux.ts';
-import { blank, cloneLabel, confirm, heading, note, ok, raw, table, warn } from '../ui.ts';
+import {
+  blank,
+  confirm,
+  heading,
+  note,
+  ok,
+  raw,
+  table,
+  truncate,
+  visibleWidth,
+  warn,
+} from '../ui.ts';
 
 /**
  * `hangar servers` -- what the fleet is serving, across every clone at once.
@@ -92,6 +105,20 @@ export type ServerRecord = {
   readonly parent: string | undefined;
   /** The pid file that names this process, for the states that have one. */
   readonly pidFile: string | undefined;
+  /**
+   * Where to reach it, rendered from the role's own `url` template.
+   *
+   * Undefined for a role that declares `url: null` -- a database port, say, which a URL does not
+   * describe -- and for anything with no role at all. Resolved here rather than at render time
+   * because the record is where every other derived fact already lives, and because that puts it
+   * inside the pure tests.
+   *
+   * **A `crossed` record keeps one.** The string `roleUrl` renders depends only on the template
+   * and the port, so it is the same either way, but the meaning is not: that port answers from
+   * the wrong clone. It stays because suppressing it would leave the one row most worth opening
+   * with nothing to open, and the detail line beneath already says whose port it is.
+   */
+  readonly url: string | undefined;
   /** For `crossed`: the clone that was assigned this port. */
   readonly tookPortOf: Clone | undefined;
 };
@@ -132,10 +159,10 @@ export const classifyServers = (
   cwds: ReadonlyMap<number, string>,
   processes: ReadonlyMap<number, ProcessRow>,
 ): ServerRecord[] => {
-  const ownerOfPort = new Map<number, { clone: Clone; role: string }>();
+  const ownerOfPort = new Map<number, { clone: Clone; role: string; url: string | undefined }>();
   for (const clone of clones) {
     for (const entry of clone.ports) {
-      ownerOfPort.set(entry.port, { clone, role: entry.role.id });
+      ownerOfPort.set(entry.port, { clone, role: entry.role.id, url: roleUrl(entry) });
     }
   }
   const listenerOf = new Map<number, Listener>();
@@ -161,6 +188,7 @@ export const classifyServers = (
       clone,
       name: file.name,
       role: undefined as string | undefined,
+      url: undefined as string | undefined,
       pid: file.pid,
       cwd: seen.cwd,
       command: seen.command,
@@ -194,11 +222,18 @@ export const classifyServers = (
         state: 'crossed',
         port: listener.port,
         role: owner.role,
+        url: owner.url,
         tookPortOf: owner.clone,
       });
       continue;
     }
-    records.push({ ...base, state: 'serving', port: listener.port, role: owner?.role });
+    records.push({
+      ...base,
+      state: 'serving',
+      port: listener.port,
+      role: owner?.role,
+      url: owner?.url,
+    });
   }
 
   for (const listener of listeners) {
@@ -211,6 +246,7 @@ export const classifyServers = (
       pid: listener.pid,
       port: listener.port,
       role: owner?.role,
+      url: owner?.url,
       cwd: seen.cwd,
       command: seen.command,
       parent: seen.parent,
@@ -268,10 +304,6 @@ export const programName = (command: string): string => {
   return path.slice(path.lastIndexOf('/') + 1) || path;
 };
 
-/** Long enough to identify a server, short enough that a table stays a table. */
-const clip = (text: string, width: number): string =>
-  text.length <= width ? text : `${text.slice(0, width - 1)}\u2026`;
-
 /**
  * A command line with its interpreter's path shortened to the program name.
  *
@@ -297,14 +329,99 @@ const PAINT: Record<ServerState, (text: string) => string> = {
   stale: pc.dim,
 };
 
-/** One table row for a record. PURE, and the only place a state is spelled for a human. */
+const MISSING = pc.dim('\u2014');
+
+/** The header, and the order every row below follows. */
+const HEADINGS = ['CLONE', 'STATE', 'NAME', 'ROLE', 'PORT', 'URL', 'PID', 'COMMAND'];
+
+/**
+ * One table row for a record. PURE, and the only place a state is spelled for a human.
+ *
+ * The clone is its index in that clone's own hue and NOT `cloneLabel`: the bullet earns its place
+ * in a heading, where it is the only thing carrying the colour, and costs two columns in a table
+ * where the whole cell is already painted.
+ *
+ * **The command is last and is left whole here.** How much of it fits is a property of the
+ * window rather than of the record, so it is `fitLastColumn`'s to decide once the other seven
+ * columns have been measured.
+ */
 export const serverRow = (record: ServerRecord): string[] => [
+  paint(record.clone.colour, String(record.clone.index)),
   PAINT[record.state](record.state),
   record.name,
-  record.port === undefined ? pc.dim('—') : String(record.port),
-  `pid ${String(record.pid)}`,
-  record.command === undefined ? pc.dim('(gone)') : clip(shortCommand(record.command), 76),
+  record.role ?? MISSING,
+  record.port === undefined ? MISSING : String(record.port),
+  record.url ?? MISSING,
+  String(record.pid),
+  record.command === undefined ? pc.dim('(gone)') : shortCommand(record.command),
 ];
+
+/** The whole table, header first. PURE. */
+export const serversListRows = (records: readonly ServerRecord[]): string[][] => [
+  HEADINGS.map((h) => pc.dim(h)),
+  ...records.map(serverRow),
+];
+
+/**
+ * Clip the last column so no row runs past the window. PURE.
+ *
+ * `table()` pads to the widest cell in each column and never wraps, so one long command line
+ * makes every row of the table run off the right edge and the terminal wraps them -- which
+ * destroys the alignment the table exists for. The budget is the width less the other columns and
+ * the gaps between them.
+ *
+ * **Measured with `visibleWidth`, never `.length`.** The clone and state cells carry ANSI colour,
+ * and counting those escape bytes as characters would overstate the used width by around twenty
+ * per row and clip the command for no visible reason.
+ *
+ * **The clip itself uses `truncate`, which DOES measure with `.length`** -- correct only while the
+ * column it cuts carries no colour. That is why `serverRow` leaves the command unpainted, and it
+ * is the thing to fix first if it ever gains a colour.
+ *
+ * The header is clipped with everything else: `COMMAND` is seven characters and a window narrow
+ * enough to matter has fewer than that to spare.
+ *
+ * **The guarantee is conditional, and the condition is the other seven columns.** They have a
+ * width of their own that no amount of clipping the eighth can go under, so below it the command
+ * column is simply empty and the table is as narrow as eight columns can be. Promising more would
+ * mean dropping columns, which is a different report rather than a narrower one.
+ */
+export const fitLastColumn = (
+  rows: readonly string[][],
+  width: number | undefined,
+  gap = 2,
+): string[][] => {
+  const last = Math.max(...rows.map((r) => r.length)) - 1;
+  if (width === undefined || last < 1) return rows.map((r) => [...r]);
+  let used = gap * last;
+  for (let i = 0; i < last; i += 1) {
+    used += Math.max(...rows.map((r) => visibleWidth(r[i] ?? '')));
+  }
+  const budget = width - used;
+  /*
+   * An empty cell below zero, and never `truncate(cell, 0)`.
+   *
+   * That call is `cell.slice(0, -1)` -- the whole string but its last character -- so a budget of
+   * nothing would print the WIDEST output this function can produce, at exactly the window width
+   * where it matters most. Measured. Nothing is the honest answer when nothing fits.
+   */
+  return rows.map((row) =>
+    row.map((cell, i) => (i === last ? (budget < 1 ? '' : truncate(cell, budget)) : cell)),
+  );
+};
+
+/**
+ * The window's width, or undefined where there is no window.
+ *
+ * Undefined rather than a fallback, deliberately. `tui.ts` falls back to 80 because a picker has
+ * to draw somewhere; this has the opposite obligation -- piped output has no right edge to stay
+ * inside, and clipping it to an imagined 80 columns would quietly cut the command lines out of
+ * `hangar servers list > somewhere`.
+ */
+const windowWidth = (): number | undefined => {
+  const columns = process.stdout.columns;
+  return typeof columns === 'number' && Number.isFinite(columns) ? columns : undefined;
+};
 
 /**
  * The lines that go UNDER a record, when it has something to say that a column cannot hold.
@@ -424,12 +541,15 @@ export const serversList = (
   const shown =
     opts.stale === true ? scan.records.filter((r) => TROUBLE.includes(r.state)) : scan.records;
 
-  for (const clone of clones) {
-    const mine = shown.filter((r) => r.clone.index === clone.index);
-    if (mine.length === 0) continue;
-    heading(cloneLabel(clone));
-    table(mine.map(serverRow));
-    for (const record of mine) {
+  if (shown.length > 0) {
+    table(fitLastColumn(serversListRows(shown), windowWidth()));
+    blank();
+    /*
+     * The explanations go under the WHOLE table rather than under each clone, because there are
+     * no longer per-clone blocks to sit in -- and keyed by pid, which is the one column that
+     * names a row uniquely.
+     */
+    for (const record of shown) {
       for (const line of serverDetail(record)) note(`pid ${String(record.pid)}: ${line}`);
     }
     blank();

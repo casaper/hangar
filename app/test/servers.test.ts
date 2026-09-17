@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import pc from 'picocolors';
+
 import {
   classifyServers,
+  fitLastColumn,
   killPlan,
   programName,
+  serversListRows,
   serversSummary,
   shortCommand,
   startCommandLine,
@@ -14,6 +18,7 @@ import {
   type ServerRecord,
 } from '../src/commands/servers.ts';
 import { cloneAt } from '../src/fleet.ts';
+import { visibleWidth } from '../src/ui.ts';
 import type { Listener, ProcessRow } from '../src/procs.ts';
 
 import { fixtureVscodeConfigText, syntheticHangar } from './fixture.ts';
@@ -404,4 +409,119 @@ test('a role asked for by name that declares no start command says so', () => {
   assert.match(plan.skip[0]?.why ?? '', /no `start` command/);
   // ...and the same role is silently passed over when nothing asked for it by name.
   assert.equal(startPlan([one], [], () => [], undefined).skip.length, 0);
+});
+
+/* ------------------------------------------------------------------ the report */
+
+/**
+ * Exactly what `table()` in `src/ui.ts` prints for these rows, `trimEnd` included.
+ *
+ * Asserting against a line this does not build would be asserting against a line the command
+ * never shows -- which passes, or fails, for a reason unconnected to the output.
+ */
+const render = (rows: readonly string[][], gap = 2): string[] => {
+  const columns = Math.max(...rows.map((r) => r.length));
+  const widths = Array.from({ length: columns }, (_, i) =>
+    Math.max(...rows.map((r) => visibleWidth(r[i] ?? ''))),
+  );
+  return rows.map((row) =>
+    row
+      .map((cell, i) => cell + ' '.repeat(Math.max(0, (widths[i] ?? 0) - visibleWidth(cell))))
+      .join(' '.repeat(gap))
+      .trimEnd(),
+  );
+};
+
+const longCommand = 'node '.concat('a/very/long/path/segment/'.repeat(20), 'server.js --watch');
+
+const wideRows = (): string[][] =>
+  serversListRows(listening(one, 960, portOf(one, 'api'))).map((row, i) =>
+    i === 0 ? row : [...row.slice(0, -1), longCommand],
+  );
+
+test('no rendered line runs past the window, with colour in the table', () => {
+  /*
+   * The clone and state cells carry real ANSI. Measuring them with `.length` counts the escape
+   * bytes as characters -- about twenty per row -- and the budget comes out far too small, so the
+   * command is clipped for no visible reason. `visibleWidth` is what makes this assertion mean
+   * the width a person sees.
+   */
+  // The seven columns in front of the command are what they are, so the floor below which no
+  // clipping can help is their own rendered width. Measured from the rows rather than assumed.
+  const floor = Math.max(...render(fitLastColumn(wideRows(), 1)).map(visibleWidth));
+  for (const width of [400, 200, 120, 100, floor + 1, floor]) {
+    const lines = render(fitLastColumn(wideRows(), width));
+    for (const line of lines) {
+      assert.ok(
+        visibleWidth(line) <= width,
+        `a line of ${String(visibleWidth(line))} in a window of ${String(width)}: ${line}`,
+      );
+    }
+  }
+  assert.ok(
+    Math.max(...render(wideRows()).map(visibleWidth)) > 400,
+    'the unclipped rows really are too long for any of those windows',
+  );
+});
+
+test('below the width of its own fixed columns, the table can only give up the command', () => {
+  /*
+   * Eight columns have a minimum width and clipping the last one cannot go under it. The honest
+   * behaviour there is an empty command column and a table that is as narrow as it can be, rather
+   * than a promise this cannot keep -- so this pins what actually happens instead of asserting a
+   * guarantee that would be false.
+   */
+  const fitted = fitLastColumn(wideRows(), 20);
+  for (const row of fitted.slice(1)) assert.equal(row[row.length - 1], '');
+  const floor = Math.max(...render(fitted).map(visibleWidth));
+  assert.ok(floor > 20, 'the fixed columns are wider than the window, and nothing here can help');
+});
+
+test('the header is clipped with everything else', () => {
+  // `COMMAND` is seven characters, and a window narrow enough to matter has fewer to spare. Left
+  // out of the fit, the header alone would run past the edge of a table whose rows all fit.
+  const wide = fitLastColumn(wideRows(), 400)[0]?.at(-1);
+  const narrow = fitLastColumn(wideRows(), 60)[0]?.at(-1);
+  assert.equal(wide, pc.dim('COMMAND'), 'a wide window leaves the heading alone');
+  assert.ok(
+    visibleWidth(narrow ?? '') < visibleWidth('COMMAND'),
+    `the heading was not clipped: ${String(narrow)}`,
+  );
+});
+
+test('a zero budget empties the last column rather than all but emptying it', () => {
+  /*
+   * `truncate(cell, 0)` is `cell.slice(0, -1)` -- the whole string but its last character -- so
+   * the narrowest window would otherwise produce the WIDEST output this can produce.
+   */
+  const fitted = fitLastColumn(wideRows(), 10);
+  for (const row of fitted.slice(1)) assert.equal(row[row.length - 1], '');
+  for (const line of render(fitted)) assert.ok(!line.includes('server.js'));
+});
+
+test('with no window there is nothing to fit, and nothing is clipped', () => {
+  const fitted = fitLastColumn(wideRows(), undefined);
+  assert.equal(fitted[1]?.[fitted[1].length - 1], longCommand);
+});
+
+test('the header has one cell per column of every row', () => {
+  const rows = serversListRows(listening(one, 961, portOf(one, 'api')));
+  const [header, ...data] = rows;
+  assert.equal(header?.length, 8);
+  for (const row of data) assert.equal(row.length, 8);
+});
+
+test('a serving record carries the URL its role renders, with that clone’s own port', () => {
+  const [record] = listening(two, 962, portOf(two, 'api'));
+  assert.equal(record?.url, `http://localhost:${String(portOf(two, 'api'))}`);
+});
+
+test('a role declaring no URL gives a record with none', () => {
+  // The fixture's `db` role is `url: null` -- a database port, which a URL does not describe.
+  const [record] = classify({
+    listeners: [{ pid: 963, port: portOf(one, 'db') }],
+    cwds: [[963, one.path]],
+  });
+  assert.equal(record?.role, 'db');
+  assert.equal(record.url, undefined, 'asserted on the record, never on how an absent cell paints');
 });

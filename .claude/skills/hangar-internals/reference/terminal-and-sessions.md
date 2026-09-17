@@ -209,6 +209,27 @@ would have blocked that deletion for good.
 environment, a reissued pid number, a wrapper killed with a signal it cannot handle. They are the
 states that matter most and the ones no capture can ever reach. `test/servers.test.ts`.
 
+**The report is ONE table for the whole fleet**, not a heading per clone with a table under each.
+Naming a single clone is the exception; the whole fleet is the normal call, and seven stacked
+fragments is the wrong shape for the case that matters. The clone becomes a column -- its index in
+its own hue, not `cloneLabel`, because the bullet earns its place in a heading where it is the only
+thing carrying the colour and costs two columns in a table where the whole cell is painted.
+
+**The command column is clipped to the window, and two measurements make that work.** Widths are
+taken with `visibleWidth`, never `.length`: the clone and state cells carry ANSI, and counting
+escape bytes as characters overstates the used width by about twenty per row and clips the command
+for no visible reason. And a budget below one empties the cell rather than calling
+`truncate(cell, 0)`, which is `cell.slice(0, -1)` -- the whole string but its last character, so
+the narrowest window would otherwise produce the WIDEST output the function can. Measured both
+ways. The guarantee is conditional on the other seven columns, which have a width no clipping can
+go under; below it the command is empty and the table is as narrow as eight columns get, because
+promising more would mean dropping columns, which is a different report rather than a narrower one.
+
+**Width comes from `process.stdout.columns`, and is undefined rather than a fallback where there
+is none.** `tui.ts` falls back to 80 because a picker has to draw somewhere; this has the opposite
+obligation, since piped output has no right edge to stay inside and clipping it to an imagined 80
+would quietly cut the command lines out of a redirect.
+
 **`hangar servers start` puts the port in front of the command, and that is the whole reason it
 is safer than typing the same line by hand.** A port role's port comes from an environment
 variable, and every clone's fallback when that variable is missing is the same base -- so a clone
