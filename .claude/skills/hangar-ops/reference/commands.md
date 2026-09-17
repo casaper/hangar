@@ -170,7 +170,7 @@ stderr as having no tool at all, is the developer tab's to fix, not yours.
 | `colours sync` (group alias `colors`) | — | `-n, --dry-run` · `--check` | act |
 | `colours change` | `<clone> <colour>` | `--force` | **act [user]**, no `-n` |
 | `colours list` | — | — | report |
-| `servers list` | `[clones...]` (defaults to every clone) | `-a, --all` · `--stale` | report |
+| `servers list` | `[clones...]` (defaults to every clone) | `-a, --all` · `--stale` · `--roles` | report |
 | `servers start` | `[clones...]` | `-a, --all` · `--role <id...>` · `-n, --dry-run` | **act [user]** (needs the clone to have a tmux session) |
 | `servers kill` | `[clones...]` | `-a, --all` · `--role <id...>` · `--name <stem...>` · `--pid <pid...>` · `--force` · `-n, --dry-run` · `-y, --yes` | **act [user]** |
 | `servers prune` | `[clones...]` (defaults to every clone) | `-a, --all` · `-n, --dry-run` | act |

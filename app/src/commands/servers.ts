@@ -19,20 +19,9 @@ import {
   type PidFile,
   type ProcessRow,
 } from '../procs.ts';
-import { paint } from '../palette.ts';
+import { paintOn } from '../palette.ts';
 import { tmuxServer } from '../tmux.ts';
-import {
-  blank,
-  confirm,
-  heading,
-  note,
-  ok,
-  raw,
-  table,
-  truncate,
-  visibleWidth,
-  warn,
-} from '../ui.ts';
+import { blank, confirm, heading, note, ok, raw, table, truncate, warn } from '../ui.ts';
 
 /**
  * `hangar servers` -- what the fleet is serving, across every clone at once.
@@ -319,6 +308,29 @@ export const shortCommand = (command: string): string => {
   return head.slice(head.lastIndexOf('/') + 1) + (space === -1 ? '' : command.slice(space));
 };
 
+/** Shown where a record has no value for a column -- no role, no port, no URL. */
+const MISSING = '\u2014';
+
+export type Align = 'left' | 'center' | 'right';
+
+/**
+ * One column of the report: its heading, how it sits in its width, and how to get it.
+ *
+ * **Content and colour are two steps, and the order matters.** `of` returns PLAIN text; `paint`
+ * is applied afterwards, to the cell already padded to its column width. That is what lets the
+ * clone badge be a solid block of hue the full width of its column instead of a smear of colour
+ * around one digit -- and it is why widths here can be measured with `.length`, since nothing
+ * being measured carries an escape sequence yet.
+ */
+export type ServerColumn = {
+  readonly heading: string;
+  readonly align: Align;
+  readonly of: (record: ServerRecord) => string;
+  readonly paint?: (record: ServerRecord, padded: string) => string;
+  /** Left out unless asked for. */
+  readonly optional?: boolean;
+};
+
 const PAINT: Record<ServerState, (text: string) => string> = {
   untracked: pc.yellow,
   stray: pc.magenta,
@@ -329,85 +341,119 @@ const PAINT: Record<ServerState, (text: string) => string> = {
   stale: pc.dim,
 };
 
-const MISSING = pc.dim('\u2014');
-
-/** The header, and the order every row below follows. */
-const HEADINGS = ['CLONE', 'STATE', 'NAME', 'ROLE', 'PORT', 'URL', 'PID', 'COMMAND'];
-
 /**
- * One table row for a record. PURE, and the only place a state is spelled for a human.
- *
- * The clone is its index in that clone's own hue and NOT `cloneLabel`: the bullet earns its place
- * in a heading, where it is the only thing carrying the colour, and costs two columns in a table
- * where the whole cell is already painted.
- *
- * **The command is last and is left whole here.** How much of it fits is a property of the
- * window rather than of the record, so it is `fitLastColumn`'s to decide once the other seven
- * columns have been measured.
+ * The report's columns, in order. The command is LAST because it is the one that gets clipped,
+ * and a clipped column can only be the last one without leaving a hole in the middle of a row.
  */
-export const serverRow = (record: ServerRecord): string[] => [
-  paint(record.clone.colour, String(record.clone.index)),
-  PAINT[record.state](record.state),
-  record.name,
-  record.role ?? MISSING,
-  record.port === undefined ? MISSING : String(record.port),
-  record.url ?? MISSING,
-  String(record.pid),
-  record.command === undefined ? pc.dim('(gone)') : shortCommand(record.command),
+export const SERVER_COLUMNS: readonly ServerColumn[] = [
+  {
+    heading: 'CLONE',
+    align: 'center',
+    of: (r) => String(r.clone.index),
+    paint: (r, padded) => paintOn(r.clone.colour, padded),
+  },
+  { heading: 'NAME', align: 'left', of: (r) => r.name },
+  {
+    heading: 'STATE',
+    align: 'center',
+    of: (r) => r.state,
+    paint: (r, padded) => PAINT[r.state](padded),
+  },
+  { heading: 'PORT', align: 'right', of: (r) => (r.port === undefined ? MISSING : String(r.port)) },
+  { heading: 'URL', align: 'left', of: (r) => r.url ?? MISSING },
+  { heading: 'PID', align: 'right', of: (r) => String(r.pid) },
+  { heading: 'ROLE', align: 'center', of: (r) => r.role ?? MISSING, optional: true },
+  {
+    heading: 'COMMAND',
+    align: 'left',
+    of: (r) => (r.command === undefined ? '(gone)' : shortCommand(r.command)),
+  },
 ];
 
-/** The whole table, header first. PURE. */
-export const serversListRows = (records: readonly ServerRecord[]): string[][] => [
-  HEADINGS.map((h) => pc.dim(h)),
-  ...records.map(serverRow),
+/** The columns this run shows. An optional one appears only when it was asked for. */
+export const columnsFor = (extras: boolean): ServerColumn[] =>
+  SERVER_COLUMNS.filter((column) => extras || column.optional !== true);
+
+/** Heading row plus one plain-text row per record. PURE. */
+export const serverCells = (
+  columns: readonly ServerColumn[],
+  records: readonly ServerRecord[],
+): string[][] => [
+  columns.map((column) => column.heading),
+  ...records.map((record) => columns.map((column) => column.of(record))),
 ];
 
+const pad = (text: string, width: number, align: Align): string => {
+  const slack = Math.max(0, width - text.length);
+  if (align === 'left') return text + ' '.repeat(slack);
+  if (align === 'right') return ' '.repeat(slack) + text;
+  const left = Math.floor(slack / 2);
+  return ' '.repeat(left) + text + ' '.repeat(slack - left);
+};
+
 /**
- * Clip the last column so no row runs past the window. PURE.
+ * Pad every cell to its column's width, clipping the last column to fit the window. PURE, and
+ * plain text in and out.
  *
- * `table()` pads to the widest cell in each column and never wraps, so one long command line
- * makes every row of the table run off the right edge and the terminal wraps them -- which
- * destroys the alignment the table exists for. The budget is the width less the other columns and
- * the gaps between them.
+ * `table()` pads to the widest cell and never wraps, so one long command line makes every row run
+ * past the right edge and the terminal wraps them -- which destroys the alignment a table exists
+ * for. The budget is the window less the other columns and the gaps between them.
  *
- * **Measured with `visibleWidth`, never `.length`.** The clone and state cells carry ANSI colour,
- * and counting those escape bytes as characters would overstate the used width by around twenty
- * per row and clip the command for no visible reason.
+ * **A budget below one empties the cell rather than calling `truncate(cell, 0)`**, which is
+ * `cell.slice(0, -1)` -- the whole string but its last character, so the narrowest window would
+ * otherwise produce the WIDEST output this can. Measured.
  *
- * **The clip itself uses `truncate`, which DOES measure with `.length`** -- correct only while the
- * column it cuts carries no colour. That is why `serverRow` leaves the command unpainted, and it
- * is the thing to fix first if it ever gains a colour.
- *
- * The header is clipped with everything else: `COMMAND` is seven characters and a window narrow
- * enough to matter has fewer than that to spare.
- *
- * **The guarantee is conditional, and the condition is the other seven columns.** They have a
- * width of their own that no amount of clipping the eighth can go under, so below it the command
- * column is simply empty and the table is as narrow as eight columns can be. Promising more would
- * mean dropping columns, which is a different report rather than a narrower one.
+ * **The guarantee is conditional on the other columns**, which have a width no clipping can go
+ * under; below it the last column is empty and the table is as narrow as its columns get.
+ * Promising more would mean dropping columns, which is a different report rather than a narrower
+ * one. The heading is clipped with everything else -- `COMMAND` is seven characters and a window
+ * narrow enough to matter has fewer to spare.
  */
-export const fitLastColumn = (
+export const layoutRows = (
   rows: readonly string[][],
+  aligns: readonly Align[],
   width: number | undefined,
   gap = 2,
 ): string[][] => {
-  const last = Math.max(...rows.map((r) => r.length)) - 1;
-  if (width === undefined || last < 1) return rows.map((r) => [...r]);
-  let used = gap * last;
-  for (let i = 0; i < last; i += 1) {
-    used += Math.max(...rows.map((r) => visibleWidth(r[i] ?? '')));
+  const count = Math.max(...rows.map((row) => row.length));
+  const widthOf = (index: number): number =>
+    Math.max(...rows.map((row) => (row[index] ?? '').length));
+  const last = count - 1;
+  let clipped: readonly string[][] = rows;
+  if (width !== undefined && last >= 1) {
+    let used = gap * last;
+    for (let i = 0; i < last; i += 1) used += widthOf(i);
+    const budget = width - used;
+    clipped = rows.map((row) =>
+      row.map((cell, i) => (i === last ? (budget < 1 ? '' : truncate(cell, budget)) : cell)),
+    );
   }
-  const budget = width - used;
-  /*
-   * An empty cell below zero, and never `truncate(cell, 0)`.
-   *
-   * That call is `cell.slice(0, -1)` -- the whole string but its last character -- so a budget of
-   * nothing would print the WIDEST output this function can produce, at exactly the window width
-   * where it matters most. Measured. Nothing is the honest answer when nothing fits.
-   */
-  return rows.map((row) =>
-    row.map((cell, i) => (i === last ? (budget < 1 ? '' : truncate(cell, budget)) : cell)),
+  const widths = Array.from({ length: count }, (_, i) =>
+    Math.max(...clipped.map((row) => (row[i] ?? '').length)),
   );
+  return clipped.map((row) => row.map((cell, i) => pad(cell, widths[i] ?? 0, aligns[i] ?? 'left')));
+};
+
+/**
+ * Colour the laid-out rows: the heading dim, and each column's own `paint` on the PADDED cell.
+ * PURE. Nothing here changes a cell's visible width, which is what keeps the table aligned.
+ */
+export const paintRows = (
+  padded: readonly string[][],
+  columns: readonly ServerColumn[],
+  records: readonly ServerRecord[],
+): string[][] => {
+  const [heading = [], ...body] = padded;
+  return [
+    heading.map((cell) => pc.dim(cell)),
+    ...body.map((row, r) =>
+      row.map((cell, c) => {
+        const record = records[r];
+        const paintCell = columns[c]?.paint;
+        return record === undefined || paintCell === undefined ? cell : paintCell(record, cell);
+      }),
+    ),
+  ];
 };
 
 /**
@@ -511,6 +557,7 @@ export const scanFleet = (clones: readonly Clone[]): FleetScan => {
 export type ServersListOptions = {
   all?: boolean | undefined;
   stale?: boolean | undefined;
+  roles?: boolean | undefined;
 };
 
 /** Ascending by index, each clone once -- the same shape every command here has. */
@@ -542,7 +589,13 @@ export const serversList = (
     opts.stale === true ? scan.records.filter((r) => TROUBLE.includes(r.state)) : scan.records;
 
   if (shown.length > 0) {
-    table(fitLastColumn(serversListRows(shown), windowWidth()));
+    const columns = columnsFor(opts.roles === true);
+    const laid = layoutRows(
+      serverCells(columns, shown),
+      columns.map((column) => column.align),
+      windowWidth(),
+    );
+    table(paintRows(laid, columns, shown));
     blank();
     /*
      * The explanations go under the WHOLE table rather than under each clone, because there are

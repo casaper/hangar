@@ -211,18 +211,36 @@ states that matter most and the ones no capture can ever reach. `test/servers.te
 
 **The report is ONE table for the whole fleet**, not a heading per clone with a table under each.
 Naming a single clone is the exception; the whole fleet is the normal call, and seven stacked
-fragments is the wrong shape for the case that matters. The clone becomes a column -- its index in
-its own hue, not `cloneLabel`, because the bullet earns its place in a heading where it is the only
-thing carrying the colour and costs two columns in a table where the whole cell is painted.
+fragments is the wrong shape for the case that matters.
 
-**The command column is clipped to the window, and two measurements make that work.** Widths are
-taken with `visibleWidth`, never `.length`: the clone and state cells carry ANSI, and counting
-escape bytes as characters overstates the used width by about twenty per row and clips the command
-for no visible reason. And a budget below one empties the cell rather than calling
-`truncate(cell, 0)`, which is `cell.slice(0, -1)` -- the whole string but its last character, so
-the narrowest window would otherwise produce the WIDEST output the function can. Measured both
-ways. The guarantee is conditional on the other seven columns, which have a width no clipping can
-go under; below it the command is empty and the table is as narrow as eight columns get, because
+**The clone is a BADGE: the hue as a background with `ink` in front of it**, centred in its column,
+which is the same pairing the status bar uses for the current window and for the same reason -- a
+solid block of colour is far easier to find at a glance down a column than coloured text is.
+`paintOn` in `palette.ts` is the painter. It takes `ink` rather than reverse video (SGR 7), which
+is the literal reading of "the hue behind, the background colour in front" and the wrong one: it
+hands the contrast decision to whatever the terminal's background happens to be, so a pale hue on
+a light theme comes out unreadable, while `ink` is the pure black or white that `contrast.test.ts`
+already holds every hue to a floor against.
+
+**Columns are data, in `SERVER_COLUMNS`**: a heading, an alignment, how to read the value, and
+optionally how to paint it. Content and colour are two steps and the ORDER is load-bearing -- `of`
+returns plain text, the cell is padded to its column width, and only then is `paint` applied. That
+is what makes the badge a block the full width of its column instead of a smear of colour around
+one digit, and it is why widths here are measured with `.length`: nothing being measured carries
+an escape sequence yet. `paintRows` changes no cell's visible width, which is what keeps the table
+aligned, and a test pins exactly that.
+
+**The role is an optional column**, behind `--roles`. It is the hangar's own word for a port and a
+tracked server's name is whatever its pid file is called, so the two rarely match and both are
+worth having -- but a column that repeats what `NAME` mostly implies is not worth its width by
+default.
+
+**The last column is clipped to the window**, and it has to be the last one: a clipped column
+anywhere else leaves a hole in the middle of every row. A budget below one empties the cell rather
+than calling `truncate(cell, 0)`, which is `cell.slice(0, -1)` -- the whole string but its last
+character, so the narrowest window would otherwise produce the WIDEST output the function can.
+Measured. The guarantee is conditional on the other columns, which have a width no clipping can go
+under; below it the command is empty and the table is as narrow as its columns get, because
 promising more would mean dropping columns, which is a different report rather than a narrower one.
 
 **Width comes from `process.stdout.columns`, and is undefined rather than a fallback where there

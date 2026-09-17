@@ -333,3 +333,19 @@ const ESC = '\u001b';
 /** Wrap text in the clone's hue for terminal output (24-bit colour). */
 export const paint = (colour: CloneColour, text: string): string =>
   `${ESC}[38;2;${colour.mainTriple}m${text}${ESC}[0m`;
+
+/**
+ * Text drawn ON the hue: the clone's colour as a BACKGROUND, with `ink` in front of it.
+ *
+ * The badge form, and the same pairing the tmux status bar already uses for the current window --
+ * a solid block of the hue is far easier to find at a glance down a column than coloured text is,
+ * which is the whole reason `ink` exists.
+ *
+ * **`ink` rather than the terminal's own background (SGR 7, reverse video).** Reverse video is the
+ * literal reading of "hue behind, background colour in front", and it is the wrong one: it hands
+ * the contrast decision to whatever the terminal's background happens to be, so a pale hue on a
+ * light theme comes out unreadable. `ink` is pure black or pure white, whichever reads, and
+ * `test/contrast.test.ts` holds every hue in the palette to a floor against both.
+ */
+export const paintOn = (colour: CloneColour, text: string): string =>
+  `${ESC}[48;2;${colour.mainTriple}m${ESC}[38;2;${triple(parseHex(colour.ink))}m${text}${ESC}[0m`;

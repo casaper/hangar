@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import pc from 'picocolors';
-
 import {
   classifyServers,
-  fitLastColumn,
+  columnsFor,
   killPlan,
   programName,
-  serversListRows,
+  layoutRows,
+  paintRows,
+  serverCells,
   serversSummary,
   shortCommand,
   startCommandLine,
@@ -410,7 +410,6 @@ test('a role asked for by name that declares no start command says so', () => {
   // ...and the same role is silently passed over when nothing asked for it by name.
   assert.equal(startPlan([one], [], () => [], undefined).skip.length, 0);
 });
-
 /* ------------------------------------------------------------------ the report */
 
 /**
@@ -434,24 +433,89 @@ const render = (rows: readonly string[][], gap = 2): string[] => {
 
 const longCommand = 'node '.concat('a/very/long/path/segment/'.repeat(20), 'server.js --watch');
 
-const wideRows = (): string[][] =>
-  serversListRows(listening(one, 960, portOf(one, 'api'))).map((row, i) =>
-    i === 0 ? row : [...row.slice(0, -1), longCommand],
-  );
+const withCommand = (records: ServerRecord[], command: string): ServerRecord[] =>
+  records.map((r) => ({ ...r, command }));
 
-test('no rendered line runs past the window, with colour in the table', () => {
-  /*
-   * The clone and state cells carry real ANSI. Measuring them with `.length` counts the escape
-   * bytes as characters -- about twenty per row -- and the budget comes out far too small, so the
-   * command is clipped for no visible reason. `visibleWidth` is what makes this assertion mean
-   * the width a person sees.
-   */
-  // The seven columns in front of the command are what they are, so the floor below which no
-  // clipping can help is their own rendered width. Measured from the rows rather than assumed.
-  const floor = Math.max(...render(fitLastColumn(wideRows(), 1)).map(visibleWidth));
+const lay = (records: ServerRecord[], width: number | undefined, extras = false) => {
+  const columns = columnsFor(extras);
+  return {
+    columns,
+    records,
+    rows: layoutRows(
+      serverCells(columns, records),
+      columns.map((c) => c.align),
+      width,
+    ),
+  };
+};
+
+test('the columns are the agreed order, and the role is left out unless asked for', () => {
+  assert.deepEqual(
+    columnsFor(false).map((c) => c.heading),
+    ['CLONE', 'NAME', 'STATE', 'PORT', 'URL', 'PID', 'COMMAND'],
+  );
+  assert.deepEqual(
+    columnsFor(true).map((c) => c.heading),
+    ['CLONE', 'NAME', 'STATE', 'PORT', 'URL', 'PID', 'ROLE', 'COMMAND'],
+  );
+  // The clipped column has to be the last one, or a clip leaves a hole mid-row.
+  for (const extras of [false, true]) {
+    assert.equal(columnsFor(extras).at(-1)?.heading, 'COMMAND');
+  }
+});
+
+test('each column sits the way it was asked to sit in its width', () => {
+  const records = listening(one, 970, portOf(one, 'api'));
+  const { rows } = lay(records, undefined, true);
+  const [heading, row] = rows;
+  const at = (name: string): string =>
+    row?.[columnsFor(true).findIndex((c) => c.heading === name)] ?? '';
+
+  // `CLONE` is five wide and the index is one character, so centring leaves two spaces a side.
+  assert.equal(at('CLONE'), '  1  ');
+  assert.equal(heading?.[0], 'CLONE');
+  // Right-aligned: the value finishes at the column's right edge, whatever the slack is.
+  assert.ok(
+    at('PORT').endsWith(String(portOf(one, 'api'))),
+    `PORT not right-aligned: "${at('PORT')}"`,
+  );
+  assert.ok(at('PID').endsWith('970'), `PID not right-aligned: "${at('PID')}"`);
+  // Left-aligned: the value starts at the column's left edge. `NAME` is four characters wide as a
+  // heading and `api_server` is ten, so the slack here is on the heading rather than the value.
+  assert.ok(at('NAME').startsWith('api_server'), `NAME not left-aligned: "${at('NAME')}"`);
+  assert.ok(at('URL').startsWith('http://'), `URL not left-aligned: "${at('URL')}"`);
+  // Centred, with an odd slack going left-light: `ROLE` is four wide and `api` is three.
+  assert.equal(at('ROLE'), 'api ');
+});
+
+test('every cell of a column comes out the same width, heading included', () => {
+  const records = [
+    ...listening(one, 971, portOf(one, 'api')),
+    ...listening(two, 972, portOf(two, 'api')),
+  ];
+  const { rows } = lay(records, undefined, true);
+  const widths = rows[0]?.map((cell) => cell.length) ?? [];
+  for (const row of rows) {
+    assert.deepEqual(
+      row.map((cell) => cell.length),
+      widths,
+    );
+  }
+});
+
+test('no rendered line runs past the window, and painting never changes a width', () => {
+  const records = withCommand(listening(one, 973, portOf(one, 'api')), longCommand);
+  // The floor below which no clipping can help is the other columns' own rendered width.
+  const floor = Math.max(...render(lay(records, 1).rows).map(visibleWidth));
   for (const width of [400, 200, 120, 100, floor + 1, floor]) {
-    const lines = render(fitLastColumn(wideRows(), width));
-    for (const line of lines) {
+    const { rows, columns } = lay(records, width);
+    const painted = paintRows(rows, columns, records);
+    // Painting is applied to the PADDED cell, so it may add bytes but never columns.
+    assert.deepEqual(
+      painted.map((row) => row.map(visibleWidth)),
+      rows.map((row) => row.map((cell) => cell.length)),
+    );
+    for (const line of render(painted)) {
       assert.ok(
         visibleWidth(line) <= width,
         `a line of ${String(visibleWidth(line))} in a window of ${String(width)}: ${line}`,
@@ -459,68 +523,56 @@ test('no rendered line runs past the window, with colour in the table', () => {
     }
   }
   assert.ok(
-    Math.max(...render(wideRows()).map(visibleWidth)) > 400,
+    Math.max(...render(lay(records, undefined).rows).map(visibleWidth)) > 400,
     'the unclipped rows really are too long for any of those windows',
   );
 });
 
-test('below the width of its own fixed columns, the table can only give up the command', () => {
-  /*
-   * Eight columns have a minimum width and clipping the last one cannot go under it. The honest
-   * behaviour there is an empty command column and a table that is as narrow as it can be, rather
-   * than a promise this cannot keep -- so this pins what actually happens instead of asserting a
-   * guarantee that would be false.
-   */
-  const fitted = fitLastColumn(wideRows(), 20);
-  for (const row of fitted.slice(1)) assert.equal(row[row.length - 1], '');
-  const floor = Math.max(...render(fitted).map(visibleWidth));
-  assert.ok(floor > 20, 'the fixed columns are wider than the window, and nothing here can help');
+test('the heading is clipped with everything else', () => {
+  const records = withCommand(listening(one, 974, portOf(one, 'api')), longCommand);
+  assert.equal(lay(records, 400).rows[0]?.at(-1)?.trim(), 'COMMAND');
+  const narrow = lay(records, 60).rows[0]?.at(-1) ?? '';
+  assert.ok(narrow.trim().length < 'COMMAND'.length, `the heading was not clipped: ${narrow}`);
 });
 
-test('the header is clipped with everything else', () => {
-  // `COMMAND` is seven characters, and a window narrow enough to matter has fewer to spare. Left
-  // out of the fit, the header alone would run past the edge of a table whose rows all fit.
-  const wide = fitLastColumn(wideRows(), 400)[0]?.at(-1);
-  const narrow = fitLastColumn(wideRows(), 60)[0]?.at(-1);
-  assert.equal(wide, pc.dim('COMMAND'), 'a wide window leaves the heading alone');
-  assert.ok(
-    visibleWidth(narrow ?? '') < visibleWidth('COMMAND'),
-    `the heading was not clipped: ${String(narrow)}`,
-  );
-});
-
-test('a zero budget empties the last column rather than all but emptying it', () => {
+test('a budget below one empties the last column rather than all but emptying it', () => {
   /*
    * `truncate(cell, 0)` is `cell.slice(0, -1)` -- the whole string but its last character -- so
    * the narrowest window would otherwise produce the WIDEST output this can produce.
    */
-  const fitted = fitLastColumn(wideRows(), 10);
-  for (const row of fitted.slice(1)) assert.equal(row[row.length - 1], '');
-  for (const line of render(fitted)) assert.ok(!line.includes('server.js'));
+  const records = withCommand(listening(one, 975, portOf(one, 'api')), longCommand);
+  const { rows } = lay(records, 20);
+  for (const row of rows) assert.equal(row.at(-1), '');
+  for (const line of render(rows)) assert.ok(!line.includes('server.js'));
 });
 
 test('with no window there is nothing to fit, and nothing is clipped', () => {
-  const fitted = fitLastColumn(wideRows(), undefined);
-  assert.equal(fitted[1]?.[fitted[1].length - 1], longCommand);
+  const records = withCommand(listening(one, 976, portOf(one, 'api')), longCommand);
+  assert.equal(lay(records, undefined).rows[1]?.at(-1)?.trim(), longCommand);
 });
 
-test('the header has one cell per column of every row', () => {
-  const rows = serversListRows(listening(one, 961, portOf(one, 'api')));
-  const [header, ...data] = rows;
-  assert.equal(header?.length, 8);
-  for (const row of data) assert.equal(row.length, 8);
+test('the clone badge is the hue BEHIND the whole padded cell', () => {
+  // A block of colour the width of the column, not a smear around one digit -- which is why the
+  // paint is applied after the padding rather than to the value.
+  const records = listening(one, 977, portOf(one, 'api'));
+  const { rows, columns } = lay(records, undefined);
+  const cell = paintRows(rows, columns, records)[1]?.[0] ?? '';
+  assert.ok(cell.includes('48;2;'), 'the hue is a background');
+  assert.equal(visibleWidth(cell), rows[1]?.[0]?.length, 'and it changes no width');
+  const plain = cell.replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g'), '');
+  assert.equal(plain, '  1  ', 'the padding is inside the colour, not outside it');
 });
 
-test('a serving record carries the URL its role renders, with that clone’s own port', () => {
-  const [record] = listening(two, 962, portOf(two, 'api'));
+test('a serving record carries the URL its role renders, with that clone\u2019s own port', () => {
+  const [record] = listening(two, 978, portOf(two, 'api'));
   assert.equal(record?.url, `http://localhost:${String(portOf(two, 'api'))}`);
 });
 
 test('a role declaring no URL gives a record with none', () => {
   // The fixture's `db` role is `url: null` -- a database port, which a URL does not describe.
   const [record] = classify({
-    listeners: [{ pid: 963, port: portOf(one, 'db') }],
-    cwds: [[963, one.path]],
+    listeners: [{ pid: 979, port: portOf(one, 'db') }],
+    cwds: [[979, one.path]],
   });
   assert.equal(record?.role, 'db');
   assert.equal(record.url, undefined, 'asserted on the record, never on how an absent cell paints');

@@ -275,6 +275,7 @@ servers
   .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2); defaults to every clone')
   .option('-a, --all', 'report every clone')
   .option('--stale', 'show only what wants a look: untracked, stray, crossed and stale')
+  .option('--roles', 'add the port role each server is on, which its own name rarely matches')
   .action((clones: string[], options: ServersListOptions) => {
     serversList(requireHangar(), clones, options);
   });
