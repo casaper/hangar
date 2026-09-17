@@ -123,6 +123,12 @@ export const EXPOSURES: readonly Exposure[] = [
   },
   { name: 'status', path: ['status'], acts: false },
   {
+    name: 'servers_list',
+    path: ['servers', 'list'],
+    acts: false,
+    lede: 'Reports what every clone is serving, and what is serving that nothing recorded. Reads and changes nothing.',
+  },
+  {
     name: 'doctor',
     path: ['doctor'],
     hides: ['--fix'],

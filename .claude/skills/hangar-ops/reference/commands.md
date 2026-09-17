@@ -33,6 +33,7 @@ another name.
 | `list` | `list` | — |
 | `ports` | `ports` (always `--json`) | — |
 | `status` | `status` | — |
+| `servers list` | `servers_list` | — |
 | `doctor` | `doctor` | `doctor_fix` |
 | `sync` | `sync_preview` | `sync` (`strategy` picks rebase or merge) |
 | `checkout-default` | `checkout_default_preview` | `checkout_default` |
@@ -166,6 +167,7 @@ stderr as having no tool at all, is the developer tab's to fix, not yours.
 | `colours sync` (group alias `colors`) | — | `-n, --dry-run` · `--check` | act |
 | `colours change` | `<clone> <colour>` | `--force` | **act [user]**, no `-n` |
 | `colours list` | — | — | report |
+| `servers list` | `[clones...]` (defaults to every clone) | `-a, --all` · `--stale` | report |
 
 **`ide` always registers all four editor families that have a shareable setup** — `vscode`,
 `jetbrains`, `zed`, `emacs` — regardless of what `editor.kinds` says. `editor.kinds` decides which

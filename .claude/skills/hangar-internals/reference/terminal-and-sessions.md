@@ -162,8 +162,9 @@ delete a clone that is still serving stop protecting anything, with nothing to n
 are a pure function of its index, so there is nothing to configure.
 
 Both halves, not one: a listener answers *is this clone serving*, a pid file answers *what is it
-called and how do I stop it*, and only the pid file survives a server on a port this hangar never
-assigned. A pid file wins when both name the same process.
+called and how do I stop it*. A pid file wins when both name the same process. Within one clone's
+own ports the pid file is also the only half that survives a server on a port this hangar never
+assigned -- across the fleet, `hangar servers list` reaches those by working directory instead.
 
 **Both of `remove-clone`'s guards depend on `lsof`, and only one of them says so.** The server
 guard reports `portsChecked: false` and blocks. The SESSION guard cannot: `claudeSessionsIn` needs
@@ -171,6 +172,42 @@ guard reports `portsChecked: false` and blocks. The SESSION guard cannot: `claud
 passes quietly. The deletion is still blocked — by the server guard, which fires on the same
 missing tool — so nothing gets through; but do not read a passing session guard on a machine
 without `lsof` as evidence that no session is running.
+
+**`hangar servers list` asks the same two questions UNFILTERED, and the extra answers are the
+point.** `runningServersIn` asks "is this clone's own port taken", which is one filtered question
+and the right one for a single-clone caller. `allListeners` asks for every listening socket on the
+machine, `cwdsOf` attributes each one to a clone, and the two facts are crossed to give seven
+states rather than a list. Three of them are reachable no other way:
+
+- **`untracked`** -- listening on an assigned port with no pid file naming it. This is what "the
+  tracking lost a server" looks like from outside the clone, and a pid-file-only view calls it
+  nothing at all.
+- **`stray`** -- listening from inside a clone on a port no clone was assigned. Frequently the
+  developer's own editor: a language server or a test runner parented by the editor's helper
+  process is a normal thing to find in a checkout. So the PARENT is printed, and a stray is never
+  swept up by a bulk kill -- it dies only when it is named.
+- **`crossed`** -- listening on a SIBLING's assigned port. The one worth the whole feature. Every
+  clone's fallback is the same base port, so a clone whose environment never loaded serves on
+  clone 1's, and from then on anything pointed at clone 1 is testing the wrong checkout. A scan
+  that only asked about ports cannot see it, because the port is right and it is the clone that is
+  wrong.
+
+The remaining four -- `serving`, `silent`, `recycled`, `stale` -- are the pid file's own states.
+**`recycled` requires a KNOWN working directory outside the clone, never an absent one**:
+`cwdsOf` returns nothing for a pid it could not read, and reading that as "somewhere else" turns
+one unlucky `lsof` into "this server cannot be stopped", which is the guard failing in the
+direction that costs the developer the thing they asked for.
+
+**`pidFilesIn` reports a dead pid rather than dropping it, and the liveness filter lives in
+`runningServersIn`.** Those are two callers with opposite needs: a file naming a dead process is
+a `stale` record worth printing, and it is emphatically not a running server -- `remove-clone`
+turns a non-empty server list into a refusal to delete, so a file left by a hard-killed wrapper
+would have blocked that deletion for good.
+
+**The classification is a pure function and is tested against synthetic input**, because
+`crossed`, `recycled` and `stale` each need something deliberately broken -- a clone with no
+environment, a reissued pid number, a wrapper killed with a signal it cannot handle. They are the
+states that matter most and the ones no capture can ever reach. `test/servers.test.ts`.
 
 **`ServerScan.portsChecked` is why this is a record and not an array.** "Nothing is running" and
 "nobody could ask" are the same empty list, and `remove-clone` turns the first into a deletion —

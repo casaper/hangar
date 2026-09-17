@@ -107,7 +107,7 @@ const psRows = (): PsRow[] => {
 };
 
 /** Working directory of each pid, in one lsof call rather than one per process. */
-const cwdsOf = (pids: readonly number[]): Map<number, string> => {
+export const cwdsOf = (pids: readonly number[]): Map<number, string> => {
   const found = new Map<number, string>();
   if (pids.length === 0) return found;
   const res = run('lsof', ['-a', '-p', pids.join(','), '-d', 'cwd', '-Fpn']);
@@ -284,6 +284,79 @@ export const listenersOn = (ports: readonly number[]): Map<number, number> | und
     if (wanted.has(port) && !found.has(port)) found.set(port, pid);
   }
   return found;
+};
+
+/** One listening TCP socket: which process holds it, and on which port. */
+export type Listener = {
+  readonly pid: number;
+  readonly port: number;
+};
+
+/**
+ * EVERY listening TCP socket on the machine, not only the ports a clone was assigned.
+ *
+ * `listenersOn` answers "is this clone's own port taken", which is what a single-clone caller
+ * needs and is one filtered question. This asks the unfiltered one, and the extra answers are the
+ * whole reason it exists: a server listening on a port this hangar assigned to NOBODY is
+ * invisible to a filtered scan, and so is one that took a SIBLING's port -- which is what a clone
+ * whose direnv never loaded does, since every clone's fallback is the same base.
+ *
+ * Same `-F` parsing and the same missing-tool rule as `listenersOn`; see the note there for why
+ * `code === -1` is the only signal that may stand for "nobody could ask".
+ */
+export const allListeners = (): Listener[] | undefined => {
+  const res = run('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn']);
+  if (res.code === -1) return undefined;
+  const found: Listener[] = [];
+  const seen = new Set<string>();
+  let pid: number | undefined;
+  for (const line of res.stdout.split('\n')) {
+    if (line.startsWith('p')) {
+      pid = Number.parseInt(line.slice(1), 10);
+      continue;
+    }
+    if (!line.startsWith('n') || pid === undefined) continue;
+    const port = Number.parseInt(line.slice(line.lastIndexOf(':') + 1), 10);
+    if (Number.isNaN(port)) continue;
+    // One process binding both IPv4 and IPv6 on one port is one server, not two.
+    const key = `${String(pid)}:${String(port)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    found.push({ pid, port });
+  }
+  return found;
+};
+
+/** A process, its parent and its command line. */
+export type ProcessRow = {
+  readonly pid: number;
+  readonly ppid: number;
+  readonly command: string;
+};
+
+/**
+ * The whole process table keyed by pid, with parents.
+ *
+ * Separate from `psRows` and deliberately not folded into it: that one's column list is load-
+ * bearing for the Claude Code matcher (`args` must stay last and unquoted), and widening it to
+ * carry a parent would put a column between the elapsed time and the command line for the sake of
+ * a different caller. One more `ps` costs a few milliseconds once per run.
+ *
+ * The parent is what tells a developer their own dev server from one their EDITOR started -- a
+ * language server or a test runner parented by the editor's helper process is a perfectly normal
+ * thing to find listening inside a clone, and reporting it as an escaped server would be noise.
+ */
+export const processTable = (): Map<number, ProcessRow> => {
+  const table = new Map<number, ProcessRow>();
+  const res = run('ps', ['-axo', 'pid=,ppid=,args=']);
+  if (!res.ok) return table;
+  for (const line of res.stdout.split('\n')) {
+    const match = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
+    if (!match?.[1] || !match[2] || match[3] === undefined) continue;
+    const pid = Number.parseInt(match[1], 10);
+    table.set(pid, { pid, ppid: Number.parseInt(match[2], 10), command: match[3].trim() });
+  }
+  return table;
 };
 
 /** Where a branch that scopes its pid files per clone writes them. */

@@ -109,8 +109,8 @@ deliberately elsewhere, and none of it reaches a clone session:
 All three are at the hangar root, so a clone session has none of them and should not go looking:
 skills load only as far as the repository root, and each clone is its own repo.
 
-**Read freely; do not integrate.** `list`, `ports`, `status`, `colours list` and a bare `doctor`
-only report, and every `-n` is a dry run — except `hangar resume`'s, which is `--limit`, the one
+**Read freely; do not integrate.** `list`, `ports`, `status`, `servers list`, `colours list` and a
+bare `doctor` only report, and every `-n` is a dry run — except `hangar resume`'s, which is `--limit`, the one
 place in this CLI where `-n` does not mean "change nothing". A clone session is welcome to all of
 them, and `plans collect` and `tmp merge --quiet` already run there from `SessionEnd` hooks.
 The ones that move git state, files between clones, or windows on the developer's screen are the

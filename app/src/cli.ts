@@ -27,6 +27,7 @@ import { ports } from './commands/ports.ts';
 import { removeClone } from './commands/remove-clone.ts';
 import { resume } from './commands/resume.ts';
 import { setup } from './commands/setup.ts';
+import { serversList, type ServersListOptions } from './commands/servers.ts';
 import { status } from './commands/status.ts';
 import { teachRg } from './commands/teach-rg.ts';
 import { forcedStrategy, sync } from './commands/sync.ts';
@@ -246,6 +247,27 @@ program
   .option('-f, --fetch', 'fetch first, so the sync answer is authoritative')
   .action((clone, options) => {
     status(requireHangar(), clone, options);
+  });
+
+const servers = program
+  .command('servers')
+  .description('The long-running servers the clones are running: what is up, and what escaped');
+
+servers
+  .command('list')
+  .summary('Show every dev server the fleet is running, and every one nothing recorded')
+  .description(
+    [
+      "What each clone is serving, from two independent facts: the pid files its repo's own tooling writes, and what is actually listening on the ports this hangar assigned that clone.",
+      "The two disagreeing is the point. A port with a listener that no pid file names is a server the tracking lost; one listening on a port no clone was assigned is reported with the process that started it, because an editor starting its own language server or test runner inside a clone is normal and is not something to go killing; and one listening on ANOTHER clone's port is the failure worth catching, since every clone falls back to the same port when its environment is missing, and a test run then quietly verifies the wrong checkout.",
+      'It reads and changes nothing. With no clone named it reports the whole fleet.',
+    ].join('\n\n'),
+  )
+  .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2); defaults to every clone')
+  .option('-a, --all', 'report every clone')
+  .option('--stale', 'show only what wants a look: untracked, stray, crossed and stale')
+  .action((clones: string[], options: ServersListOptions) => {
+    serversList(requireHangar(), clones, options);
   });
 
 program
