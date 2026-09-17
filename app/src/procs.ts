@@ -290,35 +290,68 @@ export const listenersOn = (ports: readonly number[]): Map<number, number> | und
 export const pidDirIn = (clonePath: string): string =>
   join(clonePath, 'tmp', `_${basename(clonePath)}`);
 
-const pidsIn = (dir: string): RunningServer[] => {
+/**
+ * One `tmp/<name>.pid` file, and whether the process it names is still there.
+ *
+ * `alive` is carried rather than filtered out HERE, and that is the whole point of the record.
+ * A file naming a dead process is a real thing a developer wants told about -- it is what a
+ * hard-killed wrapper leaves behind -- but it is emphatically not a running server, and
+ * `runningServersIn` feeds `remove-clone`'s refusal to delete a clone that is still serving. So
+ * the reading and the judgement are two steps: this one reads, and every caller says which it
+ * wants. Dropping a dead pid in the loop below instead would make a leftover file block a
+ * deletion forever, with nothing to notice.
+ */
+export type PidFile = {
+  /** The file's stem: `ng_serve` for `ng_serve.pid`. */
+  readonly name: string;
+  readonly pid: number;
+  /** The file itself, so a stale one can be named and removed. */
+  readonly path: string;
+  readonly alive: boolean;
+};
+
+const pidFilesIn = (dir: string): PidFile[] => {
   let entries: string[];
   try {
     entries = readdirSync(dir);
   } catch {
     return [];
   }
-  const servers: RunningServer[] = [];
+  const files: PidFile[] = [];
   for (const entry of entries) {
     if (!entry.endsWith('.pid')) continue;
+    const path = join(dir, entry);
     try {
-      const pid = Number.parseInt(readFileSync(join(dir, entry), 'utf8').trim(), 10);
-      if (!Number.isNaN(pid) && isAlive(pid)) {
-        servers.push({ name: entry.replace(/\.pid$/, ''), pid, how: 'pid file' });
+      const pid = Number.parseInt(readFileSync(path, 'utf8').trim(), 10);
+      if (!Number.isNaN(pid)) {
+        files.push({ name: entry.replace(/\.pid$/, ''), pid, path, alive: isAlive(pid) });
       }
     } catch {
-      // A pid file that cannot be read is not a running server.
+      // A pid file that cannot be read says nothing either way, so it is not reported at all.
     }
   }
-  return servers;
+  return files;
 };
+
+/**
+ * Every pid file this clone has, from BOTH conventions, alive or not.
+ *
+ * `tmp/` is the clone's own directory (only the cache entries in it are symlinks into the fleet
+ * store), so a flat `tmp/<name>.pid` and a scoped `tmp/_<clone>/<name>.pid` are equally this
+ * clone's, and which of the two it writes is whatever its checked-out branch does.
+ */
+export const pidFilesFor = (clone: Clone): PidFile[] => [
+  ...pidFilesIn(pidDirIn(clone.path)),
+  ...pidFilesIn(join(clone.path, 'tmp')),
+];
 
 /**
  * Dev servers a clone has running: its pid files, AND anything listening on its ports.
  *
- * The pid files come first and are read from both places unconditionally -- `tmp/` is the
- * clone's OWN directory (only the cache entries in it are symlinks into the fleet store), so a
- * flat `tmp/<name>.pid` and a scoped `tmp/_<clone>/<name>.pid` are equally this clone's, and
- * which of the two a clone writes is whatever its checked-out branch does.
+ * The pid files come first, from both of the places `pidFilesFor` reads, and only the ones whose
+ * process is still alive. **That filter lives here rather than in the reader**: a leftover file
+ * naming a dead process is worth reporting, and `remove-clone` turns a non-empty list into a
+ * refusal to delete -- so a hard-killed wrapper would otherwise block that deletion for good.
  *
  * **The port half exists because the pid-file half is a convention of one repo.** `*.pid` files
  * are written by this app repo's own `dev/run-with-pid.mjs`; a repo that starts its servers any
@@ -333,7 +366,9 @@ const pidsIn = (dir: string): RunningServer[] => {
  * gets the name they can kill.
  */
 export const runningServersIn = (clone: Clone): ServerScan => {
-  const byPid = [...pidsIn(pidDirIn(clone.path)), ...pidsIn(join(clone.path, 'tmp'))];
+  const byPid: RunningServer[] = pidFilesFor(clone)
+    .filter((file) => file.alive)
+    .map((file) => ({ name: file.name, pid: file.pid, how: 'pid file' }));
   const known = new Set(byPid.map((s) => s.pid));
   const listeners = listenersOn(clone.ports.map((entry) => entry.port));
   const servers = [...byPid];
