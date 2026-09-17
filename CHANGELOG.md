@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/casaper/hangar/compare/v0.25.0...v0.26.0) (2026-09-17)
+
+### Features
+
+* **editor:** Open a clone's editors with one command, a key, and only when asked ([9d5df75](https://github.com/casaper/hangar/commit/9d5df7577236a45194029f77a119e15766b903cc))
+* **sync:** Rebase a default branch that has diverged, instead of leaving it behind ([ceb7afc](https://github.com/casaper/hangar/commit/ceb7afcdada2006e7db19998f2d5327ade88e440))
+
 ## [0.25.0](https://github.com/casaper/hangar/compare/v0.24.0...v0.25.0) (2026-09-15)
 
 ### Features
