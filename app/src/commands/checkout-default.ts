@@ -35,12 +35,13 @@ import type { Hangar } from '../hangar.ts';
  *   would be the silent-wrong-thing this fleet is built to avoid. So a dirty tree is refused
  *   when a branch SWITCH is what would carry it, and not otherwise -- see
  *   `requireCleanForSwitch`.
- * - **It only ever fast-forwards.** The point of the command is to land on a CURRENT default
- *   branch, so after the checkout it pulls -- as `git merge --ff-only origin/<default>`, using
- *   the refs the fetch above already brought, which is what makes it one network round trip
- *   rather than two. A local default branch that has DIVERGED (its own commits and origin's) is
- *   reported and left alone: reconciling that is an integration, which is `sync`'s job, with
- *   `sync`'s stash protocol and its conflict resolution behind it.
+ * - **It integrates, but it never merges.** The point of the command is to land on a CURRENT
+ *   default branch, so after the checkout it pulls -- against the refs the fetch above already
+ *   brought, which is what makes it one network round trip rather than two. Behind, that is
+ *   `git merge --ff-only origin/<default>`; DIVERGED (its own commits and origin's), it is
+ *   `git rebase origin/<default>`, which is what `git pull --rebase` does. A merge commit on the
+ *   default branch is the one outcome neither path can produce, and a rebase that conflicts is
+ *   left for the developer rather than resolved -- `bringUpToDate` has both halves.
  * - **It sends no `SYNC PAUSE`.** That protocol exists because a sync holds a working tree for
  *   minutes and hands conflicts to a second Claude Code run; a checkout is one instant
  *   operation. What a live session needs here is for the human to know, so a clone with one asks
@@ -59,7 +60,7 @@ export type CheckoutDefaultOptions = {
  * `branch` is the one addition: absent means the repo's default branch, which is the whole point
  * of this command, and present means that branch instead -- `hangar open --branch <name>` is the
  * caller for it. The resolution is the only thing it changes; every guard, the fetch and the
- * fast-forward are the same, which is what keeps `open` from growing a second, subtly different
+ * integration are the same, which is what keeps `open` from growing a second, subtly different
  * idea of what it means to put a clone on a branch.
  */
 export type Landing = {
@@ -193,6 +194,20 @@ export const landOnBranch = (
         ),
       );
     }
+    /*
+     * The one outcome that REWRITES a commit gets said out loud before it happens. Read against
+     * the refs this clone has now, because the dry run returns above the fetch -- so it can miss
+     * a divergence origin has only just grown, and it cannot invent one. That is the safe
+     * direction for a line whose whole job is a warning.
+     */
+    const divergence = known === undefined ? undefined : aheadBehind(clone.path, known);
+    if (divergence !== undefined && divergence.ahead > 0 && divergence.behind > 0) {
+      note(
+        pc.yellow(
+          `diverged: ${divergence.ahead} commit(s) here and ${divergence.behind} on origin/${known} before the fetch — the run would rebase`,
+        ),
+      );
+    }
     note(
       `sessions: ${sessions.length === 0 ? 'none' : sessions.map((s) => `pid ${s.pid} on ${s.tty ?? 'no tty'}`).join(', ')}`,
     );
@@ -223,7 +238,7 @@ export const landOnBranch = (
     if (!checkout(clone, target)) return 'failed';
   }
 
-  return fastForward(hangar, clone, target) ? 'done' : 'failed';
+  return bringUpToDate(hangar, clone, target) ? 'done' : 'failed';
 };
 
 /**
@@ -276,22 +291,51 @@ const checkout = (clone: Clone, branch: string): boolean => {
 };
 
 /**
+ * How far a local branch is from its origin copy, in one read. `undefined` when git would not
+ * answer -- a branch with no remote counterpart included, which is why every caller tests for
+ * that first rather than reading a zero here as "level".
+ *
+ * One reading for the dry run and the real run, so the line `-n` prints about a divergence and
+ * the branch the run then rebases are the same measurement taken twice, never two.
+ */
+const aheadBehind = (
+  path: string,
+  branch: string,
+): { ahead: number; behind: number } | undefined => {
+  const counts = gitTry(path, ['rev-list', '--left-right', '--count', `origin/${branch}...HEAD`]);
+  if (counts === undefined) return undefined;
+  const [behind = '0', ahead = '0'] = counts.split(/\s+/);
+  return { ahead: Number.parseInt(ahead, 10), behind: Number.parseInt(behind, 10) };
+};
+
+/**
  * Bring the branch we just checked out up to the origin copy the fetch already brought.
  *
- * `git merge --ff-only origin/<branch>` rather than `git pull`: the fetch happened at the top of
- * this run, so pulling again would be a second round trip for refs we already have -- and
- * `--ff-only` is the whole safety story. It can only move the branch pointer forward, so it
- * cannot conflict, cannot write a merge commit and cannot touch a file the working tree has
- * modified (which is refused before the fetch anyway).
+ * Against `origin/<branch>` rather than through `git pull`: the fetch happened at the top of this
+ * run, so pulling again would be a second round trip for refs we already have.
  *
- * The three states it distinguishes matter more than the fast-forward itself. AHEAD-only means
- * unpushed commits sitting on the default branch, which is worth saying out loud but is nothing
- * to pull. DIVERGED means both, and it stops here: reconciling that needs a rebase or a merge,
- * which is `sync` -- with its stash label, its live-session pause and its conflict resolution.
- * Doing it silently under a command whose name says "checkout" is exactly the surprise this
- * fleet is built to avoid.
+ * The three states it distinguishes matter more than the move itself:
+ *
+ * - **BEHIND only** is `git merge --ff-only`, which can only move the branch pointer forward --
+ *   it cannot conflict, cannot write a merge commit and cannot touch a file the working tree has
+ *   modified (git refuses in its own words when the commits it would apply do).
+ * - **AHEAD only** is unpushed commits sitting on the default branch: worth saying out loud, and
+ *   nothing to pull.
+ * - **DIVERGED** -- both -- is `git rebase origin/<branch>`, which is what `git pull --rebase`
+ *   does with the fetch already paid for. Nothing is lost by it: the local commits are replayed
+ *   on top, and a rebase that stops leaves them reachable through `ORIG_HEAD` either way.
+ *
+ * **A rebase that conflicts is LEFT in place**, and that is the deliberate half. There is no
+ * resolver here the way there is in `sync`, so the alternative is `--abort`ing on the developer's
+ * behalf and reporting a clone that is still behind -- which hides the one state they have to
+ * act on. Instead it says so, names `--continue` and `--abort`, and returns false; the next run's
+ * `inProgressOperation` guard refuses before it touches anything.
+ *
+ * And no `--autostash`, which is the same rule as the header's: this command does not stash.
+ * `git rebase` refuses outright on a dirty tree, in its own words, and the hint names `hangar
+ * sync` -- which stashes under a label `hangar status` can recognise and puts it back.
  */
-const fastForward = (hangar: Hangar, clone: Clone, branch: string): boolean => {
+const bringUpToDate = (hangar: Hangar, clone: Clone, branch: string): boolean => {
   const remote = `origin/${branch}`;
   // A branch that exists only here has nothing to pull, and saying so beats warning that a
   // comparison failed. Reachable through `--branch <name>`: an unpushed local branch.
@@ -299,21 +343,40 @@ const fastForward = (hangar: Hangar, clone: Clone, branch: string): boolean => {
     ok(`on ${branch} — local only, so there is nothing to pull`);
     return true;
   }
-  const counts = gitTry(clone.path, ['rev-list', '--left-right', '--count', `${remote}...HEAD`]);
+  const counts = aheadBehind(clone.path, branch);
   if (counts === undefined) {
     warn(`could not compare ${branch} with ${remote}`);
     return true;
   }
-  const [behindRaw = '0', aheadRaw = '0'] = counts.split(/\s+/);
-  const behind = Number.parseInt(behindRaw, 10);
-  const ahead = Number.parseInt(aheadRaw, 10);
+  const { ahead, behind } = counts;
 
   if (ahead > 0 && behind > 0) {
-    warn(`${branch} has diverged from ${remote}: ${ahead} commit(s) here, ${behind} there`);
+    note(`${branch} has diverged from ${remote}: ${ahead} commit(s) here, ${behind} there`);
+    step(`git rebase ${remote}`);
+    if (git(clone.path, ['rebase', remote], { inherit: true }).ok) {
+      ok(`rebased ${ahead} commit(s) onto ${remote}`);
+      return true;
+    }
+    /*
+     * WHICH failure, read from the state directory rather than from git's message -- the same
+     * rule `sync` reads a rebase's progress by, and here it is the difference between two
+     * opposite instructions. A rebase that CONFLICTED is half applied and wants `--continue`;
+     * one that never STARTED (the common shape: a dirty tree, which `git rebase` refuses
+     * outright and `merge --ff-only` does not) has nothing to continue, and telling somebody to
+     * continue a rebase that is not there is worse than saying nothing.
+     */
+    if (inProgressOperation(clone.path) === 'rebase') {
+      warn(`could not finish rebasing ${branch} onto ${remote} — ${clone.name} is left mid-rebase`);
+      note(
+        `Resolve it and \`git -C ${clone.path} rebase --continue\`, or \`--abort\` to put the branch back. Nothing else here will touch this clone until you do.`,
+      );
+      return false;
+    }
+    warn(`the rebase of ${branch} onto ${remote} did not start — ${clone.name} is as it was`);
     note(
-      `Left as it is — \`hangar sync ${clone.index}\` rebases or merges it, which is what reconciling that needs.`,
+      `git's own reason is above; an unstaged change is the usual one, and this command does not stash. Commit it, stash it (\`git -C ${clone.path} stash\`), or run \`hangar sync ${clone.index}\`, which stashes and restores around the integration.`,
     );
-    return true;
+    return false;
   }
   if (behind === 0) {
     if (ahead > 0) note(`${ahead} commit(s) here are not on ${remote} yet — nothing to pull`);

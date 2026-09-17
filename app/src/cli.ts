@@ -299,12 +299,12 @@ program
 program
   .command('checkout-default')
   .alias('checkout')
-  .summary("Fetch, check out the repo's default branch and fast-forward it")
+  .summary("Fetch, check out the repo's default branch and bring it up to date")
   .description(
     [
       "Fetch everything, then check out the repo's default branch and bring it up to date.",
       'Which branch that is comes from `forge.defaultBranch` in `hangar.config.yaml` — detected from git the first time anything needs it and recorded there, so the question is asked once per hangar and no command falls back to `master`.',
-      'It refuses rather than carry uncommitted changes onto the default branch, and it only ever fast-forwards: a default branch that has diverged from origin is reported and left alone, because reconciling that is `hangar sync`.',
+      'It refuses rather than carry uncommitted changes onto the default branch. A branch that is merely behind is fast-forwarded; one that has diverged — commits of its own and origin’s — is rebased, which is `git pull --rebase` with the fetch already paid for. A rebase that conflicts is left for you, with `--continue` and `--abort` named.',
     ].join('\n\n'),
   )
   .argument('[clone]', 'clone name, e.g. clone_02 (or just 2)')

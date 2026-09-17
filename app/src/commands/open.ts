@@ -393,7 +393,13 @@ const SOURCE_LABEL = {
  */
 const land = (clone: Clone, opts: OpenOptions, sweeping: boolean): void => {
   try {
-    landOnBranch(clone.hangar, clone, opts, sweeping);
+    // A landing can also fail without throwing -- a rebase of a diverged default branch that
+    // stops on a conflict is left in place, by design. `checkout-default` reports that as the
+    // answer to the command; here it is one more warning, because the window still opens and the
+    // developer is about to be looking at the tree it is about.
+    if (landOnBranch(clone.hangar, clone, opts, sweeping) === 'failed') {
+      warn(`${clone.name}: the branch did not land — opening it in the state above.`);
+    }
   } catch (error) {
     // EVERY error, not just CliError. This runs inside the clone loop, before the session is
     // created, so anything that escapes here costs the whole run its windows -- and `open`'s

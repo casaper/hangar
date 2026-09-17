@@ -55,9 +55,13 @@ through the same Bitbucket adapter.
   `forge.defaultBranch` is the one answer the whole hangar uses — `reference/config.md` has why it
   is stored rather than derived — and there is no `master` fallback anywhere behind it. It differs
   from `sync` in three deliberate
-  ways: it **only ever fast-forwards** (`git merge --ff-only` on the refs the fetch already
-  brought, so one round trip and no possible conflict — a diverged default branch is reported and
-  left for `sync`); it **does not stash**, refusing a tree with modified files only when a branch
+  ways: it **integrates but never merges** — behind, `git merge --ff-only` on the refs the fetch
+  already brought, so one round trip and no possible conflict; DIVERGED,
+  `git rebase origin/<default>`, which is `git pull --rebase` with that same fetch already paid
+  for, and which is left IN PLACE when it conflicts because there is no resolver here and
+  `--abort`ing on the developer's behalf would hide the one state they have to act on (the next
+  run's `inProgressOperation` guard then refuses before touching anything); it
+  **does not stash**, refusing a tree with modified files only when a branch
   SWITCH is what would carry them, and not when the clone is already on the default branch and
   `merge --ff-only` can police itself; and it sends **no `SYNC PAUSE`**, because that protocol
   buys a paused agent a guaranteed closing message for an operation that takes minutes, and this
@@ -141,7 +145,8 @@ through the same Bitbucket adapter.
   `claude`, and a session that starts before the checkout reads one tree while the developer
   looks at another. Severity is where they differ: a `CliError` from the landing is the ANSWER to
   `checkout-default` and only a warning here, after which the clone is opened on whatever branch
-  it already has — refusing a window over a dirty tree would be the worse trade, and it is the
+  it already has — and a landing that FAILS without throwing, which is what a rebase that stopped
+  on a conflict is, gets the same one warning before the window opens — refusing a window over a dirty tree would be the worse trade, and it is the
   same degradation `open` already applies to an editor that will not launch. `--branch <name>`
   overrides the default-branch resolution and nothing else about the landing; `--no-checkout`
   skips it entirely.
