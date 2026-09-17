@@ -209,6 +209,28 @@ would have blocked that deletion for good.
 environment, a reissued pid number, a wrapper killed with a signal it cannot handle. They are the
 states that matter most and the ones no capture can ever reach. `test/servers.test.ts`.
 
+**`hangar servers start` puts the port in front of the command, and that is the whole reason it
+is safer than typing the same line by hand.** A port role's port comes from an environment
+variable, and every clone's fallback when that variable is missing is the same base -- so a clone
+whose direnv did not load serves on clone 1's port, which is the `crossed` state above, reached by
+accident rather than by choice. A shell assignment prefix wins over an exported value, so
+`<envKey>=<this clone's port> <command>` is right whether or not direnv ran. The line is typed
+into the window with `send-keys`, into the developer's own shell, which is what makes `npm run …`
+resolve the way it does by hand.
+
+**It requires a session rather than creating one.** `hangar open` builds a clone's session with
+every role the config declares; a session created here would hold one server window and none of
+them, and `open` would then find a session already there and simply attach. The clone would
+quietly lose its own tabs, from a command about dev servers.
+
+**`ports.roles[].start` is the config key, and hangar never learns what a dev server is.** It runs
+the line in the directory the config names. In this hangar that line goes through the repo's own
+pid-file wrapper, which is what makes the server stoppable by name afterwards -- but that is the
+repo's business. **The key reaches no generated artifact**, unlike `healthCheck`, which becomes a
+`permissions.allow` curl rule and so appears in the golden capture. So `gated/` does not move for
+it, and what proves it is live is the suite reading each fixture's own start command back out
+through `startPlan`.
+
 **`hangar servers kill` refuses four times, and every refusal is about the same hazard**: a pid is
 a small integer the kernel reissues, so a signal aimed at a record that has gone stale reaches
 whatever holds that number now.

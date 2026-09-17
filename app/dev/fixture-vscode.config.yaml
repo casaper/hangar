@@ -25,6 +25,8 @@
 #   * `ports.offset: 0`
 #   * a non-default `forge.prCacheTtlSeconds`, so the clone bar's refresh interval is shown to
 #     come from the config rather than from the constant behind it
+#   * a port role's `start` with a `dir`, which only means anything where `repo.appDir` is
+#     non-empty; `dev/fixture.config.yaml` carries the form with no `dir`
 id: vsfix
 displayName: vscode fixture
 profile: node-web
@@ -122,6 +124,11 @@ ports:
         kind: httpCurl
         timeoutSeconds: 20
         path: /healthz
+      # The `dir` form of `start`, which is the one that needs a non-empty `repo.appDir` to be
+      # worth having. `dev/fixture.config.yaml` carries the form with no `dir`.
+      start:
+        command: pnpm dev
+        dir: apps/web
     - id: storybook
       envKey: VSFIX_STORYBOOK_PORT
       base: 6006

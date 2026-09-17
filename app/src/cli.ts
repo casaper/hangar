@@ -31,9 +31,11 @@ import {
   serversKill,
   serversList,
   serversPrune,
+  serversStart,
   type KillOptions,
   type PruneOptions,
   type ServersListOptions,
+  type StartOptions,
 } from './commands/servers.ts';
 import { status } from './commands/status.ts';
 import { teachRg } from './commands/teach-rg.ts';
@@ -275,6 +277,24 @@ servers
   .option('--stale', 'show only what wants a look: untracked, stray, crossed and stale')
   .action((clones: string[], options: ServersListOptions) => {
     serversList(requireHangar(), clones, options);
+  });
+
+servers
+  .command('start')
+  .summary("Start a clone's dev servers in its own tmux windows")
+  .description(
+    [
+      "Starts the servers a port role declares a `start` command for, each in a window of that clone's own tmux session, so the output is somewhere you can go and look and the server outlives the command that started it.",
+      "The port is set in front of the command rather than left to the clone's environment. Every clone falls back to the same port when that environment is missing, so a clone whose direnv did not load would otherwise serve on clone 1's port and quietly answer for the wrong checkout — which is exactly what `hangar servers list` reports as crossed.",
+      'It needs the clone to have a session already, because building one here would give it a server window and none of the roles `hangar open` creates. A role already serving, or one that already has a window, is left alone and said so.',
+    ].join('\n\n'),
+  )
+  .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2)')
+  .option('-a, --all', 'every clone')
+  .option('--role <id...>', 'only these port roles; the default is every role that declares one')
+  .option('-n, --dry-run', 'print what would start, and start nothing')
+  .action((clones: string[], options: StartOptions) => {
+    serversStart(requireHangar(), clones, options);
   });
 
 servers

@@ -34,6 +34,7 @@ another name.
 | `ports` | `ports` (always `--json`) | — |
 | `status` | `status` | — |
 | `servers list` | `servers_list` | — |
+| `servers start` | `servers_start_preview` | `servers_start` |
 | `servers kill` | `servers_kill_preview` | `servers_kill` |
 | `servers prune` | `servers_prune_preview` | `servers_prune` |
 | `doctor` | `doctor` | `doctor_fix` |
@@ -170,6 +171,7 @@ stderr as having no tool at all, is the developer tab's to fix, not yours.
 | `colours change` | `<clone> <colour>` | `--force` | **act [user]**, no `-n` |
 | `colours list` | — | — | report |
 | `servers list` | `[clones...]` (defaults to every clone) | `-a, --all` · `--stale` | report |
+| `servers start` | `[clones...]` | `-a, --all` · `--role <id...>` · `-n, --dry-run` | **act [user]** (needs the clone to have a tmux session) |
 | `servers kill` | `[clones...]` | `-a, --all` · `--role <id...>` · `--name <stem...>` · `--pid <pid...>` · `--force` · `-n, --dry-run` · `-y, --yes` | **act [user]** |
 | `servers prune` | `[clones...]` (defaults to every clone) | `-a, --all` · `-n, --dry-run` | act |
 

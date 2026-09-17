@@ -291,6 +291,24 @@ const healthCheckSchema = z.strictObject({
   path: z.string().default(''),
 });
 
+/**
+ * How to START the server that listens on a port role, for `hangar servers start`.
+ *
+ * A shell line rather than an argv list, because that is what `terminal.tabs[].command` already
+ * is and what tmux is handed: the window runs the developer's own shell and the line is typed
+ * into it, so direnv has loaded and `npm run …` resolves the way it does by hand.
+ *
+ * Hangar never learns what a dev server IS. It runs this line in this directory, and whether that
+ * line goes through a repo's own pid-file wrapper -- which is what makes the server stoppable by
+ * name afterwards -- is the repo's business and not something to encode here.
+ */
+const portStartSchema = z.strictObject({
+  /** A shell line, run in the clone's own tmux window. */
+  command: z.string().min(1),
+  /** Where to run it, relative to the clone root. Empty means the clone root itself. */
+  dir: z.string().default(''),
+});
+
 const portRoleSchema = z.strictObject({
   id: z.string().regex(/^[a-z][A-Za-z0-9]*$/, 'must be a lowerCamelCase identifier'),
   envKey: z.string().regex(/^[A-Z][A-Z0-9_]*$/, 'must be an UPPER_SNAKE env var name'),
@@ -299,6 +317,7 @@ const portRoleSchema = z.strictObject({
   /** `null` for a role with no URL. */
   url: z.string().min(1).nullable().default('http://localhost:{port}'),
   healthCheck: healthCheckSchema.optional(),
+  start: portStartSchema.optional(),
 });
 
 const portsSchema = z.strictObject({

@@ -71,6 +71,10 @@ ports:
       envKey: FIXTURE_API_PORT
       base: 3000
       label: PostgREST
+      # A `start` with NO `dir`: a repo whose server starts at the clone root. The other fixture
+      # carries the `dir` form, so between them both branches of `startPlan`'s cwd are covered.
+      start:
+        command: make serve
       healthCheck:
         kind: httpCurl
         timeoutSeconds: 7

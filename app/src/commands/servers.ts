@@ -1,4 +1,5 @@
 import { readFileSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 
 import pc from 'picocolors';
 
@@ -17,6 +18,7 @@ import {
   type PidFile,
   type ProcessRow,
 } from '../procs.ts';
+import { tmuxServer } from '../tmux.ts';
 import { blank, cloneLabel, confirm, heading, note, ok, raw, table, warn } from '../ui.ts';
 
 /**
@@ -695,4 +697,168 @@ export const serversPrune = (hangar: Hangar, refs: readonly string[], opts: Prun
   }
   if (removed === 0) note('No pid file names a process that is gone.');
   else if (opts.dryRun === true) note('(dry run — nothing was removed)');
+};
+
+/* ---------------------------------------------------------------- starting one */
+
+export type StartAction = {
+  readonly clone: Clone;
+  readonly role: string;
+  readonly label: string;
+  readonly port: number;
+  readonly cwd: string;
+  /** The line typed into the window, with the port already fixed. */
+  readonly command: string;
+};
+
+export type StartSkip = { readonly clone: Clone; readonly role: string; readonly why: string };
+
+export type StartPlan = {
+  readonly start: readonly StartAction[];
+  readonly skip: readonly StartSkip[];
+};
+
+/**
+ * The line `servers start` types into the window, with this clone's port fixed in front of it.
+ * PURE.
+ *
+ * **The prefix is the whole reason this command is safer than starting the server by hand.** A
+ * port role's port comes from an environment variable, and every clone's fallback when that
+ * variable is missing is the same base -- so a clone whose environment did not load serves on
+ * clone 1's port, and anything aimed at clone 1 then tests the wrong checkout. That is the
+ * `crossed` state, and it is reached by accident rather than by choice. Naming the variable in
+ * front of the command makes it a property of the invocation instead of of the shell: a shell
+ * assignment prefix wins over an exported value, so this is right whether or not direnv ran.
+ */
+export const startCommandLine = (envKey: string, port: number, command: string): string =>
+  `${envKey}=${String(port)} ${command}`;
+
+/**
+ * What `servers start` would do for these clones, and what it would decline. PURE.
+ *
+ * `serving` is a skip and not an error: asking for a server that is already up is the natural
+ * thing to type when you are not sure, and the honest answer is that it is up.
+ */
+export const startPlan = (
+  clones: readonly Clone[],
+  records: readonly ServerRecord[],
+  windowsOf: (clone: Clone) => readonly string[],
+  roleFilter: readonly string[] | undefined,
+): StartPlan => {
+  const wanted = new Set(roleFilter ?? []);
+  const start: StartAction[] = [];
+  const skip: StartSkip[] = [];
+
+  for (const clone of clones) {
+    const windows = new Set(windowsOf(clone));
+    const busy = new Set(
+      records.filter((r) => r.clone.index === clone.index).map((r) => r.port ?? 0),
+    );
+    for (const entry of clone.ports) {
+      const role = entry.role;
+      if (wanted.size > 0 && !wanted.has(role.id)) continue;
+      if (role.start === undefined) {
+        if (wanted.size > 0) {
+          skip.push({
+            clone,
+            role: role.id,
+            why: 'no `start` command in this hangar’s config for that role',
+          });
+        }
+        continue;
+      }
+      if (busy.has(entry.port)) {
+        skip.push({ clone, role: role.id, why: `already serving on ${String(entry.port)}` });
+        continue;
+      }
+      if (windows.has(role.id)) {
+        skip.push({
+          clone,
+          role: role.id,
+          why: 'the clone already has a window for that role — look there before starting a second',
+        });
+        continue;
+      }
+      start.push({
+        clone,
+        role: role.id,
+        label: role.label,
+        port: entry.port,
+        cwd: role.start.dir === '' ? clone.path : join(clone.path, role.start.dir),
+        command: startCommandLine(role.envKey, entry.port, role.start.command),
+      });
+    }
+  }
+  return { start, skip };
+};
+
+export type StartOptions = {
+  all?: boolean | undefined;
+  role?: string[] | undefined;
+  dryRun?: boolean | undefined;
+};
+
+export const serversStart = (hangar: Hangar, refs: readonly string[], opts: StartOptions): void => {
+  const clones = resolveClones(hangar, refs, opts.all, 'servers start');
+  const server = tmuxServer(hangar);
+  /*
+   * A session is required rather than created, and that is a boundary rather than a limitation.
+   * `hangar open` builds a clone's session with every role its config declares -- the shell, the
+   * agent -- and a session created here would hold one server window and none of them, after
+   * which `open` finds a session already there and simply attaches to it. So the clone would
+   * quietly lose its own tabs, from a command about dev servers.
+   */
+  const withoutSession = clones.filter((clone) => !server.hasSession(clone));
+  if (withoutSession.length > 0 && !server.running()) {
+    throw new CliError(
+      'this hangar has no tmux server running, so there is no window to start a server in',
+      `\`hangar open ${String(withoutSession[0]?.index ?? 1)}\` builds the clone's session first.`,
+    );
+  }
+
+  const scan = scanFleet(clones);
+  const plan = startPlan(
+    clones.filter((clone) => server.hasSession(clone)),
+    scan.records,
+    (clone) => server.roles(clone),
+    opts.role,
+  );
+  for (const clone of withoutSession) {
+    warn(`${clone.name}: no tmux session — \`hangar open ${String(clone.index)}\` first`);
+  }
+  for (const item of plan.skip) note(`${item.clone.name}: ${item.role} — ${item.why}`);
+
+  if (plan.start.length === 0) {
+    note('Nothing to start.');
+    return;
+  }
+
+  heading(opts.dryRun === true ? 'Would start' : 'Starting');
+  for (const action of plan.start) {
+    raw(`  ${action.clone.name}: ${action.label} on ${String(action.port)}`);
+    raw(`    ${pc.dim(`${action.cwd} $ ${action.command}`)}`);
+  }
+  if (opts.dryRun === true) {
+    note('(dry run — nothing was started)');
+    return;
+  }
+
+  for (const action of plan.start) {
+    const added = server.addWindow(action.clone, {
+      cwd: action.cwd,
+      command: action.command,
+      clone: action.clone.name,
+      role: action.role,
+    });
+    if (added) {
+      ok(
+        `${action.clone.name}: ${action.label} starting in its own window, on ${String(action.port)}`,
+      );
+    } else {
+      warn(`${action.clone.name}: could not add a window for ${action.role}`);
+    }
+  }
+  note(
+    'A server takes a moment to bind — `hangar servers list` says when it is up, and `hangar open` puts you in the window.',
+  );
 };

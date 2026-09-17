@@ -364,6 +364,17 @@ ports:
       label: Angular dev server
       # Default "http://localhost:{port}". `null` for a role that has no URL.
       # url: http://localhost:{port}
+      # What `hangar servers start` runs to bring this one up, in a window of the clone's own
+      # tmux session. Omit it and the role is reported and stopped but never started.
+      #
+      # A shell LINE, typed into the window's own shell, so direnv has loaded and `npm run ...`
+      # resolves as it would by hand. `hangar` puts `envKey=<this clone's port>` in front of it,
+      # which is what keeps a clone whose environment did not load from serving on clone 1's
+      # port. Point it at whatever wrapper the repo uses to record a pid, if it has one -- that
+      # is what lets `hangar servers kill` stop the server by name afterwards.
+      start:
+        command: npm run start
+        dir: angular          # clone-relative; default '' -- the clone root
     - id: storybook
       envKey: STORYBOOK_DEV_SERVER_PORT
       base: 6006
@@ -375,6 +386,9 @@ ports:
         kind: httpCurl        # the only kind
         timeoutSeconds: 3     # 1-60, default 3
         # path: /health       # default '' -- appended to the URL
+      start:
+        command: npm run storybook
+        dir: angular
     - id: playwrightReport
       envKey: PLAYWRIGHT_REPORT_PORT
       base: 9323

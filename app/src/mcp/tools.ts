@@ -263,6 +263,14 @@ export const EXPOSURES: readonly Exposure[] = [
   { name: 'edit', path: ['edit'], hides: [PREVIEW], acts: true },
   { name: 'close', path: ['close'], hides: [PREVIEW], acts: true },
   {
+    name: 'servers_start_preview',
+    path: ['servers', 'start'],
+    fixed: [PREVIEW],
+    acts: false,
+    lede: previewLede,
+  },
+  { name: 'servers_start', path: ['servers', 'start'], hides: [PREVIEW], acts: true },
+  {
     name: 'servers_kill_preview',
     path: ['servers', 'kill'],
     fixed: [PREVIEW],

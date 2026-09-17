@@ -7,6 +7,8 @@ import {
   programName,
   serversSummary,
   shortCommand,
+  startCommandLine,
+  startPlan,
   TROUBLE,
   type ClonePidFile,
   type ServerRecord,
@@ -14,7 +16,7 @@ import {
 import { cloneAt } from '../src/fleet.ts';
 import type { Listener, ProcessRow } from '../src/procs.ts';
 
-import { syntheticHangar } from './fixture.ts';
+import { fixtureVscodeConfigText, syntheticHangar } from './fixture.ts';
 
 /*
  * The classifier, against input no machine here can produce.
@@ -351,4 +353,55 @@ test('a record with no port is not reachable by --role', () => {
   assert.equal(silent[0]?.state, 'silent');
   assert.equal(silent[0].role, undefined);
   assert.equal(plannedFor(silent, { role: ['api'] }).kill.length, 0);
+});
+
+/* --------------------------------------------------------------- starting one */
+
+test('the start line fixes the port in front of the command', () => {
+  /*
+   * The reason this command is safer than typing the same thing by hand. Every clone's fallback
+   * when the port variable is missing is the SAME base, so a clone whose environment did not load
+   * serves on clone 1's port -- the `crossed` state above, reached by accident. A shell assignment
+   * prefix wins over an exported value, so this is right whether or not direnv ran.
+   */
+  assert.equal(startCommandLine('NG_PORT', 4300, 'npm run start'), 'NG_PORT=4300 npm run start');
+});
+
+test('a role with a start command is planned, in the clone’s own directory', () => {
+  // `api` is the fixture's only role with a `start`, and it declares no `dir`.
+  const plan = startPlan([one], [], () => [], undefined);
+  assert.equal(plan.start.length, 1);
+  assert.equal(plan.start[0]?.role, 'api');
+  assert.equal(plan.start[0].cwd, one.path, 'no dir means the clone root');
+  assert.equal(plan.start[0].command, `FIXTURE_API_PORT=${String(portOf(one, 'api'))} make serve`);
+});
+
+test('a start dir is resolved under the clone, not under the hangar', () => {
+  const vscode = syntheticHangar({ configText: fixtureVscodeConfigText() });
+  const clone = cloneAt(vscode, 2);
+  const plan = startPlan([clone], [], () => [], undefined);
+  const web = plan.start.find((a) => a.role === 'web');
+  assert.equal(web?.cwd, `${clone.path}/apps/web`);
+  assert.ok(web.command.startsWith('VSFIX_WEB_PORT='), 'the role’s own env key, not another');
+});
+
+test('a role already serving is skipped rather than started twice', () => {
+  const serving = listening(one, 950, portOf(one, 'api'));
+  const plan = startPlan([one], serving, () => [], undefined);
+  assert.equal(plan.start.length, 0);
+  assert.match(plan.skip[0]?.why ?? '', /already serving/);
+});
+
+test('a role whose window already exists is left alone', () => {
+  const plan = startPlan([one], [], () => ['api'], undefined);
+  assert.equal(plan.start.length, 0);
+  assert.match(plan.skip[0]?.why ?? '', /already has a window/);
+});
+
+test('a role asked for by name that declares no start command says so', () => {
+  const plan = startPlan([one], [], () => [], ['db']);
+  assert.equal(plan.start.length, 0);
+  assert.match(plan.skip[0]?.why ?? '', /no `start` command/);
+  // ...and the same role is silently passed over when nothing asked for it by name.
+  assert.equal(startPlan([one], [], () => [], undefined).skip.length, 0);
 });
