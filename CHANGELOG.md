@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.27.0](https://github.com/casaper/hangar/compare/v0.26.0...v0.27.0) (2026-09-17)
+
+### Features
+
+* **servers:** Report every dev server in the fleet, and the ones tracking lost ([559721b](https://github.com/casaper/hangar/commit/559721bd8ed2b50e349a8d7e4e15b0291b89ff2c))
+* **servers:** Start a clone's servers on the port that clone was assigned ([119e393](https://github.com/casaper/hangar/commit/119e393d05161cfd16ee27f46ebe07c641205288))
+* **servers:** Stop a dev server from the fleet root ([0e2a148](https://github.com/casaper/hangar/commit/0e2a1484bfd8c23648d0a5b203c81cdefd648f0c))
+
+### Bug Fixes
+
+* **servers:** Let --role match a server that is properly tracked ([6003f00](https://github.com/casaper/hangar/commit/6003f00600e9c47956ad84fa2394aa7348a59a51))
+
+### Refactoring
+
+* **servers:** Let a pid file report that its process is gone ([6d3dbb5](https://github.com/casaper/hangar/commit/6d3dbb5d3dc7dcfcae67da6ffe75d0b87fbfbce4))
+
 ## [0.26.0](https://github.com/casaper/hangar/compare/v0.25.0...v0.26.0) (2026-09-17)
 
 ### Features
