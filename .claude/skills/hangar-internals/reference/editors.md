@@ -110,6 +110,11 @@ caveat:
   a launcher), and a `.map` would let one of them take the default editor down with it. `open`
   and `doctor` then isolate each driver again around `isAvailable`/`launch`, so `[zed, vscode]`
   cannot lose VS Code to Zed's launcher — listing order alone would have decided that.
+- **It is called only where an editor was ASKED for**, through `editorsToOpen` in `open.ts`:
+  `hangar open -e`, and `hangar edit`, which is the whole editor half on its own and is what
+  `C-b C-e` runs. `open` opens no editor without `-e`, so building the drivers unconditionally
+  would put "this driver would not build" in front of a developer who wanted a terminal window and
+  can do nothing with the warning.
 - **`editorFor(kind)` builds only the kind asked for and does NOT catch.** It used to pick from
   `editors()`, which made `hangar ide vscode sync` construct every other configured driver
   first and depend on all of them. And an editor the developer named by running

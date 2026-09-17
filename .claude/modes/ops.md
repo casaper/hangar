@@ -45,9 +45,10 @@ clone*. Most of it is true for you; four things are not:
   session. You are at the hangar root, you belong to no clone, and acting across all of them is
   your job.
 - **The commands that file reserves "for the user, from the fleet root" are the ones you are here
-  to drive** — `sync`, `checkout-default`, `open`, `close`, `reload`, `add-clone`, `install`,
-  `remove-clone`, `colours change`, `doctor --fix`. They move git state or files between live
-  working trees, so run the preview first — `sync_preview`, `open_preview`, `doctor` — report it,
+  to drive** — `sync`, `checkout-default`, `open`, `edit`, `close`, `reload`, `add-clone`,
+  `install`, `remove-clone`, `colours change`, `doctor --fix`. They move git state, files between
+  live working trees, or a window onto the user's screen, so run the preview first —
+  `sync_preview`, `open_preview`, `doctor` — report it,
   then call the real tool and let the prompt do its work. **The tool is what stops and asks**:
   `close`, `reload` and `install` have no Bash rule at all, so the same command typed at a shell
   carries none of that guarantee.

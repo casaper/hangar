@@ -371,6 +371,51 @@ export const statusClickBinding = (hangar: Hangar): readonly string[] => [
 ];
 
 /**
+ * `bind-key -T prefix C-e` -- open the current clone's editors, without naming it.
+ *
+ * `C-b C-e` for "editor", and it is free: on tmux 3.7c the prefix table binds `C-b`, `C-o`, `C-z`
+ * and the four `C-arrow`s and no other Ctrl key, and this conf does not move the prefix. So it
+ * takes nothing away, which is the same rule the click binding below is built on.
+ *
+ * **`if-shell -b`, and not `run-shell -b`.** From tmux's own documentation for `run-shell`: "If
+ * -C is not given, any output to stdout is displayed in view mode (in the pane specified by -t or
+ * the current pane)". `hangar edit` reports what it opened, so `run-shell` would throw whatever
+ * the developer is looking at -- Claude Code, a dev server -- into a scratch view on every press.
+ * `if-shell` branches on the EXIT STATUS instead, both streams are redirected for the same
+ * reason, and the answer is one `display-message` line on the status bar either way.
+ *
+ * A session with no `@hangar_clone` -- one made by hand on this socket -- expands to an empty
+ * argument, `hangar edit ""` exits non-zero, and the failure branch is what appears. That is why
+ * there is no second `if-shell` testing for the option first.
+ *
+ * `bin/hangar` by ABSOLUTE path, for the same reason as the click: the shell tmux runs here
+ * inherits the SERVER's environment, which need not have direnv's PATH.
+ */
+export const editorKeyBinding = (hangar: Hangar): readonly string[] => [
+  'bind-key',
+  '-T',
+  'prefix',
+  'C-e',
+  'if-shell',
+  '-b',
+  `${hangar.paths.bin} edit "#{@hangar_clone}" >/dev/null 2>&1`,
+  'display-message "opened #{@hangar_clone} in its editor"',
+  'display-message "hangar edit failed for #{@hangar_clone} -- run it in a shell to see why"',
+];
+
+/**
+ * Every key this conf binds, in one list -- the shape `barOptions` has, and for the same reason.
+ *
+ * A binding is a command rather than an option, so it is the part of the layer `restyle` has to
+ * ISSUE rather than `set`. Both consumers read this list, which is what keeps a new key from
+ * reaching servers that start later and no others.
+ */
+export const keyBindings = (hangar: Hangar): readonly (readonly string[])[] => [
+  statusClickBinding(hangar),
+  editorKeyBinding(hangar),
+];
+
+/**
  * One `bind-key` argv as a line of conf, quoting each word the way `set` values are quoted.
  *
  * The binding is argv rather than a string because `restyle` hands it straight to tmux, where
@@ -426,9 +471,11 @@ export const tmuxConfArtifact = (hangar: Hangar): Artifact => {
       '# this file reaches only servers that start after it is written.',
       ...barOptions(hangar).map((o) => `set -g ${o.name} ${quoteTmuxValue(o.value)}`),
       '',
+      '# ---- the two keys ------------------------------------------------------------------',
       '# A click on the ticket or the pull request opens it; a click anywhere else on the bar',
       '# still switches to that window, which is what tmux binds this key to by default.',
-      renderBinding(statusClickBinding(hangar)),
+      '# `C-b C-e` opens the editors of whichever clone the session belongs to.',
+      ...keyBindings(hangar).map(renderBinding),
       '',
       '# ---- the rest ---------------------------------------------------------------------',
       "set -g default-terminal 'tmux-256color'",

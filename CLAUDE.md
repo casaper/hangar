@@ -113,9 +113,9 @@ skills load only as far as the repository root, and each clone is its own repo.
 only report, and every `-n` is a dry run — except `hangar resume`'s, which is `--limit`, the one
 place in this CLI where `-n` does not mean "change nothing". A clone session is welcome to all of
 them, and `plans collect` and `tmp merge --quiet` already run there from `SessionEnd` hooks.
-The ones that move git state, files between clones or terminal windows are the **user's, from
-the hangar root**:
-`sync` (under any of its three names), `checkout-default`, `open`, `close`, `reload`,
+The ones that move git state, files between clones, or windows on the developer's screen are the
+**user's, from the hangar root**:
+`sync` (under any of its three names), `checkout-default`, `open`, `edit`, `close`, `reload`,
 `add-clone`, `install`, `remove-clone`, `exec`, `colours change` and `doctor --fix`.
 
 **`hangar close` and `hangar reload` both end a live Claude Code session**, which is what makes

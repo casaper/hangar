@@ -49,12 +49,12 @@ tool call goes through without stopping, it reported.
 
 | Reports only | Acts |
 | --- | --- |
-| `list`, `ports`, `status` (`--fetch` reaches the network but touches no tree), `doctor` **bare**, `colours list`, `config show`, `config validate`, `resume` (see below) | `sync` / `merge-default` / `rebase-default`, `checkout-default`, `open`, `add-clone`, `install`, `remove-clone`, `exec` (**never yours**), `colours change`, `doctor --fix`, `setup`, `teach-rg`, `config schema`, `ide <kind> sync`, `colours sync`, `tmp merge`, `plans collect`, `plans stamp` |
+| `list`, `ports`, `status` (`--fetch` reaches the network but touches no tree), `doctor` **bare**, `colours list`, `config show`, `config validate`, `resume` (see below) | `sync` / `merge-default` / `rebase-default`, `checkout-default`, `open`, `edit`, `add-clone`, `install`, `remove-clone`, `exec` (**never yours**), `colours change`, `doctor --fix`, `setup`, `teach-rg`, `config schema`, `ide <kind> sync`, `colours sync`, `tmp merge`, `plans collect`, `plans stamp` |
 
-**The hangar's own `CLAUDE.md` reserves ten of those for the user, from the hangar root:** `sync`
-under any of its three names, `checkout-default`, `open`, `close`, `reload`, `add-clone`,
-`install`, `remove-clone`, `colours change` and `doctor --fix`. They move git state, move files
-between live working trees, or end a live session.
+**The hangar's own `CLAUDE.md` reserves eleven of those for the user, from the hangar root:**
+`sync` under any of its three names, `checkout-default`, `open`, `edit`, `close`, `reload`,
+`add-clone`, `install`, `remove-clone`, `colours change` and `doctor --fix`. They move git state,
+move files between live working trees, end a live session, or put a window on the user's screen.
 
 **`hangar exec` is a step beyond all ten and is not in that list, because the list is things you
 may run after a preview and this is a thing you may never run.** It is denied in both modes and

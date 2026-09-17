@@ -30,8 +30,9 @@ import { portSummary } from '../ports.ts';
  * `hangar open <clone>…` -- a clone's whole working set in one command.
  *
  * One tab (or window) of the developer's emulator per clone, attached to that clone's session on
- * this hangar's own tmux socket, with one tmux window inside it per `terminal.tabs[]` role -- plus
- * every editor `editor.kinds` lists, which for most hangars is VS Code and its workspace file.
+ * this hangar's own tmux socket, with one tmux window inside it per `terminal.tabs[]` role -- and,
+ * with `-e`, every editor `editor.kinds` lists, which for most hangars is VS Code and its
+ * workspace file. `hangar edit` is that half on its own, for the clone you are already in.
  *
  * ## One session per clone, and why that makes the safety check a fact
  *
@@ -55,8 +56,14 @@ import { portSummary } from '../ports.ts';
  */
 export type OpenOptions = {
   /**
-   * `--no-editor`, not `--no-code`: with a list of editors the flag means "open none of them",
-   * and a JetBrains-only hangar controlled by a flag called `code` reads as a bug in the help.
+   * `--editor` and not `--code`: the flag governs the whole of `editor.kinds`, and a
+   * JetBrains-only hangar controlled by a flag called `code` reads as a bug in the help.
+   *
+   * **Opt in, which is the one asymmetry with `close`.** Opening a clone is the frequent act and
+   * the editor is the part of it a developer often already has, or does not want; closing one is
+   * cleanup, so `close --no-editor` stays a way out of something that has to happen by default.
+   * With the flag off nothing here builds an editor driver at all -- see `open` -- so a hangar
+   * whose editor is terminal `vim` gets that extra tmux window with `-e` and not without.
    */
   editor?: boolean | undefined;
   claude?: boolean | undefined;
@@ -313,17 +320,57 @@ const perform = (
 };
 
 /**
+ * Every configured editor driver, with the ones that would not build reported.
+ *
+ * Called only where an editor was ASKED for -- `hangar open -e` and `hangar edit` -- and that is
+ * the whole reason it is a function rather than four lines inline. `editors()` names a driver
+ * that would not build, which is worth a warning when the developer wanted an editor and is
+ * nothing they can act on when they did not.
+ */
+export const editorsToOpen = (hangar: Hangar): readonly EditorDriver[] => {
+  const choice = editors(hangar);
+  for (const bad of choice.broken) {
+    warn(`the ${bad.kind} editor driver would not build: ${bad.reason}`);
+    note('it is skipped; the other configured editors still open.');
+  }
+  if (choice.drivers.length > 0 && choice.fellBack) {
+    warn(
+      `hangar.config.yaml would not parse — opening ${choice.drivers.map((d) => d.label).join(', ')} by default`,
+    );
+    note(
+      '`hangar config validate` says what is wrong; the editors you configured are not being used.',
+    );
+  }
+  return choice.drivers;
+};
+
+/**
  * Open the clone in every editor this hangar is configured for.
  *
  * Every one, not the first that works: two editors can both have the same clone open, because
  * their project files are different files, and a developer who listed both meant both.
+ *
+ * Exported for `hangar edit`, which is this loop and nothing else: the per-driver isolation
+ * below, the `isAvailable` probe and the dry run that stops before `launch` are the behaviour
+ * that must not come to exist twice.
+ *
+ * It returns HOW MANY came up, which only `edit` reads -- it has nothing else to report and a key
+ * binding is reading its exit status. `open` ignores the count on purpose: its contract is that
+ * the clone's window comes up whatever the editors do, which is the same severity split `land`
+ * makes for a branch that would not move.
  */
-const openEditors = (clone: Clone, drivers: readonly EditorDriver[], dryRun: boolean): void => {
+export const openEditors = (
+  clone: Clone,
+  drivers: readonly EditorDriver[],
+  dryRun: boolean,
+): number => {
+  let opened = 0;
   for (const driver of drivers) {
-    // Already opened as one of the clone's tmux windows, above -- not a window to launch.
+    // An editor that lives in a tmux window is not a window to launch: `open` has already built
+    // it beside the configured roles, and `edit` builds no windows and says so.
     if (driver.capabilities.inTerminalTab === true) continue;
     try {
-      openEditor(clone, driver, dryRun);
+      if (openEditor(clone, driver, dryRun)) opened += 1;
     } catch (err) {
       // One editor's failure is one line, and the loop goes on. Only the default editor has to
       // work; the rest are best effort, and every one of them shells out to a launcher nobody
@@ -338,40 +385,50 @@ const openEditors = (clone: Clone, drivers: readonly EditorDriver[], dryRun: boo
       );
     }
   }
+  return opened;
 };
 
-/** One editor, one clone. Throws only if the driver does; `openEditors` owns that. */
-const openEditor = (clone: Clone, driver: EditorDriver, dryRun: boolean): void => {
+/**
+ * One editor, one clone. Throws only if the driver does; `openEditors` owns that.
+ *
+ * **True means a window came up** (or would have, under `-n`), and every one of the four misses
+ * below returns false having said which it was. That answer is what `hangar edit` turns into an
+ * exit status, and so into what `C-b C-e` reports: an editor that is not installed must not be
+ * reported as opened by a key binding whose only channel is one line on a status bar.
+ */
+const openEditor = (clone: Clone, driver: EditorDriver, dryRun: boolean): boolean => {
   if (!driver.capabilities.launch) {
     warn(`${driver.label} cannot be opened by Hangar`);
     note(driver.unavailableHint());
-    return;
+    return false;
   }
   if (!driver.isAvailable()) {
     warn(`${driver.label} is not available — ${clone.name} not opened in it`);
     note(driver.unavailableHint());
-    return;
+    return false;
   }
   if (dryRun) {
     // Stops before `launch`, which is the only call here that opens anything. Both checks above
     // are probes, so a dry run still answers the question people actually have -- would my editor
-    // come up at all -- rather than assuming it would.
+    // come up at all -- rather than assuming it would. Counted as a success for the same reason:
+    // it is what the real run would do from here.
     step(`would open ${clone.name} in ${driver.label}`);
-    return;
+    return true;
   }
   const res = driver.launch(clone);
   if (res === undefined) {
     warn(`${driver.label} would not open ${clone.name}`);
     note(driver.unavailableHint());
-    return;
+    return false;
   }
   if (res.note !== undefined) {
     warn(`${driver.label}: ${res.note}`);
-    return;
+    return false;
   }
   const what = res.target.split('/').pop() ?? res.target;
   if (res.reused) ok(`reusing ${driver.label}'s window for ${clone.name} — ${tildify(res.target)}`);
   else ok(`opened ${what} in ${driver.label}`);
+  return true;
 };
 
 const SOURCE_LABEL = {
@@ -435,20 +492,8 @@ export const open = (hangar: Hangar, refs: readonly string[], opts: OpenOptions)
   const clones = resolveClones(hangar, refs, opts);
   const { driver, source } = terminal(hangar);
   const server = tmuxServer(hangar);
-  const editorChoice = editors(hangar);
-  const drivers = opts.editor === false ? [] : editorChoice.drivers;
-  for (const bad of editorChoice.broken) {
-    warn(`the ${bad.kind} editor driver would not build: ${bad.reason}`);
-    note('it is skipped; the other configured editors still open.');
-  }
-  if (drivers.length > 0 && editorChoice.fellBack) {
-    warn(
-      `hangar.config.yaml would not parse — opening ${drivers.map((d) => d.label).join(', ')} by default`,
-    );
-    note(
-      '`hangar config validate` says what is wrong; the editors you configured are not being used.',
-    );
-  }
+  // Not even ASKED without `-e`: see `editorsToOpen`.
+  const drivers = opts.editor === true ? editorsToOpen(hangar) : [];
 
   if (!server.installed()) {
     throw new CliError(
@@ -500,7 +545,7 @@ export const open = (hangar: Hangar, refs: readonly string[], opts: OpenOptions)
         if (said !== undefined) note(said);
       }
     }
-    if (opts.editor !== false) openEditors(clone, drivers, opts.dryRun === true);
+    if (opts.editor === true) openEditors(clone, drivers, opts.dryRun === true);
     note(`ports: ${portSummary(clone.ports)}`);
   }
 

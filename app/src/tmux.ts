@@ -1,7 +1,7 @@
 import { cloneShortName, type Clone } from './fleet.ts';
 import { run } from './exec.ts';
 import type { Hangar } from './hangar.ts';
-import { barOptions, paneBorderFormat, statusClickBinding } from './generate/tmux-conf.ts';
+import { barOptions, keyBindings, paneBorderFormat } from './generate/tmux-conf.ts';
 import { type CloneColour, colourByHex } from './palette.ts';
 import { orUndefined } from './terminal/types.ts';
 
@@ -300,14 +300,16 @@ export type TmuxServer = {
   /** One live option, for `doctor` to compare with `TMUX_SETTINGS`. */
   readonly setting: (showFlags: string, name: string) => string | undefined;
   /**
-   * Re-apply the status bar to a server that is ALREADY RUNNING. Returns sessions restyled.
+   * Re-apply the status bar AND the key bindings to a server that is ALREADY RUNNING. Returns
+   * sessions restyled.
    *
    * `clone-tmux.conf` reaches it through `-f`, which tmux reads ONCE when the server starts --
    * so regenerating the conf leaves every live session on whatever it started with, and with no
    * `status-style` that means tmux's own `bg=green` behind every clone hue.
    *
-   * Every option the bar needs is a global SESSION option rather than a server option, so all of
-   * it can be written onto a running server with nothing restarted and nothing interrupted --
+   * Every option the bar needs is a global SESSION option rather than a server option, and a
+   * `bind-key` is a command any client can be handed, so all of it can be written onto a running
+   * server with nothing restarted and nothing interrupted --
    * which is what this does, and why `colours sync` needs no restart. The four settings
    * `TMUX_SETTINGS` carries are the other case: two of them really are server options, and
    * `sourceConf` below is what reaches those, by re-executing the conf rather than by writing
@@ -602,11 +604,12 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
        */
       for (const option of barOptions(hangar)) tmux(['set', '-g', option.name, option.value]);
       /*
-       * And the click, which is the one part of the bar that is not an option: a key binding is
-       * a command, so there is nothing for `set` to carry it. Applied here rather than left to
-       * the conf for exactly the same reason as the options above.
+       * And the keys -- the click on the bar, and `C-b C-e` for the clone's editors -- which are
+       * the parts of this layer that are not options: a key binding is a command, so there is
+       * nothing for `set` to carry it. Applied here rather than left to the conf for exactly the
+       * same reason as the options above.
        */
-      tmux(statusClickBinding(hangar));
+      for (const binding of keyBindings(hangar)) tmux(binding);
 
       const byName = new Map(clones.map((clone) => [clone.name, clone]));
       let restyled = 0;

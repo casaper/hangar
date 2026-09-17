@@ -395,7 +395,7 @@ whether one reads on the other. `test/contrast.test.ts` asserts the arithmetic i
 whole palette, so an unreadable hue appended in future fails `pnpm test` rather than arriving as a
 screenshot.
 
-## What the clone bar says, and the four things tmux would not let it say
+## What the clone bar says, and the five things tmux would not let it say
 
 `generate/tmux-conf.ts`'s `barOptions` and `paneBorderFormat`, `generate/tmux-status-sh.ts`,
 `pr-cache.ts` and `commands/browse.ts`. Two lines, and which fact goes on which is decided by how
@@ -442,7 +442,7 @@ bare index is still what every command that ADDRESSES a clone prints, because th
 what `findClone` takes; this is a label, and the padded form is the directory name with its
 prefix taken off.
 
-### The four refusals, each measured
+### The five refusals, each measured
 
 - **A status line cannot carry an OSC 8 hyperlink.** There is no `link=` style attribute, and a
   literal sequence in `status-left` is drawn as visible text with the `ESC` stripped --
@@ -464,6 +464,13 @@ prefix taken off.
 - **A `range=user|X` argument is at most 15 bytes**, documented and not reported: a longer one
   simply never fires. `hangar-ticket` is 13. The prefix is not decoration -- it is what the click
   binding tests, so our regions can be told from tmux's own `window`, `session` and `pane` ones.
+- **`run-shell` puts its output in the developer's face.** From tmux's own documentation: "If
+  `-C` is not given, any output to stdout is displayed in view mode (in the pane specified by `-t`
+  or the current pane) after the command finishes". So a key bound to a command that REPORTS what
+  it did drops whatever the pane was showing -- Claude Code, a dev server -- into a scratch view,
+  once per press. `if-shell -b` is the way round it: it takes the same shell command, branches on
+  its exit status, and a `display-message` on each branch puts the answer on the status line
+  instead. That is why the editor key below is an `if-shell` and redirects both streams.
 - **The border re-expands at `status-interval`, exactly as often as the status line does.** This
   is the one that decides whether the footer can carry a git state at all, and it had to be
   measured rather than assumed: a branch changes once an hour and would hide a format that only
@@ -497,6 +504,42 @@ reason `iterm2.ts` names tmux absolutely.
 person, once. Measured on this machine, `bin/hangar --version` costs 0.24-0.28s against 0.02-0.04s
 for shell plus git -- so everything the bar REFRESHES is a generated script, and in exchange the
 URLs come from `issueUrl` and `prSearchUrl` rather than being spelled a second time in shell.
+
+### `C-b C-e` opens the clone's editors, and that is why `hangar edit` exists
+
+The second binding, and the only other key this conf takes:
+
+```
+bind-key -T prefix C-e if-shell -b '<hangar>/bin/hangar edit "#{@hangar_clone}" >/dev/null 2>&1' \
+  'display-message "opened #{@hangar_clone} in its editor"' \
+  'display-message "hangar edit failed for #{@hangar_clone} -- run it in a shell to see why"'
+```
+
+`C-e` for "editor", and it is free: on tmux 3.7c the prefix table binds `C-b`, `C-o`, `C-z` and
+the four `C-arrow`s and no other Ctrl key, and this conf does not move the prefix -- so the key
+takes nothing away, the same rule the click above is built on. `list-keys -T prefix` is how that
+was checked and is how the next one should be.
+
+**`hangar edit` is a command rather than a flag on `open` BECAUSE of this key.** A key press has
+to cost only what it says: `hangar open --editor` would fetch, move a branch and create tmux
+windows on every press, and pressing it twice by accident in a clone with a live agent is exactly
+the shape of failure this module is otherwise built to prevent. `edit` opens the editors and
+touches no git state, no session and no window, so it is safe to hold down. It is `open.ts`'s own
+`editorsToOpen` and `openEditors` -- one implementation of how an editor is launched, isolated
+per driver, so a second one cannot drift.
+
+An editor whose driver declares `inTerminalTab` (terminal `vim`) is the one kind it names and
+skips: that editor IS a tmux window, and `edit` creates none.
+
+The clone comes from `@hangar_clone`, the session option, so the key needs no argument and cannot
+be pressed for the wrong clone -- and a session made by hand on this socket, which has no such
+option, expands to an empty argument, exits non-zero and gets the failure message. That is the
+whole degradation; there is no second `if-shell` testing for the option first.
+
+Both bindings are one list, `keyBindings` in `generate/tmux-conf.ts`, for the reason `barOptions`
+is one table: `TmuxServer.restyle` ISSUES them onto a server that is already running while the
+conf renders them for the ones that start later, and a binding in only one of the two is a key
+that works on half the fleet.
 
 ### The clone comes from the session tag, and that is a correctness property
 
@@ -750,9 +793,10 @@ bar that is right on a fresh server and a version behind on the one somebody is 
 `TMUX_SETTINGS`' server options -- a server option in that table is a setting that reaches the
 file and nothing else, with nothing to say which happened.
 
-The **click binding is the exception to the table**, because a key binding is a command and there
-is nothing for `set` to carry it. `restyle` issues it as a command for exactly the same reason it
-writes the options: a live server would otherwise keep the bar and lose the link.
+The **key bindings are the exception to the table**, because a binding is a command and there is
+nothing for `set` to carry it. They have a list of their own, `keyBindings`, and `restyle` issues
+each one for exactly the same reason it writes the options: a live server would otherwise keep the
+bar and lose the link, and keep the bar and lose `C-b C-e`.
 
 A window's own `@hangar_colour` tag wins over its session's clone, looked up by hex because
 `colours change` means a clone's hue need not be the one its index implies. That is the case the

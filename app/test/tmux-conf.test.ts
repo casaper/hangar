@@ -3,6 +3,8 @@ import { test } from 'node:test';
 
 import {
   barOptions,
+  editorKeyBinding,
+  keyBindings,
   paneBorderFormat,
   statusClickBinding,
   TMUX_SETTINGS,
@@ -251,4 +253,41 @@ test('both the jobs and the click name their program by absolute path', () => {
     statusClickBinding(hangar).some((word) => word.includes(`${hangar.paths.bin} browse `)),
     'the click must name bin/hangar by path',
   );
+});
+
+test('every key binding is rendered into the conf, from the one list', () => {
+  const hangar = syntheticHangar();
+  const { content } = tmuxConfArtifact(hangar);
+  // The same property the bar options have, and it exists for the same reason: `restyle` issues
+  // this list onto a running server and the conf renders it for the ones that start later. A
+  // binding in only one of the two is a key that works on half the fleet, with nothing to say
+  // which half.
+  for (const binding of keyBindings(hangar)) {
+    const key = binding[3];
+    assert.ok(key !== undefined);
+    assert.equal(
+      content.split('\n').filter((line) => line.startsWith(`bind-key -T ${binding[2]} ${key} `))
+        .length,
+      1,
+      `${key} is in the list and not in the conf exactly once`,
+    );
+    // Every one of them shells out, and `run-shell` inherits the SERVER's environment.
+    assert.ok(
+      binding.some((word) => word.includes(`${hangar.paths.bin} `)),
+      `${key} must name bin/hangar by path`,
+    );
+  }
+});
+
+test('the editor key takes no key tmux already binds, and never opens a view pane', () => {
+  const binding = editorKeyBinding(syntheticHangar());
+  // Measured on 3.7c: the prefix table binds C-b, C-o, C-z and the four C-arrows, and this conf
+  // does not move the prefix. C-e is free, so this binding takes nothing away.
+  assert.deepEqual(binding.slice(1, 4), ['-T', 'prefix', 'C-e']);
+  // `if-shell`, not `run-shell`: tmux displays a run-shell's stdout in view mode in the current
+  // pane, which for a command that reports what it opened means a scratch view over whatever the
+  // developer was looking at, on every press. Both streams are redirected for the same reason.
+  assert.equal(binding[4], 'if-shell');
+  assert.ok(binding.some((word) => word.includes('>/dev/null 2>&1')));
+  assert.ok(binding.filter((word) => word.startsWith('display-message ')).length === 2);
 });

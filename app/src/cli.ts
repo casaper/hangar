@@ -12,6 +12,7 @@ import { claude, claudeArgvFromProcess } from './commands/claude.ts';
 import { coloursChange, coloursList, coloursSync } from './commands/colours.ts';
 import { configSchema, configShow, configValidate } from './commands/config.ts';
 import { doctor } from './commands/doctor.ts';
+import { edit, type EditOptions } from './commands/edit.ts';
 import { jiraHook } from './commands/jira.ts';
 import { golden } from './commands/dev.ts';
 import { release } from './commands/release.ts';
@@ -320,7 +321,7 @@ program
   .summary('Open clones in their own tmux sessions, on a current default branch')
   .description(
     [
-      "Open each clone in one terminal tab of its own, attached to that clone's tmux session — one tmux window per `terminal.tabs[]` role — plus every configured editor. A clone that is already open is brought forward rather than opened twice, and a clone whose tab was closed reattaches to the session it still has, with whatever was running in it.",
+      "Open each clone in one terminal tab of its own, attached to that clone's tmux session — one tmux window per `terminal.tabs[]` role. A clone that is already open is brought forward rather than opened twice, and a clone whose tab was closed reattaches to the session it still has, with whatever was running in it. `-e` also opens every editor `editor.kinds` lists; `hangar edit` is the same thing on its own.",
       "Each clone is first fetched and put on its repo's default branch, up to date — a clone you are opening is one you are starting work in, and starting on last week's branch is never what was wanted. `--branch <name>` names another branch, `--no-checkout` leaves each clone as it is, and a clone whose tree cannot be moved (uncommitted work, a half-applied rebase, a live Claude session) is opened as it is with a warning.",
       "The sessions live on this hangar's own tmux socket, so nothing here touches the tmux you run for your own work. `hangar doctor` prints the socket name.",
     ].join('\n\n'),
@@ -328,7 +329,7 @@ program
   .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2) — opened in ascending order')
   .option('--all', 'open every clone in the fleet')
   .option('--no-claude', 'do not start Claude Code in any of the clone’s windows')
-  .option('--no-editor', 'do not open the clone in any configured editor')
+  .option('-e, --editor', 'also open the clone in every configured editor')
   .option('--tab', "a tab in the terminal's current window (the default)")
   .option('--window', 'a window of its own instead of a tab')
   .option('-b, --branch <name>', "check this branch out instead of the repo's default branch")
@@ -344,6 +345,23 @@ program
       ...options,
       ...(placement === undefined ? {} : { placement }),
     });
+  });
+
+program
+  .command('edit')
+  .summary('Open clones in their configured editors, and nothing else')
+  .description(
+    [
+      'Open each clone in every editor `editor.kinds` lists. It is the editor half of `hangar open` on its own: no branch is fetched or checked out, no tmux session is created and no terminal window is opened.',
+      "That is also what makes it safe to bind to a key, and `clone-tmux.conf` binds one: `C-b C-e` inside a clone's tmux window opens that clone's editors, without naming an index.",
+      'An editor that lives inside a terminal — `vim` with no GUI build — is the one kind this cannot open, because it needs a tmux window to live in. It is named and skipped; `hangar open <clone> -e` is what puts it there.',
+    ].join('\n\n'),
+  )
+  .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2) — opened in ascending order')
+  .option('--all', 'open every clone in the fleet')
+  .option('-n, --dry-run', 'print every editor that would be opened, and open none of them')
+  .action((clones: string[], options: EditOptions) => {
+    edit(requireHangar(), clones, options);
   });
 
 program

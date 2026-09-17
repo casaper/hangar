@@ -37,6 +37,7 @@ another name.
 | `sync` | `sync_preview` | `sync` (`strategy` picks rebase or merge) |
 | `checkout-default` | `checkout_default_preview` | `checkout_default` |
 | `open` | `open_preview` | `open` |
+| `edit` | `edit_preview` | `edit` |
 | `close` | `close_preview` | `close` |
 | `reload` | `reload_preview` | `reload` |
 | `install` | `install_preview` | `install` |
@@ -95,7 +96,8 @@ rule that cannot tell it from the report.
 | `sync` | `[clone]` | `-a, --all` · `-n, --dry-run` · `--no-session-notify` · `--include-busy` · `--onto <ref>` · `--strategy <rebase\|merge>` | **act [user]** |
 | `merge-default`, `rebase-default` | — | aliases of `sync`, identical options | **act [user]** |
 | `checkout-default` (alias `checkout`) | `[clone]` | `-a, --all` · `-n, --dry-run` · `--include-busy` | **act [user]** |
-| `open` | `[clones...]` | `--all` · `--no-claude` · `--no-editor` · `-b, --branch <name>` · `--no-checkout` · `--include-busy` · `-n, --dry-run` | **act [user]** |
+| `open` | `[clones...]` | `--all` · `--no-claude` · `-e, --editor` · `-b, --branch <name>` · `--no-checkout` · `--include-busy` · `-n, --dry-run` | **act [user]** |
+| `edit` | `[clones...]` | `--all` · `-n, --dry-run` | **act [user]** |
 | `close` | `[clones...]` | `--all` · `--no-editor` · `-y, --yes` · `--force` · `-n, --dry-run` | **act [user]** |
 | `reload` | `[clones...]` | `--all` · `--no-shells` · `--no-claude` · `--no-editor` · `-y, --yes` · `-n, --dry-run` | **act [user]** |
 | `browse` | `<ticket\|pr> <clone>` | `-n, --dry-run` (print the URL, open nothing) | act (opens a browser; `-n` is report) |
@@ -261,9 +263,15 @@ separate `<thing>_preview`.
   is worth LOOKING at rather than killing: something is asking.
 - **`open -n` is worth running before the real thing.** It prints the branch each clone would
   land on (or why it would be left alone), the tmux session and windows it would create or the
-  window it would bring forward, the attach line verbatim, and the editors it would launch — and
-  changes nothing. `--no-claude`, `--no-editor` and `--no-checkout` still narrow what the real run
-  does; `-n` is how you see it first.
+  window it would bring forward, and the attach line verbatim — and changes nothing.
+  `--no-claude` and `--no-checkout` still narrow what the real run does; `-n` is how you see it
+  first.
+- **`open` opens no editor unless `-e` is passed**, and `hangar edit <clone>` is that half on its
+  own — the editors, and nothing else: no fetch, no branch, no session, no window. The clone's own
+  tmux windows bind `C-b C-e` to it, so a developer sitting in a clone can open it in VS Code
+  without naming an index. `close --no-editor` and `reload --no-editor` are the other direction
+  and are unchanged: `close` shuts a window that is open, and `reload --no-editor` is about
+  rewriting the editors' per-clone files rather than about launching anything.
 - **`remove-clone --force` is the one genuinely unrecoverable flag in this CLI** — its own help says
   uncommitted work is NOT recoverable. Never pass it without the user asking for it in those terms.
 - **`add-clone --no-install` leaves the clone unusable** until someone runs `hangar install
