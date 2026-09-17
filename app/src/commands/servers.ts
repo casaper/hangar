@@ -1,18 +1,23 @@
+import { readFileSync, unlinkSync } from 'node:fs';
+
 import pc from 'picocolors';
 
 import { CliError } from '../exec.ts';
 import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import type { Hangar } from '../hangar.ts';
 import {
+  allClaudeSessions,
   allListeners,
   cwdsOf,
+  isAlive,
+  listenersOn,
   pidFilesFor,
   processTable,
   type Listener,
   type PidFile,
   type ProcessRow,
 } from '../procs.ts';
-import { blank, cloneLabel, heading, note, raw, table, warn } from '../ui.ts';
+import { blank, cloneLabel, confirm, heading, note, ok, raw, table, warn } from '../ui.ts';
 
 /**
  * `hangar servers` -- what the fleet is serving, across every clone at once.
@@ -411,4 +416,256 @@ export const serversList = (
     if (scan.scanned) raw(line);
     else warn(line);
   }
+};
+
+/* ---------------------------------------------------------------- stopping one */
+
+export type KillRefusal = { readonly record: ServerRecord; readonly why: string };
+
+export type KillPlan = {
+  /** Killable, in the order they will be signalled. */
+  readonly kill: readonly ServerRecord[];
+  /** Matched the selection and will not be signalled, each with the reason. */
+  readonly refused: readonly KillRefusal[];
+  /** Pid files naming nothing worth killing -- `servers prune` is their answer. */
+  readonly prunable: readonly ServerRecord[];
+};
+
+export type KillOptions = {
+  all?: boolean | undefined;
+  role?: string[] | undefined;
+  name?: string[] | undefined;
+  pid?: string[] | undefined;
+  force?: boolean | undefined;
+  dryRun?: boolean | undefined;
+  yes?: boolean | undefined;
+};
+
+/**
+ * Which of the scanned servers this invocation stops, and which it refuses. PURE.
+ *
+ * **Four guards, and every one of them is about killing the wrong process.** A pid is a small
+ * integer that the kernel reissues; a `kill` aimed at a stale record reaches whatever holds that
+ * number now.
+ *
+ * 1. **Containment.** The process's working directory must be KNOWN and inside the hangar. An
+ *    unknown one refuses rather than proceeding -- this is the one guard where refusing is the
+ *    safe direction, because the cost of being wrong is somebody else's process.
+ * 2. **Never `recycled`.** That state IS the reissued-number case, caught by name.
+ * 3. **Never a Claude Code session.** Free, since the process table is already in hand.
+ * 4. **A `stray` only when named by pid.** An editor's own helper is a stray, and "stop my dev
+ *    servers" does not mean "stop my editor". `--pid` is how one is asked for on purpose.
+ */
+export const killPlan = (
+  records: readonly ServerRecord[],
+  hangarRoot: string,
+  claudePids: ReadonlySet<number>,
+  opts: KillOptions,
+): KillPlan => {
+  const wantPids = new Set((opts.pid ?? []).map((p) => Number.parseInt(p, 10)));
+  const roles = new Set(opts.role ?? []);
+  const names = new Set(opts.name ?? []);
+
+  const selected = records.filter((record) => {
+    if (wantPids.size > 0 && wantPids.has(record.pid)) return true;
+    if (wantPids.size > 0) return false;
+    if (roles.size > 0 && !roles.has(record.name)) return false;
+    if (names.size > 0 && !names.has(record.name)) return false;
+    return true;
+  });
+
+  const kill: ServerRecord[] = [];
+  const refused: KillRefusal[] = [];
+  const prunable: ServerRecord[] = [];
+
+  for (const record of selected) {
+    const named = wantPids.has(record.pid);
+    if (record.state === 'stale') {
+      prunable.push(record);
+      continue;
+    }
+    if (record.state === 'recycled') {
+      prunable.push(record);
+      refused.push({
+        record,
+        why: `pid ${String(record.pid)} is alive but is not this clone's — the number was reused, so stopping it would stop something else`,
+      });
+      continue;
+    }
+    if (record.state === 'stray' && !named) {
+      refused.push({
+        record,
+        why: `a stray is stopped only when asked for by name — \`--pid ${String(record.pid)}\`${record.parent === undefined ? '' : `; this one was started by ${programName(record.parent)}`}`,
+      });
+      continue;
+    }
+    if (claudePids.has(record.pid)) {
+      refused.push({ record, why: 'this is a Claude Code session, not a server' });
+      continue;
+    }
+    if (record.cwd === undefined) {
+      refused.push({
+        record,
+        why: `nothing could read where pid ${String(record.pid)} is running, and a pid alone is not enough to stop it safely`,
+      });
+      continue;
+    }
+    if (!isInside(record.cwd, hangarRoot)) {
+      refused.push({
+        record,
+        why: `pid ${String(record.pid)} is running in ${record.cwd}, outside this hangar`,
+      });
+      continue;
+    }
+    kill.push(record);
+  }
+
+  return { kill, refused, prunable };
+};
+
+/** What a confirmation has to say before anything is signalled. PURE. */
+export const killWarnings = (plan: KillPlan): string[] =>
+  plan.kill.map(
+    (record) =>
+      `${record.clone.name}: ${record.name} (pid ${String(record.pid)}${record.port === undefined ? '' : `, on ${String(record.port)}`})`,
+  );
+
+/**
+ * Sleep, synchronously, without a subprocess.
+ *
+ * Everything in this command is synchronous -- `run` is `spawnSync` and the whole CLI is written
+ * that way -- so waiting for a signal to take effect needs a blocking wait rather than a timer
+ * whose callback would never run. `Atomics.wait` on a buffer nobody else touches is exactly that
+ * and costs no process.
+ */
+const waitMs = (ms: number): void => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+};
+
+/** Signal one process, and say whether it actually went away. */
+const stop = (record: ServerRecord, signal: NodeJS.Signals): boolean => {
+  try {
+    process.kill(record.pid, signal);
+  } catch {
+    return !isAlive(record.pid);
+  }
+  for (let waited = 0; waited < 5000; waited += 100) {
+    if (!isAlive(record.pid)) return true;
+    waitMs(100);
+  }
+  return !isAlive(record.pid);
+};
+
+export const serversKill = (hangar: Hangar, refs: readonly string[], opts: KillOptions): void => {
+  const clones = resolveClones(hangar, refs, opts.all, 'servers kill');
+  const scan = scanFleet(clones);
+  /*
+   * A kill decided from a scan that could not be taken is a kill aimed at nothing. `lsof` is what
+   * attributes a pid to a clone at all, so without it every containment check below would be
+   * deciding on absent evidence -- which is how a guard stops guarding with everything still
+   * green. `remove-clone` refuses on the same missing tool for the same reason.
+   */
+  if (!scan.scanned) {
+    throw new CliError(
+      '`lsof` could not be run, so nothing here can be stopped safely',
+      'It is what says where a process is running, and stopping one without that is stopping a pid number. `hangar doctor` names how to install it.',
+    );
+  }
+
+  const plan = killPlan(
+    scan.records,
+    hangar.root,
+    new Set(allClaudeSessions().map((s) => s.pid)),
+    opts,
+  );
+
+  for (const { record, why } of plan.refused) warn(`${record.clone.name}: ${record.name} — ${why}`);
+  if (plan.prunable.length > 0) {
+    note(
+      `${String(plan.prunable.length)} pid file(s) name nothing worth stopping — \`hangar servers prune\` removes them`,
+    );
+  }
+  if (plan.kill.length === 0) {
+    note('Nothing to stop.');
+    return;
+  }
+
+  heading(opts.dryRun === true ? 'Would stop' : 'Stopping');
+  for (const line of killWarnings(plan)) raw(`  ${line}`);
+  if (opts.dryRun === true) {
+    note('(dry run — nothing was signalled)');
+    return;
+  }
+  if (opts.yes !== true && !confirm(`Stop ${String(plan.kill.length)} server(s)?`)) {
+    throw new CliError('cancelled — nothing was signalled');
+  }
+
+  const signal: NodeJS.Signals = opts.force === true ? 'SIGKILL' : 'SIGTERM';
+  const survivors: ServerRecord[] = [];
+  for (const record of plan.kill) {
+    if (stop(record, signal))
+      ok(`${record.clone.name}: ${record.name} (pid ${String(record.pid)}) stopped`);
+    else {
+      warn(`${record.clone.name}: ${record.name} (pid ${String(record.pid)}) is still running`);
+      survivors.push(record);
+    }
+  }
+
+  /*
+   * The port is re-checked rather than assumed, and that is the whole reason `--force` is a
+   * considered escalation instead of a reflex. A dev server commonly has children of its own --
+   * a bundler, a watcher -- and whether they let go of the socket when their parent is asked to
+   * stop is not something this command can know for any given repo. So it looks.
+   */
+  const ports = plan.kill.map((r) => r.port).filter((p): p is number => p !== undefined);
+  const stillBound = ports.length === 0 ? undefined : listenersOn(ports);
+  if (stillBound !== undefined && stillBound.size > 0) {
+    for (const [port, pid] of stillBound) {
+      warn(`port ${String(port)} is still held, now by pid ${String(pid)}`);
+    }
+    note(
+      survivors.length > 0
+        ? '`hangar servers kill --force` sends SIGKILL, which a process cannot decline.'
+        : 'The server stopped but something it started still holds the port — `hangar servers list` says what.',
+    );
+  } else if (ports.length > 0) {
+    ok(`${String(ports.length)} port(s) free again`);
+  }
+};
+
+export type PruneOptions = { all?: boolean | undefined; dryRun?: boolean | undefined };
+
+export const serversPrune = (hangar: Hangar, refs: readonly string[], opts: PruneOptions): void => {
+  const clones = resolveClones(hangar, refs, opts.all, 'servers prune');
+  let removed = 0;
+  for (const clone of clones) {
+    for (const file of pidFilesFor(clone)) {
+      if (file.alive) continue;
+      if (opts.dryRun === true) {
+        raw(`  would remove  ${file.path} ${pc.dim(`(pid ${String(file.pid)} is gone)`)}`);
+        removed += 1;
+        continue;
+      }
+      /*
+       * Re-read before unlinking, and only remove a file that STILL names the dead pid it was
+       * scanned as. A server restarted between the scan and here has rewritten this file with its
+       * own pid, and deleting it would leave a running server with no record -- the exact state
+       * this command exists to clear up. The repo's own tooling guards its removal the same way.
+       */
+      try {
+        const now = Number.parseInt(readFileSync(file.path, 'utf8').trim(), 10);
+        if (now !== file.pid || isAlive(now)) {
+          note(`${clone.name}: ${file.name} was restarted while scanning — left alone`);
+          continue;
+        }
+        unlinkSync(file.path);
+        ok(`${clone.name}: removed ${file.name}.pid (pid ${String(file.pid)} is gone)`);
+        removed += 1;
+      } catch {
+        warn(`${clone.name}: could not remove ${file.path}`);
+      }
+    }
+  }
+  if (removed === 0) note('No pid file names a process that is gone.');
+  else if (opts.dryRun === true) note('(dry run — nothing was removed)');
 };

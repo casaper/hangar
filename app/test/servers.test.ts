@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 import {
   classifyServers,
+  killPlan,
   programName,
   serversSummary,
   shortCommand,
@@ -218,4 +219,101 @@ test('a command keeps its arguments and loses only the interpreter path', () => 
     'node app/cli.js serve --host 127.0.0.1',
   );
   assert.equal(shortCommand('ng serve --port 4300'), 'ng serve --port 4300');
+});
+
+/* ------------------------------------------------------- stopping the right thing */
+
+const plannedFor = (records: ServerRecord[], opts: Parameters<typeof killPlan>[3] = {}) =>
+  killPlan(records, hangar.root, new Set<number>(), opts);
+
+const listening = (clone: typeof one, pid: number, port: number, cwd?: string): ServerRecord[] =>
+  classify({
+    pidFiles: [pidFile(clone, 'api_server', pid, true)],
+    listeners: [{ pid, port }],
+    cwds: [[pid, cwd ?? clone.path]],
+  });
+
+test('a server inside the hangar is stopped; one outside it never is', () => {
+  assert.equal(plannedFor(listening(one, 930, portOf(one, 'api'))).kill.length, 1);
+
+  // Containment. `hangar.root` is the fixture's `/wt`, so a cwd elsewhere is another developer's
+  // process that happens to hold a port -- a pid is a number the system reuses.
+  const outside = classify({
+    listeners: [{ pid: 931, port: portOf(one, 'api') }],
+    cwds: [[931, '/opt/unrelated']],
+  });
+  const plan = plannedFor([...outside]);
+  assert.equal(plan.kill.length, 0);
+  assert.match(plan.refused[0]?.why ?? '', /outside this hangar/);
+});
+
+test('an unreadable working directory refuses the kill rather than risking it', () => {
+  // The opposite direction to the classifier's rule, and deliberately so: there, absence must not
+  // condemn a server to `recycled`; here, absence must not license a signal.
+  const records = classify({
+    pidFiles: [pidFile(one, 'api_server', 932, true)],
+    listeners: [{ pid: 932, port: portOf(one, 'api') }],
+  });
+  const plan = plannedFor(records);
+  assert.equal(plan.kill.length, 0);
+  assert.match(plan.refused[0]?.why ?? '', /where pid 932 is running/);
+});
+
+test('a recycled pid is never signalled, and its file is offered to prune instead', () => {
+  const records = classify({
+    pidFiles: [pidFile(one, 'api_server', 933, true)],
+    cwds: [[933, '/opt/somebody-else']],
+  });
+  const plan = plannedFor(records);
+  assert.equal(plan.kill.length, 0);
+  assert.equal(plan.prunable.length, 1);
+  assert.match(plan.refused[0]?.why ?? '', /number was reused/);
+});
+
+test('a stray survives a bulk stop and dies only when its pid is named', () => {
+  const records = classify({
+    listeners: [{ pid: 934, port: 49733 }],
+    cwds: [[934, one.path]],
+    processes: [
+      proc(934, 935, '/opt/node/bin/node test-server.js'),
+      proc(935, 1, '/Applications/Some Editor.app/Contents/MacOS/Helper --type=utility'),
+    ],
+  });
+  assert.equal(plannedFor(records).kill.length, 0, 'not swept up by a bulk stop');
+  assert.match(plannedFor(records).refused[0]?.why ?? '', /--pid 934/);
+  assert.equal(plannedFor(records, { pid: ['934'] }).kill.length, 1, 'stopped when asked for');
+});
+
+test('a Claude Code session is never a server, whatever holds the port', () => {
+  const records = listening(one, 936, portOf(one, 'api'));
+  const plan = killPlan(records, hangar.root, new Set([936]), {});
+  assert.equal(plan.kill.length, 0);
+  assert.match(plan.refused[0]?.why ?? '', /Claude Code session/);
+});
+
+test('a stale pid file is prunable and is never something to signal', () => {
+  const plan = plannedFor(classify({ pidFiles: [pidFile(one, 'gone', 937, false)] }));
+  assert.deepEqual(plan.kill, []);
+  assert.equal(plan.prunable.length, 1);
+  assert.equal(plan.refused.length, 0, 'a file to tidy is not a refusal');
+});
+
+test('--role and --pid select, and selecting nothing stops nothing', () => {
+  const records = [
+    ...listening(one, 938, portOf(one, 'api')),
+    ...classify({
+      pidFiles: [pidFile(two, 'db_server', 939, true)],
+      listeners: [{ pid: 939, port: portOf(two, 'db') }],
+      cwds: [[939, two.path]],
+    }),
+  ];
+  assert.deepEqual(
+    plannedFor(records, { name: ['db_server'] }).kill.map((r) => r.pid),
+    [939],
+  );
+  assert.deepEqual(
+    plannedFor(records, { pid: ['938'] }).kill.map((r) => r.pid),
+    [938],
+  );
+  assert.equal(plannedFor(records, { name: ['nothing-by-that-name'] }).kill.length, 0);
 });

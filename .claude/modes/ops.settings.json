@@ -36,6 +36,10 @@
       "Bash(hangar doctor:*)",
       "Bash(hangar setup)",
       "Bash(hangar setup:*)",
+      "Bash(hangar servers kill)",
+      "Bash(hangar servers kill:*)",
+      "Bash(hangar servers prune)",
+      "Bash(hangar servers prune:*)",
       "mcp__hangar__pr_create",
       "mcp__hangar__pr_update",
       "mcp__hangar__sync",
@@ -60,7 +64,9 @@
       "mcp__hangar__ide_vscode_sync",
       "mcp__hangar__ide_jetbrains_sync",
       "mcp__hangar__ide_zed_sync",
-      "mcp__hangar__ide_emacs_sync"
+      "mcp__hangar__ide_emacs_sync",
+      "mcp__hangar__servers_kill",
+      "mcp__hangar__servers_prune"
     ],
     "allow": [
       "Bash(hangar list)",
@@ -83,6 +89,8 @@
       "mcp__hangar__ports",
       "mcp__hangar__status",
       "mcp__hangar__servers_list",
+      "mcp__hangar__servers_kill_preview",
+      "mcp__hangar__servers_prune_preview",
       "mcp__hangar__doctor",
       "mcp__hangar__colours_list",
       "mcp__hangar__config_show",

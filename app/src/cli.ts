@@ -27,7 +27,14 @@ import { ports } from './commands/ports.ts';
 import { removeClone } from './commands/remove-clone.ts';
 import { resume } from './commands/resume.ts';
 import { setup } from './commands/setup.ts';
-import { serversList, type ServersListOptions } from './commands/servers.ts';
+import {
+  serversKill,
+  serversList,
+  serversPrune,
+  type KillOptions,
+  type PruneOptions,
+  type ServersListOptions,
+} from './commands/servers.ts';
 import { status } from './commands/status.ts';
 import { teachRg } from './commands/teach-rg.ts';
 import { forcedStrategy, sync } from './commands/sync.ts';
@@ -268,6 +275,44 @@ servers
   .option('--stale', 'show only what wants a look: untracked, stray, crossed and stale')
   .action((clones: string[], options: ServersListOptions) => {
     serversList(requireHangar(), clones, options);
+  });
+
+servers
+  .command('kill')
+  .summary('Stop dev servers a clone is running')
+  .description(
+    [
+      'Stops what `hangar servers list` found, by clone, by role, by pid-file name, or by pid.',
+      "A stray -- something listening inside a clone on a port no clone was assigned -- is stopped only when its pid is named, because the commonest stray is the editor's own helper and stopping those is not what anyone means by stopping their dev servers.",
+      'It refuses rather than guess: a process whose working directory cannot be read, or is outside this hangar, is never signalled, because a pid is a number the system reuses and the wrong one belongs to somebody else. It sends SIGTERM, waits, then re-checks whether the port actually came free, since a server often has children of its own that may keep hold of it.',
+    ].join('\n\n'),
+  )
+  .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2)')
+  .option('-a, --all', 'every clone')
+  .option('--role <id...>', 'only these port roles')
+  .option('--name <stem...>', 'only servers recorded under these pid-file names')
+  .option('--pid <pid...>', 'only these processes — the only way to stop a stray')
+  .option('--force', 'send SIGKILL instead of SIGTERM, which a process cannot decline')
+  .option('-n, --dry-run', 'print what would be stopped, and stop nothing')
+  .option('-y, --yes', 'do not ask first')
+  .action((clones: string[], options: KillOptions) => {
+    serversKill(requireHangar(), clones, options);
+  });
+
+servers
+  .command('prune')
+  .summary('Remove pid files whose process is gone')
+  .description(
+    [
+      'A wrapper killed with a signal it cannot handle leaves its pid file behind, and the next start is then refused by a record of a server that is not there.',
+      'Only a file that still names the same dead process is removed: one rewritten by a server that restarted while this was scanning is left exactly where it is.',
+    ].join('\n\n'),
+  )
+  .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2); defaults to every clone')
+  .option('-a, --all', 'every clone')
+  .option('-n, --dry-run', 'print what would be removed, and remove nothing')
+  .action((clones: string[], options: PruneOptions) => {
+    serversPrune(requireHangar(), clones, options);
   });
 
 program

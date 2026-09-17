@@ -209,6 +209,32 @@ would have blocked that deletion for good.
 environment, a reissued pid number, a wrapper killed with a signal it cannot handle. They are the
 states that matter most and the ones no capture can ever reach. `test/servers.test.ts`.
 
+**`hangar servers kill` refuses four times, and every refusal is about the same hazard**: a pid is
+a small integer the kernel reissues, so a signal aimed at a record that has gone stale reaches
+whatever holds that number now.
+
+- The working directory must be **known** and inside the hangar. Unknown refuses -- the opposite
+  direction to the classifier's rule above, and deliberately: there, absence must not condemn a
+  server to `recycled`; here, absence must not license a signal.
+- A `recycled` record is never signalled, which is that hazard caught by name.
+- A Claude Code session is never a server, checked against the process table already in hand.
+- A `stray` is stopped only when its pid is named. The commonest stray belongs to the developer's
+  editor, and "stop my dev servers" does not mean "stop my editor".
+
+**The port is re-checked after the signal rather than assumed**, which is what makes `--force` a
+considered escalation instead of a reflex. A dev server usually has children -- a bundler, a
+watcher -- and whether they release the socket when their parent is asked to stop is a property of
+the repo, not something this command can know. So it looks, and says which it found.
+
+**Nothing is ever signalled by process GROUP.** Measured here: a server started from a clone's
+tmux pane shares its process group with the pane's shell, so a group signal takes the pane down
+with it. The pid, and only the pid.
+
+**`servers prune` re-reads a pid file before unlinking it** and removes it only while it still
+names the same dead process. A server restarted between the scan and the unlink has rewritten that
+file with its own pid, and deleting it would leave a running server with no record -- which is the
+state the command exists to clear up, manufactured by the command itself.
+
 **`ServerScan.portsChecked` is why this is a record and not an array.** "Nothing is running" and
 "nobody could ask" are the same empty list, and `remove-clone` turns the first into a deletion —
 so a missing `lsof` is reported as its own guard rather than passing quietly. `lsof` is a

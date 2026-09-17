@@ -116,7 +116,8 @@ them, and `plans collect` and `tmp merge --quiet` already run there from `Sessio
 The ones that move git state, files between clones, or windows on the developer's screen are the
 **user's, from the hangar root**:
 `sync` (under any of its three names), `checkout-default`, `open`, `edit`, `close`, `reload`,
-`add-clone`, `install`, `remove-clone`, `exec`, `colours change` and `doctor --fix`.
+`add-clone`, `install`, `remove-clone`, `exec`, `servers kill`, `colours change` and
+`doctor --fix`.
 
 **`hangar close` and `hangar reload` both end a live Claude Code session**, which is what makes
 them the user's rather than yours. `close` kills the clone's whole tmux session and refuses when
