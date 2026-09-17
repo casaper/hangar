@@ -317,3 +317,38 @@ test('--role and --pid select, and selecting nothing stops nothing', () => {
   );
   assert.equal(plannedFor(records, { name: ['nothing-by-that-name'] }).kill.length, 0);
 });
+
+test('--role matches the PORT role, and --name the pid file stem, on one tracked server', () => {
+  /*
+   * They are different words for the same server -- `api_server` recorded on the `api` role --
+   * and matching both against the pid file's stem made `--role` select nothing for every
+   * correctly tracked server. Silently, because selecting nothing is also what a clone with no
+   * such server looks like.
+   */
+  const records = listening(one, 940, portOf(one, 'api'));
+  assert.equal(records[0]?.name, 'api_server');
+  assert.equal(records[0].role, 'api');
+  assert.deepEqual(
+    plannedFor(records, { role: ['api'] }).kill.map((r) => r.pid),
+    [940],
+  );
+  assert.deepEqual(
+    plannedFor(records, { name: ['api_server'] }).kill.map((r) => r.pid),
+    [940],
+  );
+  assert.equal(
+    plannedFor(records, { role: ['api_server'] }).kill.length,
+    0,
+    'a stem is not a role',
+  );
+});
+
+test('a record with no port is not reachable by --role', () => {
+  const silent = classify({
+    pidFiles: [pidFile(one, 'api_server', 941, true)],
+    cwds: [[941, one.path]],
+  });
+  assert.equal(silent[0]?.state, 'silent');
+  assert.equal(silent[0].role, undefined);
+  assert.equal(plannedFor(silent, { role: ['api'] }).kill.length, 0);
+});

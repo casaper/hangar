@@ -289,8 +289,11 @@ servers
   )
   .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2)')
   .option('-a, --all', 'every clone')
-  .option('--role <id...>', 'only these port roles')
-  .option('--name <stem...>', 'only servers recorded under these pid-file names')
+  .option(
+    '--role <id...>',
+    'only servers on these port roles (not a silent or stale record, which has no port)',
+  )
+  .option('--name <stem...>', 'only servers recorded under these pid-file names, e.g. ng_serve')
   .option('--pid <pid...>', 'only these processes — the only way to stop a stray')
   .option('--force', 'send SIGKILL instead of SIGTERM, which a process cannot decline')
   .option('-n, --dry-run', 'print what would be stopped, and stop nothing')

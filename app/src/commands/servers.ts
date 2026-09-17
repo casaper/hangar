@@ -68,6 +68,19 @@ export type ServerRecord = {
   readonly clone: Clone;
   /** The port role's id, or the pid file's stem when one names it. */
   readonly name: string;
+  /**
+   * The port ROLE this server is on, when it is on an assigned port at all.
+   *
+   * Separate from `name` because the two answer different questions and a selector needs both.
+   * A tracked server's `name` is its pid file's stem -- whatever the repo chose to call it, which
+   * is what stops it -- while its role is the hangar's own word for the port. They are routinely
+   * different (`ng_serve` on the `ng` role), so `--role` matching `name` would miss every
+   * correctly tracked server, which is the only kind most fleets have.
+   *
+   * Undefined for a `stray` (no role owns that port) and for `silent` and `stale` (no port at
+   * all), which is why neither is reachable by `--role`.
+   */
+  readonly role: string | undefined;
   readonly pid: number;
   readonly port: number | undefined;
   /** Undefined when `lsof` could not answer for this pid -- never read as "somewhere else". */
@@ -145,6 +158,7 @@ export const classifyServers = (
     const base = {
       clone,
       name: file.name,
+      role: undefined as string | undefined,
       pid: file.pid,
       cwd: seen.cwd,
       command: seen.command,
@@ -173,10 +187,16 @@ export const classifyServers = (
     }
     const owner = ownerOfPort.get(listener.port);
     if (owner !== undefined && owner.clone.index !== clone.index) {
-      records.push({ ...base, state: 'crossed', port: listener.port, tookPortOf: owner.clone });
+      records.push({
+        ...base,
+        state: 'crossed',
+        port: listener.port,
+        role: owner.role,
+        tookPortOf: owner.clone,
+      });
       continue;
     }
-    records.push({ ...base, state: 'serving', port: listener.port });
+    records.push({ ...base, state: 'serving', port: listener.port, role: owner?.role });
   }
 
   for (const listener of listeners) {
@@ -188,6 +208,7 @@ export const classifyServers = (
     const base = {
       pid: listener.pid,
       port: listener.port,
+      role: owner?.role,
       cwd: seen.cwd,
       command: seen.command,
       parent: seen.parent,
@@ -469,7 +490,13 @@ export const killPlan = (
   const selected = records.filter((record) => {
     if (wantPids.size > 0 && wantPids.has(record.pid)) return true;
     if (wantPids.size > 0) return false;
-    if (roles.size > 0 && !roles.has(record.name)) return false;
+    /*
+     * `--role` matches the PORT role and `--name` the pid file's stem, because those are two
+     * different words for most servers: a tracked one is `ng_serve` on the `ng` role. Matching
+     * both against `name` made `--role` select nothing at all for a correctly tracked server --
+     * silently, since selecting nothing is also what a clone with no such server looks like.
+     */
+    if (roles.size > 0 && (record.role === undefined || !roles.has(record.role))) return false;
     if (names.size > 0 && !names.has(record.name)) return false;
     return true;
   });
