@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.28.0](https://github.com/casaper/hangar/compare/v0.27.0...v0.28.0) (2026-09-18)
+
+### Features
+
+* **servers:** Give the report the column order it was asked for, and a badge ([65486a6](https://github.com/casaper/hangar/commit/65486a684a1c2267a69b07eb844531bc500e371e))
+
+### Bug Fixes
+
+* **servers:** Stop an emptied column from pushing the table past the window edge ([1aec675](https://github.com/casaper/hangar/commit/1aec6752d08615352a71d341a2105eb771aa0da3))
+
+### Refactoring
+
+* **servers:** Report the whole fleet as one table, with a role and a URL ([0e75cfc](https://github.com/casaper/hangar/commit/0e75cfc941a1293f815bee504b53196320fb29df))
+
 ## [0.27.0](https://github.com/casaper/hangar/compare/v0.26.0...v0.27.0) (2026-09-17)
 
 ### Features
