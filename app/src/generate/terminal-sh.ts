@@ -93,6 +93,16 @@ export type TerminalColourSettings = {
  * therefore carries the id, and the reset is guarded so that a hook only clears a colour IT set
  * -- otherwise leaving hangar A's clone for hangar B's would have A's hook wipe the colour B had
  * just painted, in whichever order the two hooks happen to be registered.
+ *
+ * ## One thing here is not colour at all
+ *
+ * `hangar_<id>_allow` is at the bottom, and it is here for the property this file has that
+ * nothing else does: it is sourced from the developer's shell rc, so it is defined in shells
+ * direnv has contributed nothing to. That is the whole point of it -- direnv considers only the
+ * NEAREST `.envrc` and reverts the environment outright when that one is blocked, so a clone
+ * needing `direnv allow` is a clone where `PATH_add "<hangar>/bin"` has not run and `hangar` is
+ * not callable by name. The function names `bin/hangar` absolutely and does nothing else; the
+ * work is `commands/allow.ts`, which says why it is not reimplemented in shell here.
  */
 export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSettings): Artifact => {
   const hangarId = hangar.id;
@@ -104,7 +114,7 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
   const content = [
     artifactHeader(
       hangar,
-      `Per-clone terminal colour for the ${hangarId} hangar. Source from ~/.zshrc or ~/.bashrc.`,
+      `Per-clone terminal colour and shell helpers for the ${hangarId} hangar. Source from ~/.zshrc or ~/.bashrc.`,
     ),
     '#',
     '# Safe to source anywhere: a no-op in a non-interactive shell, and in any terminal whose',
@@ -452,6 +462,19 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
     '',
     '# Apply to the directory the shell starts in.',
     `${p}_maybe`,
+    '',
+    '# ---------------------------------------------------------------------------',
+    '# Let direnv load the clone you are standing in: `direnv allow` in every directory of it',
+    '# that has an .envrc, which in most repos is more than one.',
+    '#',
+    '# The CLI is named by ABSOLUTE path on purpose, and this is the whole reason the helper',
+    '# is here rather than in bin/. A blocked .envrc is exactly when you need it -- and it is',
+    '# also exactly when the hangar is NOT on PATH, because direnv considers only the nearest',
+    '# .envrc and reverts the environment outright rather than falling back to a parent. This',
+    '# file is sourced from the shell rc, so it survives that; a PATH entry does not.',
+    `hangar_${hangarId}_allow() {`,
+    `    "\${${p}_root}/bin/hangar" allow "$@"`,
+    '}',
     '',
   ].join('\n');
 

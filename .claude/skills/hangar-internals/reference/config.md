@@ -218,6 +218,33 @@ Three things now hold it to the rule:
   Pointing it here would need `--force`, which would leave the live gitignored config one `-n`
   regression away from being destroyed by the net meant to protect it.
 
+### `envrcDirs` has a consumer, and the shell function that reaches it cannot be shell
+
+`hangar allow` runs `direnv allow` in every directory of a clone that has an `.envrc` — the same
+union `add-clone` already printed as paste-able lines, now something to run. A repo having more
+than one is the normal case (this one has three) and all of them are tracked, so any pull changes
+their content and direnv blocks the lot at once.
+
+**The entry point a developer actually types is `hangar_<id>_allow`, generated into
+`clone-terminal.sh`, and the reason it is there rather than in `bin/` is measured.** direnv
+considers exactly ONE `.envrc` — the nearest — and when that one is blocked it does not fall back
+to a parent's: it reverts the environment outright. Probed in a scratch directory and then in a
+live clone, a blocked `.envrc` leaves `PATH` without the clone's own
+`PATH_add "<hangar>/bin"`, so `hangar` is not callable by name in exactly the shell that needs
+this command. `clone-terminal.sh` is sourced from the developer's shell rc instead, which direnv
+has no say in — and `bin/hangar` resolves the hangar from `$PWD` under `env -i`, so naming it
+absolutely is enough.
+
+**That function delegates and does not reimplement, for a reason beyond drift.** A self-contained
+shell version would have to bake `repo.envrcDirs` into generated text — `angular`,
+`tests/playwright-regression-tests` — which is one hangar's layout written into an artifact
+`scan:literals` reads. Delegating keeps every repo-specific string on the config side, where the
+derivation above already put it.
+
+The command prints one line per file rather than a single success, and `add-clone` still only
+PRINTS the instruction: allowing an `.envrc` is approving the shell in it, which belongs to
+whoever's shell will run it.
+
 ### Presets are templates, not code
 
 A preset supplies the two answers no checkout can produce — `ports.roles[]` and

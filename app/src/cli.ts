@@ -4,6 +4,7 @@ import { Argument, Command, Option, type CommandUnknownOpts } from '@commander-j
 import pc from 'picocolors';
 
 import { addClone } from './commands/add-clone.ts';
+import { allow } from './commands/allow.ts';
 import { exec, splitExecArgv } from './commands/exec.ts';
 import { install } from './commands/install.ts';
 import { browse } from './commands/browse.ts';
@@ -557,6 +558,16 @@ program
   .addOption(new Option('--remote <url>', 'clone from a different URL').hideHelp())
   .action((options) => {
     addClone(requireHangar(), options);
+  });
+
+program
+  .command('allow')
+  .description('Let direnv load a clone: `direnv allow` in every directory of it with an .envrc')
+  .argument('[clone]', 'clone name, e.g. clone_02 (or just 2); default: the clone you are in')
+  .option('--all', 'every clone')
+  .option('-n, --dry-run', 'print the directories without allowing any of them')
+  .action((clone, options) => {
+    allow(requireHangar(), clone, options);
   });
 
 program

@@ -45,6 +45,7 @@ another name.
 | `close` | `close_preview` | `close` |
 | `reload` | `reload_preview` | `reload` |
 | `install` | `install_preview` | `install` |
+| `allow` | `allow_preview` | `allow` |
 | `browse` | `browse_preview` | `browse` |
 | `pr refresh` | `pr_refresh_preview`, and `pr_refresh` itself | — |
 | `pr create` | `pr_create_preview` | `pr_create` (with `--no-describe` fixed — see below) |
@@ -111,6 +112,7 @@ rule that cannot tell it from the report.
 | `resume` | `[clone]` (defaults to the clone you are in) | `-n, --limit <count>` (default `20`, `0` = all) | report **for you** — with no tty it prints the list instead of the picker; at a terminal it launches `claude --resume` |
 | `add-clone` | — | `--no-install` (+ a hidden `--remote <url>`) | **act [user]**, no `-n` |
 | `install` | `[clone]` | `--all` · `-n, --dry-run` | **act [user]** |
+| `allow` | `[clone]` (defaults to the clone you are in) | `--all` · `-n, --dry-run` | act — runs `direnv allow`, touches no tree |
 | `exec` | `[clones...] -- <snippet>` | `-a, --all` · `-n, --dry-run` · `--no-direnv` · `--serial` · `-j, --jobs <n>` | **[user] ONLY — denied to you, hook-enforced** |
 | `remove-clone` | `<clone>` | `--delete` · `--force` | **act [user]**, no `-n` |
 | `doctor` | `[clone]` (defaults to every clone) | `-a, --all` · `--fix` | report bare; **act [user]** with `--fix` |
@@ -288,6 +290,20 @@ separate `<thing>_preview`.
   runs comes from `repo.install[]`, and this repo's step is `npm ci` — which DELETES
   `node_modules` before refetching it, so a clone with a dev server running loses it mid-request.
   `hangar install <clone> -n` prints every step without spawning anything.
+- **`hangar allow` is how a clone direnv has blocked gets un-blocked**, and a repo usually has
+  more than one `.envrc` — this one has three, all TRACKED, so any `git pull` or `hangar sync`
+  blocks the lot at once. The command runs `direnv allow` in each directory that has one,
+  discovered from `git ls-files` with `repo.envrcDirs` union'd in as the fallback. It changes no
+  file and no git state, which is why it is not a `[user]` row. **A failure warns and the run
+  carries on** — unlike `install`, where a failed step means stopping — so `--all` never leaves
+  the fleet half done; the exit is non-zero at the end, naming every directory that failed.
+- **From inside a clone the command may not be reachable, and the shell function is the answer.**
+  direnv considers only the NEAREST `.envrc`, and when that one is blocked it reverts the
+  environment outright rather than falling back to a parent — so the clone's own
+  `PATH_add "<hangar>/bin"` has not run and `hangar` is not on PATH in exactly the shell that
+  needs this. `hangar_<id>_allow` is generated into `clone-terminal.sh`, which the developer's
+  `~/.zshrc` sources, and it names `bin/hangar` by absolute path. Tell the user that name rather
+  than a path; it takes the same arguments the command does, and it reaches a NEW shell only.
 - **`doctor` prints two machine-level rows before the clones, and both are diagnostics rather
   than passes.** `platform` names the OS and what it can do for Hangar, with a note per capability
   it lacks; `claude sessions` says how many live sessions the detector found and how many

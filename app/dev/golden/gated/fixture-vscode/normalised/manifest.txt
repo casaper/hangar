@@ -31,7 +31,7 @@ clone checkout_0001  index=1  colour=cyan  theme=vsfix-clone-0001-cyan
   workspace-2.json       -> %HANGAR%/checkout_0001/web/vsfix.0001.code-workspace
   theme.json             -> %HOME%/.claude/themes/vsfix-clone-0001-cyan.json
   git-info-exclude       -> %HANGAR%/checkout_0001/.git/info/exclude
-  direnv-snippet         -> %HANGAR%/checkout_0001/.envrc.private
+  direnv-snippet         -> (printed by add-clone)
   health-check-allows    -> %HANGAR%/checkout_0001/.claude/settings.local.json
   install-plan           -> (printed by add-clone and hangar install)
   symlink-web_e2e_.env.local -> %HANGAR%/checkout_0001/web/e2e/.env.local
@@ -48,7 +48,7 @@ clone checkout_0002  index=2  colour=yellow  theme=vsfix-clone-0002-yellow
   workspace-2.json       -> %HANGAR%/checkout_0002/web/vsfix.0002.code-workspace
   theme.json             -> %HOME%/.claude/themes/vsfix-clone-0002-yellow.json
   git-info-exclude       -> %HANGAR%/checkout_0002/.git/info/exclude
-  direnv-snippet         -> %HANGAR%/checkout_0002/.envrc.private
+  direnv-snippet         -> (printed by add-clone)
   health-check-allows    -> %HANGAR%/checkout_0002/.claude/settings.local.json
   install-plan           -> (printed by add-clone and hangar install)
   symlink-web_e2e_.env.local -> %HANGAR%/checkout_0002/web/e2e/.env.local
@@ -65,7 +65,7 @@ clone checkout_0003  index=3  colour=green  theme=vsfix-clone-0003-green
   workspace-2.json       -> %HANGAR%/checkout_0003/web/vsfix.0003.code-workspace
   theme.json             -> %HOME%/.claude/themes/vsfix-clone-0003-green.json
   git-info-exclude       -> %HANGAR%/checkout_0003/.git/info/exclude
-  direnv-snippet         -> %HANGAR%/checkout_0003/.envrc.private
+  direnv-snippet         -> (printed by add-clone)
   health-check-allows    -> %HANGAR%/checkout_0003/.claude/settings.local.json
   install-plan           -> (printed by add-clone and hangar install)
   symlink-web_e2e_.env.local -> %HANGAR%/checkout_0003/web/e2e/.env.local

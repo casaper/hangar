@@ -226,6 +226,7 @@ export const EXPOSURES: readonly Exposure[] = [
   { name: 'close_preview', path: ['close'], fixed: [PREVIEW], acts: false, lede: previewLede },
   { name: 'reload_preview', path: ['reload'], fixed: [PREVIEW], acts: false, lede: previewLede },
   { name: 'install_preview', path: ['install'], fixed: [PREVIEW], acts: false, lede: previewLede },
+  { name: 'allow_preview', path: ['allow'], fixed: [PREVIEW], acts: false, lede: previewLede },
   {
     name: 'tmp_merge_preview',
     path: ['tmp', 'merge'],
@@ -288,6 +289,14 @@ export const EXPOSURES: readonly Exposure[] = [
   { name: 'servers_prune', path: ['servers', 'prune'], hides: [PREVIEW], acts: true },
   { name: 'reload', path: ['reload'], hides: [PREVIEW], acts: true },
   { name: 'install', path: ['install'], hides: [PREVIEW], acts: true },
+  /*
+   * `acts: true` here is a boundary rather than a copy of `install`'s row, and the difference is
+   * what it blesses. `install` runs the commands `repo.install[]` DECLARES -- a fixed list in a
+   * config file. `allow` approves whatever is in an `.envrc` right now, and `.envrc` is tracked,
+   * so a clone session can author the file its own next `cd` will execute. The `ask` rule in
+   * `.claude/modes/ops.settings.json` is where that gets a human; nothing about the schema can.
+   */
+  { name: 'allow', path: ['allow'], hides: [PREVIEW], acts: true },
   { name: 'add_clone', path: ['add-clone'], shows: ['--remote'], acts: true },
   { name: 'remove_clone', path: ['remove-clone'], acts: true },
   { name: 'colours_change', path: ['colours', 'change'], acts: true },

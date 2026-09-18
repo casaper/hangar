@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, relative } from 'node:path';
 
 import {
   claudeLocalMdContent,
@@ -26,10 +26,11 @@ import { clearColourAssignment } from '../colour-assignments.ts';
 import { CliError, run } from '../exec.ts';
 import { cloneAt, discoverClones, nextFreeIndex, type Clone } from '../fleet.ts';
 import { installPlanLines, runInstall } from '../install.ts';
-import { FLEET_GIT_CONFIG, git, gitTry, setFleetGitConfig } from '../git.ts';
+import { FLEET_GIT_CONFIG, git, setFleetGitConfig } from '../git.ts';
 import { tildify } from '../user-paths.ts';
 import { cloneTmpPath, linkStoreEntriesInto } from '../tmp.ts';
 import { cloneLabel, heading, note, ok, step, warn } from '../ui.ts';
+import { allowInstructions } from './allow.ts';
 import { coloursSync } from './colours.ts';
 import { statusOf } from './status.ts';
 import type { Hangar } from '../hangar.ts';
@@ -219,9 +220,10 @@ export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
     runInstall(clone);
   }
 
-  // 12. direnv
+  // 12. direnv. Printed, never run: allowing an `.envrc` is approving the shell in it, and
+  //     `allow.ts` says why that decision belongs to whoever's shell will run it.
   heading('Run this to let direnv load the new clone');
-  console.log(direnvSnippet(clone));
+  console.log(allowInstructions(clone));
 
   // 13. status
   statusOf(clone, false);
@@ -231,44 +233,3 @@ const addRemote = (repo: Clone, name: string, url: string): void => {
   const res = git(repo.path, ['remote', 'add', name, url]);
   if (!res.ok) git(repo.path, ['remote', 'set-url', name, url]);
 };
-
-/**
- * Directories the repo is KNOWN to put an `.envrc` in, as the fallback for the discovery
- * below. Not the list itself: a hardcoded `['.', 'angular']` silently left
- * `tests/playwright-regression-tests` un-allowed, and that one carries the symlink that
- * reloads `.env.shared` after the tracked `.env` blanks `USER_READWRITE_PASSWORD` -- so
- * Playwright's login fails with an empty password and nothing says why.
- */
-// From `repo.envrcDirs`, not a hardcoded list. It was `['.', 'angular',
-// 'tests/playwright-regression-tests']`, which is this one repo's layout: a hangar for another
-// would silently write no `.envrc.private` where its own `.envrc` files live, and direnv would
-// load nothing there.
-const knownEnvrcDirs = (hangar: Hangar): readonly string[] => hangar.config.repo.envrcDirs;
-
-/**
- * Every directory in the clone that has an `.envrc`, root first.
- *
- * Discovered from git rather than declared: all of them are tracked, so `ls-files` is exact
- * and costs nothing, and a branch that adds a fourth `.envrc` is covered without editing this
- * file. The known list above is the union'd fallback for a checkout git cannot answer for.
- */
-const direnvDirs = (clone: Clone): string[] => {
-  const tracked = gitTry(clone.path, ['ls-files', '-z', '--', '*.envrc']) ?? '';
-  const dirs = new Set(
-    tracked
-      .split('\0')
-      .filter((file) => file.endsWith('.envrc'))
-      .map((file) => dirname(file)),
-  );
-  for (const dir of knownEnvrcDirs(clone.hangar)) dirs.add(dir);
-  return [...dirs]
-    .filter((dir) => existsSync(join(clone.path, dir, '.envrc')))
-    .sort((a, b) => (a === '.' ? -1 : b === '.' ? 1 : a.localeCompare(b)));
-};
-
-/** The `direnv allow` lines for those directories, ready to paste into a shell. */
-export const direnvSnippet = (clone: Clone): string =>
-  direnvDirs(clone)
-    .map((dir) => (dir === '.' ? clone.path : join(clone.path, dir)))
-    .map((path) => `(cd ${JSON.stringify(path)} && direnv allow .)`)
-    .join('\n');

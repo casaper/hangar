@@ -341,6 +341,21 @@ would land in the operator one, next door.
 which is also how every tool schema is generated — descriptions, arguments and `.choices()` read
 off the commander entry rather than written a second time.
 
+### `allow` is in `ask` for a reason `install` is not
+
+Both run code, so the pair of rows looks like a copy. It is not. **`install` runs the commands
+`repo.install[]` DECLARES** — a fixed list in a config file, reviewable before anything spawns,
+which is the whole point of `install_preview`. **`allow` approves whatever is in an `.envrc` right
+now**, and `.envrc` is tracked: a clone session can author the file its own developer's next `cd`
+will execute, and `hangar allow --all` would bless that across the fleet.
+
+The answer is the `ask` entry rather than an exclusion from the table. An exclusion is what `exec`
+gets, and the reason there is generality — a snippet can spell every other denied command — which
+does not apply here: the schema is a clone name and two flags, and the thing being approved is a
+file a human can read. What a rule cannot do is constrain the file's CONTENT, so the rule buys a
+human at the moment of approval and nothing more. That is the right amount, and it is written down
+because the row beside `install`'s would otherwise read as having been copied.
+
 ### Why `--mcp-config` and not a `.mcp.json`
 
 Developer mode's working directory is `app/`, so a file at the hangar root may or may not be found

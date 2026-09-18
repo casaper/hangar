@@ -1,0 +1,7 @@
+  hangar allow checkout_0001
+  hangar_vsfix_allow
+
+Allowing an .envrc is approving the shell it runs, so add-clone will not do it for you. The
+first line works from anywhere; the second is the shell function for when you are already in
+the clone, where a blocked .envrc means `hangar` itself is not yet on PATH. It reaches a new
+shell only.

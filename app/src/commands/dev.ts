@@ -28,7 +28,7 @@ import {
   type SettingsJson,
 } from '../clone-config.ts';
 import { CONFIG_FILENAME } from '../config/load.ts';
-import { direnvSnippet } from './add-clone.ts';
+import { allowInstructions } from './allow.ts';
 import { editors } from '../editor/index.ts';
 import {
   hangarClaudeLocalMdContent,
@@ -173,7 +173,7 @@ const cloneCaptures = (
       : []),
     ['theme.json', themePath(clone), theme.content],
     ['git-info-exclude', excludePath(clone), excludeBlock(hangar)],
-    ['direnv-snippet', envrcPrivatePath(clone), direnvSnippet(clone)],
+    ['direnv-snippet', '(printed by add-clone)', allowInstructions(clone)],
     ['health-check-allows', settingsPath(clone), `${healthCheckAllows(clone).join('\n')}\n`],
 
     /*
