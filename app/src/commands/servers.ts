@@ -435,6 +435,16 @@ export const layoutRows = (
 };
 
 /**
+ * A cell with nothing visible in it is handed back untouched, and that is the width guarantee
+ * rather than a nicety: `pc.dim('')` is two escape sequences around nothing, so a line ENDING in
+ * one no longer ends in whitespace and `table()`'s `trimEnd` leaves the gap in front of it
+ * standing -- two columns past the window, on exactly the narrow terminal the clipping exists
+ * for. It is reachable only with colour ON, so a suite run without a tty cannot see it.
+ */
+const painted = (cell: string, paint: (padded: string) => string): string =>
+  cell.trim() === '' ? cell : paint(cell);
+
+/**
  * Colour the laid-out rows: the heading dim, and each column's own `paint` on the PADDED cell.
  * PURE. Nothing here changes a cell's visible width, which is what keeps the table aligned.
  */
@@ -445,12 +455,14 @@ export const paintRows = (
 ): string[][] => {
   const [heading = [], ...body] = padded;
   return [
-    heading.map((cell) => pc.dim(cell)),
+    heading.map((cell) => painted(cell, (text) => pc.dim(text))),
     ...body.map((row, r) =>
       row.map((cell, c) => {
         const record = records[r];
         const paintCell = columns[c]?.paint;
-        return record === undefined || paintCell === undefined ? cell : paintCell(record, cell);
+        return record === undefined || paintCell === undefined
+          ? cell
+          : painted(cell, (text) => paintCell(record, text));
       }),
     ),
   ];

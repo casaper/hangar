@@ -546,6 +546,32 @@ test('a budget below one empties the last column rather than all but emptying it
   for (const line of render(rows)) assert.ok(!line.includes('server.js'));
 });
 
+test('an emptied cell gets no colour, so the line can still be trimmed to the window', () => {
+  /*
+   * `pc.dim('')` is two escapes around nothing: a line ending in one no longer ends in
+   * whitespace, so `table()`'s `trimEnd` keeps the gap in front of it and the row runs two
+   * columns past the window -- at exactly the width where the clipping has already given up.
+   *
+   * The paint is stubbed rather than picocolors' own, because picocolors is a no-op where there
+   * is no tty, which is what let this reach a real terminal with every gate green.
+   */
+  const esc = String.fromCharCode(27);
+  const records = withCommand(listening(one, 978, portOf(one, 'api')), longCommand);
+  const columns = columnsFor(false).map((column) => ({
+    ...column,
+    paint: (_record: ServerRecord, padded: string): string => `${esc}[2m${padded}${esc}[22m`,
+  }));
+  const rows = layoutRows(
+    serverCells(columns, records),
+    columns.map((column) => column.align),
+    20,
+  );
+  for (const row of paintRows(rows, columns, records)) {
+    assert.equal(row.at(-1), '', 'an empty cell came back carrying escapes');
+    assert.ok(render([row])[0]?.endsWith(' ') !== true, 'the line could not be trimmed');
+  }
+});
+
 test('with no window there is nothing to fit, and nothing is clipped', () => {
   const records = withCommand(listening(one, 976, portOf(one, 'api')), longCommand);
   assert.equal(lay(records, undefined).rows[1]?.at(-1)?.trim(), longCommand);

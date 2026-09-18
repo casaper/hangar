@@ -243,6 +243,15 @@ Measured. The guarantee is conditional on the other columns, which have a width 
 under; below it the command is empty and the table is as narrow as its columns get, because
 promising more would mean dropping columns, which is a different report rather than a narrower one.
 
+**An emptied cell is left UNPAINTED, and that is part of the same guarantee.** `pc.dim('')` is
+two escape sequences around nothing, so a line ending in one no longer ends in whitespace and
+`table()`'s `trimEnd` leaves the gap in front of it standing -- two columns past the window, at
+exactly the width where the clipping has already given up and every column but the last is all
+there is. It reached a terminal with every gate green because picocolors is a NO-OP where there
+is no tty: the suite paints nothing, so the header's empty cell measured the same either way, and
+the release run in a real terminal was the first thing to see it. The test now stubs the paint
+rather than borrowing picocolors', which is what makes the pin independent of where it runs.
+
 **Width comes from `process.stdout.columns`, and is undefined rather than a fallback where there
 is none.** `tui.ts` falls back to 80 because a picker has to draw somewhere; this has the opposite
 obligation, since piped output has no right edge to stay inside and clipping it to an imagined 80
