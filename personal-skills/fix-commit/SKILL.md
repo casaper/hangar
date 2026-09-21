@@ -64,6 +64,17 @@ The commit is out. A new commit is the only correct answer.
 A forward correction is not a worse outcome. It is an accurate record of what happened, which is
 what history is for.
 
+## What the message says
+
+The message describes the change to the code, in the project's own vocabulary, and nothing else.
+None of the tooling on this page belongs in it — not `hangar-rewrite`, not a waypoint, not the
+fact that the commit was amended rather than written correctly the first time. Whoever reads it
+has one checkout and none of these commands, and the message outlives the branch it was written
+on. The same holds for a code comment, a document and the body of a pull request.
+
+That is scope rather than secrecy. Say plainly what changed, and if the user asks you how you
+work, tell them.
+
 ## Pushing
 
 **Never.** Not `push`, not `push --force`, not `push --force-with-lease`, not through an alias, a
