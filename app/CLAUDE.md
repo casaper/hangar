@@ -215,7 +215,8 @@ the README or the skills and nothing else.
 
 **Scopes** are the subsystem: `sync` `doctor` `open` `tmp` `plans` `pr` `jira` `colours` `config`
 `editor` `terminal` `platform` `setup` `add-clone` `install` `resume` `ide` `status` `golden`
-`cli` `fleet` `modes` `exec` `servers` `allow` `waypoint` `commit-gate` `skills` `scrub` `test`. That list is documented and deliberately **not** enforced — a
+`cli` `fleet` `modes` `exec` `servers` `allow` `waypoint` `commit-gate` `skills` `scrub` `test`
+`deps`. That list is documented and deliberately **not** enforced — a
 `scope-enum` rule goes red the first time somebody adds a subsystem, and this repo already knows
 what a check that is red in normal operation is worth.
 
@@ -867,6 +868,9 @@ disk, so no shell rc that sources `clone-terminal.sh` broke.
   run after touching `config/schema.ts`. Both YAML files open with
   `# yaml-language-server: $schema=./hangar.schema.json`, so a stale committed schema silently
   validates every editor against last week's shape — invisible until someone opens the file.
+  **Run it when `zod` moves, too.** The generator's other input is the library, so a
+  `toJSONSchema` change across a version leaves exactly the same stale schema with
+  `config/schema.ts` untouched and this rule, read by the letter, never firing.
 - **`clone-colours.sh` and `clone-terminal.sh` are gitignored**, like the artifacts under
   `~/.claude/` (one statusline plus one theme per clone) — so a `palette.ts` edit no longer puts
   two hangar-root files into your commit, and **nothing in git records that they are stale.** Both
