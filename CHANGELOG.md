@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.29.0](https://github.com/casaper/hangar/compare/v0.28.0...v0.29.0) (2026-09-21)
+
+### Features
+
+* **allow:** Let direnv load a clone in one go, from inside it or from the root ([30cc464](https://github.com/casaper/hangar/commit/30cc4649640b46a51047eb068ccef73068dd264b))
+
 ## [0.28.0](https://github.com/casaper/hangar/compare/v0.27.0...v0.28.0) (2026-09-18)
 
 ### Features
