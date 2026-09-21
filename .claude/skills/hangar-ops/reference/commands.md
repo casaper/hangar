@@ -32,6 +32,7 @@ another name.
 | --- | --- | --- |
 | `list` | `list` | — |
 | `ports` | `ports` (always `--json`) | — |
+| `scrub` | `scrub` | — |
 | `status` | `status` | — |
 | `servers list` | `servers_list` | — |
 | `servers start` | `servers_start_preview` | `servers_start` |
@@ -99,6 +100,7 @@ rule that cannot tell it from the report.
 | --- | --- | --- | --- |
 | `list` | — | — | report |
 | `ports` | — | `--json` | report |
+| `scrub` | — | `--recent [hours]` (default `24`; pass a big number for the whole store) · `-q, --quiet` | report |
 | `status` | `[clone]` (defaults to every clone) | `-a, --all` · `-f, --fetch` | report (`--fetch` reaches the network, touches no tree) |
 | `sync` | `[clone]` | `-a, --all` · `-n, --dry-run` · `--no-session-notify` · `--include-busy` · `--onto <ref>` · `--strategy <rebase\|merge>` | **act [user]** |
 | `merge-default`, `rebase-default` | — | aliases of `sync`, identical options | **act [user]** |
@@ -476,6 +478,32 @@ separate `<thing>_preview`.
 - **`-q, --quiet` on `plans collect` and `tmp merge` exists for the `SessionEnd` hooks.** They flush
   on opposite criteria — `plans collect` prints when something MOVED, `tmp merge` when something
   WARNED — so silence from either is the normal outcome, not a failure.
+
+## `scrub` reads the drafts, not the code
+
+`hangar scrub` reports lines under `tmp/` that name this fleet — a clone directory, a path inside
+the hangar, a port the fleet derived, the CLI itself, or fleet vocabulary like `this clone` and
+`<clone>`. It changes nothing, ever: what a sentence was trying to say is a judgement, and the
+usual fix is to say it about the checkout rather than to delete it.
+
+**Run it before issue text or a reproduction case goes anywhere.** That is the moment it pays,
+because `tmp/` is where both are drafted and both are pasted out verbatim — into a tracker, into a
+pull request, to a colleague who has one checkout and no fleet. Reproduction STEPS are the worst
+case and the reason the check exists: steps built around one clone's dev-server port cannot be
+followed by anybody else at all.
+
+- **`tmp/` only**, the shared store plus every clone's own, deduplicated by real path — a clone's
+  `tmp/` entries are symlinks into one store, so a draft would otherwise be reported once per
+  clone. A clone's own unmerged directory is still its own finding.
+- **Documents only.** Prose and the files a reproduction case is made of; dot-directories under
+  `tmp/` are machine scratch and are skipped whole.
+- **`--recent` bounds it to a day** and is what the `SessionEnd` hook in every clone passes. By
+  hand, the interesting answer is usually the whole store: `hangar scrub --recent=100000`.
+- A base port is never reported — that is the project's own default and is correct anywhere. Only
+  a port this fleet derived from it is.
+
+The rule it backs is in every clone's `CLAUDE.local.md`, so a clone session already has it; this
+is what catches the slip, and `hangar doctor` has a row for the hook.
 
 ## `config validate` also checks the committed example
 

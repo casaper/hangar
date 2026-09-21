@@ -399,6 +399,9 @@ export const claudeLocalMdContent = (clone: Clone): string => {
     'exist — and in a reproduction case it is worse than noise, because steps written around this',
     'clone cannot be followed in the plain checkout that is all the reader has.',
     '',
+    '`hangar scrub` reports every line under `tmp/` that names this fleet, with the reason. It is',
+    'worth a run before issue text or a reproduction case goes anywhere; it changes nothing.',
+    '',
     "Write about the change and about the project, in the project's own vocabulary. The fact",
     'almost always survives the translation: what is true of "this clone" is usually true of "this',
     'checkout", and that version is true for the reader too.',
@@ -836,6 +839,41 @@ export const withCommitGateHook = (hangar: Hangar, settings: SettingsJson): Sett
   return { ...settings, hooks };
 };
 
+/**
+ * The `SessionEnd` hook that reports the fleet leaking into text written for somebody else.
+ *
+ * Its rule lives in the clone's identity file -- nothing about the fleet goes into anything the
+ * session writes -- and an instruction is all that rule can be: this runs after the fact, and a
+ * `SessionEnd` hook cannot refuse anything. That is the right trade here rather than a
+ * compromise. The alternative is a `PreToolUse` matcher on every Write, which would put a scan
+ * on the hot path of every file an agent touches, and there is no publish event to hang it on --
+ * issue text is pasted into a browser by a person, where no hook of ours will ever run.
+ *
+ * So the command is the deliverable and this is the backstop, which is why it is bounded to a
+ * day: run by hand `hangar scrub` reports the whole store, and a hook that did that would report
+ * the same backlog at the end of every session until somebody cleaned it.
+ */
+export const scrubHookCommand = (hangar: Hangar): string =>
+  `${hangar.paths.bin} --hangar ${hangar.root} scrub --quiet --recent`;
+
+const scrubHook = (hangar: Hangar): HookMatcher => ({
+  hooks: [{ type: 'command', command: scrubHookCommand(hangar), timeout: 60 }],
+});
+
+export const hasScrubHook = (hangar: Hangar, settings: SettingsJson | undefined): boolean =>
+  (settings?.hooks?.['SessionEnd'] ?? []).some((matcher) =>
+    matcher.hooks.some((hook) => hook.command === scrubHookCommand(hangar)),
+  );
+
+export const withScrubHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
+  const hooks = { ...settings.hooks };
+  const existing = (hooks['SessionEnd'] ?? []).filter(
+    (matcher) => !matcher.hooks.some((hook) => invokesOurCli(hangar, hook.command, 'scrub')),
+  );
+  hooks['SessionEnd'] = [...existing, scrubHook(hangar)];
+  return { ...settings, hooks };
+};
+
 export const withPlansHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
   const { plansDirectory: _dropped, ...rest } = settings;
   const hooks = { ...rest.hooks };
@@ -922,7 +960,7 @@ export const defaultSettings = (clone: Clone): SettingsJson => {
     hangar,
     withExecGuardHook(
       hangar,
-      withTmpHook(hangar, withPlansHook(hangar, withJiraHook(hangar, base))),
+      withScrubHook(hangar, withTmpHook(hangar, withPlansHook(hangar, withJiraHook(hangar, base)))),
     ),
   );
 };
@@ -997,7 +1035,10 @@ export const settingsContentFor = (clone: Clone, template: SettingsJson): string
     hangar,
     withExecGuardHook(
       hangar,
-      withTmpHook(hangar, withPlansHook(hangar, withJiraHook(hangar, settings))),
+      withScrubHook(
+        hangar,
+        withTmpHook(hangar, withPlansHook(hangar, withJiraHook(hangar, settings))),
+      ),
     ),
   );
   const final: SettingsJson =

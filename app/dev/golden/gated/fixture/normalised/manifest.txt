@@ -7,6 +7,7 @@ editor-kinds       zed
 plans-hook         %HANGAR%/bin/hangar --hangar %HANGAR% plans collect --quiet
 jira-hook          %HANGAR%/bin/hangar --hangar %HANGAR% jira hook
 tmp-hook           %HANGAR%/bin/hangar --hangar %HANGAR% tmp merge --quiet
+scrub-hook         %HANGAR%/bin/hangar --hangar %HANGAR% scrub --quiet --recent
 fleet-bin-path     PATH_add "%HANGAR%/bin"
 colour-assignments %HANGAR%/.hangar/colour-assignments.json
 memory-dir         %HOME%/.claude/wt-memory

@@ -22,11 +22,13 @@ import {
   hasExecGuardHook,
   hasJiraHook,
   hasPlansHook,
+  hasScrubHook,
   hasTmpHook,
   withCommitGateHook,
   withExecGuardHook,
   withJiraHook,
   withPlansHook,
+  withScrubHook,
   withTmpHook,
   claudeLocalMdPath,
   envLocalContent,
@@ -615,6 +617,26 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
       settings === undefined
         ? undefined
         : reconcileHook(hangar, clone, (s) => withCommitGateHook(hangar, s)),
+  });
+
+  /*
+   * The backstop behind the identity file's rule that nothing about the fleet goes into anything
+   * the session writes. It only ever reports, so its absence costs a report rather than a
+   * protection -- which is why this row exists at all: with nothing to see when it is missing and
+   * nothing to see when it is present and clean, a wrong answer here is invisible from inside the
+   * clone.
+   */
+  const scrubOk = hasScrubHook(hangar, settings);
+  checks.push({
+    name: 'scrub hook',
+    ok: scrubOk,
+    detail: scrubOk
+      ? 'reports fleet references in this clone’s tmp/ as the session ends'
+      : 'missing — a draft naming a clone, a port or a path would go out unremarked',
+    repair:
+      settings === undefined
+        ? undefined
+        : reconcileHook(hangar, clone, (s) => withScrubHook(hangar, s)),
   });
 
   const strayPlanDirs = planDirsIn(clone).filter(

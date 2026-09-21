@@ -13,6 +13,7 @@ import {
   fleetBinPathLine,
   jiraHookCommand,
   plansHookCommand,
+  scrubHookCommand,
   cloneSymlinks,
   defaultSettings,
   settingsContentFor,
@@ -228,6 +229,7 @@ export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
     `plans-hook         ${plansHookCommand(hangar)}`,
     `jira-hook          ${jiraHookCommand(hangar)}`,
     `tmp-hook           ${tmpHookCommand(hangar)}`,
+    `scrub-hook         ${scrubHookCommand(hangar)}`,
     `fleet-bin-path     ${fleetBinPathLine(hangar)}`,
     /*
      * Two hangar-level DESTINATIONS with no content of their own, captured because they moved.

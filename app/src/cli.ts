@@ -23,6 +23,7 @@ import { closeClones, type CloseOptions } from './commands/close.ts';
 import { open } from './commands/open.ts';
 import { reloadClones, type ReloadOptions } from './commands/reload.ts';
 import { plansCollect, plansStamp } from './commands/plans.ts';
+import { scrub } from './commands/scrub.ts';
 import { skillsList, skillsSync } from './commands/skills.ts';
 import { prCreate, prRefresh, prUpdate } from './commands/pr.ts';
 import { ports } from './commands/ports.ts';
@@ -246,6 +247,33 @@ program
   .option('--json', 'machine-readable output')
   .action((options) => {
     ports(requireHangar(), options);
+  });
+
+program
+  .command('scrub')
+  .description(
+    'Report text under tmp/ that names this fleet: drafts, issue text, reproduction cases',
+  )
+  .addHelpText(
+    'after',
+    "\nReports and changes nothing. A clone session can see the whole fleet and almost none of it is the managed repo's subject -- a draft that says \"this clone's own node_modules\", or reproduction steps naming one clone's dev-server port, cannot be followed by a reader who has one checkout. Scans the shared store and every clone's own tmp/, deduplicated, since that is where issue text is drafted and where it goes out verbatim.",
+  )
+  .option('-q, --quiet', 'say nothing unless something was found (for the SessionEnd hook)')
+  .option(
+    '--recent [hours]',
+    'only files changed in the last N hours, so a backlog is not re-reported every session',
+    '24',
+  )
+  .action((options: { quiet?: boolean; recent?: string | boolean }) => {
+    const recentHours =
+      options.recent === undefined
+        ? undefined
+        : Number(options.recent === true ? 24 : options.recent);
+    scrub(requireHangar(), {
+      quiet: options.quiet,
+      recentHours:
+        recentHours !== undefined && Number.isFinite(recentHours) ? recentHours : undefined,
+    });
   });
 
 program

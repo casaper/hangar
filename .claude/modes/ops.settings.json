@@ -92,6 +92,7 @@
       "Bash(hangar servers list:*)",
       "mcp__hangar__list",
       "mcp__hangar__ports",
+      "mcp__hangar__scrub",
       "mcp__hangar__status",
       "mcp__hangar__servers_list",
       "mcp__hangar__servers_start_preview",

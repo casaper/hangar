@@ -89,6 +89,61 @@ Two things about how it is written, both deliberate and both asserted in `builde
   a commit message does not name your editor. The second is not something this fleet asks for,
   and the test is what keeps them from collapsing into each other.
 
+## `scrub`, and what calibrating it cost
+
+The rule above is an instruction, and `hangar scrub` is the check behind it: it reports lines
+under `tmp/` naming a clone directory, a path inside the hangar, a port the fleet derived, the CLI
+itself, or fleet vocabulary. `commands/scrub.ts`, a `SessionEnd` hook in every clone, and a
+`doctor` row for that hook.
+
+**It is a report and a `SessionEnd` hook, and neither is a compromise on something better.** There
+is no publish event to hang a refusal on — issue text is pasted into a browser by a person, where
+no hook of ours will ever run — and a `PreToolUse` matcher on every Write would put a scan on the
+hot path of every file an agent touches. So the command is the deliverable, the identity file
+names it, and the hook is the backstop. It never edits either: `"this clone's own node_modules"`
+was making a real point, that the page loads the installed copy rather than a CDN one, and the fix
+is to say that about the checkout. A tool that rewrote the line would take the point out with the
+leak.
+
+**Every pattern is derived**, because a literal `clone_` or `4300` would be one fleet's answer
+shipped as everybody's: the prefix and pad from the config, the ports from the same derivation the
+dotenvs use, the CLI's own name from the binary path.
+
+Four narrowings, and each one is a measurement against this fleet's own store rather than a
+guess. They matter more than the patterns do — the first run of this check reported **61,538
+findings in 919 files**, which is worth exactly as much as no check at all:
+
+- **Documents, as an ALLOW-list.** `tmp/` here holds 77k PNG attachments, Claude Code's own
+  session transcripts and per-agent status scratch. A deny-list of binary extensions let every
+  transcript through, and a machine writing down a path it had just used is not output written
+  for a reader. Dot-directories under `tmp/` are skipped whole for the same reason. An allow-list
+  also fails the safe way: a format nobody has thought of yet is skipped rather than scanned.
+- **A port must be one the FLEET derived, and must sit in a port context.** A role's `base` is the
+  project's documented default and is right in any document. The context half was forced by a real
+  pair: a link ending `/lang-sql/4300` was reported as a leaked dev-server port while
+  `localhost:4700` in the next file along was a genuine one. Nothing about four digits separates
+  them, so the words around them do.
+- **No bare `clone` and no bare `sibling`.** Both are ordinary English in a repository — "clone the
+  repo", "the sibling element" — and `sibling` matched only prose, never once a real leak. Every
+  leak measured arrived as `this clone`.
+- **No colour names at all.** The palette is `red`, `green`, `blue` and thirteen more ordinary
+  words, and a ticket about a status indicator is full of them. A colour leak arrives attached to
+  a clone in practice, which the phrase pattern already catches.
+
+**`--recent` is why the hook is bearable.** Run by hand the interesting answer is the whole store;
+the hook wants only what the ending session might have written. After calibration the full run
+still found **454 lines in 89 files** — all genuine, all written before the rule existed, including
+`file://` links pointing into one clone's checkout from inside issue drafts, and one draft
+already attached to a ticket. A hook
+reporting that at the end of every session would be reporting somebody else's backlog forever.
+Past forty findings the report collapses to files and counts, since nothing scrolls in a hook.
+
+**One thing the golden net did not catch on its own**: the manifest's hook rows are a hand-written
+list in `dev.ts`, not derived from the settings, so adding a CLI-invoked hook moved twelve settings
+captures and left `manifest.txt` untouched — the file whose job is to record exactly that. The row
+was added by hand. The exec guard and the commit gate are legitimately absent from it, since both
+are named as direct script paths rather than as `bin/hangar <subcommand>`.
+
 ## Six literals from this repo that were being written into every hangar
 
 The builders in `clone-config.ts` render text a clone session READS as authoritative, and six

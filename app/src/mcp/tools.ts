@@ -242,6 +242,7 @@ export const EXPOSURES: readonly Exposure[] = [
     lede: previewLede,
   },
   { name: 'skills_list', path: ['skills', 'list'], acts: false },
+  { name: 'scrub', path: ['scrub'], acts: false },
   {
     name: 'skills_sync_preview',
     path: ['skills', 'sync'],

@@ -32,6 +32,15 @@
             "timeout": 120
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%HANGAR%/bin/hangar --hangar %HANGAR% scrub --quiet --recent",
+            "timeout": 60
+          }
+        ]
       }
     ],
     "PreToolUse": [

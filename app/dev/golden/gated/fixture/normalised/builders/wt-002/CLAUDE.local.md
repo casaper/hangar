@@ -92,6 +92,9 @@ placeholder or a `hangar` command reaches them as a reference to something that 
 exist — and in a reproduction case it is worse than noise, because steps written around this
 clone cannot be followed in the plain checkout that is all the reader has.
 
+`hangar scrub` reports every line under `tmp/` that names this fleet, with the reason. It is
+worth a run before issue text or a reproduction case goes anywhere; it changes nothing.
+
 Write about the change and about the project, in the project's own vocabulary. The fact
 almost always survives the translation: what is true of "this clone" is usually true of "this
 checkout", and that version is true for the reader too.
