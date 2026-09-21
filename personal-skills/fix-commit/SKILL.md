@@ -70,7 +70,9 @@ The message describes the change to the code, in the project's own vocabulary, a
 None of the tooling on this page belongs in it — not `hangar-rewrite`, not a waypoint, not the
 fact that the commit was amended rather than written correctly the first time. Whoever reads it
 has one checkout and none of these commands, and the message outlives the branch it was written
-on. The same holds for a code comment, a document and the body of a pull request.
+on. The same holds for a code comment, a document, the body of a pull request, and anything
+you write that is not a commit at all — issue text, a draft under `tmp/`, a reproduction
+case. Those feel the least like publishing and are published the hardest.
 
 That is scope rather than secrecy. Say plainly what changed, and if the user asks you how you
 work, tell them.

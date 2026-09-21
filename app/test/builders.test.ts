@@ -89,10 +89,22 @@ test('the identity file keeps the fleet out of the repo, as scope and not as sec
    * fleet does not ask for. The counterweight sentence is what keeps them apart.
    */
   const text = claudeLocalMdContent(cloneAt(hangar(), 2));
-  assert.match(text, /## Nothing about the fleet goes into the repo/);
-  assert.match(text, /commit messages, code comments/);
+  assert.match(text, /## Nothing about the fleet goes into anything you write/);
+  assert.match(text, /code comments, documentation, identifiers, business/);
+
+  /*
+   * The half that is NOT about committing, and the half a real leak came through. A draft issue
+   * description said "this clone's own `node_modules`" and its reproduction steps named one
+   * clone's dev-server port -- neither file was tracked, both were bound for a tracker, and a
+   * rule that said "the repo" had nothing to say about either. `tmp/` is named explicitly
+   * because it is shared fleet-wide AND is where issue text is drafted before it goes out.
+   */
+  assert.match(text, /never reach git either/);
+  assert.match(text, /`tmp\/`/);
+  assert.match(text, /reproduction case/);
+
   assert.match(text, /scope rather than secrecy/);
-  assert.match(text, /if the user asks you how you work,\ntell them/);
+  assert.match(text, /if the user asks you how you work, tell them/);
 
   // Named by CATEGORY, never by a roster of tool names -- a list goes stale the next time one is
   // added, leaving a rule that reads complete and is not.

@@ -56,11 +56,26 @@ untracked, excluded via `.git/info/exclude`, generated from one builder and held
 one tracked byte in the repo being managed.
 
 That is what the closing section uses: **nothing about the fleet goes into anything the session
-commits.** A commit message naming a helper on this PATH, a code comment naming a sibling clone,
+writes.** A commit message naming a helper on this PATH, a code comment naming a sibling clone,
 an identifier carrying a colour — each is a reference to something no contributor with one
 checkout has, and each outlives the branch it was written on. It generalises a rule that was
 already there one scope narrower (nothing fleet-specific in the clone's tracked `.claude/`), so
 it replaced that sentence rather than sitting beside it.
+
+**It says "writes" and not "commits", and that is the correction rather than the first draft.**
+The rule was written about committed artifacts, and the leak that followed was in neither git nor
+a commit message: a draft issue description under `tmp/` explained that its reproduction page
+loaded "this clone's own `node_modules`", and the steps beside it told the reader the app serves
+on one clone's dev-server port. Nothing tracked, nothing committed, and both bound for the
+tracker as written. Untracked is the opposite of safe here — `tmp/` is shared fleet-wide by
+design, and issue text drafted in it goes out as it stands, so the files furthest from git are
+the ones published hardest.
+
+The reproduction case is the sharper half of that, and the rule names it: text that merely
+mentions a clone is noise, whereas STEPS written around this clone cannot be followed at all in
+the plain checkout the reader has. So the instruction is not only "do not mention it" but "write
+it so it works without the fleet", and it carries the translation that usually does it — what is
+true of "this clone" is almost always true of "this checkout", which is true for the reader too.
 
 Two things about how it is written, both deliberate and both asserted in `builders.test.ts`:
 
