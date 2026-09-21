@@ -75,6 +75,32 @@ test('claudeLocalMdContent names its own clone and no sibling', () => {
   assert.ok(namesNoMachinePath(text));
 });
 
+test('the identity file keeps the fleet out of the repo, as scope and not as secrecy', () => {
+  /*
+   * A clone session can see the whole fleet, and almost none of it is the managed repo's subject:
+   * a commit message naming a helper on this PATH, or a code comment naming a sibling, is a
+   * reference to something no contributor with one checkout has. This is the only place that rule
+   * reaches a clone session, and it is the right one -- the file is untracked and excluded, so
+   * saying it here costs the managed repo nothing.
+   *
+   * The second half is asserted because it is the half an edit would quietly drop. "Do not
+   * mention the tooling" and "do not tell the user what you are doing" are one word apart and
+   * completely different instructions; the first is hygiene and the second is something this
+   * fleet does not ask for. The counterweight sentence is what keeps them apart.
+   */
+  const text = claudeLocalMdContent(cloneAt(hangar(), 2));
+  assert.match(text, /## Nothing about the fleet goes into the repo/);
+  assert.match(text, /commit messages, code comments/);
+  assert.match(text, /scope rather than secrecy/);
+  assert.match(text, /if the user asks you how you work,\ntell them/);
+
+  // Named by CATEGORY, never by a roster of tool names -- a list goes stale the next time one is
+  // added, leaving a rule that reads complete and is not.
+  for (const tool of ['hangar-waypoint', 'hangar-commit-gate', 'hangar-rewrite']) {
+    assert.ok(!text.includes(tool), `the rule enumerates ${tool} instead of the category`);
+  }
+});
+
 test('hangarClaudeLocalMdContent takes the hangar and nothing else', () => {
   // Same rule one level up, and the reason the ports appear as a FORMULA plus a role table
   // rather than a per-clone grid: a grid here would be a second answer to `hangar ports`.

@@ -46,6 +46,34 @@ means, and a check that is red in normal operation is a check nobody reads.
 (`hangar-ops/reference/reading-output.md` says the same to whoever reads the report — change one
 and change both.)
 
+## The identity file is the only way to instruct a clone session for free
+
+Everything else that could carry a standing instruction into a clone costs the managed repo
+something. Its tracked `CLAUDE.md` and its `.claude/` ship to every contributor, who has one
+checkout and no fleet; a settings file there is shared the same way. The identity file is
+untracked, excluded via `.git/info/exclude`, generated from one builder and held to it by content
+— so a rule put here reaches every session in every clone from its first turn, and changes not
+one tracked byte in the repo being managed.
+
+That is what the closing section uses: **nothing about the fleet goes into anything the session
+commits.** A commit message naming a helper on this PATH, a code comment naming a sibling clone,
+an identifier carrying a colour — each is a reference to something no contributor with one
+checkout has, and each outlives the branch it was written on. It generalises a rule that was
+already there one scope narrower (nothing fleet-specific in the clone's tracked `.claude/`), so
+it replaced that sentence rather than sitting beside it.
+
+Two things about how it is written, both deliberate and both asserted in `builders.test.ts`:
+
+- **It names a CATEGORY, not the tools.** A roster of `hangar-waypoint`, `hangar-commit-gate` and
+  the rest goes stale the next time one is added, leaving a rule that reads complete and is not.
+  Every line of this file is also paid for once per clone per session, forever.
+- **It closes by saying this is scope rather than secrecy, and that the user gets a straight
+  answer about how the session works.** That sentence is load-bearing and is the half a later
+  edit would quietly drop: "do not mention the tooling" and "do not say what you are doing" are
+  one word apart and are completely different instructions. The first is hygiene, the same reason
+  a commit message does not name your editor. The second is not something this fleet asks for,
+  and the test is what keeps them from collapsing into each other.
+
 ## Six literals from this repo that were being written into every hangar
 
 The builders in `clone-config.ts` render text a clone session READS as authoritative, and six
