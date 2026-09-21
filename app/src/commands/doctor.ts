@@ -18,10 +18,12 @@ import {
   claudeLocalMdContent,
   effectivePlansDirectory,
   hasAnyJiraHook,
+  hasCommitGateHook,
   hasExecGuardHook,
   hasJiraHook,
   hasPlansHook,
   hasTmpHook,
+  withCommitGateHook,
   withExecGuardHook,
   withJiraHook,
   withPlansHook,
@@ -68,6 +70,7 @@ import {
 import { usesBitbucket } from '../bitbucket.ts';
 import { editors, type EditorDriver } from '../editor/index.ts';
 import { CliError } from '../exec.ts';
+import { skillDriftRows } from './skills.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import { applyArtifact, type Artifact } from '../generate/index.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
@@ -590,6 +593,28 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
       settings === undefined
         ? undefined
         : reconcileHook(hangar, clone, (s) => withExecGuardHook(hangar, s)),
+  });
+
+  /*
+   * Unconditional for a different reason than the guard above: not because it protects a rule,
+   * but because it does NOTHING until someone opts in. The script is silent on both events with
+   * no state file, so a clone that never locks a branch cannot tell it is registered -- which is
+   * what makes "wired everywhere, opted into per clone" the right shape.
+   *
+   * Both events are checked together, because half a gate is the worst of the three states: a
+   * `PreToolUse` without its `SessionStart` denies commits in a session that was never told why.
+   */
+  const commitGateOk = hasCommitGateHook(hangar, settings);
+  checks.push({
+    name: 'commit gate hook',
+    ok: commitGateOk,
+    detail: commitGateOk
+      ? 'wired on both events — inert until `hangar-commit-gate lock` is run in this clone'
+      : 'missing or partial — `hangar-commit-gate lock` would not be honoured here',
+    repair:
+      settings === undefined
+        ? undefined
+        : reconcileHook(hangar, clone, (s) => withCommitGateHook(hangar, s)),
   });
 
   const strayPlanDirs = planDirsIn(clone).filter(
@@ -1502,6 +1527,25 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
     note(`  sed 's|"command": ".*statusline.*"|"command": "${want}"|' ${path} > ${path}.tmp \\`);
     note(`    && mv ${path}.tmp ${path}`);
     note("Not repairable on purpose: that file is operator mode's permission boundary.");
+  }
+
+  /*
+   * The personal skill overrides, REPORTED and never repaired.
+   *
+   * No `--fix`, and for a reason of scope rather than security: a repair would mean re-deriving
+   * an override from a tracked original that has moved, which is an editorial judgement about
+   * prose, not a reconciliation a builder can do. What `doctor` can answer is the question that
+   * is otherwise unanswerable -- a personal skill shadows a project one SILENTLY, so a stale
+   * override is indistinguishable from a current one until it recommends something the project
+   * now refuses.
+   *
+   * `not-compared` and `standalone` are not failures. A shallow clone, an unfetched default
+   * branch and a skill with no counterpart are all normal, and a check that is red in normal
+   * operation is a check nobody reads.
+   */
+  for (const row of skillDriftRows(hangar)) {
+    if (row.ok) continue;
+    problem(`${row.name}: ${row.detail}`);
   }
 
   /*

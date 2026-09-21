@@ -22,10 +22,19 @@ the check for a while, and three clones spent it telling their sessions the flee
 clones), `.envrc.private`, **one row per `repo.symlinks[]` entry** (printing that entry's `why`
 when it is missing), the theme and whether the file it names resolves, **one health-check allow per
 port role that declares one**, one declaration-only row per `repo.install[]` step, that `tmp/` is
-the clone's own directory, the three hooks in `settings.local.json` (plan collection, the cache
-merge and the ticket record hook — each repair re-reads the file, so a clone missing two of them
-gets both in one `--fix` pass), the sibling remotes in both directions, and the
-`checkout.defaultRemote=origin` those remotes make necessary. Above the clones it also holds the
+the clone's own directory, the five hooks in `settings.local.json` (plan collection, the cache
+merge, the ticket record hook, the exec guard and the commit gate — each repair re-reads the file,
+so a clone missing two of them gets both in one `--fix` pass), the sibling remotes in both
+directions, and the
+`checkout.defaultRemote=origin` those remotes make necessary.
+
+**The commit gate is the one hook whose absence is not a hazard**, and its row says so rather than
+scolding: the script is silent on both events with no state file, so a clone that never locks a
+branch cannot tell whether it is registered. Both events are checked TOGETHER, because half a
+gate is the worst of the three states — a `PreToolUse` without its `SessionStart` denies commits
+in a session that was never told why.
+
+Above the clones it also holds the
 hangar's own generated `CLAUDE.local.md` and `.claude/settings.json` to their renders, reports
 the machine's required tooling, reports the shared secrets file and the variables expected in it
 (**creating the file** under `--fix`, never its contents), warns when a declared

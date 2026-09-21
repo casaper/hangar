@@ -129,6 +129,11 @@ test('defaultSettings denies the secrets file and allows only its own clone', ()
   // failure, and only an exhaustive comparison catches that.
   assert.deepEqual(permissions.allow, [
     'Read(/wt/**)',
+    // Pre-approved because a waypoint cannot lose work: `restore` records an undo snapshot before
+    // it writes AND refuses any path resolving to the repo root. The gate is allowed only to be
+    // READ -- `lock`/`release`/`unlock` have no entry, so releasing a gate asks a human.
+    'Bash(hangar-waypoint:*)',
+    'Bash(hangar-commit-gate status:*)',
     'Bash(curl -s -o /dev/null -w "%{http_code}" --max-time 7 http://localhost:3037/ready)',
   ]);
 

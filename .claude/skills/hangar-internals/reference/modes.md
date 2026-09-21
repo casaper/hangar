@@ -356,6 +356,22 @@ file a human can read. What a rule cannot do is constrain the file's CONTENT, so
 human at the moment of approval and nothing more. That is the right amount, and it is written down
 because the row beside `install`'s would otherwise read as having been copied.
 
+### `skills_sync` is in `ask` because it is the only tool that leaves the hangar
+
+Every other acting tool writes inside this hangar or inside one of its clones, so its blast radius
+is bounded by the fleet. `skills sync` writes `~/.claude/skills/<name>`, which is machine-global: a
+personal skill shadows a same-named project skill ENTIRELY and silently, in every repo on the
+machine, so what it changes is which instructions every future session anywhere follows.
+
+**It cannot be namespaced, and that is why the refusals matter more than the rule.** Everything
+else a hangar puts under `~/.claude` carries the hangar id in its filename precisely so a second
+hangar cannot clobber it; a skill cannot, because the directory name is what makes it shadow at
+all. So `sync` reads an existing link's TARGET and refuses when it belongs to another hangar, and
+`--adopt` replaces a real directory only when the content already matches byte for byte — the
+failure mode is a refusal, never a discarded edit. The `ask` entry buys the same thing `allow`'s
+does, a human at the moment of approval, and as there it is the refusals rather than the rule that
+bound what can actually go wrong.
+
 ### Why `--mcp-config` and not a `.mcp.json`
 
 Developer mode's working directory is `app/`, so a file at the hangar root may or may not be found

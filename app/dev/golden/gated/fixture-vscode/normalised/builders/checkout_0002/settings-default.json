@@ -2,6 +2,8 @@
   "permissions": {
     "allow": [
       "Read(%HANGAR%/**)",
+      "Bash(hangar-waypoint:*)",
+      "Bash(hangar-commit-gate status:*)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" --max-time 20 https://local.example.invalid:4250/app/healthz)"
     ],
     "deny": [
@@ -34,6 +36,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%HANGAR%/bin/hangar-commit-gate",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SessionEnd": [
@@ -52,6 +64,17 @@
             "type": "command",
             "command": "%HANGAR%/bin/hangar --hangar %HANGAR% tmp merge --quiet",
             "timeout": 120
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%HANGAR%/bin/hangar-commit-gate",
+            "timeout": 10
           }
         ]
       }

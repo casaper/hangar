@@ -241,6 +241,14 @@ export const EXPOSURES: readonly Exposure[] = [
     acts: false,
     lede: previewLede,
   },
+  { name: 'skills_list', path: ['skills', 'list'], acts: false },
+  {
+    name: 'skills_sync_preview',
+    path: ['skills', 'sync'],
+    fixed: [PREVIEW],
+    acts: false,
+    lede: previewLede,
+  },
   {
     name: 'plans_stamp_preview',
     path: ['plans', 'stamp'],
@@ -311,6 +319,13 @@ export const EXPOSURES: readonly Exposure[] = [
   { name: 'tmp_merge', path: ['tmp', 'merge'], hides: [PREVIEW], acts: true },
   { name: 'plans_collect', path: ['plans', 'collect'], hides: [PREVIEW], acts: true },
   { name: 'plans_stamp', path: ['plans', 'stamp'], hides: [PREVIEW], acts: true },
+  /*
+   * `skills sync` writes OUTSIDE the hangar, into `~/.claude/skills` -- the one place a hangar
+   * touches that it cannot namespace, since a skill's directory name is what makes it shadow.
+   * It refuses a link belonging to another hangar rather than replacing it, but what it changes
+   * is which skills every session on this machine loads, in every repo. That is worth a human.
+   */
+  { name: 'skills_sync', path: ['skills', 'sync'], hides: [PREVIEW], acts: true },
   { name: 'teach_rg', path: ['teach-rg'], hides: [PREVIEW], acts: true },
   /*
    * `--no-describe` is FIXED on both, which is a limit on the tool rather than on the command.

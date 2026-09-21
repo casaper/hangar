@@ -36,6 +36,25 @@ export type HangarPaths = {
    * to start with, and a guard that cannot be found is a guard that is not guarding.
    */
   readonly execGuard: string;
+  /**
+   * `bin/hangar-waypoint` -- the non-destructive working-tree snapshot, reached from inside a
+   * clone with `Bash(hangar-waypoint:*)` pre-approved.
+   *
+   * A standalone script rather than a `hangar` subcommand for two reasons. It is typed often, and
+   * loading `cli.ts` costs ~0.25s of type stripping against a bare node start. And it acts on
+   * whatever repo `$PWD` is in -- right for a standalone tool, wrong for a hangar command, since
+   * every one of those addresses a clone by index and the MCP server spawns them with the hangar
+   * root as cwd.
+   */
+  readonly waypoint: string;
+  /**
+   * `bin/hangar-commit-gate` -- the opt-in per-branch commit lock: a `PreToolUse` hook, a
+   * `SessionStart` banner, and the verbs that toggle it.
+   *
+   * Absolute for `execGuard`'s reason, and standalone for the same one: it runs before EVERY Bash
+   * call in every clone, so it may not pay a CLI load.
+   */
+  readonly commitGate: string;
   readonly plans: string;
   readonly tmp: string;
   /**
@@ -164,6 +183,8 @@ export const pathsFor = (
     configFile: join(root, 'hangar.config.yaml'),
     bin: join(root, 'bin', 'hangar'),
     execGuard: join(root, 'bin', 'hangar-exec-guard'),
+    waypoint: join(root, 'bin', 'hangar-waypoint'),
+    commitGate: join(root, 'bin', 'hangar-commit-gate'),
     plans: join(root, 'plans'),
     tmp,
     jiraTickets: join(tmp, 'jira-tickets'),

@@ -1,0 +1,256 @@
+#!/usr/bin/env node
+/*
+ * Local history rewriting, for work that has never left this machine.
+ *
+ *   hangar-rewrite amend [-m "<msg>"]     # redo the last commit
+ *   hangar-rewrite fixup <sha>            # a fixup commit aimed at <sha>
+ *   hangar-rewrite autosquash <base>      # apply the fixups, non-interactively
+ *   hangar-rewrite reset <soft|mixed> <ref>
+ *   hangar-rewrite status                 # what is safe to rewrite here
+ *
+ * **What this is for, and what it is not.** A repo may forbid history rewriting outright, and
+ * the reason such a rule exists is that rewriting a commit somebody else has already pulled
+ * rewrites history under them. That reason is about PUBLISHED commits. This tool exists so the
+ * commits that have never been published can still be tidied, and it enforces the distinction
+ * the blanket rule cannot: every verb refuses the moment the target is reachable from any
+ * remote-tracking ref.
+ *
+ * **It never pushes, and there is no flag that makes it.** No verb takes a remote, nothing here
+ * spawns `git push`, `send-pack` or `http-push`, and an argument that names one is refused
+ * rather than passed along. Publishing is the user's, always, and no agent may do it.
+ *
+ * **Every rewrite is preceded by a waypoint**, so anything this does can be undone with
+ * `hangar-waypoint restore`. A rewrite that could not be reversed would be a much larger promise
+ * than "tidy the last commit" needs.
+ *
+ * **Deliberately NOT pre-approved.** `personalToolAllows` in `clone-config.ts` lists
+ * `hangar-waypoint` and `hangar-commit-gate status`; this is absent on purpose, so every call
+ * asks. Rewriting history is something to be asked for, never something to reach for.
+ *
+ * CommonJS, for the reason the other helpers here are: the hangar root's package.json declares
+ * no `"type"`.
+ */
+
+const { execFileSync, spawnSync } = require('node:child_process');
+const { dirname, join } = require('node:path');
+
+const git = (args, options = {}) =>
+  execFileSync('git', args, { encoding: 'utf8', ...options }).trim();
+
+const gitTry = (args) => {
+  try {
+    return git(args);
+  } catch {
+    return undefined;
+  }
+};
+
+const fail = (message) => {
+  console.error(message);
+  process.exit(1);
+};
+
+const repoRoot = () => git(['rev-parse', '--show-toplevel']);
+
+/**
+ * Anything that could reach a remote. Refused rather than forwarded.
+ *
+ * The verbs below never build a push command, so this is defence in depth against an argument
+ * smuggling one through -- `-c` can set an alias, and `--exec` on a rebase runs a shell command
+ * per commit, which is a push in one hop if nobody looks.
+ */
+const REMOTE_REACHING = /^(?:--exec|--exec=.*|-x|-c|--upload-pack.*|--receive-pack.*)$/;
+const REMOTE_WORDS = /\b(?:push|send-pack|http-push|remote|origin)\b/;
+
+const refuseRemoteArgs = (args) => {
+  for (const arg of args) {
+    if (REMOTE_REACHING.test(arg) || REMOTE_WORDS.test(arg)) {
+      fail(
+        `Refusing: "${arg}" could reach a remote.\n` +
+          'This tool rewrites LOCAL history only. Publishing is yours, never an agent\'s --\n' +
+          'there is no flag here that pushes, and that is deliberate.',
+      );
+    }
+  }
+};
+
+/**
+ * The commits this repo has already published, as an exclusion set.
+ *
+ * `--remotes` covers every remote-tracking ref, not just `origin/<branch>`: a sibling clone is a
+ * named remote in this fleet, so a commit fetched into one of those has been seen elsewhere too
+ * and is no longer this machine's alone.
+ */
+const isPublished = (rev) => {
+  const sha = gitTry(['rev-parse', rev]);
+  if (sha === undefined) fail(`Not a commit this repo knows: ${rev}`);
+  const contained = gitTry(['branch', '--remotes', '--contains', sha]);
+  return contained !== undefined && contained !== '';
+};
+
+const refusePublished = (rev, what) => {
+  if (!isPublished(rev)) return;
+  const where = gitTry(['branch', '--remotes', '--contains', rev]) ?? '';
+  fail(
+    `Refusing to ${what}: ${gitTry(['rev-parse', '--short', rev]) ?? rev} is already on a remote.\n` +
+      where
+        .split('\n')
+        .map((line) => `  ${line.trim()}`)
+        .join('\n') +
+      '\n\nRewriting a published commit rewrites history under everyone who has it. That is the\n' +
+      'reason the blanket rule exists, and it is the one case this tool will not make an\n' +
+      'exception for. Correct it forward with a new commit instead.',
+  );
+};
+
+/** Nothing is rewritten on a tree that is mid-rebase or mid-merge. */
+const refuseInProgress = (root) => {
+  const dir = git(['rev-parse', '--absolute-git-dir'], { cwd: root });
+  const { existsSync } = require('node:fs');
+  for (const [marker, name] of [
+    ['rebase-merge', 'a rebase'],
+    ['rebase-apply', 'a rebase'],
+    ['MERGE_HEAD', 'a merge'],
+    ['CHERRY_PICK_HEAD', 'a cherry-pick'],
+  ]) {
+    if (existsSync(join(dir, marker))) {
+      fail(`Refusing: ${name} is already in progress here. Finish or abort it first.`);
+    }
+  }
+};
+
+/**
+ * A waypoint of the whole tree before anything is rewritten.
+ *
+ * Not optional and not a flag: this is what makes every verb below reversible, and it is the
+ * reason a rewrite here does not need the permission gate an irreversible one would.
+ */
+const waypoint = (what) => {
+  const script = join(dirname(__filename), 'hangar-waypoint');
+  const res = spawnSync(script, ['save', `pre-rewrite: ${what}`], { encoding: 'utf8' });
+  if (res.status !== 0) {
+    fail(
+      `Refusing: could not record a waypoint first (${(res.stderr || '').trim() || 'unknown error'}).\n` +
+        'Every rewrite here is undoable, and that guarantee is not worth skipping.',
+    );
+  }
+  process.stdout.write(res.stdout);
+};
+
+const run = (args, root) => {
+  const res = spawnSync('git', args, { cwd: root, stdio: 'inherit' });
+  process.exit(res.status ?? 1);
+};
+
+const amend = (rest, root) => {
+  refuseRemoteArgs(rest);
+  refusePublished('HEAD', 'amend HEAD');
+  waypoint('amend HEAD');
+  run(['commit', '--amend', ...(rest.length > 0 ? rest : ['--no-edit'])], root);
+};
+
+const fixup = (rest, root) => {
+  refuseRemoteArgs(rest);
+  const target = rest[0];
+  if (target === undefined) fail('hangar-rewrite fixup needs the commit to aim at: fixup <sha>');
+  refusePublished(target, `aim a fixup at ${target}`);
+  waypoint(`fixup ${target}`);
+  run(['commit', `--fixup=${target}`, ...rest.slice(1)], root);
+};
+
+/**
+ * `--autosquash` without an interactive editor.
+ *
+ * `rebase -i` cannot work here: a hook or an agent has no tty, so the editor would either hang
+ * or open on a terminal nobody is watching. `GIT_SEQUENCE_EDITOR=true` accepts the todo list git
+ * generated -- which, with `--autosquash`, is exactly the reordering the fixups asked for.
+ */
+const autosquash = (rest, root) => {
+  refuseRemoteArgs(rest);
+  const base = rest[0];
+  if (base === undefined) {
+    fail('hangar-rewrite autosquash needs the base to rebase onto: autosquash <ref>');
+  }
+  refusePublished('HEAD', 'rewrite this branch');
+  waypoint(`autosquash onto ${base}`);
+  const res = spawnSync('git', ['rebase', '--autosquash', base], {
+    cwd: root,
+    stdio: 'inherit',
+    env: { ...process.env, GIT_SEQUENCE_EDITOR: 'true' },
+  });
+  process.exit(res.status ?? 1);
+};
+
+const reset = (rest, root) => {
+  refuseRemoteArgs(rest);
+  const [mode, ref] = rest;
+  if (mode !== 'soft' && mode !== 'mixed' && mode !== 'hard') {
+    fail('hangar-rewrite reset needs a mode: reset <soft|mixed|hard> <ref>');
+  }
+  if (ref === undefined) fail(`hangar-rewrite reset ${mode} needs the ref to reset to.`);
+  refusePublished('HEAD', 'move this branch');
+  waypoint(`reset --${mode} ${ref}`);
+  run(['reset', `--${mode}`, ref], root);
+};
+
+const status = (root) => {
+  const branch = gitTry(['rev-parse', '--abbrev-ref', 'HEAD']) ?? '(detached)';
+  console.log(`On ${branch}, in ${root}.`);
+
+  const unpublished = gitTry(['log', '--oneline', '--not', '--remotes']);
+  if (!unpublished) {
+    console.log('\nNothing here is unpublished — every commit is already on a remote,');
+    console.log('so nothing can be rewritten. Correct forward with a new commit.');
+    return;
+  }
+  console.log('\nUnpublished, so safe to rewrite (newest first):\n');
+  unpublished.split('\n').forEach((line) => console.log(`  ${line}`));
+  console.log('\nEverything older is on a remote and will be refused.');
+  console.log('Every rewrite records a waypoint first: `hangar-waypoint list` to undo one.');
+};
+
+const usage = () => {
+  console.log(
+    [
+      'Rewrites LOCAL, unpublished history. Never pushes; there is no flag that does.',
+      '',
+      'Usage:',
+      '  hangar-rewrite status',
+      '  hangar-rewrite amend [-m "<msg>" | --no-edit | ...]',
+      '  hangar-rewrite fixup <sha>',
+      '  hangar-rewrite autosquash <base>',
+      '  hangar-rewrite reset <soft|mixed|hard> <ref>',
+      '',
+      'Refused: anything already on a remote, and anything that could reach one.',
+      'Every rewrite records a waypoint first, so all of it is undoable.',
+    ].join('\n'),
+  );
+};
+
+const main = () => {
+  const [command, ...rest] = process.argv.slice(2);
+  if (command === undefined || command === '--help') {
+    usage();
+    process.exit(command === undefined ? 1 : 0);
+  }
+
+  const root = repoRoot();
+  if (command === 'status') return status(root);
+
+  refuseInProgress(root);
+
+  if (command === 'amend') return amend(rest, root);
+  if (command === 'fixup') return fixup(rest, root);
+  if (command === 'autosquash') return autosquash(rest, root);
+  if (command === 'reset') return reset(rest, root);
+
+  usage();
+  process.exit(1);
+};
+
+try {
+  main();
+} catch (error) {
+  console.error(`hangar-rewrite: ${error.message}`);
+  process.exit(1);
+}

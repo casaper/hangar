@@ -767,6 +767,55 @@ export const withExecGuardHook = (hangar: Hangar, settings: SettingsJson): Setti
   return { ...settings, hooks };
 };
 
+/**
+ * The opt-in commit gate: `bin/hangar-commit-gate`, on TWO events.
+ *
+ * `PreToolUse` is what denies a commit; `SessionStart` is what tells a new session the gate is
+ * on. Both are needed and neither is sufficient: a session started under a lock would otherwise
+ * discover it only by being refused, and a branch locked mid-session never gets a banner at all
+ * -- which is why the deny text carries the whole procedure rather than naming a skill.
+ *
+ * **Unconditional, and that is safe because the script is inert without a state file.** No
+ * config makes a gate unwanted, because a clone whose developer never runs `hangar-commit-gate
+ * lock` sees nothing: no banner, no deny, no output on either event. The cost of registering it
+ * everywhere is one bare node start per Bash call, which is why it is a standalone script rather
+ * than a `hangar` subcommand -- the same trade `hangar-exec-guard` records.
+ *
+ * Named by ABSOLUTE path for `execGuardHookCommand`'s reason: a hook's PATH is whatever the
+ * session started with.
+ */
+export const commitGateHookCommand = (hangar: Hangar): string => hangar.paths.commitGate;
+
+const commitGateMatcher = (hangar: Hangar, matcher?: string): HookMatcher => ({
+  ...(matcher === undefined ? {} : { matcher }),
+  hooks: [{ type: 'command', command: commitGateHookCommand(hangar), timeout: 10 }],
+});
+
+const isCommitGateHook = (command: string | undefined): boolean =>
+  command?.endsWith('hangar-commit-gate') === true;
+
+export const hasCommitGateHook = (hangar: Hangar, settings: SettingsJson | undefined): boolean =>
+  (['PreToolUse', 'SessionStart'] as const).every((event) =>
+    (settings?.hooks?.[event] ?? []).some((matcher) =>
+      matcher.hooks.some((hook) => hook.command === commitGateHookCommand(hangar)),
+    ),
+  );
+
+/** Reconciles like the others: one gate hook per event, at the path this hangar would write today. */
+export const withCommitGateHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
+  const hooks = { ...settings.hooks };
+  for (const [event, matcher] of [
+    ['PreToolUse', 'Bash'],
+    ['SessionStart', undefined],
+  ] as const) {
+    const existing = (hooks[event] ?? []).filter(
+      (entry) => !entry.hooks.some((hook) => isCommitGateHook(hook.command)),
+    );
+    hooks[event] = [...existing, commitGateMatcher(hangar, matcher)];
+  }
+  return { ...settings, hooks };
+};
+
 export const withPlansHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
   const { plansDirectory: _dropped, ...rest } = settings;
   const hooks = { ...rest.hooks };
@@ -816,19 +865,45 @@ export const withPlansHook = (hangar: Hangar, settings: SettingsJson): SettingsJ
 export const hangarRootAllow = (hangar: Hangar): string => `Read(${hangar.root}/**)`;
 export const secretsDeny = (hangar: Hangar): string => `Read(${hangar.paths.envShared})`;
 
+/**
+ * The personal tools every clone may reach without a prompt.
+ *
+ * Bare command names rather than absolute paths, deliberately: unlike a HOOK -- which runs with
+ * whatever PATH the session started with and so must be named absolutely -- these are what a
+ * person or an agent TYPES, and `bin/` is on PATH in every clone through its own `.envrc.private`.
+ *
+ * **`hangar-waypoint` is allowed whole, including `restore`, and that rests on two properties
+ * together**: a restore records an undo waypoint of the current tree before it writes, so it
+ * moves between two saved states rather than discarding one, AND it refuses any path that
+ * resolves to the repo root, so it cannot be talked into reverting the whole tree. Weakening
+ * either one means revisiting this entry, not just the script.
+ *
+ * **The gate is allowed only to be READ.** `status` answers a question; `lock`, `release` and
+ * `unlock` change whether committing is permitted, and they get no entry, so they prompt. The
+ * gate exists to put a human in charge of when committing resumes -- an agent that can release
+ * its own gate has no gate.
+ */
+export const personalToolAllows = (): string[] => [
+  'Bash(hangar-waypoint:*)',
+  'Bash(hangar-commit-gate status:*)',
+];
+
 export const defaultSettings = (clone: Clone): SettingsJson => {
   const hangar = clone.hangar;
   const base: SettingsJson = {
     permissions: {
-      allow: [hangarRootAllow(hangar), ...healthCheckAllows(clone)],
+      allow: [hangarRootAllow(hangar), ...personalToolAllows(), ...healthCheckAllows(clone)],
       deny: [secretsDeny(hangar)],
     },
     statusLine: { type: 'command', command: hangar.paths.statuslineScript },
     autoMemoryDirectory: hangar.paths.memory,
   };
-  return withExecGuardHook(
+  return withCommitGateHook(
     hangar,
-    withTmpHook(hangar, withPlansHook(hangar, withJiraHook(hangar, base))),
+    withExecGuardHook(
+      hangar,
+      withTmpHook(hangar, withPlansHook(hangar, withJiraHook(hangar, base))),
+    ),
   );
 };
 
@@ -881,6 +956,7 @@ export const settingsContentFor = (clone: Clone, template: SettingsJson): string
   permissions.allow = [
     ...kept,
     ...(kept.includes(rootAllow) ? [] : [rootAllow]),
+    ...personalToolAllows().filter((entry) => !kept.includes(entry)),
     ...healthCheckAllows(clone),
   ];
   const deny = permissions.deny ?? [];
@@ -897,9 +973,12 @@ export const settingsContentFor = (clone: Clone, template: SettingsJson): string
    * silently. Letting this builder strip it would undo that repair on the next `--fix`.
    */
   const plansDirectory = settings.plansDirectory;
-  const withHooks = withExecGuardHook(
+  const withHooks = withCommitGateHook(
     hangar,
-    withTmpHook(hangar, withPlansHook(hangar, withJiraHook(hangar, settings))),
+    withExecGuardHook(
+      hangar,
+      withTmpHook(hangar, withPlansHook(hangar, withJiraHook(hangar, settings))),
+    ),
   );
   const final: SettingsJson =
     plansDirectory === undefined ? withHooks : { ...withHooks, plansDirectory };

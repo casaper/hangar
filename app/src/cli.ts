@@ -23,6 +23,7 @@ import { closeClones, type CloseOptions } from './commands/close.ts';
 import { open } from './commands/open.ts';
 import { reloadClones, type ReloadOptions } from './commands/reload.ts';
 import { plansCollect, plansStamp } from './commands/plans.ts';
+import { skillsList, skillsSync } from './commands/skills.ts';
 import { prCreate, prRefresh, prUpdate } from './commands/pr.ts';
 import { ports } from './commands/ports.ts';
 import { removeClone } from './commands/remove-clone.ts';
@@ -752,6 +753,26 @@ plans
   )
   .action((options) => {
     plansCollect(requireHangar(), options);
+  });
+
+const skills = program
+  .command('skills')
+  .description('Personal Claude Code skills this hangar keeps, and whether they have gone stale');
+
+skills
+  .command('list')
+  .description('Each declared personal skill, whether it is linked, and whether it has drifted')
+  .action(() => {
+    skillsList(requireHangar());
+  });
+
+skills
+  .command('sync')
+  .description('Link ~/.claude/skills/<name> at this hangar’s tracked copy of each personal skill')
+  .option('-n, --dry-run', 'print what would be linked, change nothing')
+  .option('--adopt', 'replace a real directory with a link, only when its content already matches')
+  .action((options) => {
+    skillsSync(requireHangar(), options);
   });
 
 const pr = program

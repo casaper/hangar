@@ -65,6 +65,8 @@ another name.
 | `tmp merge` | `tmp_merge_preview` | `tmp_merge` |
 | `plans collect` | `plans_collect_preview` | `plans_collect` |
 | `plans stamp` | `plans_stamp_preview` | `plans_stamp` |
+| `skills list` | `skills_list` | — |
+| `skills sync` | `skills_sync_preview` | `skills_sync` |
 | `ide <kind> sync` | `ide_<kind>_sync_preview` | `ide_<kind>_sync` |
 
 **`colours sync` is the one command with two read-only tools**, because `--check` and `-n` answer
@@ -168,6 +170,8 @@ stderr as having no tool at all, is the developer tab's to fix, not yours.
 | `plans collect` | — | `-n, --dry-run` · `-q, --quiet` · `--no-transcript-scan` · `--in-use-window <minutes>` | act (runs from each clone's `SessionEnd` hook) |
 | `plans stamp` | — | `-n, --dry-run` · `--no-transcript-scan` · `--in-use-window <minutes>` | act |
 | `tmp merge` | — | `-n, --dry-run` · `-q, --quiet` | act (runs from each clone's `SessionEnd` hook) |
+| `skills list` | — | — | report (each personal skill: whether it is linked, and whether the tracked original moved under it) |
+| `skills sync` | — | `-n, --dry-run` · `--adopt` | **act [user]** — the one command that writes OUTSIDE the hangar, into `~/.claude/skills` |
 | `ide <kind> sync` (group alias `editor`) | — | `--from <clone>` · `-n, --dry-run` | act |
 | `colours sync` (group alias `colors`) | — | `-n, --dry-run` · `--check` | act |
 | `colours change` | `<clone> <colour>` | `--force` | **act [user]**, no `-n` |

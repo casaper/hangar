@@ -4,6 +4,8 @@
       "Bash(git status)",
       "Bash(curl -s -o /dev/null --max-time 3 http://localhost:9999)",
       "Read(%HANGAR%/**)",
+      "Bash(hangar-waypoint:*)",
+      "Bash(hangar-commit-gate status:*)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" --max-time 20 https://local.example.invalid:4300/app/healthz)"
     ],
     "deny": [
@@ -49,6 +51,27 @@
           {
             "type": "command",
             "command": "%HANGAR%/bin/hangar-exec-guard",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%HANGAR%/bin/hangar-commit-gate",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%HANGAR%/bin/hangar-commit-gate",
             "timeout": 10
           }
         ]

@@ -215,7 +215,7 @@ the README or the skills and nothing else.
 
 **Scopes** are the subsystem: `sync` `doctor` `open` `tmp` `plans` `pr` `jira` `colours` `config`
 `editor` `terminal` `platform` `setup` `add-clone` `install` `resume` `ide` `status` `golden`
-`cli` `fleet` `modes` `exec` `servers` `allow` `test`. That list is documented and deliberately **not** enforced — a
+`cli` `fleet` `modes` `exec` `servers` `allow` `waypoint` `commit-gate` `skills` `test`. That list is documented and deliberately **not** enforced — a
 `scope-enum` rule goes red the first time somebody adds a subsystem, and this repo already knows
 what a check that is red in normal operation is worth.
 
@@ -803,7 +803,8 @@ Tracked: this file, the root `CLAUDE.md`, `bin/**`, `.local/bin/**`, `app/**`, `
 `.envrc.hangar`, `.nvmrc`,
 `.editorconfig`, `hangar.config.example.yaml`, `hangar.schema.json`, `.gitignore`, `CHANGELOG.md`,
 `package.json` (scripts and nothing else — see the top of this file), `.releaserc.json`,
-`.claude/**` except the
+`personal-skills/**` (the overrides `hangar skills sync` links into `~/.claude/skills`, tracked so
+a shadow that goes stale is a diff rather than a silence), `.claude/**` except the
 generated `settings.json`, and the two `.gitkeep` files under `plans/` and `tmp/`. Never the
 application.
 
@@ -949,6 +950,40 @@ Five more root files are hand-maintained and belong to this package rather than 
   cannot be suppressed for either of them, the socket and the singleton rules, four probes that
   answered wrongly, and two more that could not answer at all — the status line does not run
   under `claude -p`, and `$CLAUDE_PROJECT_DIR` is not exported to tool subprocesses.
+- **`bin/hangar-waypoint` and `bin/hangar-commit-gate`** — the two personal tools every clone gets
+  on PATH, and the reason both are scripts rather than `hangar` subcommands is the one
+  `hangar-exec-guard` already records: the gate is a `PreToolUse` hook that runs before EVERY Bash
+  call, where loading `cli.ts` costs ~0.25s of type stripping against a bare node start, and the
+  waypoint is typed often enough for the same argument to hold. They are CommonJS, because the
+  hangar root's `package.json` declares no `"type"` — do not "modernise" them to `import`.
+  `waypoint` is pre-approved WHOLE, `restore` included, and that rests on two properties together:
+  a restore records an undo snapshot before it writes, AND it refuses any path resolving to the
+  repo root. The gate is pre-approved only as `status`; `lock`, `release` and `unlock` prompt,
+  because an agent that can release its own gate has no gate — and the hook refuses those verbs
+  and any command naming its own state file, because a permission rule matches only the START of
+  a command string and `hangar-commit-gate status && … release` sails straight past one.
+- **`bin/hangar-rewrite`** — amend, fixup, autosquash and reset, for history that has never been
+  published. A blanket "never rewrite" rule is a proxy for the thing that actually matters, which
+  is never rewriting what other people already have; this enforces the real rule instead of the
+  proxy, by refusing any commit reachable from a remote-tracking ref. Every verb records a
+  waypoint first, so all of it is undoable. **It is deliberately absent from `personalToolAllows`**
+  — rewriting history should be asked for, never reached for, and absence is what makes every call
+  prompt.
+- **`bin/hangar-exec-guard` also refuses publishing**, and the remit widened with `hangar-rewrite`
+  rather than before it: a rewritten branch has diverged from its remote, which is the one moment
+  a force-push looks like the obvious next step. The capability and the refusal were one decision.
+  It covers `push`, `send-pack`, `http-push` and `gh pr create|merge`, token-based so
+  `git log --grep=push` and a file called `push.ts` survive. A managed repo may forbid pushing in
+  its own rules; this is not per-project, and holds in a fresh clone and in a repo that has no
+  such rule.
+- **`personal-skills/` is tracked, and is the one thing this repo writes OUTSIDE its own root.**
+  `hangar skills sync` links `~/.claude/skills/<name>` at it, which shadows a same-named project
+  skill entirely and silently. **It is also the one artifact that cannot carry the hangar id** —
+  the directory name is what makes a skill shadow, so `<id>-<name>` would shadow nothing. The
+  collision with a second hangar is therefore made INSPECTABLE rather than named away: `sync`
+  reads the existing link's target and refuses when it belongs elsewhere. `--adopt` replaces a
+  real directory only when its content already matches byte for byte, so the failure mode is a
+  refusal and never a discarded edit.
 - **`.nvmrc` and `app/.nvmrc`** are a pair, both `24`. Move them together.
 - **`.claude/skills/**` is tracked, and both skills are artifacts of this package.** A command
   whose flags change is a `hangar-ops/reference/commands.md` edit; a design decision that changes

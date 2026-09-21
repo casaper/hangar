@@ -40,23 +40,78 @@ process.stdin.on('end', () => {
   const command = payload?.tool_input?.command;
   if (typeof command !== 'string' || command === '') process.exit(0);
 
-  if (!invokesHangarExec(command)) process.exit(0);
+  const reason = invokesHangarExec(command)
+    ? '`hangar exec` runs a shell snippet in every clone you name, and is reserved for the ' +
+      'user at a terminal — it reaches other agents’ live working trees, and it can ' +
+      'spell any command that is denied on its own. Ask the user to run it, and give them ' +
+      'the exact line. `hangar exec -n` prints the plan and is also theirs, not yours. To ' +
+      'act on ONE clone you may already have a permitted command for, use that instead.'
+    : publishes(command)
+      ? '**Publishing is the user’s, and no agent may do it — there is no exception to this.** ' +
+        'Not `push`, not `--force`, not `--force-with-lease`, not `send-pack`, not through an ' +
+        'alias, a script, a `--exec`, or a pull request opened from the command line. This holds ' +
+        'however reasonable the push looks, and it holds especially right after a local history ' +
+        'rewrite — a rewritten branch has diverged from its remote, and that is exactly when a ' +
+        'force-push starts to feel necessary. Say the branch is ready, give the exact line, stop.'
+      : undefined;
+
+  if (reason === undefined) process.exit(0);
 
   process.stdout.write(
     JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
-        permissionDecisionReason:
-          '`hangar exec` runs a shell snippet in every clone you name, and is reserved for the ' +
-          'user at a terminal — it reaches other agents’ live working trees, and it can ' +
-          'spell any command that is denied on its own. Ask the user to run it, and give them ' +
-          'the exact line. `hangar exec -n` prints the plan and is also theirs, not yours. To ' +
-          'act on ONE clone you may already have a permitted command for, use that instead.',
+        permissionDecisionReason: reason,
       },
     }) + '\n',
   );
 });
+
+/**
+ * Does this command line publish anything?
+ *
+ * **Why the guard's remit widened.** A managed repo may forbid pushing in its own rules -- this
+ * fleet's does -- but that rule is one repo's, in a tracked file, and it only applies once that
+ * repo's hooks are wired. Hangar manages any repo, and this instruction is not per-project:
+ * publishing is the user's duty, always. A fresh clone, a repo with no such rule, and a rules
+ * file that changes tomorrow all have to land the same way.
+ *
+ * **It is here NOW because of `bin/hangar-rewrite`.** That tool makes rewriting unpublished
+ * history easy and refuses to touch published history -- but a rewritten branch has diverged from
+ * its remote, and a diverged branch is the one situation where a force-push looks like the
+ * obvious next step. The capability and this refusal were one decision, and splitting them up
+ * later would leave the capability without its counterweight.
+ *
+ * Token-based for `invokesHangarExec`'s reasons: `git log --grep=push` and a file named `push.ts`
+ * must survive, while `cd /x && git -C y push --force` must not.
+ */
+function publishes(command) {
+  const tokens = command.split(/[\s;&|()`]+/).filter(Boolean);
+  const bare = (t) => t.replace(/^["']|["']$/g, '');
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = bare(tokens[i]);
+    if (/(^|\/)git$/.test(token)) {
+      for (let j = i + 1; j < tokens.length; j += 1) {
+        const next = bare(tokens[j]);
+        // Step over git's own pre-command options, and the ones that take a value.
+        if (next === '-C' || next === '-c' || next === '--git-dir' || next === '--work-tree') {
+          j += 1;
+          continue;
+        }
+        if (next.startsWith('-')) continue;
+        if (next === 'push' || next === 'send-pack' || next === 'http-push') return true;
+        break; // some other subcommand entirely
+      }
+    }
+    // `gh pr create` and `gh pr merge` publish just as surely as a push does.
+    if (/(^|\/)gh$/.test(token) && bare(tokens[i + 1] ?? '') === 'pr') {
+      const verb = bare(tokens[i + 2] ?? '');
+      if (verb === 'create' || verb === 'merge') return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Does this command line invoke `hangar exec` anywhere in it?

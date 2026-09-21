@@ -1,0 +1,345 @@
+#!/usr/bin/env node
+/*
+ * Snapshots the working tree into `refs/hangar-waypoints/<branch>` without touching the working
+ * tree or the real index.
+ *
+ *   hangar-waypoint save "<what>"            # record a waypoint
+ *   hangar-waypoint list                     # the waypoints for this branch
+ *   hangar-waypoint show <n>                 # the snapshot commit
+ *   hangar-waypoint diff <n>                 # snapshot -> working tree
+ *   hangar-waypoint covers <path>...         # assert the snapshot holds them
+ *   hangar-waypoint restore <n> <path>...    # writes the tree, undoably
+ *
+ * The snapshot is built through a throwaway index, so unlike `git stash create` it captures
+ * untracked files too, and unlike `git stash push` it leaves the tree exactly as it found it.
+ * `--create-reflog` is mandatory: reflogs are automatic only for refs/heads, refs/remotes,
+ * refs/notes, refs/stash and HEAD, so without it each save would silently overwrite its
+ * predecessor.
+ *
+ * **Standalone, and deliberately not a `hangar` subcommand.** Same reasoning as
+ * `hangar-exec-guard`: this is reached from inside a clone with `Bash(hangar-waypoint:*)`
+ * pre-approved, so it runs often, and loading `app/src/cli.ts` costs ~0.25s of type stripping
+ * against a bare node start. It also acts on whatever repo `$PWD` is in, which is the right
+ * shape for a standalone tool and the wrong one for a hangar command -- every one of those
+ * addresses a clone by index, and the MCP server spawns them with the HANGAR ROOT as cwd.
+ *
+ * CommonJS, because the hangar root's package.json deliberately declares no `"type"` and an
+ * extensionless entry point resolves from the nearest one. Do not add `import` here.
+ */
+
+const { execFileSync } = require('node:child_process');
+const { rmSync } = require('node:fs');
+const { join, resolve } = require('node:path');
+
+const REF_PREFIX = 'refs/hangar-waypoints';
+
+const git = (args, options = {}) =>
+  execFileSync('git', args, { encoding: 'utf8', ...options }).trim();
+
+const repoRoot = () => git(['rev-parse', '--show-toplevel']);
+
+const gitDir = () => git(['rev-parse', '--absolute-git-dir']);
+
+/** Branch name, or `detached-<sha>` when HEAD is not on one. */
+const currentBranch = () => {
+  const name = git(['rev-parse', '--abbrev-ref', 'HEAD']);
+  return name === 'HEAD' ? `detached-${git(['rev-parse', '--short', 'HEAD'])}` : name;
+};
+
+const refForBranch = () => `${REF_PREFIX}/${currentBranch()}`;
+
+const refExists = (ref) => {
+  try {
+    git(['rev-parse', '--verify', '--quiet', ref], { stdio: ['ignore', 'pipe', 'ignore'] });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const fail = (message) => {
+  console.error(message);
+  process.exit(1);
+};
+
+/**
+ * Commits the current working tree and returns the SHA, without publishing it to any ref. The
+ * real index is never involved: every command runs with GIT_INDEX_FILE pointed at a scratch file
+ * that is deleted afterwards.
+ */
+const buildSnapshot = (message) => {
+  const root = repoRoot();
+  const indexFile = join(gitDir(), `waypoint-${process.pid}.index`);
+  const scratch = { cwd: root, env: { ...process.env, GIT_INDEX_FILE: indexFile } };
+
+  try {
+    git(['read-tree', 'HEAD'], scratch);
+    git(['add', '-A'], scratch);
+
+    const tree = git(['write-tree'], scratch);
+    const parent = git(['rev-parse', 'HEAD'], { cwd: root });
+
+    return git(['commit-tree', tree, '-p', parent, '-m', message], scratch);
+  } finally {
+    rmSync(indexFile, { force: true });
+  }
+};
+
+const save = (message) => {
+  if (!message) {
+    fail('waypoint save needs a message: hangar-waypoint save "<what>"');
+  }
+
+  const snapshot = buildSnapshot(message);
+  const ref = refForBranch();
+
+  git(['update-ref', '--create-reflog', '-m', message, ref, snapshot], { cwd: repoRoot() });
+
+  console.log(`waypoint ${git(['rev-parse', '--short', snapshot])}  ${ref}@{0}`);
+  console.log(`  ${message}`);
+};
+
+const list = () => {
+  const ref = refForBranch();
+
+  if (!refExists(ref)) {
+    console.log(`No waypoints on ${currentBranch()} yet.`);
+    return;
+  }
+
+  // The index is what `show`/`diff`/`restore` take, so number the lines here rather than printing
+  // %gd, which spells out the whole ref on every row.
+  const rows = git(['reflog', 'show', `--format=%h%x09%cr%x09%gs`, ref], {
+    cwd: repoRoot(),
+  }).split('\n');
+
+  console.log(`Waypoints on ${currentBranch()} (newest first):\n`);
+  rows.forEach((row, index) => {
+    const [sha, age, subject] = row.split('\t');
+    console.log(`  ${String(index).padEnd(3)} ${sha}  ${(age ?? '').padEnd(16)} ${subject ?? ''}`);
+  });
+  console.log('\nInspect with: hangar-waypoint diff <n>');
+};
+
+/** Resolves `<n>` to a reflog entry, failing loudly rather than silently picking @{0}. */
+const entry = (index) => {
+  const ref = refForBranch();
+
+  if (!refExists(ref)) {
+    fail(`No waypoints on ${currentBranch()} yet.`);
+  }
+
+  const position = index === undefined ? '0' : String(index);
+
+  if (!/^\d+$/.test(position)) {
+    fail(`waypoint index must be a number, got "${index}"`);
+  }
+
+  const target = `${ref}@{${position}}`;
+
+  if (!refExists(target)) {
+    fail(`No waypoint at ${target} — run: hangar-waypoint list`);
+  }
+
+  return target;
+};
+
+const show = (index, extra) => console.log(git(['show', entry(index), ...extra], { cwd: repoRoot() }));
+
+/**
+ * Diffs a waypoint against the current tree, or against another waypoint when a second index is
+ * given.
+ *
+ * The comparison goes snapshot-to-snapshot rather than `git diff <snapshot>`, because a plain
+ * diff walks the real index: every file that is untracked there -- which is most of what a
+ * waypoint exists to hold -- would be reported as deleted even though it is sitting in the
+ * working tree.
+ */
+const diff = (index, rest) => {
+  const from = entry(index);
+  const [maybeIndex, ...extra] = rest;
+  const comparingWaypoints = /^\d+$/.test(maybeIndex ?? '');
+  const to = comparingWaypoints ? entry(maybeIndex) : buildSnapshot('waypoint diff scratch');
+
+  console.log(git(['diff', from, to, ...(comparingWaypoints ? extra : rest)], { cwd: repoRoot() }));
+};
+
+/**
+ * Asserts that a waypoint actually holds the files about to be edited.
+ *
+ * A snapshot is built with `git add -A`, which honours `.gitignore` -- so an ignored path is
+ * absent from it, and anything relying on the waypoint to make a file recoverable must check
+ * rather than assume.
+ */
+const missingFrom = (commitish, paths) =>
+  paths.filter((path) => {
+    try {
+      execFileSync('git', ['cat-file', '-e', `${commitish}:${path}`], {
+        cwd: repoRoot(),
+        stdio: 'ignore',
+      });
+      return false;
+    } catch {
+      return true;
+    }
+  });
+
+const covers = (rest) => {
+  const [maybeIndex, ...tail] = rest;
+  const indexGiven = /^\d+$/.test(maybeIndex ?? '');
+  const paths = indexGiven ? tail : rest;
+
+  if (paths.length === 0) {
+    fail('waypoint covers needs the paths to check.');
+  }
+
+  const target = entry(indexGiven ? maybeIndex : '0');
+  const missing = missingFrom(target, paths);
+
+  if (missing.length === 0) {
+    console.log(`All ${paths.length} path(s) are held by ${target}.`);
+    return;
+  }
+
+  console.error(`${missing.length} path(s) are NOT in ${target} — back them up before editing:`);
+  missing.forEach((path) => console.error(`  ${path}`));
+  console.error('\nMost likely they are gitignored, which a waypoint never captures.');
+  process.exit(1);
+};
+
+/**
+ * Paths that mean "the whole tree" rather than a file to repair.
+ *
+ * **This exists because `restore`'s no-paths guard does not actually bound the blast radius**,
+ * and the hole is only visible if you trace it through `git cat-file`. Measured: `.` is rejected
+ * by `missingFrom` (`path '.' exists on disk, but not in HEAD`), so it looks as if a root revert
+ * is already impossible -- but `./` and the empty string both resolve to the ROOT TREE and exit
+ * 0, sail through the check, and hand `git restore` the entire working tree. With
+ * `Bash(hangar-waypoint:*)` pre-approved that happens with no prompt, and the no-prompt decision
+ * was made about repairing NAMED FILES.
+ *
+ * A directory is deliberately still allowed -- restoring `src/components` is real repair. The
+ * repo root is not a path, it is everything.
+ */
+const REPO_ROOT_PATHS = new Set(['', '.', './', '/']);
+
+const revertsWholeTree = (path, root) => {
+  if (REPO_ROOT_PATHS.has(path.trim())) return true;
+  // An absolute or relative spelling that lands on the root, e.g. `src/..` or the root itself.
+  try {
+    return resolve(process.cwd(), path) === root;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * The one verb that writes to the working tree. It records an undo waypoint of the current state
+ * first, so a restore moves between two saved states rather than discarding one --
+ * `restore 0 <the same paths>` puts it back.
+ *
+ * Paths stay mandatory: repairing named files and reverting a whole tree are different acts, and
+ * nothing here needs the second.
+ */
+const restore = (index, paths) => {
+  if (paths.length === 0) {
+    fail(
+      'waypoint restore needs explicit paths.\n' +
+        'Restoring the whole tree would discard work the user may still want;\n' +
+        'inspect first with: hangar-waypoint diff <n>',
+    );
+  }
+
+  const root = repoRoot();
+
+  // Checked BEFORE anything is resolved or written, for the same reason the missing-path check
+  // below is: a refusal that had already recorded an undo waypoint would consume a slot for a
+  // restore that never ran.
+  const wholeTree = paths.filter((path) => revertsWholeTree(path, root));
+
+  if (wholeTree.length > 0) {
+    fail(
+      `${wholeTree.map((p) => `"${p}"`).join(', ')} names the whole repository, not a file to repair.\n` +
+        'Restoring the whole tree would discard work the user may still want;\n' +
+        'name the paths you actually want back, or inspect first with: hangar-waypoint diff <n>',
+    );
+  }
+
+  // Resolved BEFORE the undo waypoint is written: `@{n}` is positional, so the update-ref below
+  // would silently move it one place off the intended commit.
+  const source = git(['rev-parse', entry(index)], { cwd: root });
+
+  // Before anything is written: a `git restore` that fails on a path the waypoint lacks would
+  // leave an undo snapshot for a restore that never ran.
+  const missing = missingFrom(source, paths);
+
+  if (missing.length > 0) {
+    fail(
+      `${git(['rev-parse', '--short', source], { cwd: root })} does not hold ` +
+        `${missing.length} of the ${paths.length} path(s) given:\n` +
+        missing.map((path) => `  ${path}`).join('\n') +
+        '\n\nEither it predates them or they are gitignored, which a waypoint never' +
+        '\ncaptures. Check with: hangar-waypoint list',
+    );
+  }
+
+  const undoMessage = `pre-restore: ${paths.join(' ')}`;
+
+  git(
+    ['update-ref', '--create-reflog', '-m', undoMessage, refForBranch(), buildSnapshot(undoMessage)],
+    { cwd: root },
+  );
+  git(['restore', `--source=${source}`, '--', ...paths], { cwd: root });
+
+  console.log(`Restored from ${git(['rev-parse', '--short', source], { cwd: root })}:`);
+  paths.forEach((path) => console.log(`  ${path}`));
+  console.log(`\nUndo: hangar-waypoint restore 0 ${paths.join(' ')}`);
+  console.log('The undo waypoint is @{0}, so every earlier one moved down a place.');
+};
+
+const usage = () => {
+  console.log(
+    [
+      'Usage:',
+      '  hangar-waypoint save "<what>"',
+      '  hangar-waypoint list',
+      '  hangar-waypoint show <n> [git show args...]',
+      '  hangar-waypoint diff <n> [git diff args...]',
+      '  hangar-waypoint covers [<n>] <path>...',
+      '  hangar-waypoint restore <n> <path>...',
+    ].join('\n'),
+  );
+};
+
+const main = () => {
+  const [command, ...rest] = process.argv.slice(2);
+
+  if (command === 'save') {
+    return save(rest.join(' ').trim());
+  }
+
+  if (command === 'list') {
+    return list();
+  }
+
+  if (command === 'show') {
+    return show(rest[0], rest.slice(1));
+  }
+
+  if (command === 'diff') {
+    return diff(rest[0], rest.slice(1));
+  }
+
+  if (command === 'covers') {
+    return covers(rest);
+  }
+
+  if (command === 'restore') {
+    return restore(rest[0], rest.slice(1));
+  }
+
+  usage();
+  process.exit(command === undefined || command === '--help' ? 0 : 1);
+};
+
+main();

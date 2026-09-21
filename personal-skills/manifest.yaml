@@ -1,0 +1,57 @@
+# Personal Claude Code skills this hangar keeps, and how each relates to the project skill it
+# shadows. `hangar skills sync` links ~/.claude/skills/<name> here; `hangar skills list` and
+# `hangar doctor` report drift.
+#
+# A skill at ~/.claude/skills/<name>/ replaces a same-named project skill ENTIRELY, on this
+# machine, in every repo -- documented precedence is enterprise > personal > project, keyed on the
+# DIRECTORY name. That is the supported way to run a personal version of a skill a project tracks,
+# and it changes nothing in the project. What it does not come with is any way to notice the
+# tracked original moving underneath you, which is what this file exists for.
+#
+# divergence:
+#   intentional  the copy here is MEANT to differ. Comparing content would be red forever, so what
+#                is checked is whether the ORIGINAL has moved since the override was taken off it
+#                -- that is what `basedOn` records. When it moves, re-derive and update the hash.
+#   none         the copy here should stay byte-identical to the original. Prefer having no
+#                personal copy at all over this: one that may not differ can only drift.
+#   standalone   no tracked counterpart anywhere, so there is nothing to compare.
+#
+# `mirrors` is a path inside the managed repo's own checkout, read from `forge.defaultBranch`
+# rather than from whatever branch a clone happens to have out.
+
+skills:
+  - name: shorten-comment
+    divergence: intentional
+    mirrors: .claude/skills/shorten-comment/SKILL.md
+    basedOn: 3df1c0c526807af2fa701eecdcbe5d65627d376a
+    reason: >-
+      Adds the "Reporting -- the edit is the verdict" contract (one line per changed block, no
+      narrated justification) and judges every block in a file from a single read instead of one
+      Read per comment. Both are speed, not policy: the pre-edit safety gates are untouched.
+
+  - name: shorten-changed-comments
+    divergence: intentional
+    mirrors: .claude/skills/shorten-changed-comments/SKILL.md
+    basedOn: f221fc77b02c174a0a6d340f99a7fa01ee9e57b8
+    reason: Honours shorten-comment's reporting contract; keeps the Step 1b selection question.
+
+  - name: shorten-all-comments
+    divergence: intentional
+    mirrors: .claude/skills/shorten-all-comments/SKILL.md
+    basedOn: 6df88f3131ef327ec11fdfe79c40bcad6f4ef4be
+    reason: Honours shorten-comment's reporting contract; keeps the Step 2 snapshot/covers checks.
+
+  - name: fix-commit
+    divergence: intentional
+    mirrors: .claude/skills/fix-commit/SKILL.md
+    basedOn: 691ab4f79c8b62190a0fb87c6e73e6da8a277ffe
+    reason: >-
+      Inverts the tracked skill in one direction only. That one forbids rewriting outright; this
+      permits it for UNPUBLISHED commits, on request, through `hangar-rewrite`, which refuses any
+      commit reachable from a remote-tracking ref. The ban exists to protect published history and
+      that protection is kept, by a mechanism instead of a convention. The never-push rule is not
+      relaxed -- it is stated more strongly, because a local rewrite is what tempts a force-push.
+
+  - name: new-plan
+    divergence: standalone
+    reason: No tracked counterpart in any managed repo -- this one exists only at user level.

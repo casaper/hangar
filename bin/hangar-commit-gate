@@ -1,0 +1,339 @@
+#!/usr/bin/env node
+/*
+ * The opt-in, per-branch commit gate: lock a branch, and every `git commit` in it is denied until
+ * the lock is released.
+ *
+ *   hangar-commit-gate status              # what the gate is doing here
+ *   hangar-commit-gate lock [--ticket X]   # deny commits on the checked-out branch
+ *   hangar-commit-gate release --note "…"  # release, recording why
+ *   hangar-commit-gate unlock              # release without a note
+ *
+ * With no verb it behaves as a Claude Code hook, reading a payload on stdin: it announces itself
+ * on `SessionStart` and denies `git commit` on `PreToolUse`.
+ *
+ * **Silent and inert unless this clone's state file says the checked-out branch is locked**, so a
+ * clone whose developer never locks anything sees no behavioural change at all. That is what
+ * makes it safe to register in EVERY clone's generated settings rather than per-hangar.
+ *
+ * Like the other hooks here it fails OPEN but LOUD: any internal error goes to stderr and the
+ * call is allowed, because a broken gate must never wedge a session that then cannot commit at
+ * all.
+ *
+ * State is re-read on every invocation, so toggling the gate takes effect at once -- including
+ * mid-session, after the SessionStart banner's only chance to fire has passed. That is why the
+ * deny below carries the whole procedure rather than naming a skill: for a branch locked
+ * mid-session, the deny text may be the only thing the agent ever sees about it.
+ *
+ * **Self-contained and deliberately not a `hangar` subcommand**, for `hangar-exec-guard`'s
+ * measured reason: this runs before EVERY Bash tool call in every clone, where loading
+ * `app/src/cli.ts` would cost ~0.25s of type stripping against a bare node start.
+ *
+ * CommonJS -- the hangar root's package.json declares no `"type"` on purpose. Do not add
+ * `import` here.
+ */
+
+const { execFileSync } = require('node:child_process');
+const { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } = require('node:fs');
+const { join, basename, dirname } = require('node:path');
+
+/**
+ * Anchored at a command boundary and stepping over complete quoted spans, so `echo "then git
+ * commit"` is not a commit and `git -C dir commit` is.
+ */
+const GIT_COMMIT = /(?:^|&&|\|\||;|\n)\s*git\s+(?:-C\s+\S+\s+|-c\s+\S+\s+|--\S+\s+)*commit\b/;
+
+/**
+ * Releasing the gate, in any spelling -- and this is a hook rather than a permission rule for the
+ * reason `hangar-exec-guard` already records, measured again here.
+ *
+ * `Bash(hangar-commit-gate status:*)` is in the clones' allow list and `release` deliberately is
+ * not, which reads like a boundary and is not one: a rule matches the START of the command
+ * string, so `hangar-commit-gate status && hangar-commit-gate release` begins with the approved
+ * prefix and sails through. All three escapes below were confirmed to be allowed before this
+ * pattern existed.
+ *
+ * An agent that can release its own gate has no gate, so the claim has to be enforced where the
+ * whole command line is visible. The person at the terminal is unaffected: a PreToolUse hook sees
+ * an agent's tool calls and nothing they type themselves.
+ */
+const GATE_RELEASE = /hangar-commit-gate\s+(?:--\S+\s+)*(?:release|unlock)\b/;
+
+/**
+ * Deleting or rewriting the lock, which is the same escape one level down.
+ *
+ * The hook denies `git commit` by reading a file; a command that removes that file turns the gate
+ * off just as completely and was, until this, entirely unguarded. Matched by the state
+ * directory's name rather than the resolved path, so a relative spelling, a glob or a `$HOME`
+ * form is caught too -- nothing an agent has reason to touch mentions it.
+ */
+const GATE_STATE = /\.hangar\/commit-gate/;
+
+/** The hangar root, from this script's own location -- never from $PWD. Same rule as bin/hangar. */
+const hangarRoot = () => dirname(dirname(__filename));
+
+const git = (args, options = {}) =>
+  execFileSync('git', args, { encoding: 'utf8', ...options }).trim();
+
+const repoRoot = (cwd) => git(['rev-parse', '--show-toplevel'], cwd ? { cwd } : {});
+
+const currentBranch = (root) => git(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: root });
+
+/**
+ * One state file per clone, so two clones on different branches never share a lock.
+ *
+ * Keyed on the clone directory's own name rather than on an index, because this script reads no
+ * config: the directory pattern is the hangar's business, and the state directory is already
+ * per-hangar, so a bare basename cannot collide across hangars.
+ *
+ * It lives under the gitignored `.hangar/` rather than inside the clone, which is the whole
+ * point -- nothing here may touch a tracked file. Losing it fails OPEN (an absent file means
+ * unlocked), which is why it sits under the generic ignore line instead of earning its own.
+ */
+const statePath = (root) => join(hangarRoot(), '.hangar', 'commit-gate', `${basename(root)}.json`);
+
+const readState = (root) => {
+  const path = statePath(root);
+  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : null;
+};
+
+/** The lock, but only when it applies to the branch actually checked out. */
+const activeLock = (root) => {
+  const state = readState(root);
+  if (!state || !state.locked) return null;
+  return state.branch === currentBranch(root) ? state : null;
+};
+
+const describe = (lock) =>
+  `${lock.branch}${lock.ticket ? ` (${lock.ticket})` : ''}, locked ${String(lock.locked_at).slice(0, 10)}`;
+
+/*
+ * The banner and the denial name NO project's conventions.
+ *
+ * The version this was ported from opened by suspending three of its repo's numbered workflow
+ * rules by number. Hangar manages any repo: that text is wrong in every other one, and it breaks
+ * the moment the project renumbers. What a gate can say generically is that it is on, and what
+ * the two permitted next actions are. Project-specific prose belongs in the skill that drives
+ * this, not in generated output.
+ */
+const banner = (lock) =>
+  [
+    `Commit gate ACTIVE on ${describe(lock)}.`,
+    '',
+    'Committing is suspended on this branch. You do not commit -- not at checkpoints, not when',
+    "asked, not \"so the work isn't lost\". Work continues normally in every other respect.",
+    '',
+    '  Save progress:  hangar-waypoint save "<what>"   (never touches the tree)',
+    '  Ready to ship:  stop, and tell the user the work is ready for the gate',
+    '',
+    'Everything else about commits is unchanged: never push, never rewrite history.',
+  ].join('\n');
+
+/** Goes in `permissionDecisionReason` -- that is the field a deny's text reaches the agent by. */
+const denial = (lock) =>
+  [
+    `**Commit gate is ACTIVE on ${describe(lock)} -- this commit is blocked.**`,
+    '',
+    'Committing is suspended on this branch. You do not commit here at any checkpoint, and not',
+    'because the user said "commit" -- on this branch that means *ask them to run the gate*, not',
+    '*commit now*.',
+    '',
+    '**Anything already staged stays staged.** This is not an obstacle to route around: do not',
+    'stash (`git stash push` reverts the working tree), do not branch off, do not look for another',
+    'way to persist the work. There are exactly two permitted next actions:',
+    '',
+    '1. Save a waypoint -- `hangar-waypoint save "<what>"`. It snapshots the whole tree, untracked',
+    '   files included, into a ref without touching the tree or the index, so nothing is at risk.',
+    '2. Stop, and tell the user the work is ready. Releasing the gate is theirs, not yours.',
+    '',
+    'Gate state: `hangar-commit-gate status`',
+  ].join('\n');
+
+/** The deny for an attempt to turn the gate off, rather than to commit through it. */
+const escape = (lock) =>
+  [
+    `**Releasing the commit gate is the user's, and this is blocked.**`,
+    '',
+    `The gate is ACTIVE on ${describe(lock)}. Releasing it -- with \`release\`, with \`unlock\`,`,
+    'or by deleting its state file -- is the one thing you may not do on this branch, because a',
+    'gate you can turn off yourself is not a gate.',
+    '',
+    'If the work is ready, say so and stop. The user runs the release.',
+    '',
+    'Reading the state is fine: `hangar-commit-gate status`.',
+  ].join('\n');
+
+const fail = (message) => {
+  console.error(message);
+  process.exit(1);
+};
+
+const writeState = (root, value) => {
+  const path = statePath(root);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+};
+
+/** The repo's default branch, or undefined when origin has no HEAD to read it from. */
+const defaultBranch = (root) => {
+  try {
+    return git(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { cwd: root }).replace(
+      /^origin\//,
+      '',
+    );
+  } catch {
+    return undefined;
+  }
+};
+
+const valueFor = (args, flag) => {
+  const at = args.indexOf(flag);
+  return at === -1 ? undefined : args[at + 1];
+};
+
+const lock = (args) => {
+  const root = repoRoot();
+  const branch = currentBranch(root);
+
+  if (branch === 'HEAD') {
+    fail('Refusing to lock a detached HEAD -- check out a branch first.');
+  }
+  if (branch === defaultBranch(root)) {
+    fail(`Refusing to lock ${branch} -- it is this repository's default branch.`);
+  }
+  if (/^release/.test(branch)) {
+    fail(`Refusing to lock ${branch} -- release branches are protected version branches.`);
+  }
+
+  const ticket = valueFor(args, '--ticket') ?? (branch.match(/([A-Z]{2,}-\d+)/) ?? [])[1] ?? null;
+
+  writeState(root, {
+    locked: true,
+    branch,
+    ticket,
+    locked_at: new Date().toISOString(),
+  });
+
+  console.log(`Commit gate LOCKED on ${branch}${ticket ? ` (${ticket})` : ''}.`);
+  console.log('Commits are denied on this branch until the gate is released.');
+  console.log('A new session picks this up at once; a running one sees it on its next commit.');
+};
+
+const clear = (event, detail) => {
+  const root = repoRoot();
+  const state = readState(root);
+
+  if (!state || !state.locked) {
+    console.log('Commit gate is not active here -- nothing to release.');
+    return;
+  }
+
+  rmSync(statePath(root), { force: true });
+  console.log(`Commit gate ${event} on ${state.branch}. Commits are allowed again.`);
+  if (detail) console.log(`  ${detail}`);
+};
+
+const status = () => {
+  const root = repoRoot();
+  const state = readState(root);
+  const branch = currentBranch(root);
+
+  if (!state || !state.locked) {
+    console.log(`Commit gate: not active (${basename(root)}, on ${branch}).`);
+    return;
+  }
+
+  if (state.branch !== branch) {
+    console.log(`Commit gate: locked on ${state.branch}, but ${branch} is checked out here.`);
+    console.log('  Commits are allowed on this branch.');
+    return;
+  }
+
+  console.log(`Commit gate: ACTIVE on ${describe(state)}.`);
+  console.log(`  State: ${statePath(root)}`);
+};
+
+/** Hook mode: a JSON payload on stdin, and never a non-zero exit. */
+const hook = () => {
+  const raw = readFileSync(0, 'utf8');
+  if (!raw.trim()) return;
+
+  const payload = JSON.parse(raw);
+  const root = repoRoot(payload.cwd);
+  const lockHere = activeLock(root);
+
+  if (!lockHere) return;
+
+  if ((payload.hook_event_name ?? '') === 'SessionStart') {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'SessionStart',
+          additionalContext: banner(lockHere),
+        },
+      }),
+    );
+    return;
+  }
+
+  const command = payload.tool_input?.command ?? '';
+  if (payload.tool_name !== 'Bash') return;
+
+  const escaping = GATE_RELEASE.test(command) || GATE_STATE.test(command);
+  if (!escaping && !GIT_COMMIT.test(command)) return;
+
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: escaping ? escape(lockHere) : denial(lockHere),
+      },
+      systemMessage: escaping
+        ? `Commit gate ACTIVE on ${lockHere.branch} -- releasing it is the user's.`
+        : `Commit gate ACTIVE on ${lockHere.branch} -- commit blocked.`,
+    }),
+  );
+};
+
+const usage = () => {
+  console.log(
+    [
+      'Usage:',
+      '  hangar-commit-gate status',
+      '  hangar-commit-gate lock [--ticket <KEY>]',
+      '  hangar-commit-gate release --note "<summary>"',
+      '  hangar-commit-gate unlock',
+      '',
+      'With no verb, reads a Claude Code hook payload on stdin.',
+    ].join('\n'),
+  );
+};
+
+const main = () => {
+  const [command, ...rest] = process.argv.slice(2);
+
+  if (command === undefined) return hook();
+  if (command === 'lock') return lock(rest);
+  if (command === 'status') return status();
+  if (command === 'release') return clear('released', valueFor(rest, '--note') ?? 'checklist passed');
+  if (command === 'unlock') return clear('unlocked');
+
+  usage();
+  process.exit(command === '--help' ? 0 : 1);
+};
+
+/*
+ * Fails open, and the two modes differ in how loud they may be.
+ *
+ * A verb is a person at a terminal who needs a non-zero exit and a message. The HOOK may never
+ * exit non-zero -- Claude Code reads that as a blocked tool call, which is the one thing a
+ * broken gate must not do.
+ */
+try {
+  main();
+} catch (error) {
+  process.stderr.write(`[commit-gate] ${error.message}\n`);
+  if (process.argv[2] !== undefined) process.exit(1);
+}
+
+process.exit(0);
