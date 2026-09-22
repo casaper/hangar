@@ -140,7 +140,7 @@ export const readSourceClone = (hangar: Hangar): string | undefined =>
 
 export type DriftState =
   | { readonly kind: 'ok'; readonly detail: string }
-  | { readonly kind: 'drifted'; readonly detail: string }
+  | { readonly kind: 'drifted'; readonly detail: string; readonly hint?: string | undefined }
   | { readonly kind: 'standalone'; readonly detail: string }
   | { readonly kind: 'not-compared'; readonly detail: string };
 
@@ -180,7 +180,11 @@ export const driftFor = (
     // A clone with no default branch at all cannot tell any of it apart, so that one reports.
     const hasBranch = gitTry(repo, ['rev-parse', '--verify', `${branch}^{commit}`]) !== undefined;
     return hasBranch
-      ? { kind: 'drifted', detail: `not on ${branch}` }
+      ? {
+          kind: 'drifted',
+          detail: `not on ${branch}`,
+          hint: `Nothing to do here: it clears itself when the branch carrying it merges into ${branch}, or names the move if the skill changed on the way.`,
+        }
       : { kind: 'not-compared', detail: `${branch} is not in that clone` };
   }
 
@@ -356,7 +360,7 @@ export const skillsSync = (hangar: Hangar, opts: SkillsOptions = {}): void => {
 /** One `doctor` row per declared skill, so a drifted override is reported where things are checked. */
 export const skillDriftRows = (
   hangar: Hangar,
-): readonly { name: string; ok: boolean; detail: string }[] => {
+): readonly { name: string; ok: boolean; detail: string; hint?: string | undefined }[] => {
   const manifest = existsSync(manifestPath(hangar)) ? readManifest(hangar) : { skills: [] };
   const repo = readSourceClone(hangar);
   return manifest.skills.map((entry) => {
@@ -386,6 +390,9 @@ export const skillDriftRows = (
           ? `linked to ${tildify(link.target)}, which is not this hangar`
           : `${tildify(linkPath(entry.name))} is a real directory whose content differs from ${skillsSourceHint(hangar)}/${entry.name}`
         : drift.detail,
+      // Only a drift row earns one, and only when the link is fine: a hint under a line about the
+      // WRONG link would answer a question nobody asked.
+      hint: linkProblem || drift.kind !== 'drifted' ? undefined : drift.hint,
     };
   });
 };

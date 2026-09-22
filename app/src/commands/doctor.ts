@@ -1669,6 +1669,10 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
   for (const row of skillDriftRows(hangar)) {
     if (row.ok) continue;
     problem(`${row.name}: ${row.detail}`);
+    // A drift row can name a wait rather than a chore -- a skill adopted before its branch merged
+    // sits red until it does, and there is no hangar action in between. Saying so is what keeps
+    // `still to fix` honest without making the row quieter than it should be.
+    if (row.hint !== undefined) note(row.hint);
   }
 
   /*
