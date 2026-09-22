@@ -1662,17 +1662,14 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
    * override is indistinguishable from a current one until it recommends something the project
    * now refuses.
    *
-   * `not-compared` and `standalone` are not failures. A shallow clone, an unfetched default
-   * branch and a skill with no counterpart are all normal, and a check that is red in normal
-   * operation is a check nobody reads.
+   * `not-compared`, `standalone` and `pending` are not failures. A shallow clone, an unfetched
+   * default branch, a skill with no counterpart and a skill adopted before its branch merged are
+   * all normal, and a check that is red in normal operation is a check nobody reads. `pending` is
+   * the newest of them and was learned the hard way: it read as "the link was never made".
    */
   for (const row of skillDriftRows(hangar)) {
     if (row.ok) continue;
     problem(`${row.name}: ${row.detail}`);
-    // A drift row can name a wait rather than a chore -- a skill adopted before its branch merged
-    // sits red until it does, and there is no hangar action in between. Saying so is what keeps
-    // `still to fix` honest without making the row quieter than it should be.
-    if (row.hint !== undefined) note(row.hint);
   }
 
   /*

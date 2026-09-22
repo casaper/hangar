@@ -19,12 +19,13 @@
 # `mirrors` is a path inside the managed repo's own checkout, read from `forge.defaultBranch`
 # rather than from whatever branch a clone happens to have out.
 #
-# A skill adopted from a branch that has NOT MERGED yet is `intentional`, never `standalone`. Its
-# counterpart exists -- it is simply not on the default branch -- so `mirrors` names where it
-# be and `basedOn` is the blob it was taken off. The drift row then reads `not on <branch>` until
-# that branch lands, and turns green by itself when it does. `standalone` would read green from
-# the first day and say nothing at all on the day the original arrives, which is precisely the
-# silent shadow this file exists to prevent.
+# A skill adopted from a branch that has NOT MERGED yet is `intentional`, never `standalone`: its
+# counterpart exists, it is simply not on the default branch. `mirrors` names where it will be,
+# `basedOn` is the blob it was taken off, and `adoptedFrom` names the branch -- which is what tells
+# an absent original from a REMOVED one, and is the only record of where that blob is reachable
+# from until it merges. The row reads `pending` and is not a failure; the comparison resumes by
+# itself the day the branch lands, green if the skill arrived unchanged and naming the move if it
+# did not. Drop `adoptedFrom` then; it does nothing once there is something to compare against.
 
 skills:
   - name: shorten-comment
@@ -63,16 +64,16 @@ skills:
     divergence: intentional
     mirrors: .claude/skills/granular-commits/SKILL.md
     basedOn: 1a65a69a5b051bd3d3b12f14178dce849e3f5d12
+    adoptedFrom: docs/agent_commit_behaviour_stays_as_is_but_user_can_opt_in_for_commit_last_behaviour
     reason: >-
       Two touches, both forced by a personal skill being active in every repo on this machine and
       not just the one it was written in: the pre-split snapshot is taken with `hangar-waypoint`,
       which is on PATH in every clone and at the hangar root, and the `check-commits.mjs` run is
       made conditional on the repo actually shipping that file. The grouping rules, the staging
       and the verification stance are untouched. `basedOn` is the blob on the branch that ADDS
-      this skill -- it is not on the default branch yet, so the drift row reads `not on <branch>`
-      until that branch lands, and turns green by itself when it does. That branch is
-      `docs/agent_commit_behaviour_stays_as_is_but_user_can_opt_in_for_commit_last_behaviour`,
-      named here because the blob is reachable from nowhere else until it merges.
+      this skill, which `adoptedFrom` names because it is reachable from nowhere else until that
+      branch merges. Until then the row reads `pending` rather than red: waiting is the expected
+      state, and the comparison resumes on its own the day it lands.
 
   - name: new-plan
     divergence: standalone

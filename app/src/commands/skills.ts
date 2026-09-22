@@ -62,6 +62,16 @@ export type SkillEntry = {
    * since the override was taken off it, which is what this records.
    */
   readonly basedOn?: string | undefined;
+  /**
+   * The branch the override was taken off, when the counterpart is not on the default branch YET.
+   *
+   * Without it, "absent from the default branch" has two readings a `rev-parse` cannot separate:
+   * the original was removed, or it has not landed. Declaring the branch says which, so a skill
+   * adopted ahead of its merge waits quietly while a skill deleted upstream still goes red. It
+   * also records where the `basedOn` blob is reachable from, which is nowhere else until then.
+   * Vestigial once the branch merges -- the comparison resumes on its own -- and removable.
+   */
+  readonly adoptedFrom?: string | undefined;
   readonly reason?: string | undefined;
 };
 
@@ -91,6 +101,7 @@ const entrySchema = z
     divergence: z.enum(['intentional', 'none', 'standalone']),
     mirrors: z.string().min(1).optional(),
     basedOn: z.string().min(1).optional(),
+    adoptedFrom: z.string().min(1).optional(),
     reason: z.string().optional(),
   })
   .superRefine((entry, ctx) => {
@@ -98,6 +109,12 @@ const entrySchema = z
       ctx.addIssue({
         code: 'custom',
         message: `\`${entry.name}\` is \`${entry.divergence}\` but declares no \`mirrors:\` path to compare against`,
+      });
+    }
+    if (entry.divergence === 'standalone' && entry.adoptedFrom !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `\`${entry.name}\` is \`standalone\` but names an \`adoptedFrom:\` branch, and nothing standalone is ever compared against one`,
       });
     }
     if (entry.divergence === 'intentional' && entry.basedOn === undefined) {
@@ -140,9 +157,88 @@ export const readSourceClone = (hangar: Hangar): string | undefined =>
 
 export type DriftState =
   | { readonly kind: 'ok'; readonly detail: string }
-  | { readonly kind: 'drifted'; readonly detail: string; readonly hint?: string | undefined }
+  | { readonly kind: 'drifted'; readonly detail: string }
+  | { readonly kind: 'pending'; readonly detail: string }
   | { readonly kind: 'standalone'; readonly detail: string }
   | { readonly kind: 'not-compared'; readonly detail: string };
+
+/** Everything the verdict depends on, so the verdict itself can be decided without a clone. */
+export type DriftFacts = {
+  /**
+   * The hangar's default branch. Optional in the schema by design -- it is autofilled by the
+   * first command that ACTS on it, and a report must not be the thing that writes it -- so a
+   * hangar can genuinely be asked this before anything has answered it.
+   */
+  readonly branch: string | undefined;
+  /** Whether there was a clone to read the originals from at all. */
+  readonly repoFound: boolean;
+  /** Whether that clone has the default branch. A shallow or unfetched one may not. */
+  readonly hasBranch: boolean;
+  /** The blob at `<branch>:<mirrors>`, or undefined when nothing is there. */
+  readonly original: string | undefined;
+  /** The hash of the copy kept here. Only `none` entries compare against it. */
+  readonly ours: string | undefined;
+};
+
+/**
+ * The verdict, given the facts -- pure, so every state can be asserted without a clone, a branch
+ * or a working tree, which is the only way the ones that need a REMOVED original get covered.
+ */
+export const classifyDrift = (entry: SkillEntry, facts: DriftFacts): DriftState => {
+  if (entry.divergence === 'standalone') {
+    return { kind: 'standalone', detail: entry.reason ?? 'no tracked counterpart' };
+  }
+  if (entry.mirrors === undefined) {
+    return { kind: 'not-compared', detail: 'declares no `mirrors:` path' };
+  }
+  if (!facts.repoFound) {
+    return { kind: 'not-compared', detail: 'no clone to read the original from' };
+  }
+  if (facts.branch === undefined) {
+    return { kind: 'not-compared', detail: 'no `forge.defaultBranch` to read the original from' };
+  }
+
+  if (facts.original === undefined) {
+    if (!facts.hasBranch) {
+      return { kind: 'not-compared', detail: `${facts.branch} is not in that clone` };
+    }
+    /*
+     * Nothing at that path on the default branch, and `adoptedFrom` is what says which of the two
+     * meanings applies.
+     *
+     * Declared: the skill was adopted before its branch merged, so absence is the EXPECTED state
+     * and waiting is not a finding. Going red through the wait would buy nothing -- the moment
+     * the blob appears, the `basedOn` comparison below resumes by itself and reports a skill that
+     * changed on the way in. So the redness detects nothing the merge would not; it only nags,
+     * and a `doctor` row that reads as a chore for weeks is the row people learn to skip.
+     *
+     * Undeclared: the original really is gone, which is a finding -- the copy here now shadows
+     * nothing and is following prose the project has dropped.
+     */
+    return entry.adoptedFrom === undefined
+      ? { kind: 'drifted', detail: `the original is gone from ${facts.branch}` }
+      : {
+          kind: 'pending',
+          detail: `not on ${facts.branch} yet -- adopted from ${entry.adoptedFrom}`,
+        };
+  }
+
+  if (entry.divergence === 'intentional') {
+    if (entry.basedOn === undefined) {
+      return { kind: 'not-compared', detail: 'records no `basedOn:` to compare against' };
+    }
+    return facts.original === entry.basedOn
+      ? { kind: 'ok', detail: `diverges on purpose from ${facts.original.slice(0, 9)}` }
+      : {
+          kind: 'drifted',
+          detail: `the original moved: ${entry.basedOn.slice(0, 9)} -> ${facts.original.slice(0, 9)}`,
+        };
+  }
+
+  return facts.ours === facts.original
+    ? { kind: 'ok', detail: 'byte-identical to the original' }
+    : { kind: 'drifted', detail: 'should match the original and does not' };
+};
 
 /**
  * Whether a personal copy still stands in the right relationship to the project skill it shadows.
@@ -157,53 +253,24 @@ export const driftFor = (
   entry: SkillEntry,
   repo: string | undefined,
 ): DriftState => {
-  if (entry.divergence === 'standalone') {
-    return { kind: 'standalone', detail: entry.reason ?? 'no tracked counterpart' };
-  }
-  if (entry.mirrors === undefined) {
-    return { kind: 'not-compared', detail: 'declares no `mirrors:` path' };
-  }
-  if (repo === undefined) {
-    return { kind: 'not-compared', detail: 'no clone to read the original from' };
-  }
-
   const branch = hangar.config.forge.defaultBranch;
-  const ref = `${branch}:${entry.mirrors}`;
-  const blob = gitTry(repo, ['rev-parse', ref]);
+  const nothing = { branch, hasBranch: false, original: undefined, ours: undefined };
 
-  if (blob === undefined) {
-    // The original is not on the default branch, and the two ways that happens are
-    // indistinguishable from here: it was removed, or it has not landed yet. So the text names
-    // the fact rather than a history it cannot know. Both want the same answer anyway -- a skill
-    // adopted off an unmerged branch sits at `drifted` until that branch merges and then goes
-    // green on its own, which is the only state that reports the wait without going silent.
-    // A clone with no default branch at all cannot tell any of it apart, so that one reports.
-    const hasBranch = gitTry(repo, ['rev-parse', '--verify', `${branch}^{commit}`]) !== undefined;
-    return hasBranch
-      ? {
-          kind: 'drifted',
-          detail: `not on ${branch}`,
-          hint: `Nothing to do here: it clears itself when the branch carrying it merges into ${branch}, or names the move if the skill changed on the way.`,
-        }
-      : { kind: 'not-compared', detail: `${branch} is not in that clone` };
+  if (repo === undefined || entry.mirrors === undefined) {
+    return classifyDrift(entry, { ...nothing, repoFound: repo !== undefined });
   }
 
-  if (entry.divergence === 'intentional') {
-    if (entry.basedOn === undefined) {
-      return { kind: 'not-compared', detail: 'records no `basedOn:` to compare against' };
-    }
-    return blob === entry.basedOn
-      ? { kind: 'ok', detail: `diverges on purpose from ${blob.slice(0, 9)}` }
-      : {
-          kind: 'drifted',
-          detail: `the original moved: ${entry.basedOn.slice(0, 9)} -> ${blob.slice(0, 9)}`,
-        };
-  }
+  const original = gitTry(repo, ['rev-parse', `${branch}:${entry.mirrors}`]);
+  // Only asked when there is nothing at the path: a blob that resolved proves the branch exists.
+  const hasBranch =
+    original !== undefined ||
+    gitTry(repo, ['rev-parse', '--verify', `${branch}^{commit}`]) !== undefined;
+  const ours =
+    entry.divergence === 'none'
+      ? gitTry(hangar.root, ['hash-object', sourcePath(hangar, entry.name)])
+      : undefined;
 
-  const mine = gitTry(hangar.root, ['hash-object', sourcePath(hangar, entry.name)]);
-  return mine === blob
-    ? { kind: 'ok', detail: 'byte-identical to the original' }
-    : { kind: 'drifted', detail: 'should match the original and does not' };
+  return classifyDrift(entry, { branch, repoFound: true, hasBranch, original, ours });
 };
 
 /** What a link at `~/.claude/skills/<name>` currently is. */
@@ -360,7 +427,7 @@ export const skillsSync = (hangar: Hangar, opts: SkillsOptions = {}): void => {
 /** One `doctor` row per declared skill, so a drifted override is reported where things are checked. */
 export const skillDriftRows = (
   hangar: Hangar,
-): readonly { name: string; ok: boolean; detail: string; hint?: string | undefined }[] => {
+): readonly { name: string; ok: boolean; detail: string }[] => {
   const manifest = existsSync(manifestPath(hangar)) ? readManifest(hangar) : { skills: [] };
   const repo = readSourceClone(hangar);
   return manifest.skills.map((entry) => {
@@ -382,17 +449,16 @@ export const skillDriftRows = (
       link.kind === 'foreign' || (link.kind === 'not-a-link' && !adoptable(hangar, entry.name));
     return {
       name: `personal skill ${entry.name}`,
-      // `not-compared` and `standalone` are deliberately NOT failures either: a shallow clone and
-      // a skill with no counterpart are both normal states, and neither means anything is wrong.
+      // `drifted` is the only failing state. `not-compared`, `standalone` and `pending` are all
+      // normal: a shallow clone, a skill with no counterpart, and one adopted before its branch
+      // merged. None of them means anything is wrong, and a row red in normal operation is read
+      // as broken -- this one was, on the day it was added.
       ok: drift.kind !== 'drifted' && !linkProblem,
       detail: linkProblem
         ? link.kind === 'foreign'
           ? `linked to ${tildify(link.target)}, which is not this hangar`
           : `${tildify(linkPath(entry.name))} is a real directory whose content differs from ${skillsSourceHint(hangar)}/${entry.name}`
         : drift.detail,
-      // Only a drift row earns one, and only when the link is fine: a hint under a line about the
-      // WRONG link would answer a question nobody asked.
-      hint: linkProblem || drift.kind !== 'drifted' ? undefined : drift.hint,
     };
   });
 };
