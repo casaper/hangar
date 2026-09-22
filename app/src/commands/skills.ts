@@ -172,11 +172,15 @@ export const driftFor = (
   const blob = gitTry(repo, ['rev-parse', ref]);
 
   if (blob === undefined) {
-    // Absent is a real answer only when the original USED to be there. An unfetched or shallow
-    // clone cannot tell the two apart, so this reports rather than going red.
+    // The original is not on the default branch, and the two ways that happens are
+    // indistinguishable from here: it was removed, or it has not landed yet. So the text names
+    // the fact rather than a history it cannot know. Both want the same answer anyway -- a skill
+    // adopted off an unmerged branch sits at `drifted` until that branch merges and then goes
+    // green on its own, which is the only state that reports the wait without going silent.
+    // A clone with no default branch at all cannot tell any of it apart, so that one reports.
     const hasBranch = gitTry(repo, ['rev-parse', '--verify', `${branch}^{commit}`]) !== undefined;
     return hasBranch
-      ? { kind: 'drifted', detail: `the original is gone from ${branch}` }
+      ? { kind: 'drifted', detail: `not on ${branch}` }
       : { kind: 'not-compared', detail: `${branch} is not in that clone` };
   }
 
