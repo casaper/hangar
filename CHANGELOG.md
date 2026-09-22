@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.30.0](https://github.com/casaper/hangar/compare/v0.29.0...v0.30.0) (2026-09-22)
+
+### Features
+
+* **close:** Stop the clone's dev servers rather than assume they die with the session ([82f999e](https://github.com/casaper/hangar/commit/82f999e98e2b2b2d9daed5db3f7ab43ae5b1df0b))
+* **fleet:** Keep the fleet out of everything a clone session commits ([d94ebb6](https://github.com/casaper/hangar/commit/d94ebb6f7620093a7afe342341334e1c12256649))
+* **fleet:** Widen the rule from what a session commits to everything it writes ([aa4137f](https://github.com/casaper/hangar/commit/aa4137fc16ff28215dcf740f3f5869cca07290ff))
+* Personal opt-in tooling — waypoint, commit gate, skill overrides, local rewrite ([e9ae7bf](https://github.com/casaper/hangar/commit/e9ae7bf4c41bba485e7a934c94d9c1a7d8de0f9c))
+* **scrub:** Report the fleet leaking into text written for somebody else ([1e36545](https://github.com/casaper/hangar/commit/1e36545108f0476489ca1bd47623776159b598a3))
+
+### Bug Fixes
+
+* **terminal:** Bind the tab click, since tmux's own default selects no window ([0700ab0](https://github.com/casaper/hangar/commit/0700ab058516ef892fbaede825b179828d4711b7))
+* **terminal:** Paint a clone session hangar did not create, and say so when one is empty ([eef6d6b](https://github.com/casaper/hangar/commit/eef6d6ba554c942aa8754ab7fc8a1a91dfcc8101))
+
+### Documentation
+
+* **skills:** Keep the tooling out of the commit messages fix-commit writes ([3170f93](https://github.com/casaper/hangar/commit/3170f933f103dd713522702370c6d1d8e96c7951))
+
+### Build & Dependencies
+
+* **deps:** Take the three upgrades the release-age floor allows, and record why four stay ([84edcc4](https://github.com/casaper/hangar/commit/84edcc4d3ae55265e3ff22b0f31e3591d2c672ce))
+
 ## [0.29.0](https://github.com/casaper/hangar/compare/v0.28.0...v0.29.0) (2026-09-21)
 
 ### Features
