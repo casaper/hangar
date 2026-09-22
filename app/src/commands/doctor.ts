@@ -103,7 +103,7 @@ import { paletteEntry } from '../palette.ts';
 import { portSummary } from '../ports.ts';
 import { platform } from '../platform/index.ts';
 import { claudeSessionDiagnostic, claudeSessionsIn } from '../procs.ts';
-import { terminal, type EmulatorCapabilities } from '../terminal/index.ts';
+import { terminal, type EmulatorCapabilities, type MouseReporting } from '../terminal/index.ts';
 import { TMUX_SETTINGS, tmuxConfArtifact } from '../generate/tmux-conf.ts';
 import { tmuxStatusArtifact } from '../generate/tmux-status-sh.ts';
 import { tmuxServer, tmuxSessionName, tmuxSocketName, type TmuxSessionRow } from '../tmux.ts';
@@ -823,6 +823,27 @@ const CAPABILITY_LABELS = [
   ['openWindow', 'window'],
   ['raiseByTty', 'raise'],
 ] as const satisfies readonly (readonly [keyof EmulatorCapabilities, string])[];
+
+/**
+ * What the `emulator` row says about mouse reporting, if anything.
+ *
+ * Deliberately not a `problem()` and deliberately not counted. Whether an emulator reports clicks
+ * is the developer's own setting, and turning it on costs them native drag-select -- so an
+ * emulator with it off is a trade somebody made, exactly like the capability rows the tally above
+ * keeps out for being facts about the machine. `clicks` and `unknown` both render as nothing at
+ * all, which keeps this the same one line on every machine but the one it has something to say
+ * about.
+ */
+export const mouseReportingBadge = (state: MouseReporting): string | undefined => {
+  switch (state) {
+    case 'wheel-only':
+      return 'clicks not reported';
+    case 'off':
+      return 'no mouse reporting';
+    default:
+      return undefined;
+  }
+};
 
 /**
  * tmux: is it installed, is the generated conf current, and is the RUNNING server using it?
@@ -1714,7 +1735,22 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
     );
     note(driver.unavailableHint());
   } else {
-    ok(`${'emulator'.padEnd(22)} ${pc.dim(`${driver.label} (${source}) — ${can.join(', ')}`)}`);
+    /*
+     * The capabilities, then whether a click even leaves the emulator.
+     *
+     * The second half is the one nothing else would ever say: the bar's window tabs, issue key
+     * and pull request are all clicks, and an emulator withholding button presses leaves every
+     * one of them dead with the bindings correct and every gate green.
+     */
+    const report = driver.mouseReporting?.();
+    const badge = report === undefined ? undefined : mouseReportingBadge(report.state);
+    const mouse = badge === undefined ? '' : `; ${badge}`;
+    ok(
+      `${'emulator'.padEnd(22)} ${pc.dim(`${driver.label} (${source}) — ${can.join(', ')}${mouse}`)}`,
+    );
+    // One `note` per line: the helper indents a whole message once, so a multi-line hint passed
+    // as one string would put its first line under the row and the rest at column zero.
+    for (const line of report?.hint?.split('\n') ?? []) note(line);
   }
   hangarWarnings.push(...reportTmux(hangar));
   hangarWarnings.push(...reportShellHook(hangar));

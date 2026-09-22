@@ -615,7 +615,10 @@ default is `switch-client -t =`, and tmux's manual restricts `-t` to changing th
 a target containing `:`, `.` or `%`, which `=` has none of. So the default changes the session, and
 on a socket holding one session per clone that is a click onto the session you are already in. The
 fall-through names `select-window` instead; it runs `hangar browse`, the only part of the bar that
-can afford the CLI. tmux cannot emit an OSC 8 hyperlink into a status
+can afford the CLI. **A correct binding is half of it — the emulator has to report button presses
+at all**, which iTerm2 settles under a different setting from the wheel, so a bar whose clicks all
+do nothing while scrolling works is an emulator finding rather than a tmux one; `doctor`'s
+`emulator` row says which. tmux cannot emit an OSC 8 hyperlink into a status
 line at all — measured, the escape is stripped and the rest is drawn as text — so this is the
 mechanism rather than a workaround. `hangar-internals/reference/terminal-and-sessions.md` has the
 five refusals, the measurement that says the border redraws as often as the status line does, the

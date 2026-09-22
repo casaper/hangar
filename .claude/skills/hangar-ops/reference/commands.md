@@ -337,7 +337,12 @@ separate `<thing>_preview`.
   clone, where in it the pane is standing, its git state and its branch. A click on the key or on
   `PR#1234` opens it in the browser; a click on a tab still switches to that window, and a click
   on a pane border still marks the pane. What a click runs is `hangar browse ticket|pr <clone>`,
-  which is also worth typing directly.
+  which is also worth typing directly. **A click only arrives if the terminal emulator reports
+  button presses, and that is not the same setting as the wheel** — iTerm2 has one for each, so a
+  bar where scrolling works and nothing is clickable is the emulator rather than tmux. `doctor`'s
+  `emulator` row appends `clicks not reported` and names the setting to change; it never changes
+  it, and it is not counted as a problem, because with clicks reported a plain drag inside a pane
+  selects in tmux rather than in the emulator — a trade the developer may have made on purpose.
 
   The git state is glyphs, and there are seven: `✔` nothing to report, `⚑` a half-applied rebase
   or merge, `‼` conflicts, `✚` staged, `✱` changed and not staged, `?` untracked, and `⇡n` / `⇣n`

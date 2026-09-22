@@ -655,7 +655,7 @@ prefix taken off.
   fallback (a `precmd` hook calling `tmux refresh-client`) would have reached every shell pane and
   missed the one that matters, the pane running Claude Code, which prints no prompt.
 
-### The click preserves the key it takes, and repairs it
+### The click preserves the key it takes, and needs the emulator to send one
 
 A bare rebinding of `MouseDown1Status` would take clicking-a-tab away from every window in the
 fleet in order to add a link, so there is one binding and it falls through:
@@ -680,6 +680,35 @@ complaint, `pnpm golden` pins the bytes and `pnpm test` asserts the shape -- and
 is equally happy with a binding that does nothing. It took a person with a mouse.
 `test/tmux-conf.test.ts` now pins the command by name and asserts `switch-client` appears nowhere,
 which is the closest a suite with no tmux server in it can get.
+
+**The binding is half of it: the emulator has to deliver the click.** iTerm2 splits mouse
+reporting across two settings -- `Mouse Reporting` and `Mouse Reporting allow clicks and drags` --
+so a profile reports the WHEEL and withholds the BUTTONS, and then the tabs, the issue key and the
+pull request are all dead while the binding is right, the conf is current and every gate is green.
+The wheel still scrolling is what makes it read as a tmux fault: mouse events are plainly
+arriving, so the key looks like the only thing left to suspect.
+
+**The other socket is the control that settles it in one step.** `claude-tmux.conf` binds a bare
+`select-window -t =` -- no `if-shell`, no `range=user` regions, no fall-through -- so a click that
+is dead on both sockets has eliminated every hangar-side suspect at once, and the two share
+nothing but the emulator.
+
+`iterm2.ts` reads that pair out of the DEFAULT profile, which is the profile `openScript` creates
+every tab and every window with, and `doctor`'s `emulator` row appends `clicks not reported` with
+the setting to change. Three things about that row are decisions:
+
+- **It reports and never repairs**, because the setting lives in another application's
+  preferences and iTerm2 keeps its own copy in memory while it runs.
+- **It is not counted as a problem**, for the reason the tally keeps every capability row out:
+  clicks off is a trade somebody made -- with them on, a plain drag inside a pane selects in tmux
+  rather than in the emulator and ⌥-drag becomes the native copy -- so counting it would leave a
+  correctly configured machine permanently non-zero.
+- **A missing clicks key reads as reported, never as withheld.** iTerm2's shipped
+  `DefaultBookmark.plist` carries `Mouse Reporting` and not that key, so its compiled-in default
+  is unmeasured here, and an advisory row that guesses is a false alarm on a machine that is fine.
+  `iterm2MouseState` is pure and takes the parsed profiles plus the default guid, which is the
+  only way any of those branches is reachable: the probe reads whatever preferences the machine
+  running it has.
 
 **The root socket gets the same key, from its own one-entry list.** `claude-tmux-conf.ts` bound no
 keys at all and so had only that default to fall back on; `KEY_BINDINGS` there is rendered into the

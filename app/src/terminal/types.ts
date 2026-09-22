@@ -1,5 +1,6 @@
 /**
- * The emulator seam: the two things Hangar needs from a terminal emulator.
+ * The emulator seam: the two things Hangar asks a terminal emulator to do, and the one thing it
+ * asks it about.
  *
  * `hangar open` puts a clone in ONE tab (or window) of the developer's emulator, and that tab is
  * a client attached to that clone's tmux session -- one tmux window inside it per
@@ -7,6 +8,16 @@
  * command**, and to **bring one it already opened to the front**. Everything else -- creating the
  * roles, naming them, ordering them, finding the clone again, typing a `SYNC PAUSE` into a live
  * session -- is `src/tmux.ts`, which is the same program on macOS and on Linux.
+ *
+ * ## The third method ASKS rather than acts, which is why it is not a capability
+ *
+ * `mouseReporting` answers whether the emulator delivers button presses to the program inside it.
+ * Nothing here can change that -- it is the developer's own setting, and turning it on costs them
+ * native drag-select -- so it is not a capability and `EmulatorCapabilities` grows no field for
+ * it. It is on the seam because the answer is emulator-specific knowledge and belongs with the
+ * driver that has it, and because the failure it explains is otherwise unattributable: the tmux
+ * bar's window tabs, issue key and pull request are all clicks, and an emulator that reports the
+ * wheel and withholds the buttons leaves every one of them dead with every binding correct.
  *
  * ## Why capabilities, and not one interface every driver must satisfy
  *
@@ -48,6 +59,26 @@ export type EmulatorCapabilities = {
    * gets the developer back to it.
    */
   readonly raiseByTty: boolean;
+};
+
+/**
+ * What an emulator passes through to the program inside it.
+ *
+ * `wheel-only` is a real and separately configurable state rather than a theoretical one: iTerm2
+ * splits scroll reporting from button reporting across two settings, so the wheel scrolls a tmux
+ * pane while no click ever reaches tmux. `unknown` is what a probe returns when it could not read
+ * the answer, and it renders as silence -- a state that was not measured is a false alarm on
+ * somebody else's machine.
+ */
+export type MouseReporting = 'clicks' | 'wheel-only' | 'off' | 'unknown';
+
+export type MouseReport = {
+  readonly state: MouseReporting;
+  /**
+   * What to change, in this emulator's own words -- the job `unavailableHint` does for launching.
+   * Absent whenever there is nothing to say, which is both `clicks` and `unknown`.
+   */
+  readonly hint?: string | undefined;
 };
 
 /** One tab or window, running one command. There is nothing else to ask an emulator for. */
@@ -97,6 +128,15 @@ export type EmulatorDriver = {
   readonly lastNote: () => string | undefined;
   /** False when there is no such tab, or `raiseByTty` is false. */
   readonly raiseByTty: (tty: string) => boolean;
+  /**
+   * Whether this emulator reports mouse CLICKS, and what to change when it does not.
+   *
+   * Optional, and a driver with no way to read the answer omits it entirely rather than returning
+   * `unknown` -- so "nobody asked" and "asked and it is fine" stay different states. `doctor` is
+   * the only caller, and it reports rather than repairs: this is a setting in another
+   * application's preferences, and a trade the developer may have made on purpose.
+   */
+  readonly mouseReporting?: () => MouseReport;
 };
 
 /** `/dev/ttys004` from either `ttys004` or `/dev/ttys004`. */
