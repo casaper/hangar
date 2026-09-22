@@ -614,17 +614,37 @@ prefix taken off.
   fallback (a `precmd` hook calling `tmux refresh-client`) would have reached every shell pane and
   missed the one that matters, the pane running Claude Code, which prints no prompt.
 
-### The click preserves the key it takes
+### The click preserves the key it takes, and repairs it
 
-The default binding for `MouseDown1Status` is `switch-client -t =`, which is click-a-tab-to-switch,
-and `MouseDown1Border` is `select-pane -M`. A bare rebinding of either takes that away from every
-window in the fleet in order to add a link. So there is one binding and it falls through:
+A bare rebinding of `MouseDown1Status` would take clicking-a-tab away from every window in the
+fleet in order to add a link, so there is one binding and it falls through:
 
 ```
 bind-key -T root MouseDown1Status if-shell -F '#{m:hangar-*,#{mouse_status_range}}' \
   'run-shell -b "<hangar>/bin/hangar browse #{s/hangar-//:mouse_status_range} #{@hangar_clone}"' \
-  'switch-client -t ='
+  'select-window -t ='
 ```
+
+**`select-window` and not tmux's own default, which cannot do this job.** 3.7c binds
+`switch-client -t =`, and the name is the trap: from tmux's manual, *"As a special case, `-t` may
+refer to a pane (a target that contains ':', '.' or '%'), to change session, window and pane"*.
+`=` contains none of the three, so the default changes the SESSION and selects no window at all.
+On a socket that holds one session per clone -- every hangar -- clicking a tab is then a switch to
+the session you are already in: nothing moves, nothing errors, and the bar looks correct. The
+default is only ever useful for clicking into a session you are NOT in, and neither of this CLI's
+two bars shows one.
+
+That went unnoticed because nothing here can find it. The conf renders, tmux loads it without
+complaint, `pnpm golden` pins the bytes and `pnpm test` asserts the shape -- and every one of them
+is equally happy with a binding that does nothing. It took a person with a mouse.
+`test/tmux-conf.test.ts` now pins the command by name and asserts `switch-client` appears nowhere,
+which is the closest a suite with no tmux server in it can get.
+
+**The root socket gets the same key, from its own one-entry list.** `claude-tmux-conf.ts` bound no
+keys at all and so had only that default to fall back on; `KEY_BINDINGS` there is rendered into the
+conf and issued by `applyBar` onto a server that is already running, for the reason `keyBindings`
+and `restyle` are paired on the clone socket -- `-f` is read once, so a key that lives only in a
+conf works for whoever last restarted and for nobody else.
 
 `#{m:…}` is a glob match and `#{s/hangar-//:…}` strips the prefix, so **the range name IS the
 argument** and there is no table mapping one to the other. `run-shell` expands formats in its

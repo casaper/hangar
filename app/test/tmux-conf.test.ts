@@ -11,6 +11,10 @@ import {
   tmuxConfArtifact,
 } from '../src/generate/tmux-conf.ts';
 import {
+  claudeTmuxConfArtifact,
+  KEY_BINDINGS as CLAUDE_KEY_BINDINGS,
+} from '../src/generate/claude-tmux-conf.ts';
+import {
   colourFor,
   PALETTE,
   STATUS_BAR_BG,
@@ -188,13 +192,45 @@ test('every clickable region is ours by prefix, and inside tmux 15-byte limit', 
   );
 });
 
-test('a click that is not on one of ours falls through to what tmux does by default', () => {
+test('a click that is not on one of ours still selects that window', () => {
   const binding = statusClickBinding(syntheticHangar());
-  // Measured on 3.7c: the default for this key is `switch-client -t =`, which is click-a-tab-to-
-  // switch. A bare rebinding would take that away from every window in the fleet to add a link,
-  // so the else branch restates it -- and this is the assertion that it is still there at all.
-  assert.equal(binding.at(-1), 'switch-client -t =');
   assert.equal(binding[4], 'if-shell');
+  /*
+   * `select-window`, and NOT tmux's own default for this key -- which is the whole content of
+   * this assertion. 3.7c binds `switch-client -t =`, which reads like click-a-tab-to-switch and
+   * is not: from tmux's manual, "-t may refer to a pane (a target that contains ':', '.' or
+   * '%'), to change session, window and pane". `=` has none of the three, so it changes the
+   * SESSION and selects no window, and on a socket holding one session per clone that is a click
+   * onto the session you are already in. Nothing moves, nothing errors, and the bar looks fine.
+   *
+   * Both spellings render, load into tmux without complaint and pass every other gate, so a
+   * regression here is silent in the one way this fleet cannot see: by hand, with a mouse.
+   */
+  assert.equal(binding.at(-1), 'select-window -t =');
+  assert.ok(
+    !binding.some((word) => word.includes('switch-client')),
+    'switch-client changes the session and selects no window -- see above',
+  );
+});
+
+test('both sockets bind the tab click, and each one reaches a LIVE server too', () => {
+  /*
+   * The property that broke: `-f` is read once when a server starts, so a binding that lives only
+   * in a conf works for whoever last restarted and for nobody else. Each server has a list, its
+   * conf renders that list, and its live-apply pass issues it -- `TmuxServer.restyle` for the
+   * clones, `applyBar` in `commands/claude.ts` for the two root modes.
+   */
+  const hangar = syntheticHangar();
+  const cloneConf = tmuxConfArtifact(hangar).content;
+  for (const binding of keyBindings(hangar)) {
+    assert.ok(cloneConf.includes(binding[3] ?? ''), `${String(binding[3])} is not in the conf`);
+  }
+  const fleetConf = claudeTmuxConfArtifact(hangar).content;
+  assert.equal(CLAUDE_KEY_BINDINGS.length, 1, 'one key on the root socket: the tab click');
+  for (const binding of CLAUDE_KEY_BINDINGS) {
+    assert.match(fleetConf, /bind-key -T root MouseDown1Status/);
+    assert.equal(binding.at(-1), 'select-window -t =');
+  }
 });
 
 test('the footer renders for the active pane only', () => {

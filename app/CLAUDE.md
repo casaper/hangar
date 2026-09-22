@@ -609,9 +609,13 @@ a real record, not an absence), and `refreshPullRequest` is the ONE writer — a
 its own record would stamp `fetchedAt` on missing fields and suppress the refresh that would fill
 them in.
 
-Clicking works through `range=user` regions and one `MouseDown1Status` binding that **falls through
-to tmux's own default**, so a click on a tab still switches windows; it runs `hangar browse`, the
-only part of the bar that can afford the CLI. tmux cannot emit an OSC 8 hyperlink into a status
+Clicking works through `range=user` regions and one `MouseDown1Status` binding whose fall-through
+**selects the window under the mouse, because tmux's own default for that key does not**: the
+default is `switch-client -t =`, and tmux's manual restricts `-t` to changing the window only for
+a target containing `:`, `.` or `%`, which `=` has none of. So the default changes the session, and
+on a socket holding one session per clone that is a click onto the session you are already in. The
+fall-through names `select-window` instead; it runs `hangar browse`, the only part of the bar that
+can afford the CLI. tmux cannot emit an OSC 8 hyperlink into a status
 line at all — measured, the escape is stripped and the rest is drawn as text — so this is the
 mechanism rather than a workaround. `hangar-internals/reference/terminal-and-sessions.md` has the
 five refusals, the measurement that says the border redraws as often as the status line does, the

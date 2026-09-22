@@ -5,6 +5,7 @@ import { CliError, run } from '../exec.ts';
 import { discoverClones } from '../fleet.ts';
 import {
   BAR_OPTIONS,
+  KEY_BINDINGS,
   claudeTmuxConfArtifact,
   modeWindowFormat,
 } from '../generate/claude-tmux-conf.ts';
@@ -568,6 +569,14 @@ const ensureSession = (
  */
 const applyBar = (srv: Server): void => {
   for (const option of BAR_OPTIONS) srv.tmux(['set', '-g', option.name, option.value]);
+  /*
+   * And the key, for the same reason and with the same table -- but it has to be ISSUED rather
+   * than written, because a binding is a command and there is nothing for `set` to carry it.
+   * Without this line the click reaches only servers that start after the conf changed, which is
+   * the half of the split that is easy to forget: the options here already close that gap and a
+   * binding left out of it works for whoever last restarted and nobody else.
+   */
+  for (const binding of KEY_BINDINGS) srv.tmux(binding);
 };
 
 /**

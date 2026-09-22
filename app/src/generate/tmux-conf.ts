@@ -345,12 +345,21 @@ const statusJob =
  * issue as a command rather than write as a value. It is listed beside the table for that reason
  * instead of hiding in it.
  *
- * **The fall-through is the whole shape of it.** tmux's own default for this key is
- * `switch-client -t =` -- click a tab, go to that window -- and a bare rebinding would take that
- * away from every window in the fleet to add a link. So the condition tests for OUR ranges by
- * their `hangar-` prefix and the else branch is tmux's default, restated. `#{m:…}` is a glob
- * match and `#{s/hangar-//:…}` strips the prefix, so the range name IS the argument and there is
- * no table mapping one to the other.
+ * **The fall-through is the whole shape of it**, and it is NOT tmux's default restated. The
+ * condition tests for OUR ranges by their `hangar-` prefix; `#{m:…}` is a glob match and
+ * `#{s/hangar-//:…}` strips it, so the range name IS the argument and there is no table mapping
+ * one to the other. A click anywhere else on the bar has to go on switching windows, which is
+ * what a bare rebinding would take away from every window in the fleet in order to add a link.
+ *
+ * **`select-window -t =`, and tmux's own default for this key cannot do that job.** 3.7c binds
+ * `switch-client -t =`, which reads like click-a-tab-to-switch and is not -- from tmux's manual:
+ * "As a special case, -t may refer to a pane (a target that contains ':', '.' or '%'), to change
+ * session, window and pane". `=` contains none of the three, so the command changes the SESSION
+ * and selects no window at all: clicking a tab in the session you are already in switches you to
+ * the session you are already in, and nothing moves. It is invisible on a socket holding one
+ * session per clone, which is every hangar -- the default is only ever useful for clicking into
+ * a session you are not in, and this bar never shows one. So the fall-through names the command
+ * that selects a window rather than inheriting a default that does not.
  *
  * It calls `hangar` and not the generated script, which is the one place in this feature that
  * can afford to: a click is a human action once in a while, so a quarter of a second of Node
@@ -367,7 +376,7 @@ export const statusClickBinding = (hangar: Hangar): readonly string[] => [
   '-F',
   '#{m:hangar-*,#{mouse_status_range}}',
   `run-shell -b "${hangar.paths.bin} browse #{s/hangar-//:mouse_status_range} #{@hangar_clone}"`,
-  'switch-client -t =',
+  'select-window -t =',
 ];
 
 /**
@@ -473,7 +482,8 @@ export const tmuxConfArtifact = (hangar: Hangar): Artifact => {
       '',
       '# ---- the two keys ------------------------------------------------------------------',
       '# A click on the ticket or the pull request opens it; a click anywhere else on the bar',
-      '# still switches to that window, which is what tmux binds this key to by default.',
+      '# switches to that window -- which tmux does NOT do by default, since its own binding for',
+      '# this key changes the session and selects no window. See `statusClickBinding`.',
       '# `C-b C-e` opens the editors of whichever clone the session belongs to.',
       ...keyBindings(hangar).map(renderBinding),
       '',

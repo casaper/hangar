@@ -83,6 +83,30 @@ export const BAR_OPTIONS: readonly BarOption[] = [
  * known to work. The purpose text stays a user option (`@hangar_purpose`), which expands inside
  * a format perfectly well -- verified on tmux 3.7c.
  */
+/**
+ * `bind-key -T root MouseDown1Status select-window -t =` -- click a tab, go to that window.
+ *
+ * The one key this conf binds, and it exists because tmux's own default for it does not do what
+ * its name suggests. 3.7c binds `switch-client -t =`, and from tmux's manual: "As a special case,
+ * -t may refer to a pane (a target that contains ':', '.' or '%'), to change session, window and
+ * pane". `=` contains none of the three, so the default changes the SESSION and selects no window
+ * -- and this socket holds exactly one session, so clicking a tab switched to the session it was
+ * already in and nothing moved. `select-window -t =` is the command that selects the window under
+ * the mouse.
+ *
+ * A bare binding rather than `clone-tmux.conf`'s `if-shell`: that one falls through to this same
+ * command because it has `range=user` regions of its own to test for first, and this bar has none.
+ *
+ * A LIST of one, and the shape is the point rather than the count: `hangar claude` writes
+ * `BAR_OPTIONS` onto a server that is already running, and a binding is a command rather than an
+ * option, so there is nothing for `set` to carry it. One source read by the conf and by that pass,
+ * exactly as `keyBindings` and `TmuxServer.restyle` are on the other socket -- a key that reaches
+ * only servers started later is a key that works for whoever last restarted.
+ */
+export const KEY_BINDINGS: readonly (readonly string[])[] = [
+  ['bind-key', '-T', 'root', 'MouseDown1Status', 'select-window -t ='],
+];
+
 export const modeWindowFormat = (mode: 'ops' | 'dev'): string => {
   const { main, ink } = MODE_COLOURS[mode];
   return `#[bg=${main},fg=${ink},bold] #W · #{@hangar_purpose} #[default]`;
@@ -128,6 +152,11 @@ export const claudeTmuxConfArtifact = (hangar: Hangar): Artifact => {
       '# One line, and the whole width goes to the tabs. `hangar claude` writes this same list',
       '# onto a server that is already running, since every one of them is a session option.',
       ...BAR_OPTIONS.map((o) => `set -g ${o.name} ${quoteTmuxValue(o.value)}`),
+      '',
+      '# ---- the one key -------------------------------------------------------------------',
+      '# A click on a tab switches to it. tmux does NOT do this by default: its own binding for',
+      '# this key changes the session and selects no window, and this socket has one session.',
+      ...KEY_BINDINGS.map((argv) => argv.map(quoteTmuxValue).join(' ')),
       '',
       '# Which hangar, in the TERMINAL WINDOW title -- the bar has no width to spare for it.',
       'set -g set-titles on',
