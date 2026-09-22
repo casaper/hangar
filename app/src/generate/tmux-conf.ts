@@ -364,20 +364,41 @@ const statusJob =
  * It calls `hangar` and not the generated script, which is the one place in this feature that
  * can afford to: a click is a human action once in a while, so a quarter of a second of Node
  * startup is free, and the URLs come from `issueUrl`/`prSearchUrl` in TypeScript rather than
- * being re-derived in shell. `bin/hangar` by ABSOLUTE path -- tmux's `run-shell` inherits the
- * server's environment, which is whatever shell started it and need not have direnv's PATH.
+ * being re-derived in shell. `bin/hangar` by ABSOLUTE path -- the shell tmux runs here inherits
+ * the SERVER's environment, which is whatever started the server and need not have direnv's PATH.
+ * That environment is also why `TmuxServer.ensureNodeOnPath` exists: an absolute path reaches
+ * `bin/hangar`, and `bin/hangar` still has to find `node`.
+ *
+ * **`if-shell -b`, and not `run-shell`**, for the reason `editorKeyBinding` below spells out and
+ * this binding learned the hard way: run-shell puts a command's stdout in view mode, so every
+ * click threw `hangar browse`'s own two lines of output over whatever the developer was looking
+ * at -- Claude Code, a dev server -- and a failure arrived the same way. Both streams are
+ * redirected and the answer is one `display-message` line on the bar either way. The nesting
+ * round-trips: tmux parses `\"` inside a double-quoted argument, so the whole branch survives
+ * `quoteTmuxValue`'s single quotes, verified by loading the rendered line from a conf and reading
+ * the binding back off the server.
  */
-export const statusClickBinding = (hangar: Hangar): readonly string[] => [
-  'bind-key',
-  '-T',
-  'root',
-  'MouseDown1Status',
-  'if-shell',
-  '-F',
-  '#{m:hangar-*,#{mouse_status_range}}',
-  `run-shell -b "${hangar.paths.bin} browse #{s/hangar-//:mouse_status_range} #{@hangar_clone}"`,
-  'select-window -t =',
-];
+export const statusClickBinding = (hangar: Hangar): readonly string[] => {
+  const what = '#{s/hangar-//:mouse_status_range}';
+  const browse = [
+    'if-shell',
+    '-b',
+    `"${hangar.paths.bin} browse ${what} #{@hangar_clone} >/dev/null 2>&1"`,
+    `"display-message \\"opened ${what} for #{@hangar_clone}\\""`,
+    `"display-message \\"hangar browse ${what} failed for #{@hangar_clone} -- run it in a shell to see why\\""`,
+  ].join(' ');
+  return [
+    'bind-key',
+    '-T',
+    'root',
+    'MouseDown1Status',
+    'if-shell',
+    '-F',
+    '#{m:hangar-*,#{mouse_status_range}}',
+    browse,
+    'select-window -t =',
+  ];
+};
 
 /**
  * `bind-key -T prefix C-e` -- open the current clone's editors, without naming it.

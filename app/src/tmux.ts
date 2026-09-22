@@ -1,3 +1,5 @@
+import { dirname } from 'node:path';
+
 import { cloneShortName, type Clone } from './fleet.ts';
 import { run } from './exec.ts';
 import type { Hangar } from './hangar.ts';
@@ -334,6 +336,32 @@ export type TmuxServer = {
    */
   readonly restyle: (clones: readonly Clone[]) => number;
   /**
+   * Put `node` on the server's global PATH, so the things the BAR starts can run.
+   *
+   * Two of them do: the click on the issue key or the pull request runs `bin/hangar browse`, and
+   * `clone-tmux-status.sh` spawns a detached `hangar pr refresh` past the cache TTL. Both are
+   * `sh` jobs tmux starts itself, and they get the server's own environment -- measured on 3.7c:
+   * a `run-shell` and a `#()` status job both see what `set-environment -g` holds.
+   *
+   * **The environment a server has depends on who created it**, which is what made this hide. A
+   * server `hangar open` starts inherits direnv's PATH and everything works. One the EMULATOR
+   * created -- `attachCommand` is `new-session -A`, so a restored tab with the server gone makes
+   * it -- inherits launchd's `/usr/bin:/bin:/usr/sbin:/sbin`, where there is no node at all, and
+   * `bin/hangar` answers with its own bootstrap error. Measured on this fleet: every pull-request
+   * record was 8236 seconds old against a 90-second TTL with five sessions drawing, and every one
+   * of them refreshed within three seconds of this being written.
+   *
+   * **It belongs here and not in `clone-tmux.conf`, and that is the whole argument.** A conf is
+   * read once, by servers `hangar open` starts -- which are exactly the servers whose PATH is
+   * already fine. The broken case is the server that never read the conf, so the repair has to be
+   * something written onto a server that is already up, like `barOptions` and `keyBindings`. It
+   * also keeps this machine's node path out of a generated artifact and out of the golden capture.
+   *
+   * Prepended, never replaced: whatever else is on the server's PATH stays, and a second call is
+   * a no-op.
+   */
+  readonly ensureNodeOnPath: () => void;
+  /**
    * Re-execute `clone-tmux.conf` on a server that is already running.
    *
    * This is the half `restyle` cannot reach. `-f` is read once at start-up, so a live server is
@@ -385,6 +413,22 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
   };
 
   const lines = (out: string): string[] => (out === '' ? [] : out.split('\n'));
+
+  const ensureNodeOnPath = (): void => {
+    // `process.execPath` is the real installation path rather than a per-shell fnm multishell
+    // link, so it is a directory that is still there tomorrow. It carries the Node version, so a
+    // `.nvmrc` bump moves it -- and moves it for a fresh `colours sync` too, which is the command
+    // that writes this.
+    const nodeBin = dirname(process.execPath);
+    const shown = tmux(['show-environment', '-g', 'PATH']);
+    // tmux prints `-PATH` for a variable it is told to REMOVE from the environment, which is not
+    // a value and must not be split as one.
+    const live = shown.ok && shown.out.startsWith('PATH=') ? shown.out.slice('PATH='.length) : '';
+    const base = live === '' ? (process.env['PATH'] ?? '') : live;
+    const parts = base === '' ? [] : base.split(':');
+    if (parts.includes(nodeBin)) return;
+    tmux(['set-environment', '-g', 'PATH', [nodeBin, ...parts].join(':')]);
+  };
 
   const readSessions = (): TmuxSessionRow[] => {
     const res = tmux([
@@ -543,6 +587,9 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
         { withConf: true },
       );
       if (!created.ok) return false;
+      // The server may be brand new or may have been standing for days -- and it exists either
+      // way now, which is the only moment this can be written.
+      ensureNodeOnPath();
       const [, window] = created.out.split(SEP);
       if (window === undefined || window === '') return false;
       paintSession(clone);
@@ -607,8 +654,12 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
       const res = tmux(['show', showFlags, name]);
       return res.ok ? res.out : undefined;
     },
+    ensureNodeOnPath,
     restyle: (clones) => {
       if (!tmux(['list-sessions']).ok) return 0;
+      // Before the bar is written, because the bar is what starts things: a `#()` job spawned by
+      // the very next redraw needs this already in place.
+      ensureNodeOnPath();
       /*
        * The globals first, from the same table `clone-tmux.conf` is rendered from, and they are
        * worth writing even with no clone session on the socket: a window the developer made by

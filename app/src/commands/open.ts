@@ -541,7 +541,13 @@ export const open = (hangar: Hangar, refs: readonly string[], opts: OpenOptions)
      * Three `set` calls and idempotent, so the reuse path can simply do it rather than first
      * asking whether it is needed -- and outside a dry run, because a session's tags are state.
      */
-    if (facts.sessionExists && opts.dryRun !== true) server.paintSession(clone);
+    if (facts.sessionExists && opts.dryRun !== true) {
+      server.paintSession(clone);
+      // Same reason, and the same case: a server the emulator's own `new-session -A` created has
+      // launchd's PATH, where the bar's `hangar browse` click and its detached `pr refresh` both
+      // find no node. Reaching a session at all means the server is up, so this is safe here.
+      server.ensureNodeOnPath();
+    }
     for (const action of openPlan(hangar, facts)) {
       if (opts.dryRun === true) {
         step(describeAction(action, false));

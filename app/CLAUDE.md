@@ -615,7 +615,11 @@ default is `switch-client -t =`, and tmux's manual restricts `-t` to changing th
 a target containing `:`, `.` or `%`, which `=` has none of. So the default changes the session, and
 on a socket holding one session per clone that is a click onto the session you are already in. The
 fall-through names `select-window` instead; it runs `hangar browse`, the only part of the bar that
-can afford the CLI. **A correct binding is half of it — the emulator has to report button presses
+can afford the CLI — through `if-shell -b` with both streams redirected, because `run-shell` puts
+a command's stdout in view mode over whatever the pane was showing. **What the bar starts runs in
+the SERVER's environment**, which is launchd's when the emulator created the server, so
+`TmuxServer.ensureNodeOnPath` puts Node on its global PATH from the live-apply pass rather than
+from the conf — the conf only ever reaches servers whose PATH was already fine. **A correct binding is half of it — the emulator has to report button presses
 at all**, which iTerm2 settles under a different setting from the wheel, so a bar whose clicks all
 do nothing while scrolling works is an emulator finding rather than a tmux one; `doctor`'s
 `emulator` row says which. tmux cannot emit an OSC 8 hyperlink into a status

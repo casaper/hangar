@@ -213,6 +213,30 @@ test('a click that is not on one of ours still selects that window', () => {
   );
 });
 
+test('a click on one of ours reports on the bar, and never into the pane', () => {
+  /*
+   * `run-shell` puts a command's stdout in VIEW MODE, in the pane the developer is looking at --
+   * so every click threw `hangar browse`'s own two lines of output over Claude Code or a running
+   * dev server, and a failure arrived the same way. `editorKeyBinding` had already learned this
+   * and said so in its header; this binding had not.
+   */
+  const binding = statusClickBinding(syntheticHangar());
+  const branch = binding.find((word) => word.includes('browse')) ?? '';
+  assert.ok(!branch.includes('run-shell'), "run-shell displays stdout in the developer's pane");
+  assert.ok(branch.startsWith('if-shell -b '), branch);
+  // Both streams, because either one reaches the same place.
+  assert.ok(branch.includes('>/dev/null 2>&1'), branch);
+  // And the answer comes back on the status line rather than nowhere: a click that silently does
+  // nothing is exactly the state this whole feature spent a session being in.
+  assert.equal(branch.match(/display-message/g)?.length, 2, branch);
+  /*
+   * No SINGLE quote anywhere in it. `quoteTmuxValue` wraps a value in single quotes and cannot
+   * escape one, so a single quote in this branch would render a conf line that ends early --
+   * which tmux would load without complaint, since what follows is still valid syntax.
+   */
+  assert.ok(!branch.includes("'"), branch);
+});
+
 test('both sockets bind the tab click, and each one reaches a LIVE server too', () => {
   /*
    * The property that broke: `-f` is read once when a server starts, so a binding that lives only

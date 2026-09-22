@@ -716,6 +716,35 @@ conf and issued by `applyBar` onto a server that is already running, for the rea
 and `restyle` are paired on the clone socket -- `-f` is read once, so a key that lives only in a
 conf works for whoever last restarted and for nobody else.
 
+**A click has to survive the environment the server was born with, and that is not the same for
+every server.** One `hangar open` starts inherits direnv's PATH. One the EMULATOR created --
+`attachCommand` is `new-session -A`, so a restored tab with the server gone makes the server
+itself -- inherits launchd's `/usr/bin:/bin:/usr/sbin:/sbin`, which has no `node` in it. An
+absolute `bin/hangar` still reaches the script; the script then cannot find Node and answers with
+its own bootstrap error. Two things on this bar run that way and both were dead:
+`hangar browse` on a click, and `clone-tmux-status.sh`'s detached `hangar pr refresh`. Measured
+here: every pull-request record was 8236 seconds old against a 90-second TTL with five sessions
+drawing their bars, and every attached clone refreshed within three seconds of `node`'s directory
+being put on the server's global PATH.
+
+`TmuxServer.ensureNodeOnPath` is that write, and **it is deliberately not in `clone-tmux.conf`**:
+a conf is read once, by the servers `hangar open` starts, which are exactly the servers whose PATH
+is already fine. The broken case is the server that never read the conf, so the repair has to be
+something written onto a server already up -- beside `barOptions` and `keyBindings`, from
+`restyle` and from `open`'s reuse path. It also keeps one machine's Node path out of a generated
+artifact and out of the golden capture. Both job kinds honour it, measured on 3.7c: a `run-shell`
+and a `#()` status job each see what `set-environment -g` holds.
+
+**The click reports on the status line and never into a pane.** `run-shell` puts a command's
+stdout in view mode, in the pane the developer is looking at, so every successful click threw
+`hangar browse`'s two lines of output over Claude Code or a running dev server -- and a failure
+arrived the same way, which is how the missing Node was eventually seen. The binding is an
+`if-shell -b` with both streams redirected and a `display-message` on each branch, exactly like
+`C-b C-e` beside it, whose header had recorded this before this binding was written.
+`tmux-conf.test.ts` pins all of it, the absence of a single quote included: `quoteTmuxValue` wraps
+a value in single quotes and cannot escape one, so a single quote in that branch would end the
+conf line early and tmux would load the result without complaining.
+
 `#{m:…}` is a glob match and `#{s/hangar-//:…}` strips the prefix, so **the range name IS the
 argument** and there is no table mapping one to the other. `run-shell` expands formats in its
 command before running it -- verified, `#{@hangar_clone}` arriving as `clone_01` -- and `-b` keeps
