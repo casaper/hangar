@@ -102,11 +102,11 @@ import {
 import { paletteEntry } from '../palette.ts';
 import { portSummary } from '../ports.ts';
 import { platform } from '../platform/index.ts';
-import { claudeSessionDiagnostic } from '../procs.ts';
+import { claudeSessionDiagnostic, claudeSessionsIn } from '../procs.ts';
 import { terminal, type EmulatorCapabilities } from '../terminal/index.ts';
 import { TMUX_SETTINGS, tmuxConfArtifact } from '../generate/tmux-conf.ts';
 import { tmuxStatusArtifact } from '../generate/tmux-status-sh.ts';
-import { tmuxServer, tmuxSocketName, type TmuxSessionRow } from '../tmux.ts';
+import { tmuxServer, tmuxSessionName, tmuxSocketName, type TmuxSessionRow } from '../tmux.ts';
 import {
   hangarClaudeLocalMdContent,
   hangarClaudeLocalMdPath,
@@ -896,6 +896,9 @@ const reportTmux = (hangar: Hangar): readonly string[] => {
   }
 
   const rows = server.sessions();
+  const clones = discoverClones(hangar);
+  const bySessionName = new Map(clones.map((clone) => [tmuxSessionName(clone), clone]));
+  const byCloneName = new Map(clones.map((clone) => [clone.name, clone]));
   const mine = rows.filter((row) => row.clone !== undefined);
   ok(
     `${'tmux'.padEnd(22)} ${pc.dim(
@@ -903,7 +906,59 @@ const reportTmux = (hangar: Hangar): readonly string[] => {
     )}`,
   );
 
-  const stale: readonly TmuxSessionRow[] = server.staleSessions(discoverClones(hangar));
+  /*
+   * A session whose NAME is a live clone's and which carries no `@hangar_clone`.
+   *
+   * It used to fall into the "other" count above -- dim, green, and reading as a session somebody
+   * made by hand. It is not: `attachCommand` is `new-session -A`, so an emulator tab that comes
+   * back up with the server gone creates the session itself, unpainted. What follows is a blank
+   * footer, a window title with no clone in it, and a click binding handing `hangar browse` an
+   * empty clone -- none of which says why, because the status script's every failure is a silent
+   * `exit 0`. The whole fleet went that way at once here, after the terminal restored its tabs.
+   */
+  const unpainted = rows.filter((row) => row.clone === undefined && bySessionName.has(row.name));
+  if (unpainted.length > 0) {
+    const text = `${String(unpainted.length)} tmux session(s) carry no clone tag, so their bar says nothing`;
+    problems.push(text);
+    warn(text);
+    note(
+      `${unpainted.map((row) => row.name).join(', ')} — \`hangar colours sync\` adopts them by name and repaints, with nothing killed.`,
+    );
+  }
+
+  /*
+   * DERELICT: a session for a live clone with no client, no role window and no agent in it.
+   *
+   * Reported and never killed, which is the same rule `staleSessions` follows below and for the
+   * same reason -- a session is cheap to keep and somebody's work is not. All three conditions
+   * together, because each one alone is ordinary: a detached session is exactly what a clone
+   * whose tab was closed looks like, and `hangar open` is expected to reattach to it with its
+   * scrollback intact. What makes these derelict is that there is nothing in them to come back
+   * to: `new-session -A` built them on a dead server, so they hold one bare shell and no role.
+   *
+   * The tag has nothing to do with it, and tying the two together was a bug worth recording:
+   * checking only UNTAGGED sessions made this row disappear the moment `colours sync` adopted
+   * them, which is to say it went quiet exactly when the other repair ran and left the empty
+   * sessions unreported. A derelict session is derelict painted or not.
+   */
+  const derelict = rows.filter((row) => {
+    if (row.attached) return false;
+    const clone =
+      row.clone === undefined ? bySessionName.get(row.name) : byCloneName.get(row.clone);
+    // A tag naming a clone that is gone is `staleSessions`' business, reported just below.
+    if (clone === undefined) return false;
+    return server.roles(clone).length === 0 && claudeSessionsIn(clone.path).length === 0;
+  });
+  for (const row of derelict) {
+    const text = `tmux session ${row.name} holds no role window, no client and no agent`;
+    problems.push(text);
+    warn(text);
+    note(
+      `Nothing built it but a reattach onto a dead server. \`tmux -L ${socket} kill-session -t '=${row.name}:'\`, or \`hangar open ${row.name}\` to give it its windows back.`,
+    );
+  }
+
+  const stale: readonly TmuxSessionRow[] = server.staleSessions(clones);
   for (const row of stale) {
     const text = `tmux session ${row.name} names a clone that is gone`;
     problems.push(text);

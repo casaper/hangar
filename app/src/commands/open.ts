@@ -528,6 +528,20 @@ export const open = (hangar: Hangar, refs: readonly string[], opts: OpenOptions)
   for (const clone of clones) {
     if (opts.checkout !== false) land(clone, opts, clones.length > 1);
     const facts = factsFor(hangar, clone, opts, server, driver.capabilities, drivers);
+    /*
+     * Paint a session this command did not create, before anything else touches it.
+     *
+     * `createSession` paints the ones it makes, which left a hole with no name until it cost this
+     * fleet its whole status bar: `attachCommand` is `new-session -A`, so an emulator tab coming
+     * back up with the server gone creates the session ITSELF -- unpainted, carrying no
+     * `@hangar_clone`, and therefore with a blank footer, a blank window title and a click
+     * binding handing `hangar browse` an empty clone. Every restored tab at once, after the
+     * terminal restores its windows.
+     *
+     * Three `set` calls and idempotent, so the reuse path can simply do it rather than first
+     * asking whether it is needed -- and outside a dry run, because a session's tags are state.
+     */
+    if (facts.sessionExists && opts.dryRun !== true) server.paintSession(clone);
     for (const action of openPlan(hangar, facts)) {
       if (opts.dryRun === true) {
         step(describeAction(action, false));

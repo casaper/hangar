@@ -38,8 +38,16 @@ import { orUndefined } from './terminal/types.ts';
  * clean out of the clone and still be that clone's window, because the session it sits in is what
  * says so -- which turns "is this clone already open" from an inference about where some shell
  * happens to be standing into `has-session`. `@hangar_clone` is set per session anyway, so a
- * session made by hand on this socket (it carries the conf's global `@hangar_id` and no
- * `@hangar_clone`) reads as foreign on a fact rather than on a heuristic.
+ * session can name its clone from a pane-context format too.
+ *
+ * **A missing `@hangar_clone` does NOT prove a session was made by hand**, and reading it that
+ * way cost this fleet its whole status bar once. `attachCommand` is `new-session -A`, so an
+ * emulator tab that comes back up with the server gone -- every tab at once, after the terminal
+ * restores its windows -- CREATES the session itself, unpainted and carrying exactly the shape
+ * this header used to call foreign. What follows is a blank footer, a blank window title and a
+ * click binding handing `hangar browse` an empty clone, none of which says why. So the tag is
+ * how a painted session names its clone, and the session NAME is what identifies one that is
+ * not painted yet: `restyle` matches on it and paints, which makes `colours sync` the repair.
  */
 
 /** The private socket. It is addressable from outside the hangar, so it carries the id. */
@@ -292,6 +300,15 @@ export type TmuxServer = {
   readonly roles: (clone: Clone) => string[];
   /** Create the session on its first role's window, tagged and painted. False if tmux refused. */
   readonly createSession: (clone: Clone, first: TabSpec) => boolean;
+  /**
+   * Write a clone's identity onto its session: the tag, the short label, the badge.
+   *
+   * Three `set` calls and idempotent, which is what lets every route into a session call it
+   * rather than only the one that creates one. `open` calls it on the REUSE path for exactly
+   * that reason -- the session it is reusing may be one the emulator's own `new-session -A`
+   * created, which nothing has painted.
+   */
+  readonly paintSession: (clone: Clone) => void;
   readonly addWindow: (clone: Clone, tab: TabSpec) => boolean;
   /** Bring one role's window forward inside the session. Cosmetic; failure is ignored. */
   readonly selectRole: (clone: Clone, role: string) => void;
@@ -470,6 +487,7 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
       return res.ok ? orUndefined(res.out) : undefined;
     },
     hasSession: (clone) => tmux(['has-session', '-t', tmuxTarget(clone)]).ok,
+    paintSession,
     sessions: readSessions,
     staleSessions: (clones) => {
       const alive = new Set(clones.map((clone) => clone.name));
@@ -611,12 +629,27 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
        */
       for (const binding of keyBindings(hangar)) tmux(binding);
 
-      const byName = new Map(clones.map((clone) => [clone.name, clone]));
+      const byTag = new Map(clones.map((clone) => [clone.name, clone]));
+      /*
+       * The second map is what makes this command the repair for an UNPAINTED session.
+       *
+       * A session the emulator's own `new-session -A` created carries no `@hangar_clone`, so the
+       * tag lookup finds nothing and the old code skipped it -- which disqualified the one
+       * command that could have fixed it, using the very field that was missing. Its NAME is
+       * still `tmuxSessionName(clone)`, written by whoever attached from this hangar's own
+       * generated command, so the match is exact rather than a guess, and `paintSession` writes
+       * the tag on the way past. The session is an ordinary one from that moment on.
+       */
+      const bySessionName = new Map(clones.map((clone) => [tmuxSessionName(clone), clone]));
       let restyled = 0;
       for (const row of readSessions()) {
-        const clone = row.clone === undefined ? undefined : byName.get(row.clone);
-        // A session naming a clone that is gone is `staleSessions`' business, and `doctor`
-        // already reports it. Nothing to paint it with, so it keeps the neutral bar.
+        /*
+         * The tag first, and the name only when there is no tag. A tag naming a clone that is
+         * GONE stays `staleSessions`' business -- `doctor` already reports it, and falling back
+         * to the name there would adopt a session the fleet has deliberately let go of.
+         */
+        const clone = row.clone === undefined ? bySessionName.get(row.name) : byTag.get(row.clone);
+        // Nothing to paint it with, so it keeps the neutral bar.
         if (clone === undefined) continue;
         // The same builder `open` uses, so the badge cannot differ by route.
         paintSession(clone);

@@ -391,12 +391,38 @@ carries the id, and nothing INSIDE a per-hangar server needs one.
 **The session NAME is the identity, which is why there is nothing to stamp and read back.** A
 window can be split, renamed or `cd`'d clean out of the clone and still be that clone's window,
 because the session it sits in says so. `open` asks `has-session`: absent, it creates the session
-with a window per role and hands it to an emulator tab; present, it raises. `@hangar_clone` is set
-per session anyway, so a session made by hand on this socket -- it carries the conf's global
-`@hangar_id` and no `@hangar_clone` -- reads as foreign on a fact rather than on a heuristic.
-`@hangar_clone` needs exactly one write at session scope: measured on tmux 3.7c, a session-scope
-user option is visible from a pane-context format too, so a split pane stays attributed without a
-second write.
+with a window per role and hands it to an emulator tab; present, it raises. `@hangar_clone` needs
+exactly one write at session scope: measured on tmux 3.7c, a session-scope user option is visible
+from a pane-context format too, so a split pane stays attributed without a second write.
+
+**A session with no `@hangar_clone` is not proof that a human made it**, and reading it that way
+cost this fleet its entire status bar. `attachCommand` is `new-session -A`, so an emulator tab that
+comes back up with the server gone CREATES the session itself -- and the terminal restoring its
+windows after a restart does that for every tab at once. What it builds is the shape `tmux.ts`'s
+header describes: one bare unnamed window, no roles, and nothing painted. Observed here, six
+sessions deep, with the two clones nobody reopened left holding a single `zsh` window each.
+
+Nothing then says so. The footer job is `#(clone-tmux-status.sh footer "#{@hangar_clone}" …)` and
+every failure in that script is a deliberate silent `exit 0`, so an empty tag renders an empty
+footer; `set-titles-string` reads `@hangar_clone_label` and drops the clone out of the window
+title; the click binding and `C-b C-e` hand `hangar browse` and `hangar edit` an empty argument.
+Three symptoms, one missing `set`, and no error anywhere.
+
+The repair had the same hole in it. `paintSession` ran only from `createSession`, and `restyle`
+identified a session by the very tag that was missing -- so `hangar colours sync`, the one command
+that could have fixed it, skipped exactly the sessions that needed it and reported zero restyled.
+Both halves are closed, and the shape of the fix is the point:
+
+- **`restyle` falls back to the session NAME.** It is `tmuxSessionName(clone)`, written by this
+  hangar's own generated attach command, so the match is exact rather than a guess -- and
+  `paintSession` writes the tag on the way past, so the session is an ordinary one from then on.
+  A tag that names a clone which is GONE still gets no fallback: that is `staleSessions`' business,
+  and adopting it by name would take back a session the fleet deliberately let go of.
+- **`open` paints the session it REUSES**, not only the one it creates. Three `set` calls and
+  idempotent, so the path can simply do it rather than first asking whether it is needed.
+- **`doctor` has a row for it**, because the old one actively concealed it: an untagged session
+  fell into the dim green `N clone session(s), M other` count, which reads as somebody's hand-made
+  session. It is now a problem naming `hangar colours sync` as the repair.
 
 **Six things tmux enforces silently, each measured before the code was written.** They are the
 reason the argv is a pure builder with a test rather than a call site that got it right once:
