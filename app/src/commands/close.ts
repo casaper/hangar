@@ -3,7 +3,8 @@ import { CliError } from '../exec.ts';
 import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import type { Hangar } from '../hangar.ts';
 import { plansCollect } from './plans.ts';
-import { claudeSessionsIn, runningServersIn } from '../procs.ts';
+import { allClaudeSessions, claudeSessionsIn } from '../procs.ts';
+import { killPlan, scanFleet, stopServer, type ServerRecord } from './servers.ts';
 import { tmuxServer, tmuxSessionName, type TmuxServer } from '../tmux.ts';
 import { tmpMerge } from './tmp.ts';
 import { confirm, note, ok, step, warn } from '../ui.ts';
@@ -36,11 +37,28 @@ import { confirm, note, ok, step, warn } from '../ui.ts';
  * terminal the command was typed in, half way through the command. `--force` is the way past it,
  * because a session opened from inside another clone's window is a real case.
  *
- * Everything else is a warning inside one confirmation. A dev server dying with the session is
- * recoverable by restarting it, so it is named rather than treated as a guard -- the asymmetry
- * with `remove-clone`, which refuses on the same fact, is that `remove-clone` is about to delete
- * the directory. A live Claude Code session is not a warning at all: ending it is what the
- * command is for.
+ * Everything else is a warning inside one confirmation. A live Claude Code session is not a
+ * warning at all: ending it is what the command is for.
+ *
+ * ## The dev servers are STOPPED, and not left to die with the session
+ *
+ * They used to be named as dying with it, which was an assumption rather than a fact. It holds
+ * for a server started by `hangar servers start`, which types the line into a pane's own shell,
+ * and it does not hold for one that was detached, re-parented by a watcher, or started outside
+ * tmux altogether -- and the failure is quiet in the worst way: the port stays held by a server
+ * belonging to a clone nobody has open, so the next thing pointed at that port is testing a
+ * checkout that is no longer being worked in. `hangar servers list` calls that state `untracked`.
+ *
+ * So `close` stops them itself, through `killPlan` and nothing of its own -- the same four guards
+ * `hangar servers kill` applies, which exist because a pid is a small integer the kernel reissues.
+ * Two consequences of reusing that planner rather than signalling the scan: a `stray` is refused
+ * unless it is asked for by pid, so closing a clone never stops the editor's own language server,
+ * and a `recycled` record is never signalled at all.
+ *
+ * **Before the `kill-session`, deliberately.** A tracked server removes its own pid file when it
+ * exits, and killing the pane out from under it takes that chance away -- leaving a file naming a
+ * dead process, which is the `stale` record `servers prune` then has to clear up. Asking it to
+ * stop while its pane is still there is what lets it clean up after itself.
  */
 export type CloseOptions = {
   all?: boolean | undefined;
@@ -59,8 +77,10 @@ export type CloseFacts = {
   readonly roles: readonly string[];
   /** How many Claude Code processes are running in the clone. */
   readonly claudeSessions: number;
-  /** Dev servers that will die with the session, by name. */
-  readonly servers: readonly string[];
+  /** The dev servers this close will stop, already past `killPlan`'s four guards. */
+  readonly servers: readonly ServerRecord[];
+  /** Servers `killPlan` matched and refused, each with why -- a stray, or a recycled record. */
+  readonly serversRefused: readonly string[];
   /** True when `lsof` could not be asked, so `servers` being empty means nothing. */
   readonly serversUnknown: boolean;
   /** True when THIS process is inside the clone's own session. */
@@ -73,6 +93,11 @@ export type CloseAction =
   | { readonly kind: 'nothing-open'; readonly clone: string }
   | { readonly kind: 'refuse-from-inside'; readonly clone: string }
   | { readonly kind: 'close-editor'; readonly clone: string; readonly editor: string }
+  | {
+      readonly kind: 'stop-servers';
+      readonly clone: string;
+      readonly servers: readonly ServerRecord[];
+    }
   | { readonly kind: 'kill-session'; readonly clone: string; readonly roles: readonly string[] }
   | { readonly kind: 'collect'; readonly clone: string };
 
@@ -91,6 +116,12 @@ export const closePlan = (facts: CloseFacts, opts: CloseOptions): CloseAction[] 
     for (const driver of facts.closers)
       actions.push({ kind: 'close-editor', clone, editor: driver.kind });
   }
+  /*
+   * Before the session goes, and independent of whether there IS one: a server outlives the tab
+   * that started it, so a clone with no session at all can still be holding its ports.
+   */
+  if (facts.servers.length > 0)
+    actions.push({ kind: 'stop-servers', clone, servers: facts.servers });
   if (facts.sessionExists) {
     actions.push({ kind: 'kill-session', clone, roles: facts.roles });
     // Only when there was a session to kill: with nothing running there was no SessionEnd hook
@@ -111,6 +142,10 @@ export const describeCloseAction = (action: CloseAction): string => {
       return `${action.clone}: refusing — this command is running inside that clone's own session`;
     case 'close-editor':
       return `${action.clone}: close the ${action.editor} window`;
+    case 'stop-servers':
+      return `${action.clone}: stop ${String(action.servers.length)} dev server(s): ${action.servers
+        .map((r) => `${r.name} (pid ${String(r.pid)})`)
+        .join(', ')}`;
     case 'kill-session':
       return `${action.clone}: kill the tmux session (${action.roles.length} window(s): ${action.roles.join(', ')})`;
     case 'collect':
@@ -126,7 +161,10 @@ export const closeWarnings = (facts: CloseFacts): string[] => {
       `${String(facts.claudeSessions)} live Claude Code session(s) — a tool call in flight is interrupted`,
     );
   if (facts.servers.length > 0)
-    out.push(`dev server(s) that die with the session: ${facts.servers.join(', ')}`);
+    out.push(`dev server(s) that will be stopped: ${facts.servers.map((r) => r.name).join(', ')}`);
+  // Named rather than silently skipped: a stray is usually the editor's own language server, and
+  // the developer is the only one who can say whether stopping it is what they meant.
+  for (const why of facts.serversRefused) out.push(`left running: ${why}`);
   if (facts.serversUnknown)
     out.push('`lsof` could not be run, so a running dev server would not have been noticed');
   return out;
@@ -134,18 +172,31 @@ export const closeWarnings = (facts: CloseFacts): string[] => {
 
 const factsFor = (
   clone: Clone,
+  hangarRoot: string,
   server: TmuxServer,
   drivers: readonly EditorDriver[],
 ): CloseFacts => {
   const sessionExists = server.hasSession(clone);
-  const scan = runningServersIn(clone);
+  /*
+   * The same scan and the same planner `hangar servers kill` runs, with no selection flags -- so
+   * everything this clone owns is considered and the four guards decide, rather than `close`
+   * holding a second opinion about which process is safe to signal.
+   */
+  const scan = scanFleet([clone]);
+  const plan = killPlan(
+    scan.records,
+    hangarRoot,
+    new Set(allClaudeSessions().map((session) => session.pid)),
+    {},
+  );
   return {
     clone,
     sessionExists,
     roles: sessionExists ? server.roles(clone) : [],
     claudeSessions: claudeSessionsIn(clone.path).length,
-    servers: scan.servers.map((proc) => proc.name),
-    serversUnknown: !scan.portsChecked,
+    servers: plan.kill,
+    serversRefused: plan.refused.map(({ record, why }) => `${record.name} — ${why}`),
+    serversUnknown: !scan.scanned,
     fromInside: server.currentSession() === tmuxSessionName(clone),
     closers: drivers.filter((d) => d.capabilities.closeWindow && d.closeWindow !== undefined),
   };
@@ -208,7 +259,7 @@ export const closeClones = (hangar: Hangar, refs: readonly string[], opts: Close
   const dryRun = opts.dryRun === true;
 
   const plans = clones.map((clone) => {
-    const facts = factsFor(clone, server, drivers);
+    const facts = factsFor(clone, hangar.root, server, drivers);
     return { facts, actions: closePlan(facts, opts) };
   });
 
@@ -223,7 +274,14 @@ export const closeClones = (hangar: Hangar, refs: readonly string[], opts: Close
     return;
   }
 
-  const killing = plans.filter(({ actions }) => actions.some((a) => a.kind === 'kill-session'));
+  /*
+   * `stop-servers` counts as killing, and it has to: a clone whose tab was closed days ago has no
+   * session to kill and can still be holding its ports, so without this a `close` that signals
+   * somebody's dev server would ask nothing at all.
+   */
+  const killing = plans.filter(({ actions }) =>
+    actions.some((a) => a.kind === 'kill-session' || a.kind === 'stop-servers'),
+  );
   const warned = killing.some(({ facts }) => closeWarnings(facts).length > 0);
   if (killing.length > 0 && warned && opts.yes !== true) {
     if (!confirm(`Close ${killing.map(({ facts }) => facts.clone.name).join(', ')}?`)) {
@@ -249,6 +307,21 @@ export const closeClones = (hangar: Hangar, refs: readonly string[], opts: Close
           if (driver !== undefined) closeEditorWindow(driver, facts.clone);
           break;
         }
+        case 'stop-servers':
+          /*
+           * SIGTERM and no escalation. `hangar servers kill --force` is where SIGKILL is asked
+           * for on purpose, and a server that declines to stop is worth a line rather than a
+           * harder signal from a command whose subject is the window, not the process.
+           */
+          for (const record of action.servers) {
+            if (stopServer(record, 'SIGTERM'))
+              ok(`${facts.clone.name}: stopped ${record.name} (pid ${String(record.pid)})`);
+            else
+              warn(
+                `${facts.clone.name}: ${record.name} (pid ${String(record.pid)}) is still running — \`hangar servers kill ${facts.clone.name} --force\``,
+              );
+          }
+          break;
         case 'kill-session':
           if (server.killSession(facts.clone)) {
             ok(`killed ${facts.clone.name}'s tmux session`);

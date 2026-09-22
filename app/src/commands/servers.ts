@@ -756,8 +756,15 @@ const waitMs = (ms: number): void => {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 };
 
-/** Signal one process, and say whether it actually went away. */
-const stop = (record: ServerRecord, signal: NodeJS.Signals): boolean => {
+/**
+ * Signal one process, and say whether it actually went away.
+ *
+ * Exported because `hangar close` stops a clone's servers before it kills the session, and one
+ * implementation of "ask a dev server to stop and wait to see whether it did" is the point: a
+ * second caller doing its own `process.kill` would be a second opinion about how long to wait
+ * and what a failure looks like.
+ */
+export const stopServer = (record: ServerRecord, signal: NodeJS.Signals): boolean => {
   try {
     process.kill(record.pid, signal);
   } catch {
@@ -817,7 +824,7 @@ export const serversKill = (hangar: Hangar, refs: readonly string[], opts: KillO
   const signal: NodeJS.Signals = opts.force === true ? 'SIGKILL' : 'SIGTERM';
   const survivors: ServerRecord[] = [];
   for (const record of plan.kill) {
-    if (stop(record, signal))
+    if (stopServer(record, signal))
       ok(`${record.clone.name}: ${record.name} (pid ${String(record.pid)}) stopped`);
     else {
       warn(`${record.clone.name}: ${record.name} (pid ${String(record.pid)}) is still running`);

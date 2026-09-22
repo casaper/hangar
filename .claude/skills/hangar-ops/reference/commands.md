@@ -398,6 +398,12 @@ separate `<thing>_preview`.
   **There is one tmux server per hangar, not one per clone**, so it kills the clone's SESSION;
   `kill-server` would end every other clone in the fleet. The server exits on its own once its
   last session closes, which is what makes the next `hangar open` read a fresh conf.
+  **It also stops the clone's dev servers**, rather than assuming they die with the session — one
+  that was detached or re-parented outlives it and goes on holding the clone's port. They are
+  stopped first, so a tracked server can remove its own pid file, and through the same guards
+  `hangar servers kill` uses: a stray is left running and named, so the editor's own language
+  server is never caught up in it. A clone with no session but a live dev server is therefore no
+  longer "nothing to close" — and because that is a signal, it asks before sending one.
   It **refuses** to close the clone whose own session you typed the command in — that kills the
   terminal mid-command — and `--force` is the way past. Everything else worth knowing (a live
   session, a dev server that dies with it) is named in one confirmation, which `-y` skips.

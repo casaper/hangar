@@ -14,6 +14,7 @@ import { eclipseDriver, xcodeDriver } from '../src/editor/launch-only.ts';
 import { vimDriver } from '../src/editor/vim.ts';
 import { vscodeDriver } from '../src/editor/vscode.ts';
 import { zedDriver } from '../src/editor/zed.ts';
+import type { ServerRecord } from '../src/commands/servers.ts';
 import { cloneAt } from '../src/fleet.ts';
 import { platform } from '../src/platform/index.ts';
 import { linuxPlatform } from '../src/platform/linux.ts';
@@ -31,6 +32,22 @@ import { syntheticHangar } from './fixture.ts';
  * `EditorCapabilities.closeWindow` and of `PlatformDriver.closeAppWindow`.
  */
 
+/** One `serving` record, which is all `close` ever needs of one: a name and a pid to report. */
+const devServer = (name: string, pid: number): ServerRecord => ({
+  state: 'serving',
+  clone: cloneAt(syntheticHangar(), 1),
+  name,
+  role: 'ng',
+  pid,
+  port: 4242,
+  cwd: undefined,
+  command: undefined,
+  parent: undefined,
+  pidFile: undefined,
+  url: undefined,
+  tookPortOf: undefined,
+});
+
 const closeFacts = (over: Partial<CloseFacts> = {}): CloseFacts => {
   const hangar = syntheticHangar();
   return {
@@ -39,6 +56,7 @@ const closeFacts = (over: Partial<CloseFacts> = {}): CloseFacts => {
     roles: ['claude', 'shell'],
     claudeSessions: 0,
     servers: [],
+    serversRefused: [],
     serversUnknown: false,
     fromInside: false,
     closers: [],
@@ -81,21 +99,60 @@ test('close collects nothing when there was no session to kill', () => {
   );
 });
 
-test('close warns about what dies with the session, and about not having been able to look', () => {
-  const busy = closeFacts({ claudeSessions: 2, servers: ['ng_serve'] });
+test('close warns about what it will stop, and about not having been able to look', () => {
+  const busy = closeFacts({ claudeSessions: 2, servers: [devServer('ng_serve', 4242)] });
   const warnings = closeWarnings(busy).join('\n');
   assert.match(warnings, /2 live Claude Code session/);
   assert.match(warnings, /ng_serve/);
+  /*
+   * A refusal is named rather than passed over in silence. `killPlan` declines a `stray` unless
+   * it is asked for by pid, and the commonest stray is the developer's own editor helper -- so
+   * "left running" is the line that keeps `close` from looking like it stopped everything.
+   */
+  assert.match(
+    closeWarnings(closeFacts({ serversRefused: ['tsserver — a stray'] })).join('\n'),
+    /left running: tsserver/,
+  );
   // "Nothing is running" and "nobody could ask" are the same empty list, and only one of them is
   // a reason to go ahead -- the same distinction `ServerScan.portsChecked` exists for.
   assert.match(closeWarnings(closeFacts({ serversUnknown: true })).join('\n'), /lsof/);
   assert.deepEqual(closeWarnings(closeFacts()), []);
 });
 
+test('the dev servers are stopped, and stopped BEFORE the session they may not be a child of', () => {
+  /*
+   * They used to be warned about as dying with the session, which is true only of a server
+   * started in one of its own panes. One that was detached, or re-parented by a watcher, outlives
+   * the `kill-session` and goes on holding the clone's port -- and from then on anything pointed
+   * at that port is testing a checkout nobody has open. `servers list` calls that `untracked`.
+   */
+  const kinds = closePlan(closeFacts({ servers: [devServer('ng_serve', 4242)] }), {}).map(
+    (a) => a.kind,
+  );
+  assert.deepEqual(kinds, ['stop-servers', 'kill-session', 'collect']);
+
+  /*
+   * And with no session at all, which is the case that makes the ordering more than tidiness: a
+   * clone whose tab was closed days ago has nothing to kill and can still be serving.
+   */
+  assert.deepEqual(
+    closePlan(closeFacts({ sessionExists: false, servers: [devServer('ng_serve', 4242)] }), {}).map(
+      (a) => a.kind,
+    ),
+    ['stop-servers'],
+  );
+  // And a clone with neither still reads as nothing to do rather than as a silent success.
+  assert.deepEqual(
+    closePlan(closeFacts({ sessionExists: false }), {}).map((a) => a.kind),
+    ['nothing-open'],
+  );
+});
+
 test('every close action renders a line, so a dry run can never fall silent', () => {
   const all = [
     ...closePlan(closeFacts({ fromInside: true }), {}),
     ...closePlan(closeFacts({ sessionExists: false }), {}),
+    ...closePlan(closeFacts({ servers: [devServer('ng_serve', 4242)] }), {}),
     ...closePlan(closeFacts(), {}),
   ];
   const name = cloneAt(syntheticHangar(), 1).name;

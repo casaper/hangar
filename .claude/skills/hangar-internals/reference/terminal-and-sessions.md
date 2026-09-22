@@ -60,6 +60,21 @@ closed. **`reload` deliberately does neither**, and that is the same rule rather
 inconsistency -- the session is not over there, it comes back under the same id and runs the hook
 when it genuinely ends.
 
+**`close` stops the clone's dev servers, and stops them BEFORE the session.** It used to name them
+as dying with it, which is true only of a server started in one of the session's own panes --
+`hangar servers start` types the line into a pane's shell, so that case held and hid the others. A
+server that was detached, re-parented by a watcher or started outside tmux outlives the
+`kill-session` and goes on holding the clone's port, which is the `untracked` state `servers list`
+exists to name: from then on anything pointed at that port is testing a checkout nobody has open.
+It runs `killPlan` and nothing of its own, so the four guards that make `servers kill` safe apply
+unchanged -- a `stray` is refused unless named by pid, so closing a clone never stops the editor's
+own language server, and every refusal is printed rather than passed over. The ordering is the
+other half: a tracked server removes its own pid file as it exits, and killing the pane out from
+under it takes that chance away, leaving the `stale` record `servers prune` then has to clear up.
+It also makes `close` do something for a clone with no session at all, which is the case that
+proves the point -- a clone whose tab was shut days ago has nothing to kill and can still be
+serving.
+
 **One refusal in `close`, and everything else is a warning inside one confirmation.** The refusal
 is closing the clone whose own session the command is running inside, which kills the terminal
 mid-command; `--force` is the way past it. A dev server dying with the session is named rather
