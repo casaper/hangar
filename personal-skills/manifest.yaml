@@ -18,6 +18,13 @@
 #
 # `mirrors` is a path inside the managed repo's own checkout, read from `forge.defaultBranch`
 # rather than from whatever branch a clone happens to have out.
+#
+# A skill adopted from a branch that has NOT MERGED yet is `intentional`, never `standalone`. Its
+# counterpart exists -- it is simply not on the default branch -- so `mirrors` names where it
+# be and `basedOn` is the blob it was taken off. The drift row then reads `not on <branch>` until
+# that branch lands, and turns green by itself when it does. `standalone` would read green from
+# the first day and say nothing at all on the day the original arrives, which is precisely the
+# silent shadow this file exists to prevent.
 
 skills:
   - name: shorten-comment
@@ -51,6 +58,19 @@ skills:
       commit reachable from a remote-tracking ref. The ban exists to protect published history and
       that protection is kept, by a mechanism instead of a convention. The never-push rule is not
       relaxed -- it is stated more strongly, because a local rewrite is what tempts a force-push.
+
+  - name: granular-commits
+    divergence: intentional
+    mirrors: .claude/skills/granular-commits/SKILL.md
+    basedOn: 1a65a69a5b051bd3d3b12f14178dce849e3f5d12
+    reason: >-
+      Two touches, both forced by a personal skill being active in every repo on this machine and
+      not just the one it was written in: the pre-split snapshot is taken with `hangar-waypoint`,
+      which is on PATH in every clone and at the hangar root, and the `check-commits.mjs` run is
+      made conditional on the repo actually shipping that file. The grouping rules, the staging
+      and the verification stance are untouched. `basedOn` is the blob on the branch that ADDS
+      this skill -- it is not on the default branch yet, so the drift row reads `not on <branch>`
+      until that branch lands, and turns green by itself when it does.
 
   - name: new-plan
     divergence: standalone
