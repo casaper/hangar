@@ -343,6 +343,10 @@ separate `<thing>_preview`.
   `emulator` row appends `clicks not reported` and names the setting to change; it never changes
   it, and it is not counted as a problem, because with clicks reported a plain drag inside a pane
   selects in tmux rather than in the emulator — a trade the developer may have made on purpose.
+  **The other half is the tmux server's own PATH**, which is launchd's when the terminal created
+  the server rather than `hangar open` — and then the click, `C-b C-e` and the bar's own
+  pull-request refresh all find no `node` and do nothing. `doctor` has a row for that one too, and
+  `hangar colours sync` is the repair; it writes onto the running server with nothing restarted.
 
   The git state is glyphs, and there are seven: `✔` nothing to report, `⚑` a half-applied rebase
   or merge, `‼` conflicts, `✚` staged, `✱` changed and not staged, `?` untracked, and `⇡n` / `⇣n`

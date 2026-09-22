@@ -721,9 +721,9 @@ every server.** One `hangar open` starts inherits direnv's PATH. One the EMULATO
 `attachCommand` is `new-session -A`, so a restored tab with the server gone makes the server
 itself -- inherits launchd's `/usr/bin:/bin:/usr/sbin:/sbin`, which has no `node` in it. An
 absolute `bin/hangar` still reaches the script; the script then cannot find Node and answers with
-its own bootstrap error. Two things on this bar run that way and both were dead:
-`hangar browse` on a click, and `clone-tmux-status.sh`'s detached `hangar pr refresh`. Measured
-here: every pull-request record was 8236 seconds old against a 90-second TTL with five sessions
+its own bootstrap error. THREE things run that way and every one of them was dead: `hangar browse` on
+a click, `hangar edit` on `C-b C-e`, and `clone-tmux-status.sh`'s detached `hangar pr refresh`.
+Two of the three fail in total silence. Measured here: every pull-request record was 8236 seconds old against a 90-second TTL with five sessions
 drawing their bars, and every attached clone refreshed within three seconds of `node`'s directory
 being put on the server's global PATH.
 
@@ -732,7 +732,9 @@ a conf is read once, by the servers `hangar open` starts, which are exactly the 
 is already fine. The broken case is the server that never read the conf, so the repair has to be
 something written onto a server already up -- beside `barOptions` and `keyBindings`, from
 `restyle` and from `open`'s reuse path. It also keeps one machine's Node path out of a generated
-artifact and out of the golden capture. Both job kinds honour it, measured on 3.7c: a `run-shell`
+artifact and out of the golden capture. **It is repair-on-touch rather than a guarantee**, which
+is why `doctor` has a row for it: a server the emulator made is wrong until something reaches it,
+and the next time the terminal restores its tabs onto a dead server it is wrong again. Both job kinds honour it, measured on 3.7c: a `run-shell`
 and a `#()` status job each see what `set-environment -g` holds.
 
 **The click reports on the status line and never into a pane.** `run-shell` puts a command's

@@ -10,6 +10,7 @@ import {
   TMUX_SETTINGS,
   tmuxConfArtifact,
 } from '../src/generate/tmux-conf.ts';
+import { pathWithNode } from '../src/tmux.ts';
 import {
   claudeTmuxConfArtifact,
   KEY_BINDINGS as CLAUDE_KEY_BINDINGS,
@@ -350,4 +351,26 @@ test('the editor key takes no key tmux already binds, and never opens a view pan
   assert.equal(binding[4], 'if-shell');
   assert.ok(binding.some((word) => word.includes('>/dev/null 2>&1')));
   assert.ok(binding.filter((word) => word.startsWith('display-message ')).length === 2);
+});
+
+test('node is prepended to the server PATH, once, and never replaces what is there', () => {
+  /*
+   * What the bar STARTS runs in the tmux server's environment, and which environment that is
+   * depends on who created the server: `hangar open` gives it direnv's PATH, while the
+   * emulator's own `new-session -A` gives it launchd's `/usr/bin:/bin:/usr/sbin:/sbin`, where
+   * there is no node. `bin/hangar` then answers with its bootstrap error, which is a click that
+   * does nothing, a `C-b C-e` that fails and a pull-request field that never refreshes.
+   */
+  const node = '/opt/node/bin';
+  assert.equal(pathWithNode('/usr/bin:/bin', node), '/opt/node/bin:/usr/bin:/bin');
+  // Idempotent, which is what lets every route into a server simply do it rather than ask first.
+  assert.equal(pathWithNode('/opt/node/bin:/usr/bin', node), undefined);
+  // Not only at the front: a server that has it anywhere needs nothing written.
+  assert.equal(pathWithNode('/usr/bin:/opt/node/bin', node), undefined);
+  // A server with no PATH at all, and the empty segments a `:`-joined value picks up. Both are
+  // input rather than output, which is why this is a pure function and not a branch inside the
+  // tmux call that would need a server to reach.
+  assert.equal(pathWithNode(undefined, node), node);
+  assert.equal(pathWithNode('', node), node);
+  assert.equal(pathWithNode(':/usr/bin:', node), '/opt/node/bin:/usr/bin');
 });

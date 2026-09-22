@@ -1,4 +1,5 @@
-import { dirname } from 'node:path';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { cloneShortName, type Clone } from './fleet.ts';
 import { run } from './exec.ts';
@@ -338,10 +339,11 @@ export type TmuxServer = {
   /**
    * Put `node` on the server's global PATH, so the things the BAR starts can run.
    *
-   * Two of them do: the click on the issue key or the pull request runs `bin/hangar browse`, and
-   * `clone-tmux-status.sh` spawns a detached `hangar pr refresh` past the cache TTL. Both are
-   * `sh` jobs tmux starts itself, and they get the server's own environment -- measured on 3.7c:
-   * a `run-shell` and a `#()` status job both see what `set-environment -g` holds.
+   * THREE of them do: the click on the issue key or the pull request runs `bin/hangar browse`,
+   * `C-b C-e` runs `bin/hangar edit`, and `clone-tmux-status.sh` spawns a detached
+   * `hangar pr refresh` past the cache TTL. All three are `sh` jobs tmux starts itself, and they
+   * get the server's own environment -- measured on 3.7c: a `run-shell` and a `#()` status job
+   * both see what `set-environment -g` holds.
    *
    * **The environment a server has depends on who created it**, which is what made this hide. A
    * server `hangar open` starts inherits direnv's PATH and everything works. One the EMULATOR
@@ -361,6 +363,17 @@ export type TmuxServer = {
    * a no-op.
    */
   readonly ensureNodeOnPath: () => void;
+  /**
+   * Whether the server's global PATH holds a `node` at all -- `undefined` when it has no PATH to
+   * read, which is not the same answer and must not be reported as one.
+   *
+   * For `doctor` alone. `ensureNodeOnPath` is repair-on-touch: a server the emulator created is
+   * wrong until `colours sync` or `open` reaches it, and the next emulator restart puts it back.
+   * This is what keeps that from being invisible in between, and it asks the real question --
+   * is there a node on that PATH -- rather than whether the one directory this process happens to
+   * run from is on it.
+   */
+  readonly nodeOnPath: () => boolean | undefined;
   /**
    * Re-execute `clone-tmux.conf` on a server that is already running.
    *
@@ -403,6 +416,20 @@ export type TmuxPane = {
   readonly path: string;
 };
 
+/**
+ * The PATH a server should have, or `undefined` when the one it has already does.
+ *
+ * Pure, and split out because both of its awkward cases are input rather than output: a base that
+ * is absent entirely, and one already carrying the directory. It PREPENDS and never replaces --
+ * whatever else the server has stays, and calling it twice is a no-op, which is what lets every
+ * route into a server simply do it rather than first asking whether it is needed.
+ */
+export const pathWithNode = (base: string | undefined, nodeBin: string): string | undefined => {
+  const parts = (base ?? '').split(':').filter((part) => part !== '');
+  if (parts.includes(nodeBin)) return undefined;
+  return [nodeBin, ...parts].join(':');
+};
+
 export const tmuxServer = (hangar: Hangar): TmuxServer => {
   const tmux = (
     args: readonly string[],
@@ -414,20 +441,24 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
 
   const lines = (out: string): string[] => (out === '' ? [] : out.split('\n'));
 
+  /** The server's global PATH, or undefined when it holds none and nothing could be read. */
+  const serverPath = (): string | undefined => {
+    const shown = tmux(['show-environment', '-g', 'PATH']);
+    // tmux prints `-PATH` for a variable it is told to REMOVE from the environment. That is not a
+    // value and must not be split as one.
+    if (!shown.ok || !shown.out.startsWith('PATH=')) return undefined;
+    const value = shown.out.slice('PATH='.length);
+    return value === '' ? undefined : value;
+  };
+
   const ensureNodeOnPath = (): void => {
     // `process.execPath` is the real installation path rather than a per-shell fnm multishell
     // link, so it is a directory that is still there tomorrow. It carries the Node version, so a
     // `.nvmrc` bump moves it -- and moves it for a fresh `colours sync` too, which is the command
     // that writes this.
-    const nodeBin = dirname(process.execPath);
-    const shown = tmux(['show-environment', '-g', 'PATH']);
-    // tmux prints `-PATH` for a variable it is told to REMOVE from the environment, which is not
-    // a value and must not be split as one.
-    const live = shown.ok && shown.out.startsWith('PATH=') ? shown.out.slice('PATH='.length) : '';
-    const base = live === '' ? (process.env['PATH'] ?? '') : live;
-    const parts = base === '' ? [] : base.split(':');
-    if (parts.includes(nodeBin)) return;
-    tmux(['set-environment', '-g', 'PATH', [nodeBin, ...parts].join(':')]);
+    const wanted = pathWithNode(serverPath() ?? process.env['PATH'], dirname(process.execPath));
+    if (wanted === undefined) return;
+    tmux(['set-environment', '-g', 'PATH', wanted]);
   };
 
   const readSessions = (): TmuxSessionRow[] => {
@@ -655,6 +686,11 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
       return res.ok ? res.out : undefined;
     },
     ensureNodeOnPath,
+    nodeOnPath: () => {
+      const value = serverPath();
+      if (value === undefined) return undefined;
+      return value.split(':').some((dir) => dir !== '' && existsSync(join(dir, 'node')));
+    },
     restyle: (clones) => {
       if (!tmux(['list-sessions']).ok) return 0;
       // Before the bar is written, because the bar is what starts things: a `#()` job spawned by

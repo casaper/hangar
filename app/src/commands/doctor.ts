@@ -928,6 +928,31 @@ const reportTmux = (hangar: Hangar): readonly string[] => {
   );
 
   /*
+   * Is there a `node` on the server's own PATH -- which decides whether the bar can start
+   * anything at all.
+   *
+   * Three things it starts run as `sh` jobs in the SERVER's environment: the click that runs
+   * `hangar browse`, `C-b C-e`'s `hangar edit`, and `clone-tmux-status.sh`'s detached
+   * `hangar pr refresh`. Which environment that is depends on who created the server -- one
+   * `hangar open` starts has direnv's PATH, one the emulator's own `new-session -A` created has
+   * launchd's, with no node in it -- so `bin/hangar` answers with its bootstrap error and exits
+   * non-zero. Two of those three fail in total silence, and the third did it in view mode over
+   * whatever the developer was looking at.
+   *
+   * `TmuxServer.ensureNodeOnPath` repairs it on touch, which is exactly why this row exists: a
+   * server nothing has touched since the emulator made it is wrong until something does, and the
+   * next restart of the emulator puts it back.
+   */
+  if (server.nodeOnPath() === false) {
+    const text = `the ${socket} server has no node on its PATH, so the bar's click and its PR refresh cannot run`;
+    problems.push(text);
+    warn(text);
+    note(
+      'Run `hangar colours sync`; it writes it onto the running server, with nothing restarted. A server the terminal created rather than `hangar open` starts this way.',
+    );
+  }
+
+  /*
    * A session whose NAME is a live clone's and which carries no `@hangar_clone`.
    *
    * It used to fall into the "other" count above -- dim, green, and reading as a session somebody
