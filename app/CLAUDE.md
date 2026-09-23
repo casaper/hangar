@@ -46,7 +46,7 @@ hangar root for the reason below.
 **There is no build step.** Node strips the types and runs `src/cli.ts` directly, so an edit is
 live the moment it is saved and there is nothing to rebuild before trying it.
 
-**The package manager is pnpm**, pinned by `packageManager: "pnpm@11.7.0"` in `app/package.json`,
+**The package manager is pnpm**, pinned by `packageManager: "pnpm@11.26.0"` in `app/package.json`,
 which is the single source of truth for both the shell and CI. Run the CLI's own checks **from
 `app/`** — they cover the CLI, not the app:
 
@@ -1007,9 +1007,9 @@ Five more root files are hand-maintained and belong to this package rather than 
 
 **One thing that looks broken and is not: `pnpm --version` differs by directory.** corepack reads
 `packageManager` from the NEAREST `package.json` walking up, so inside `app/` it answers the
-pinned 11.7.0, while the hangar root — which has no `package.json`, deliberately and permanently —
-answers corepack's own bundled default. `app/` is the only place pnpm is ever run, so the pin
-governs every real invocation. `.envrc.hangar` records this beside `hangar_use_pnpm`; do not
+pinned 11.26.0, while the hangar root — whose `package.json` is scripts only and declares no
+`packageManager`, deliberately and permanently — answers corepack's own bundled default. Every
+root script is `pnpm --dir app`, so the pin governs every real invocation. `.envrc.hangar` records this beside `hangar_use_pnpm`; do not
 "fix" it.
 
 ## Do not run project work from the hangar root
