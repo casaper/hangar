@@ -76,6 +76,10 @@ version moves. The hangar root's `.envrc` activates it through `hangar_use_pnpm`
 of those commands is not found, the answer is almost always that direnv has not loaded: run
 `direnv allow` at the hangar root.
 
+**`hangar_use_gnu` puts GNU coreutils first on PATH, so `sed -i` takes no `''` argument.** The
+BSD spelling fails partway through a multi-file edit, and a half-edited `src/**` is live at once
+— every clone's `SessionEnd` hook runs this working tree.
+
 ## Two conventions for changing it
 
 Both exist because they caught something, and both apply to every edit under `app/src/**`.
@@ -136,7 +140,7 @@ Both exist because they caught something, and both apply to every edit under `ap
     no port of one appears in the other's.
   - **Input that is WRONG.** A capture shows what one config rendered to; it cannot show the
     refusal. An unknown `{token}`, a known token with no value in context, two port roles
-    congruent mod step.
+    fewer than `PORT_CAPACITY` whole steps apart.
   - **Properties, never snapshots.** `gated/fixture/` already pins every builder byte for byte, so
     expected text here would be a second oracle to hand-update on every prose edit — the work the
     golden net exists to absorb. Assert that the offset reached the port and that an identity file
@@ -196,6 +200,9 @@ Two consequences worth knowing before editing the files they touch:
 
 ## Commit messages
 
+**Commits go straight to `main`** — no feature branch unless the user asks for one.
+`.claude/modes/dev.md` says why.
+
 **Every commit in this repo is a Conventional Commit, and a `commit-msg` hook enforces it.**
 `type(scope): subject`, then a blank line, then the body. The subject keeps the house style — a
 sentence saying what changed, in Sentence case — and the body keeps doing the work it already
@@ -215,7 +222,7 @@ the README or the skills and nothing else.
 
 **Scopes** are the subsystem: `sync` `doctor` `open` `tmp` `plans` `pr` `jira` `colours` `config`
 `editor` `terminal` `platform` `setup` `add-clone` `install` `resume` `ide` `status` `golden`
-`cli` `fleet` `modes` `exec` `servers` `allow` `waypoint` `commit-gate` `skills` `scrub` `test`
+`cli` `fleet` `ports` `modes` `exec` `servers` `allow` `waypoint` `commit-gate` `skills` `scrub` `test`
 `deps`. That list is documented and deliberately **not** enforced — a
 `scope-enum` rule goes red the first time somebody adds a subsystem, and this repo already knows
 what a check that is red in normal operation is worth.

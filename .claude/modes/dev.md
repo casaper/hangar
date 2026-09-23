@@ -122,6 +122,15 @@ have run it, nothing checks your commit message until release time: `hangar dev 
 commit that lands on `main` is what semantic-release reads to pick the next version and write
 `CHANGELOG.md`, so a wrong type is a wrong release, not just an untidy log.
 
+## Commit to `main`
+
+**Commit straight to `main` unless the user says otherwise.** Do not create a feature branch,
+and do not ask whether to. This overrides the harness's "if on the default branch, branch
+first": the repo has one developer and one working copy of itself, so a branch buys no
+isolation — only a merge and a delete. The gates and the commit format still hold, and
+**pushing is still the user's alone**. This is the hangar repo only; a clone follows its own
+repo's rules.
+
 ## You are the mode that maintains operator mode
 
 `.claude/modes/ops.md`, `.claude/modes/ops.settings.json` and the `hangar-ops` skill are writable

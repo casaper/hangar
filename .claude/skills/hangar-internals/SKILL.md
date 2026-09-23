@@ -9,8 +9,8 @@ Why each command is built the way it is. This is the half of the hangar's `CLAUD
 matters when you are **changing or debugging the CLI**, kept out of that file because it sits above
 every clone and so was loaded into four sessions that can act on almost none of it.
 
-**Every "this exists because it caught something" note is load-bearing.** The fleet has no test
-suite, so these paragraphs are the regression record — the only surviving account of a bug that was
+**Every "this exists because it caught something" note is load-bearing.** The test suite is a
+seed over the pure core, so for everything else these paragraphs are the regression record — the only surviving account of a bug that was
 fixed and must not come back. When you change behaviour, update the note. When you tidy prose, leave
 them alone.
 
