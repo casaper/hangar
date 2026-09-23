@@ -14,7 +14,7 @@ import { hangarConfigSchema } from './schema.ts';
  * empty file validates) rather than what the loader hands back (every default filled in, so
  * almost everything required). Getting this backwards makes the editor demand every field.
  *
- * Cross-field rules -- duplicate role ids, bases congruent mod step, the tracker's
+ * Cross-field rules -- duplicate role ids, port bases too few steps apart, the tracker's
  * conditional baseUrl -- cannot be expressed here and are NOT lost: the loader still enforces
  * them. The schema is a typing aid; the loader is the authority.
  */
@@ -37,7 +37,7 @@ export const configJsonSchema = (): Record<string, unknown> => {
     description:
       'Configuration for one hangar: a directory holding a fleet of clones of one repo. ' +
       'Generated from the zod schema in src/config/schema.ts -- do not hand-edit. ' +
-      'Cross-field rules (duplicate port roles, bases congruent mod step, tracker.baseUrl ' +
+      'Cross-field rules (duplicate port roles, port bases too few steps apart, tracker.baseUrl ' +
       'when tracker.kind is set) are enforced by the loader, not expressible here.',
     ...generated,
   };

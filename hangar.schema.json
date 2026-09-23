@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Hangar configuration",
-  "description": "Configuration for one hangar: a directory holding a fleet of clones of one repo. Generated from the zod schema in src/config/schema.ts -- do not hand-edit. Cross-field rules (duplicate port roles, bases congruent mod step, tracker.baseUrl when tracker.kind is set) are enforced by the loader, not expressible here.",
+  "description": "Configuration for one hangar: a directory holding a fleet of clones of one repo. Generated from the zod schema in src/config/schema.ts -- do not hand-edit. Cross-field rules (duplicate port roles, port bases too few steps apart, tracker.baseUrl when tracker.kind is set) are enforced by the loader, not expressible here.",
   "type": "object",
   "properties": {
     "$schema": {
