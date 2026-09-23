@@ -53,7 +53,7 @@ Three properties hold that pair together, and each is a decision:
   can sit in a hangar root without being mistaken for one — and `hangar --hangar <dir>` on a
   copy is how you validate it (nothing loads the example's own filename).
 - **You cannot uncomment two alternatives.** `superRefine` rejects two port roles whose bases
-  are congruent mod `step`, an `install` step naming both `manager` and `command`,
+  are fewer than `PORT_CAPACITY` whole steps apart, an `install` step naming both `manager` and `command`,
   `rootPathKeys` with no VS Code-family kind to read them, and a tracker with no `baseUrl`. So
   the example carries alternatives as COMMENTS beside one live choice.
 
@@ -260,6 +260,17 @@ schema rejects two roles whose clones would collide — correctly: `api: 3000` b
 puts clone 1's admin on clone 2's api. A preset shipping that would be a config nobody can load,
 found by whoever ran setup rather than whoever wrote it, which is why each preset is rendered and
 parsed in the gated capture.
+
+**The rule is a distance, not a congruence, because of `step: 1`.** Two bases `k` whole steps
+apart put role A of clone `N + k` on role B of clone `N`; the schema refuses any `k` below
+`PORT_CAPACITY` (100) clones. At step 100 that refuses every congruent pair that could occur,
+since one 100 steps apart is 10,000 ports apart. At step 1 it is the only rule there can be: every
+pair of integers is congruent mod 1, so congruence alone would refuse every step-1 config. `offset < step` is likewise enforced only above step 1: at step 1
+there is one residue class and nothing for the rule to protect, and `offset: 1` is what puts clone
+`N` on `base + N`, leaving the base — a repo's own default port, which is where a server started
+without the clone's environment lands — to no clone at all. What the schema cannot see is two
+LAYOUTS: while `hangar ports pin` holds some clones on an earlier one, `doctor` and `hangar ports`
+check the clones that exist for any port claimed twice (`portCollisions` in `ports.ts`).
 
 ### The secrets file is created, and every line is commented out
 

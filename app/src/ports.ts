@@ -37,11 +37,61 @@ export type ClonePort = {
  */
 export type ClonePorts = readonly ClonePort[];
 
-/** The ports a clone index (1-based) owns in this hangar. */
-export const portsFor = (hangar: Hangar, index: number): ClonePorts => {
+/**
+ * The ports a clone index (1-based) owns in this hangar.
+ *
+ * `pin` is the clone's entry in `.hangar/port-pins.json`, passed in rather than read here so this
+ * stays a pure function of its arguments: a pinned role keeps the port it was snapshotted on, and
+ * every other role takes the formula. `makeClone` is the one caller that reads the file.
+ */
+export const portsFor = (
+  hangar: Hangar,
+  index: number,
+  pin?: ReadonlyMap<string, number>,
+): ClonePorts => {
   const { roles, step, offset } = hangar.config.ports;
-  return roles.map((role) => ({ role, port: role.base + offset + (index - 1) * step }));
+  return roles.map((role) => ({
+    role,
+    port: pin?.get(role.envKey) ?? role.base + offset + (index - 1) * step,
+  }));
 };
+
+/** One port two or more clones claim, and which clones and roles claim it. */
+export type PortCollision = {
+  readonly port: number;
+  readonly claims: readonly { readonly clone: string; readonly role: string }[];
+};
+
+/**
+ * Every port claimed more than once across the given clones.
+ *
+ * The schema proves a single layout collision-free, but while pinned clones keep an earlier
+ * layout two layouts coexist and nothing static can: a clone released onto the new layout can
+ * land exactly on a port a still-pinned sibling holds. Two clones on one port means a test run in
+ * one verifies the other's code, so this is checked over the clones that EXIST, every time.
+ */
+export const portCollisions = (
+  clones: readonly { readonly name: string; readonly ports: ClonePorts }[],
+): PortCollision[] => {
+  const byPort = new Map<number, { clone: string; role: string }[]>();
+  for (const clone of clones) {
+    for (const entry of clone.ports) {
+      const claims = byPort.get(entry.port) ?? [];
+      // One clone claiming a port twice -- derived and written agreeing -- is not a collision.
+      if (!claims.some((claim) => claim.clone === clone.name && claim.role === entry.role.id))
+        claims.push({ clone: clone.name, role: entry.role.id });
+      byPort.set(entry.port, claims);
+    }
+  }
+  return [...byPort.entries()]
+    .filter(([, claims]) => new Set(claims.map((claim) => claim.clone)).size > 1)
+    .sort(([a], [b]) => a - b)
+    .map(([port, claims]) => ({ port, claims }));
+};
+
+/** `4300 (clone_02 storybook, clone_06 ng)` -- one collision as `doctor` and `ports` print it. */
+export const describeCollision = (collision: PortCollision): string =>
+  `${String(collision.port)} (${collision.claims.map((c) => `${c.clone} ${c.role}`).join(', ')})`;
 
 /** One role's port, or undefined when this hangar declares no such role. */
 export const portForRole = (ports: ClonePorts, roleId: string): number | undefined =>

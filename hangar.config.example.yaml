@@ -357,9 +357,9 @@ ports:
       id: ng
       # UPPER_SNAKE env var name, written into `repo.cloneEnv.file`.
       envKey: NG_DEV_SERVER_PORT
-      # 1024-65535. Two roles whose bases differ by a multiple of `step` are REJECTED: role A of
-      # clone 2 would land on role B of clone 1, and a dev server answering on another role's
-      # port verifies the wrong code without erroring.
+      # 1024-65535. Two roles whose bases are fewer than 100 whole steps apart are REJECTED:
+      # role A of clone N + k would land on role B of clone N, and a dev server answering on
+      # another role's port verifies the wrong code without erroring.
       base: 4200
       label: Angular dev server
       # Default "http://localhost:{port}". `null` for a role that has no URL.

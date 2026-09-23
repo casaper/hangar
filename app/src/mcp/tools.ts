@@ -251,6 +251,20 @@ export const EXPOSURES: readonly Exposure[] = [
     lede: previewLede,
   },
   {
+    name: 'ports_pin_preview',
+    path: ['ports', 'pin'],
+    fixed: [PREVIEW],
+    acts: false,
+    lede: previewLede,
+  },
+  {
+    name: 'ports_unpin_preview',
+    path: ['ports', 'unpin'],
+    fixed: [PREVIEW],
+    acts: false,
+    lede: previewLede,
+  },
+  {
     name: 'plans_stamp_preview',
     path: ['plans', 'stamp'],
     fixed: [PREVIEW],
@@ -320,6 +334,12 @@ export const EXPOSURES: readonly Exposure[] = [
   { name: 'tmp_merge', path: ['tmp', 'merge'], hides: [PREVIEW], acts: true },
   { name: 'plans_collect', path: ['plans', 'collect'], hides: [PREVIEW], acts: true },
   { name: 'plans_stamp', path: ['plans', 'stamp'], hides: [PREVIEW], acts: true },
+  /*
+   * Both move what every command derives for a clone's ports, and `unpin` is the first half of
+   * moving a clone's dev servers -- which is a human's decision about a clone that may be busy.
+   */
+  { name: 'ports_pin', path: ['ports', 'pin'], hides: [PREVIEW], acts: true },
+  { name: 'ports_unpin', path: ['ports', 'unpin'], hides: [PREVIEW], acts: true },
   /*
    * `skills sync` writes OUTSIDE the hangar, into `~/.claude/skills` -- the one place a hangar
    * touches that it cannot namespace, since a skill's directory name is what makes it shadow.

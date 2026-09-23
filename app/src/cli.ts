@@ -26,7 +26,7 @@ import { plansCollect, plansStamp } from './commands/plans.ts';
 import { scrub } from './commands/scrub.ts';
 import { skillsList, skillsSync } from './commands/skills.ts';
 import { prCreate, prRefresh, prUpdate } from './commands/pr.ts';
-import { ports } from './commands/ports.ts';
+import { ports, portsPin, portsUnpin } from './commands/ports.ts';
 import { removeClone } from './commands/remove-clone.ts';
 import { resume } from './commands/resume.ts';
 import { setup } from './commands/setup.ts';
@@ -241,12 +241,33 @@ program
     list(requireHangar());
   });
 
-program
+const portsCommand = program
   .command('ports')
   .description('Show the port map of every clone')
   .option('--json', 'machine-readable output')
   .action((options) => {
     ports(requireHangar(), options);
+  });
+
+portsCommand
+  .command('pin')
+  .description('Hold clones on the ports their .env.local names now, whatever the formula says')
+  .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2)')
+  .option('-a, --all', 'every clone')
+  .option('-n, --dry-run', 'print what would be pinned, and pin nothing')
+  .action((clones: string[], options) => {
+    portsPin(requireHangar(), clones, options);
+  });
+
+portsCommand
+  .command('unpin')
+  .description(
+    'Release one clone to the current port formula; `doctor <clone> --fix` then moves it',
+  )
+  .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
+  .option('-n, --dry-run', 'print the ports it would move to, and change nothing')
+  .action((clone, options) => {
+    portsUnpin(requireHangar(), clone, options);
   });
 
 program

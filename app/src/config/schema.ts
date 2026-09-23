@@ -320,17 +320,26 @@ const portRoleSchema = z.strictObject({
   start: portStartSchema.optional(),
 });
 
+/**
+ * How many clones a single port layout is proved collision-free for. Two roles closer than this
+ * many steps apart are rejected by the schema; a fleet that ever outgrows it is still covered by
+ * `doctor`'s check over the clones that exist.
+ */
+export const PORT_CAPACITY = 100;
+
 const portsSchema = z.strictObject({
   /** Spacing between clones. Must match across hangars for the offset guarantee to hold. */
   step: z.int().min(1).max(10000).default(100),
   /**
-   * This hangar's residue class, `0 <= offset < step`.
+   * This hangar's residue class, `0 <= offset < step` -- or, at `step: 1`, how far above its base
+   * clone 1 sits.
    *
    * Two hangars with the same step and different offsets produce ports in different classes
    * mod step, so their clones can never collide for ANY clone counts -- unlike a reserved
-   * block, which fails silently once a hangar outgrows it. `offset: 0` keeps an existing
-   * hangar exactly where it is, which matters because changing a port moves a running dev
-   * server out from under a live session.
+   * block, which fails silently once a hangar outgrows it. At `step: 1` there is one class and
+   * no such guarantee, and `offset: 1` puts clone N on `base + N`, leaving the base itself -- a
+   * repo's own default port -- to no clone at all. Changing either value moves a running dev
+   * server out from under a live session, which is what `hangar ports pin` is for.
    */
   offset: z.int().min(0).default(0),
   /** Ordered; the order is the display order. Empty means this hangar assigns no ports. */
@@ -590,8 +599,10 @@ export const hangarConfigSchema = z
       });
     }
 
-    // Two hangars can only be guaranteed apart if the offset is inside one step.
-    if (ports.offset >= ports.step) {
+    // Two hangars can only be guaranteed apart if the offset is inside one step. At step 1 there
+    // is one residue class and no such guarantee to keep, so the offset is simply how far above
+    // its base clone 1 sits -- `offset: 1` is what leaves every base itself to no clone.
+    if (ports.step > 1 && ports.offset >= ports.step) {
       ctx.addIssue({
         code: 'custom',
         path: ['ports', 'offset'],
@@ -624,20 +635,26 @@ export const hangarConfigSchema = z
     });
 
     /*
-     * Two roles whose bases are congruent mod step collide ACROSS clones: role A of clone 2
-     * lands on role B of clone 1. Statically checkable, and silent at runtime -- a dev server
-     * answering on another role's port is the kind of thing that verifies the wrong code.
+     * Two roles whose bases differ by k steps collide ACROSS clones: role A of clone N + k lands
+     * on role B of clone N. Statically checkable, and silent at runtime -- a dev server answering
+     * on another role's port is the kind of thing that verifies the wrong code.
+     *
+     * Rejected up to a fleet of PORT_CAPACITY clones rather than for every k, because at step 1
+     * every pair of bases is some whole number of steps apart and "never collide" is not a
+     * property any config could have. Past that ceiling -- and across two layouts while clones
+     * are pinned -- `doctor` checks the clones that actually exist instead.
      */
     for (let i = 0; i < ports.roles.length; i += 1) {
       for (let j = i + 1; j < ports.roles.length; j += 1) {
         const a = ports.roles[i];
         const b = ports.roles[j];
         if (a === undefined || b === undefined) continue;
-        if ((a.base - b.base) % ports.step === 0) {
+        const delta = Math.abs(a.base - b.base);
+        if (delta % ports.step === 0 && delta / ports.step < PORT_CAPACITY) {
           ctx.addIssue({
             code: 'custom',
             path: ['ports', 'roles', j, 'base'],
-            message: `${a.id} (${String(a.base)}) and ${b.id} (${String(b.base)}) differ by a multiple of step ${String(ports.step)}, so their clones would share ports`,
+            message: `${a.id} (${String(a.base)}) and ${b.id} (${String(b.base)}) are ${String(delta / ports.step)} step(s) of ${String(ports.step)} apart, so clone N + ${String(delta / ports.step)} would share a port with clone N (bases must be at least ${String(PORT_CAPACITY)} steps apart, or not a whole number of steps)`,
           });
         }
       }

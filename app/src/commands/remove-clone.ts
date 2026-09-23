@@ -4,6 +4,7 @@ import { CliError } from '../exec.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import { clearColourAssignment, colourAssignmentsLabel } from '../colour-assignments.ts';
 import { themePath } from '../generate/theme-json.ts';
+import { clearPortPin } from '../port-pins.ts';
 import { git, gitTry, syncState } from '../git.ts';
 import { tildify } from '../user-paths.ts';
 import { claudeSessionsIn, runningServersIn } from '../procs.ts';
@@ -149,6 +150,11 @@ export const removeClone = (hangar: Hangar, ref: string, opts: RemoveCloneOption
   //    leaving it behind would hand the next clone this one's hue.
   if (clearColourAssignment(hangar, clone.index)) {
     ok(`dropped its ${clone.colour.name} assignment from ${colourAssignmentsLabel(hangar)}`);
+  }
+
+  // 5b. its port pin, for the same reason: the next clone at this index starts on the formula.
+  if (clearPortPin(hangar, clone.index)) {
+    ok(`dropped its port pin from ${tildify(hangar.paths.portPinsFile)}`);
   }
 
   // 6. the generated artifacts no longer mention it

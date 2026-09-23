@@ -802,14 +802,15 @@ that needs it — the same reason the rest of this file is here.
 One rule decides every row: _a tracked file that a `hangar` command rewrites is a merge conflict
 on every `git pull` from a published upstream._
 
-| Not tracked                                                                        | Written by                             |
-| ---------------------------------------------------------------------------------- | -------------------------------------- |
-| `hangar.config.yaml` — **the marker file**                                         | `hangar setup`                         |
-| `CLAUDE.local.md` — this hangar's identity                                         | `setup`, `doctor --fix`                |
-| `.claude/settings.json`                                                            | `setup`, `doctor --fix`                |
-| `clone-colours.sh`, `clone-terminal.sh`, `clone-tmux.conf`, `clone-tmux-status.sh` | `hangar colours sync`                  |
-| `.hangar/colour-assignments.json` — **INPUT**                                      | `hangar colours change` — nothing else |
-| `.hangar/claude-tmux.conf`                                                         | `hangar claude`, every run             |
+| Not tracked                                                                        | Written by                                  |
+| ---------------------------------------------------------------------------------- | ------------------------------------------- |
+| `hangar.config.yaml` — **the marker file**                                         | `hangar setup`                              |
+| `CLAUDE.local.md` — this hangar's identity                                         | `setup`, `doctor --fix`                     |
+| `.claude/settings.json`                                                            | `setup`, `doctor --fix`                     |
+| `clone-colours.sh`, `clone-terminal.sh`, `clone-tmux.conf`, `clone-tmux-status.sh` | `hangar colours sync`                       |
+| `.hangar/colour-assignments.json` — **INPUT**                                      | `hangar colours change` — nothing else      |
+| `.hangar/port-pins.json` — **INPUT**                                               | `hangar ports pin` / `unpin` — nothing else |
+| `.hangar/claude-tmux.conf`                                                         | `hangar claude`, every run                  |
 
 Tracked: this file, the root `CLAUDE.md`, `bin/**`, `.local/bin/**`, `app/**`, `.envrc`,
 `.envrc.hangar`, `.nvmrc`,

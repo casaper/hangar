@@ -46,7 +46,8 @@ clone*. Most of it is true for you; four things are not:
   your job.
 - **The commands that file reserves "for the user, from the fleet root" are the ones you are here
   to drive** — `sync`, `checkout-default`, `open`, `edit`, `close`, `reload`, `add-clone`,
-  `install`, `remove-clone`, `servers start`, `servers kill`, `colours change`, `doctor --fix`. They move git state, files between
+  `install`, `remove-clone`, `servers start`, `servers kill`, `colours change`, `ports pin`,
+  `ports unpin`, `doctor --fix`. They move git state, files between
   live working trees, or a window onto the user's screen, so run the preview first —
   `sync_preview`, `open_preview`, `doctor` — report it,
   then call the real tool and let the prompt do its work. **The tool is what stops and asks**:

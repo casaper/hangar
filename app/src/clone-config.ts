@@ -6,7 +6,7 @@ import { themeName } from './generate/theme-json.ts';
 import { isVscodeFork } from './editor/kinds.ts';
 import type { Hangar } from './hangar.ts';
 import { tildify } from './user-paths.ts';
-import { roleUrl, type ClonePort } from './ports.ts';
+import { roleUrl, type ClonePort, type ClonePorts } from './ports.ts';
 import { render, type TokenValues } from './template.ts';
 
 /**
@@ -1090,4 +1090,21 @@ export const readEnvLocalPorts = (clone: Clone): Partial<Record<string, number>>
     if (match?.[1] && match[2]) found[match[1]] = Number.parseInt(match[2], 10);
   }
   return found;
+};
+
+/**
+ * Every port a clone may be holding: what it derives AND what its `.env.local` still names.
+ *
+ * The two differ exactly in the window between `hangar ports unpin` and `doctor --fix`, and that
+ * is the window a collision check must not be blind in: a clone released but not yet repaired has
+ * already moved its derived ports while its running dev server still sits on the old one. A
+ * check over derived ports alone let a sibling be released straight onto it.
+ */
+export const portClaims = (clone: Clone): { readonly name: string; readonly ports: ClonePorts } => {
+  const actual = readEnvLocalPorts(clone);
+  const written = clone.ports.flatMap((entry): ClonePort[] => {
+    const port = actual[entry.role.envKey];
+    return port === undefined || port === entry.port ? [] : [{ role: entry.role, port }];
+  });
+  return { name: clone.name, ports: [...clone.ports, ...written] };
 };

@@ -31,7 +31,9 @@ another name.
 | Command | preview / report tool | acting tool |
 | --- | --- | --- |
 | `list` | `list` | — |
-| `ports` | `ports` (always `--json`) | — |
+| `ports` | `ports` (`json` is a parameter) | — |
+| `ports pin` | `ports_pin_preview` | `ports_pin` |
+| `ports unpin` | `ports_unpin_preview` | `ports_unpin` |
 | `scrub` | `scrub` | — |
 | `status` | `status` | — |
 | `servers list` | `servers_list` | — |
@@ -178,6 +180,8 @@ stderr as having no tool at all, is the developer tab's to fix, not yours.
 | `colours sync` (group alias `colors`) | — | `-n, --dry-run` · `--check` | act |
 | `colours change` | `<clone> <colour>` | `--force` | **act [user]**, no `-n` |
 | `colours list` | — | — | report |
+| `ports pin` | `[clones...]` | `-a, --all` · `-n, --dry-run` | **act [user]** — holds clones on the ports their `.env.local` names now |
+| `ports unpin` | `<clone>` | `-n, --dry-run` | **act [user]** — releases one clone to the formula; `doctor <clone> --fix` then moves it |
 | `servers list` | `[clones...]` (defaults to every clone) | `-a, --all` · `--stale` · `--roles` | report |
 | `servers start` | `[clones...]` | `-a, --all` · `--role <id...>` · `-n, --dry-run` | **act [user]** (needs the clone to have a tmux session) |
 | `servers kill` | `[clones...]` | `-a, --all` · `--role <id...>` · `--name <stem...>` · `--pid <pid...>` · `--force` · `-n, --dry-run` · `-y, --yes` | **act [user]** |
@@ -197,6 +201,16 @@ error: jetbrains is not one of this hangar's editors
 This hangar lists `['vscode']`, so `hangar ide vscode sync` is the only one that will run here.
 The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positron`, `trae`,
 `vim`, `xcode`, `eclipse`) have no `sync` subcommand at all — there is nothing shareable to sync.
+
+**`ports pin` and `ports unpin` are how a port layout change reaches a busy fleet one clone at a
+time.** Pin every clone (`ports pin --all`), change `ports` in `hangar.config.yaml`, and every
+command still derives exactly the ports each clone's `.env.local` names — `doctor`, `servers`, the
+health-check allow, the identity file. Then, per clone and when it is idle: `ports unpin <clone>`,
+`doctor <clone> --fix` (which rewrites the `.env.local`, the health-check allow and
+`CLAUDE.local.md` together), restart its servers, and `reload <clone>` so its session reads the new
+ports. `unpin` refuses when the formula would put the clone on a port a still-pinned sibling holds
+and names the sibling to release first. Between `unpin` and `doctor --fix` the clone's derived ports
+and its `.env.local` disagree, so run the two together.
 
 **`colours change`'s `<colour>` is a fixed choice list**, from `src/palette.ts`: `cyan`, `yellow`,
 `green`, `orange`, `magenta`, `violet`, `red`, `teal`, `blue`, `lime`, `pink`, `amber`, `purple`,

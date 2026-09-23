@@ -256,6 +256,37 @@ this is the only thing a human has to supply. Which makes it worth a row precise
 row `--fix` will never close. (`hangar-ops/reference/reading-output.md` says the same to whoever
 relays the report — change one and change both.)
 
+## Port pins, and why a layout change is a rollout rather than an edit
+
+A clone's port is where its running dev server is, what its live session was told when it started
+(its `CLAUDE.local.md`), and what its health-check allow names. Editing `ports` in the config
+moves every clone's derived port at once, and `doctor --all --fix` would then rewrite every
+clone's `.env.local` under whatever each one is serving. So a layout change goes through
+`.hangar/port-pins.json`: `hangar ports pin --all` snapshots each clone's `.env.local` values,
+and `makeClone` hands a clone's pin to `portsFor`, which is the ONE place a port is derived. After
+that the config can change and nothing derives a different port for a pinned clone — `doctor`,
+`servers`, `procs`, `scrub`, the health-check allow and both identity files all read
+`clone.ports`. A pinned clone renders byte-identically to an unpinned one on the same ports: no
+"pinned" text reaches its `.env.local`, its settings or its `CLAUDE.local.md`, so a busy clone sees
+no churn at all. The hangar-root `CLAUDE.local.md` says only THAT some clones are pinned, never
+which — it reaches every clone session, and naming them would make it stale for all of them each
+time one is released.
+
+A pin is a literal snapshot keyed by env var and never "the old formula": the arithmetic it
+outlives is exactly what is changing. A role missing from a pin takes the new formula. A file that
+will not parse is an ERROR rather than "no pins", because the fallback is the new layout, and a
+silent one would release every pinned clone at once.
+
+Releasing a clone is `ports unpin <clone>` then `doctor <clone> --fix`, which rewrites the three
+files together. Two layouts coexisting can collide where neither collides with itself — in this
+fleet's own move from step 100 to `base + N`, the new clone 6's Storybook port is 6106, exactly what
+clone 2 still holds under the old one. So `unpin` refuses to release a clone onto a port a sibling
+claims and names the sibling, `doctor` reports any port two existing clones claim as a hangar
+problem, and the `.env.local ports` repair is withheld for a clone in such a collision — the net
+for a pin file edited by hand. A pin for an index with no clone is reported the way an orphaned
+colour assignment is, and `add-clone` and `remove-clone` both drop one, because `nextFreeIndex`
+reuses gaps.
+
 ## `--fix` runs to the end, and a symlink is judged on where it POINTS
 
 Two bugs in one report, both found by walking a colleague's first day, and both about the same

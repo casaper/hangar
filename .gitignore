@@ -62,6 +62,12 @@ hangar.config.yaml
 # a pull into an older checkout restores the tracked file, and the reader still has to find it.
 /.hangar/colour-assignments.json
 
+# Operator input of the same kind: which clones `hangar ports pin` holds on the ports they had
+# before a layout change. Nothing regenerates it, and losing it would move every pinned clone's
+# derived ports out from under its running dev server -- so it gets a line of its own rather than
+# riding on the safe-to-delete `.hangar/` one.
+/.hangar/port-pins.json
+
 # The four generated hangar-root helpers, for the same reason: `hangar colours sync` rewrites all
 # of them from `app/src/palette.ts`, the hangar id, the tracker's key prefixes and the clone list,
 # so a published copy is wrong for every hangar but the one that committed it. `git rm --cached`

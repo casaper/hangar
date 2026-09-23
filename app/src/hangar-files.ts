@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 
 import type { Hangar } from './hangar.ts';
+import { portPins } from './port-pins.ts';
 
 /**
  * The files a hangar generates into its OWN root, as pure builders.
@@ -102,6 +103,9 @@ const row = (label: string, value: string): string => `| ${label.padEnd(20)} | $
 
 export const hangarClaudeLocalMdContent = (hangar: Hangar): string => {
   const cfg = hangar.config;
+  // Whether a layout change is mid-rollout. Not WHICH clones: this file reaches every clone
+  // session, and naming them would make it stale for all of them each time one is released.
+  const pinned = portPins(hangar).size > 0;
   const { prefix, pad } = cfg.clones;
   const example = `${prefix}${'1'.padStart(pad, '0')}`;
 
@@ -144,7 +148,7 @@ export const hangarClaudeLocalMdContent = (hangar: Hangar): string => {
   const ports =
     cfg.ports.roles.length === 0
       ? 'This hangar assigns no ports. Nothing per-clone depends on one.\n'
-      : `Every clone's ports are a pure function of its index:
+      : `Every clone's ports are a pure function of its index${pinned ? ', unless it is pinned' : ''}:
 
     port = base + ${String(cfg.ports.offset)} + (index - 1) * ${String(cfg.ports.step)}
 
@@ -157,12 +161,28 @@ ${cfg.ports.roles
   )
   .join('\n')}
 
-The offset is this hangar's residue class mod ${String(cfg.ports.step)}, and that is the whole
+${
+  cfg.ports.step > 1
+    ? `The offset is this hangar's residue class mod ${String(cfg.ports.step)}, and that is the whole
 guarantee: two hangars with different offsets can never collide for any clone counts, unlike a
-reserved block, which fails silently once a hangar outgrows it. **Never hard-code a port and never
+reserved block, which fails silently once a hangar outgrows it.`
+    : `Clones sit one port apart${
+        cfg.ports.offset >= 1
+          ? `, and clone 1 sits ${String(cfg.ports.offset)} above each base, so no clone
+ever holds a base port itself.`
+          : '.'
+      }`
+} **Never hard-code a port and never
 assume a server on a default port is yours** — \`hangar ports\` is the answer for the fleet, and
 each clone's own \`CLAUDE.local.md\` names its own.
-`;
+${
+  pinned
+    ? `
+**Some clones are pinned to the ports they had before this layout**, and for those the formula
+above is not the answer — their own \`CLAUDE.local.md\` is.
+`
+    : ''
+}`;
 
   const extras: string[] = [];
   if (cfg.repo.symlinks.length > 0) {

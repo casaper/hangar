@@ -42,6 +42,7 @@ import {
   excludePath,
   missingExcludeLines,
   cloneSymlinks,
+  portClaims,
   readEnvLocalPorts,
   readSettings,
   type SettingsJson,
@@ -100,7 +101,8 @@ import {
   tmpIsOwnDirectory,
 } from '../tmp.ts';
 import { paletteEntry } from '../palette.ts';
-import { portSummary } from '../ports.ts';
+import { portPins } from '../port-pins.ts';
+import { describeCollision, portCollisions, portSummary } from '../ports.ts';
 import { platform } from '../platform/index.ts';
 import { claudeSessionDiagnostic, claudeSessionsIn } from '../procs.ts';
 import { terminal, type EmulatorCapabilities, type MouseReporting } from '../terminal/index.ts';
@@ -245,13 +247,25 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
       ? []
       : [`${key}=${String(found)}, formula says ${String(entry.port)}`];
   });
+  /*
+   * A repair must not write a port a sibling already claims. `ports unpin` refuses to release a
+   * clone onto one, so this is the net for a pin file edited by hand: the row stays red with no
+   * repair, and the hangar-level collision says which sibling is in the way.
+   */
+  const contested = portCollisions(siblings.map(portClaims)).filter((collision) =>
+    collision.claims.some((claim) => claim.clone === clone.name),
+  );
+  const summary = `${portSummary(clone.ports)}${clone.portsPinned ? ' (pinned)' : ''}`;
   checks.push({
     name: '.env.local ports',
     ok: portProblems.length === 0,
-    detail: portProblems.length === 0 ? portSummary(clone.ports) : portProblems.join('; '),
-    repair: () => {
-      writeFile(envLocalPath(clone), envLocalContent(clone));
-    },
+    detail: portProblems.length === 0 ? summary : portProblems.join('; '),
+    repair:
+      contested.length > 0
+        ? undefined
+        : () => {
+            writeFile(envLocalPath(clone), envLocalContent(clone));
+          },
   });
 
   // --- shared secrets ----------------------------------------------------------------
@@ -1528,6 +1542,27 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
         .join(', ')}, which no clone has`,
     );
     note('Harmless now; `hangar add-clone` reuses free indices, so it would inherit the hue.');
+  }
+  // The same for a port pin, with the same consequence: a reused index inheriting it would put
+  // a brand-new clone on the ports of the one that used to live there.
+  const pinOrphans = [...portPins(hangar).keys()].filter(
+    (index) => !all.some((clone) => clone.index === index),
+  );
+  if (pinOrphans.length > 0) {
+    problem(
+      `${tildify(hangar.paths.portPinsFile)} pins ${pinOrphans
+        .map((index) => `index ${String(index)}`)
+        .join(', ')}, which no clone has`,
+    );
+    note('`hangar ports unpin <index>` removes it.');
+  }
+  /*
+   * Two clones on one port, over the clones that EXIST. The schema proves one layout apart, but
+   * while `hangar ports pin` holds some clones on an earlier layout two layouts coexist, and a
+   * clone released onto the new one can land exactly on a port a pinned sibling still holds.
+   */
+  for (const collision of portCollisions(all.map(portClaims))) {
+    problem(`two clones claim port ${describeCollision(collision)}`);
   }
   /*
    * The hangar root's own `.claude/settings.json`, by CONTENT, like every generated artifact.

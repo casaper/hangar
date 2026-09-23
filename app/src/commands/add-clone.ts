@@ -25,6 +25,7 @@ import {
 import { clearColourAssignment } from '../colour-assignments.ts';
 import { CliError, run } from '../exec.ts';
 import { cloneAt, discoverClones, nextFreeIndex, type Clone } from '../fleet.ts';
+import { clearPortPin } from '../port-pins.ts';
 import { installPlanLines, runInstall } from '../install.ts';
 import { FLEET_GIT_CONFIG, git, setFleetGitConfig } from '../git.ts';
 import { tildify } from '../user-paths.ts';
@@ -85,6 +86,12 @@ const settingsTemplate = (clone: Clone, siblings: readonly Clone[]): SettingsJso
 export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
   const existing = discoverClones(hangar);
   const index = nextFreeIndex(hangar);
+  // A port pin left at this index by a clone that used to live here, dropped BEFORE the clone is
+  // built: `clone.ports` is what the `.env.local` below is written from, and a new clone starts on
+  // the formula. `nextFreeIndex` only returns an index with no directory, so any pin is an orphan.
+  if (clearPortPin(hangar, index)) {
+    warn(`dropped a leftover port pin for index ${String(index)}`);
+  }
   const clone = cloneAt(hangar, index);
   /*
    * `forge.originUrl`, with NO literal fallback.

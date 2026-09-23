@@ -111,6 +111,12 @@ export type HangarPaths = {
    */
   readonly legacyColourAssignmentsFile: string;
   /**
+   * Clones held on the ports they had before a layout change. INPUT, like the colour file: only
+   * `hangar ports pin` and `hangar ports unpin` write it, and nothing regenerates it -- losing it
+   * would move every pinned clone's derived ports out from under its running dev server.
+   */
+  readonly portPinsFile: string;
+  /**
    * One statusline script for every clone; it derives the hue from its stdin payload.
    *
    * Named with the hangar id, because it lives in `~/.claude` -- outside the hangar root, where
@@ -197,6 +203,7 @@ export const pathsFor = (
     claudeTmuxConf: join(root, '.hangar', 'claude-tmux.conf'),
     colourAssignmentsFile: join(root, '.hangar', 'colour-assignments.json'),
     legacyColourAssignmentsFile: join(root, 'colour-assignments.json'),
+    portPinsFile: join(root, '.hangar', 'port-pins.json'),
     statuslineScript: join(claudeDir, `${id}-clone-statusline.sh`),
     memory: join(claudeDir, `${id}-memory`),
   });

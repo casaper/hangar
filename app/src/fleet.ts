@@ -5,6 +5,7 @@ import { colourAssignmentFor } from './colour-assignments.ts';
 import { CliError } from './exec.ts';
 import type { Hangar } from './hangar.ts';
 import { colourFor, type CloneColour } from './palette.ts';
+import { portPinFor } from './port-pins.ts';
 import { portsFor, type ClonePorts } from './ports.ts';
 
 /**
@@ -15,9 +16,10 @@ import { portsFor, type ClonePorts } from './ports.ts';
  * are pure functions of that index. Nothing is positional, so removing clone_02 leaves a
  * gap that costs nothing and never renumbers anyone.
  *
- * The single exception is a colour a human chose with `hangar colours change`, which is a
- * SPARSE override in `colour-assignments.json` -- a clone that was never re-coloured is not in
- * that file, so none of the above changes.
+ * The exceptions are a colour a human chose with `hangar colours change`, which is a SPARSE
+ * override in `colour-assignments.json`, and ports a human pinned with `hangar ports pin` while
+ * a layout change rolls out -- a clone in neither file is not mentioned anywhere, so none of the
+ * above changes.
  *
  * Two or more digits, so the fleet does not break at clone_10 the way the old
  * `clone_0[0-9]` globs did.
@@ -47,6 +49,11 @@ export type Clone = {
   readonly path: string;
   readonly colour: CloneColour;
   readonly ports: ClonePorts;
+  /**
+   * Whether `.hangar/port-pins.json` holds this clone on ports it had before a layout change.
+   * For REPORTING only -- `ports` already carries the pinned values, so no consumer branches on it.
+   */
+  readonly portsPinned: boolean;
   /**
    * The hangar this clone belongs to.
    *
@@ -84,7 +91,8 @@ const makeClone = (hangar: Hangar, index: number): Clone => ({
   index,
   path: join(hangar.root, cloneNameFor(hangar, index)),
   colour: colourFor(index, colourAssignmentFor(hangar, index)),
-  ports: portsFor(hangar, index),
+  ports: portsFor(hangar, index, portPinFor(hangar, index)),
+  portsPinned: portPinFor(hangar, index) !== undefined,
   hangar,
 });
 

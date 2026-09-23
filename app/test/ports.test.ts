@@ -4,8 +4,8 @@ import { test } from 'node:test';
 import { parseConfigText } from '../src/config/load.ts';
 import { CliError } from '../src/exec.ts';
 import { cloneAt } from '../src/fleet.ts';
-import { portForRole, portsFor, portSummary, roleUrl } from '../src/ports.ts';
-import { fixtureConfigText, syntheticHangar } from './fixture.ts';
+import { portCollisions, portForRole, portsFor, portSummary, roleUrl } from '../src/ports.ts';
+import { first, fixtureConfigText, syntheticHangar } from './fixture.ts';
 
 /**
  * Ports, and the guard that keeps two of them from landing on each other.
@@ -14,10 +14,10 @@ import { fixtureConfigText, syntheticHangar } from './fixture.ts';
  * the worst thing a hangar can do -- so this is worth asserting twice over: the arithmetic, and
  * the schema cross-check that rejects a role table which would produce a collision.
  *
- * **The congruence rule is in `superRefine`, not in `portsFor`.** `portsFor` is three lines of
+ * **The distance rule is in `superRefine`, not in `portsFor`.** `portsFor` is three lines of
  * arithmetic and cannot detect anything; what actually protects a fleet is `parseConfigText`
  * refusing to load the config in the first place. That refusal is what the presets depend on --
- * a preset shipping congruent bases would be a config nobody can load, discovered by whoever ran
+ * a preset shipping colliding bases would be a config nobody can load, discovered by whoever ran
  * `hangar setup` rather than by whoever wrote it.
  */
 
@@ -115,7 +115,7 @@ test('two roles congruent mod step are REFUSED at load, not at render', () => {
   );
 });
 
-test('an offset at or beyond the step is refused', () => {
+test('an offset at or beyond the step is refused while the step is above 1', () => {
   // `0 <= offset < step` is what makes the offset a residue class at all. An offset of exactly
   // the step is another hangar's class shifted by one clone, which collides on every index.
   assert.throws(
@@ -149,4 +149,93 @@ test('a hangar may declare NO port roles at all', () => {
   );
   assert.deepEqual(none.ports.roles, []);
   assert.deepEqual(portsFor({ ...syntheticHangar(), config: none }, 1), []);
+});
+
+/** The layout this repo's own hangar moves to: clone N on base + N, one port apart. */
+const STEP_ONE = `ports:
+  step: 1
+  offset: 1
+  roles:
+    - id: api
+      envKey: FIXTURE_API_PORT
+      base: 4200
+      label: PostgREST
+    - id: db
+      envKey: FIXTURE_DB_PORT
+      base: 6100
+      label: PostgreSQL
+    - id: swagger
+      envKey: FIXTURE_SWAGGER_PORT
+      base: 9400
+      label: Swagger UI
+`;
+
+test('step 1 loads, and leaves every base itself to no clone', () => {
+  /*
+   * At step 1 every two bases are a whole number of steps apart, so congruence alone would
+   * refuse every step-1 config there could be. What matters is whether they are CLOSE: 4200 and
+   * 6100 are 1900 clones apart. And `offset: 1` is an offset at the step, which step 1 has to
+   * allow -- it is what keeps a repo's default port (a server started without the clone's
+   * environment) off clone 1.
+   */
+  const hangar = syntheticHangar({ configText: withPorts(STEP_ONE) });
+  assert.deepEqual(
+    portsFor(hangar, 1).map((entry) => entry.port),
+    [4201, 6101, 9401],
+  );
+  assert.deepEqual(
+    portsFor(hangar, 7).map((entry) => entry.port),
+    [4207, 6107, 9407],
+  );
+});
+
+test('two roles fewer steps apart than a fleet can hold are still refused at step 1', () => {
+  assert.throws(
+    () =>
+      parseConfigText(
+        withPorts(STEP_ONE.replace('base: 6100', 'base: 4250')),
+        'two bases 50 clones apart',
+      ),
+    CliError,
+  );
+});
+
+test('a pin wins for the roles it names, and the formula answers the rest', () => {
+  const hangar = syntheticHangar();
+  const pinned = portsFor(
+    hangar,
+    2,
+    new Map([
+      ['FIXTURE_API_PORT', 4300],
+      ['FIXTURE_DB_PORT', 6106],
+    ]),
+  );
+  // swagger is in no pin -- a role added after the snapshot -- so it takes clone 2's formula port.
+  assert.deepEqual(
+    pinned.map((entry) => entry.port),
+    [4300, 6106, 8217],
+  );
+});
+
+test('portCollisions finds a released clone landing on a pinned sibling', () => {
+  /*
+   * The case this repo's own rollout has: under the new layout clone 6's second role is 6106,
+   * which is exactly what clone 2 still holds under the old one. Neither layout collides with
+   * itself, so only a check over the clones that exist can see it.
+   */
+  const next = syntheticHangar({ configText: withPorts(STEP_ONE) });
+  const clone2 = {
+    name: 'two',
+    ports: portsFor(next, 2, new Map([['FIXTURE_DB_PORT', 6106]])),
+  };
+  const clone6 = { name: 'six', ports: portsFor(next, 6) };
+  const collisions = portCollisions([clone2, clone6]);
+  assert.equal(collisions.length, 1);
+  const collision = first(collisions, 'collision');
+  assert.equal(collision.port, 6106);
+  assert.deepEqual(
+    collision.claims.map((claim) => claim.clone),
+    ['two', 'six'],
+  );
+  assert.deepEqual(portCollisions([clone6, { name: 'one', ports: portsFor(next, 1) }]), []);
 });
