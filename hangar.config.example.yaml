@@ -337,18 +337,21 @@ repo:
 # --------------------------------------------------------------------------------------------
 ports:
   # Spacing between clones, 1-10000. Must match across hangars for the offset guarantee below
-  # to hold. Pinned even though it equals the default: it places servers that are running.
-  step: 100
+  # to hold. At 1, clones sit one port apart. The default is 100.
+  step: 1
+  # step: 100
 
-  # This hangar's residue class, `0 <= offset < step`.
+  # This hangar's residue class, `0 <= offset < step` -- or, at `step: 1`, how far above its base
+  # clone 1 sits.
   #
   # Two hangars with the same step and DIFFERENT offsets produce ports in different classes mod
   # step, so their clones can never collide for any clone counts -- unlike a reserved block,
-  # which fails silently the moment a hangar outgrows it. `offset: 0` keeps an existing hangar
-  # exactly where it is, which matters because changing a port moves a running dev server out
-  # from under a live session. A second hangar on this machine would use 1, a third 2.
-  offset: 0
-  # offset: 1
+  # which fails silently the moment a hangar outgrows it. At `step: 1` there is one class and no
+  # such guarantee, and `offset: 1` puts clone N on `base + N`, leaving the base itself -- the
+  # repo's own default port -- to no clone at all. Changing either value moves a running dev
+  # server out from under a live session, which is what `hangar ports pin` is for.
+  offset: 1
+  # offset: 0
 
   # Ordered; the order is the display order. `roles: []` is legal and means this hangar assigns
   # no ports -- but the `ports` key itself is required, so "no ports" has to be said out loud.
@@ -377,7 +380,7 @@ ports:
         dir: angular          # clone-relative; default '' -- the clone root
     - id: storybook
       envKey: STORYBOOK_DEV_SERVER_PORT
-      base: 6006
+      base: 6100
       label: Storybook
       # Declaring the check is what lets the `permissions.allow` matcher be GENERATED and stay
       # fully anchored. A looser hand-written pattern rewrites the wrong allow entry and leaves
@@ -391,7 +394,7 @@ ports:
         dir: angular
     - id: playwrightReport
       envKey: PLAYWRIGHT_REPORT_PORT
-      base: 9323
+      base: 9400
       label: Playwright HTML report
     # A role with no URL and no check -- a backend port an app merely connects to:
     # - id: api
