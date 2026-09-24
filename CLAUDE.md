@@ -360,11 +360,13 @@ either:
   are separate repos, so each gets its own memory directory unless `autoMemoryDirectory` is
   pointed at a shared path.
 
-A parent session has its own transcript directory, so it sees no clone's history in `/resume`. It
-**does** see the shared memory — the generated `.claude/settings.json` points `autoMemoryDirectory`
-at the same per-hangar directory every clone uses. A memory written from the parent is immediately
-visible in every clone and vice versa; `MEMORY.md` is one shared index with no locking, so append a
-line to it, never rewrite it wholesale.
+A parent session has its own transcript directory, so it sees no clone's history in `/resume`.
+Operator mode **does** see the shared memory — the generated `.claude/settings.json` points
+`autoMemoryDirectory` at the same per-hangar directory every clone uses, so a memory written there
+is immediately visible in every clone and vice versa; `MEMORY.md` is one shared index with no
+locking, so append a line to it, never rewrite it wholesale. Developer mode does not: its working
+directory is `app/`, which that settings file does not reach, so its CLI-maintainer memories stay
+out of every clone session.
 
 ## How this file reaches the clone sessions
 
