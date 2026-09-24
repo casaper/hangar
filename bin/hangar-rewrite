@@ -186,14 +186,21 @@ const autosquash = (rest, root) => {
   if (base === undefined) {
     fail('hangar-rewrite autosquash needs the base to rebase onto: autosquash <ref>');
   }
-  refusePublished('HEAD', 'rewrite this branch');
+  refusePublishedRange(
+    base,
+    'rewrite this branch',
+    'Pass the newest published commit as the base, so only what follows it is replayed.',
+  );
   waypoint(`autosquash onto ${base}`);
   const res = spawnSync('git', ['rebase', '--autosquash', base], {
     cwd: root,
     stdio: 'inherit',
     env: { ...process.env, GIT_SEQUENCE_EDITOR: 'true' },
   });
-  process.exit(res.status ?? 1);
+  if (res.status === 0) return;
+  // Stopped for the reason `rebase` below gives: no way out through git where rebasing is denied.
+  spawnSync('git', ['rebase', '--abort'], { cwd: root, stdio: 'inherit' });
+  fail('Autosquash stopped and was aborted; the branch is exactly as it was.');
 };
 
 /**

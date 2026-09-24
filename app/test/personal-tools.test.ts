@@ -229,6 +229,10 @@ test('the rewrite tool rebases only an unpublished range, and never leaves one s
   assert.match(verb, /'rebase', '--abort'/);
   assert.match(verb, /process\.exit\(2\)/);
   assert.match(text, /--not', '--remotes'/);
+  // `autosquash` replays a range too, so it owes both properties for the same reasons.
+  const squash = /const autosquash = [\s\S]*?\n};\n/.exec(text)?.[0] ?? '';
+  assert.match(squash, /refusePublishedRange\(/);
+  assert.match(squash, /'rebase', '--abort'/);
 });
 
 test('the rewrite tool is deliberately NOT pre-approved', () => {
