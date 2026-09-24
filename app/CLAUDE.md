@@ -53,6 +53,7 @@ which is the single source of truth for both the shell and CI. Run the CLI's own
 ```bash
 cd app && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 # pnpm lint:fix and pnpm format write; format:check is what a commit gate wants
+# prettier never rewraps a comment and eslint has no max-len: wrap comments at 100 by hand
 pnpm golden && git diff --exit-code dev/golden/gated   # the regression net; see below
 pnpm scan     # both hygiene gates; see **Nothing in here names one organisation**
 pnpm hooks    # ONCE per clone of this repo: installs the two git hooks. See Commit messages
