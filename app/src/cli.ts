@@ -236,9 +236,10 @@ const resolveForCommand = (path: string, flag: string | undefined): void => {
 
 program
   .command('list')
-  .description('List every clone with its branch and last commit')
-  .action(() => {
-    list(requireHangar());
+  .description('List every clone with its branch, issue key, pull request and last commit')
+  .option('--no-refresh', 'draw the cached pull-request state; ask Bitbucket for nothing')
+  .action(async (options: { refresh?: boolean }) => {
+    await list(requireHangar(), options);
   });
 
 const portsCommand = program

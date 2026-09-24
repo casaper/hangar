@@ -337,6 +337,12 @@ const parsePullRequests = (body: unknown, ref: RepoRef): PullRequest[] => {
 /** Enough for one API call over a VPN, short enough that an offline `sync --all` still ends. */
 const TIMEOUT_MS = 8000;
 
+/** The request timeout, and a caller's own deadline too when it has one (`hangar list`). */
+const withTimeout = (signal: AbortSignal | undefined): AbortSignal =>
+  signal === undefined
+    ? AbortSignal.timeout(TIMEOUT_MS)
+    : AbortSignal.any([AbortSignal.timeout(TIMEOUT_MS), signal]);
+
 /**
  * The OPEN pull requests whose source is `branch`.
  *
@@ -367,7 +373,7 @@ export const openPullRequests = async (
   hangar: Hangar,
   ref: RepoRef | undefined,
   branch: string,
-  opts: { readonly anyState?: boolean } = {},
+  opts: { readonly anyState?: boolean; readonly signal?: AbortSignal | undefined } = {},
 ): Promise<PullRequestLookup> => {
   /*
    * No recognisable Bitbucket repo is a SOFT failure, like every other one here.
@@ -403,7 +409,7 @@ export const openPullRequests = async (
   try {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: withTimeout(opts.signal),
     });
     if (!res.ok) {
       return {
@@ -434,6 +440,7 @@ export const pullRequestCiState = async (
   hangar: Hangar,
   ref: RepoRef | undefined,
   id: number,
+  signal?: AbortSignal,
 ): Promise<CiState> => {
   const token = bitbucketToken(hangar);
   if (ref === undefined || token === undefined) return 'none';
@@ -445,7 +452,7 @@ export const pullRequestCiState = async (
   try {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: withTimeout(signal),
     });
     if (!res.ok) return 'none';
     const values = asRecord(await res.json())?.['values'];

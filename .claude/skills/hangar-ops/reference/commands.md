@@ -100,7 +100,7 @@ rule that cannot tell it from the report.
 
 | Command | Args | Options | |
 | --- | --- | --- | --- |
-| `list` | — | — | report |
+| `list` | — | `--no-refresh` | report (asks Bitbucket for stale pull requests, ≤3s; writes only the bar's PR cache) |
 | `ports` | — | `--json` | report |
 | `scrub` | — | `--recent [hours]` (default `24`; pass a big number for the whole store) · `-q, --quiet` | report |
 | `status` | `[clone]` (defaults to every clone) | `-a, --all` · `-f, --fetch` | report (`--fetch` reaches the network, touches no tree) |
@@ -503,6 +503,13 @@ separate `<thing>_preview`.
   to resolve. Every other command resolves it as the hangar to act on.
 - **`doctor` with no clone argument already checks every clone**, so `-a` is only needed to be
   explicit.
+- **`hangar list` is the fleet's one-screen answer to "who is on what"**: branch, issue key, pull
+  request, build and review per clone. The pull-request columns come from the cache the tmux bar
+  draws, and a record past `forge.prCacheTtlSeconds` is refreshed first, all clones at once, for
+  at most three seconds — whatever has not answered is shown marked `(stale)`, with one line after
+  the table saying why. `--no-refresh` asks nothing. REVIEW is `no reviewers`, `pending a/n`
+  (reviewers assigned, nobody has decided), `approved a/n` or `changes a/n`, with `changes`
+  winning over any approval; a merged, declined or superseded pull request shows no build or review.
 - **`resume -n` is `--limit`.** Everywhere else `-n` is `--dry-run`.
 - **`-q, --quiet` on `plans collect` and `tmp merge` exists for the `SessionEnd` hooks.** They flush
   on opposite criteria — `plans collect` prints when something MOVED, `tmp merge` when something

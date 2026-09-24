@@ -127,7 +127,7 @@ for preset in generic node-web sql-postgrest; do
     sed -e "s|$setupdir|%SETUP%|g" | normalise > "$out/gated/commands/setup-dry-$preset.txt" || true
 done
 
-capture advisory list list
+capture advisory list list --no-refresh
 capture advisory status status --all
 capture advisory doctor doctor --all
 capture advisory plans-collect-dry plans collect -n

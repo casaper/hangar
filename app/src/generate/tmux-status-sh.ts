@@ -1,6 +1,6 @@
 import type { Hangar } from '../hangar.ts';
 import { CI_COLOURS } from '../palette.ts';
-import { prCacheTtlSeconds } from '../pr-cache.ts';
+import { PR_LOCK_STALE_SECONDS, prCacheTtlSeconds } from '../pr-cache.ts';
 import { type Artifact, artifactHeader } from './index.ts';
 
 /**
@@ -79,6 +79,24 @@ export const issueKeyPattern = (hangar: Hangar): string => {
 };
 
 /**
+ * The issue key the bar's `key` field draws for `branch`, or `''`.
+ *
+ * The same steps as the shell's `tr | grep -o | head -1`, in the same order, so `hangar list`
+ * and the bar cannot name different tickets for one branch: split on everything but word
+ * characters and `-`, and take the first token the anchored pattern matches.
+ */
+export const issueKeyInBranch = (hangar: Hangar, branch: string): string => {
+  const pattern = issueKeyPattern(hangar);
+  if (pattern === '') return '';
+  const re = new RegExp(pattern);
+  for (const token of branch.split(/[^A-Za-z0-9-]+/)) {
+    const match = re.exec(token);
+    if (match !== null) return match[0];
+  }
+  return '';
+};
+
+/**
  * How much branch the footer will carry.
  *
  * Measured against this fleet's own branch names: `fixes/ABC-1323_i_can_close_the_browser_tab_even_changes_not_saved`
@@ -141,16 +159,6 @@ const PR_GLYPHS = {
   pending: '◷',
   noReview: '·',
 } as const;
-
-/**
- * How long a refresh may hold the lock before the next redraw assumes it died.
- *
- * Fixed rather than derived from the TTL: this bounds a CRASH, not a cadence. Two API calls take
- * under a second and `openPullRequests` gives up at eight, so five minutes is far past any run
- * that is still alive -- and the cost of guessing high is one clone's field staying stale a
- * little longer, against the cost of guessing low, which is two refreshers running at once.
- */
-const PR_LOCK_STALE_SECONDS = 300;
 
 export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
   path: hangar.paths.tmuxStatusScript,
@@ -317,10 +325,12 @@ export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
     '',
     '  # Past the TTL, hand the question to a detached `hangar pr refresh` and draw the OLD value',
     '  # now. Nothing here ever waits for the network: the fresh answer lands at the next redraw.',
-    '  # This is also why a hangar nobody is looking at makes no requests -- the only thing that',
-    '  # starts a refresh is a pane being drawn.',
+    '  # This is also why a hangar nobody is looking at makes no requests -- a refresh starts only',
+    '  # when a pane is drawn or somebody runs `hangar list`.',
     '  now=$(date +%s 2>/dev/null) || now=0',
     '  if [ "$now" -gt 0 ] && [ "$((now - c_at))" -ge "$PR_TTL" ]; then',
+    '    # The same name and the same epoch file `takePrRefreshLock` in pr-cache.ts uses, so a',
+    '    # redraw and `hangar list` never both ask about one clone.',
     '    lock="$PR_DIR/.lock-$clone"',
     "    # A refresher that was killed leaves its lock behind, which would wedge this clone's",
     '    # field for good. The epoch inside the lock is what lets the next redraw tell a run in',

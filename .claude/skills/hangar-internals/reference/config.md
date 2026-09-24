@@ -114,8 +114,8 @@ absent, floor 10, and there is deliberately **no zero**.
 The name would suggest a polling loop and there is none. Nothing ever waits for the network to
 draw a bar: `clone-tmux-status.sh` prints what is on disk and, past this age, spawns one detached
 `hangar pr refresh` whose answer lands at the next redraw. So the value bounds how WRONG the bar
-may be, and a hangar nobody is looking at makes no requests at all — the only thing that starts a
-refresh is a pane being drawn.
+may be, and a hangar nobody is looking at makes no requests at all — a refresh starts only when a
+pane is drawn or somebody runs `hangar list`, which waits for it for at most three seconds.
 
 **The default is set by the fastest-moving field.** The number and the branch never go stale; a
 build does, and a red mark that stays red for five minutes after the rerun went green is the

@@ -89,7 +89,7 @@ const forgeSchema = z.strictObject({
    * The bar never blocks on the network: it draws what is on disk and, past this age, spawns one
    * detached refresh whose answer lands at the next redraw. So this is a ceiling on how WRONG the
    * bar may be, not a poll interval -- a hangar nobody is looking at makes no requests at all,
-   * because the only thing that starts a refresh is a pane being drawn.
+   * because a refresh starts only when a pane is drawn or somebody runs `hangar list`.
    *
    * The default of 90 is set by the fastest-moving field. The id and the branch never go stale;
    * a build does, and a red mark that stays red for five minutes after the rerun went green is

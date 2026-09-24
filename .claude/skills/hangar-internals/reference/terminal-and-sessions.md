@@ -923,8 +923,9 @@ The `pr` arm draws what is on disk, and only then, if the record is past its TTL
 detached `hangar pr refresh <clone>` whose answer lands at the next redraw. Three consequences
 worth stating, because each one is a property somebody would otherwise have to rediscover:
 
-- **A hangar nobody is looking at makes no requests.** The only thing that starts a refresh is a
-  pane being drawn, so this is demand-driven rather than a poll, and there is no daemon.
+- **A hangar nobody is looking at makes no requests.** A refresh starts only when a pane is drawn
+  or when somebody runs `hangar list`, so this is demand-driven rather than a poll, and there is no
+  daemon. The bar never waits for its refresh; `list`, below, is the one caller that does.
 - **`mkdir` is the stampede guard**, because it is the atomic primitive every POSIX shell has.
   Six clones times three windows times every few seconds is a real stampede; measured, 24
   concurrent redraws against one stale record spawn exactly ONE refresher.
@@ -944,6 +945,17 @@ worth stating, because each one is a property somebody would otherwise have to r
   the two calls take under a second and the API gives up at eight. A lock directory with no epoch
   in it -- a crash between the `mkdir` and the write -- reads as 0 and so as stale, which is the
   safe direction.
+- **`hangar list` is the second thing that starts a refresh, and the only one that waits.** A
+  human asked for the fleet's state, so a bounded wait is acceptable there and nowhere else: every
+  clone past its TTL is refreshed concurrently, through `refreshPullRequest`, under THIS lock
+  (`takePrRefreshLock` in `pr-cache.ts` takes the same directory, the same `at` file and the same
+  five-minute rule), and inside one three-second deadline for the whole fleet. A held lock means a
+  redraw is already asking and the cache is drawn as it is. The deadline is a signal threaded to
+  both requests, and an abort writes nothing — an abort between the two would otherwise stamp a
+  fresh `fetchedAt` on `ci: none`, the half-filled record the next section rules out. The
+  deadline exists because each request may run eight seconds, so no network would otherwise cost
+  sixteen, for a command clone sessions and the MCP tool call freely.
+  `pnpm golden` captures `list --no-refresh`, so a capture never needs a token.
 
 #### `id` of 0 is "asked, and there is none"
 
@@ -959,7 +971,7 @@ one exists. Without it a cold cache would leave nothing on the bar to click.
 
 #### One writer, because a half-filled record is worse than none
 
-`refreshPullRequest` is the only thing that writes the record, and `sync`, `browse` and
+`refreshPullRequest` is the only thing that writes the record, and `sync`, `browse`, `list` and
 `hangar pr refresh` all go through it. The failure it exists to prevent is a caller assembling its
 own record from what it happened to have: `sync` looks up only OPEN pull requests and never asks
 CI at all, so a record built there would be short of exactly the volatile fields while carrying a

@@ -107,6 +107,11 @@ const ideExposures: readonly Exposure[] = IDE_KINDS.flatMap((kind) => [
  */
 export const EXPOSURES: readonly Exposure[] = [
   // ---- reports ----------------------------------------------------------------------------
+  /*
+   * A report that may write the pull-request cache -- the same record every redraw of the bar
+   * refreshes, through the same writer and under the same lock -- so it changes nothing a person
+   * would have to approve.
+   */
   { name: 'list', path: ['list'], acts: false },
   /*
    * `--json` is a PARAMETER and not fixed, and that was a correction. Fixing it looked like a

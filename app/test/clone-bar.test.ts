@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 
 import { pullRequestLink, ticketLink } from '../src/commands/browse.ts';
 import { DETACHED } from '../src/git.ts';
 import { cloneAt } from '../src/fleet.ts';
-import { issueKeyPattern, tmuxStatusArtifact } from '../src/generate/tmux-status-sh.ts';
+import {
+  issueKeyInBranch,
+  issueKeyPattern,
+  tmuxStatusArtifact,
+} from '../src/generate/tmux-status-sh.ts';
 import { fixtureConfigText, namesNoMachinePath, syntheticHangar } from './fixture.ts';
 
 /**
@@ -39,6 +44,40 @@ test('the key pattern comes from tracker.keyPrefixes, and is anchored', () => {
   // a branch called `feature/XABC-99_x` would report `ABC-99`. `jira.ts` gets that from a
   // lookbehind, which `grep -E` has not got.
   assert.ok(issueKeyPattern(two).startsWith('^'));
+});
+
+test('`hangar list` names the same ticket for a branch as the bar does', () => {
+  const h = syntheticHangar();
+  const branches = [
+    'fixes/BE-1323_close_the_tab',
+    'feature/XBE-99_x',
+    'BE-7',
+    'chore/bump_BE_deps',
+    'fixes/storefront_ui-BE-12-and-BE-13',
+    'master',
+  ];
+  assert.equal(issueKeyInBranch(h, branches[0] ?? ''), 'BE-1323');
+  assert.equal(issueKeyInBranch(h, 'feature/XBE-99_x'), '', 'the anchor holds per token');
+  /*
+   * The bar's own pipeline, verbatim from the generated script, over the same branches. Two
+   * implementations of one rule are only safe while something runs both.
+   */
+  const pattern = issueKeyPattern(h);
+  for (const branch of branches) {
+    const shell = execFileSync(
+      'sh',
+      [
+        '-c',
+        `printf '%s' "$1" | tr -cs 'A-Za-z0-9-' '\\n' | grep -oE "$2" | head -1 || true`,
+        'sh',
+        branch,
+        pattern,
+      ],
+      { encoding: 'utf8' },
+    ).trim();
+    assert.equal(issueKeyInBranch(h, branch), shell, branch);
+  }
+  assert.equal(issueKeyInBranch(withTracker('tracker:\n  kind: none\n'), branches[0] ?? ''), '');
 });
 
 test('a hangar with no tracker, or no prefixes, gets no ticket field rather than a guess', () => {

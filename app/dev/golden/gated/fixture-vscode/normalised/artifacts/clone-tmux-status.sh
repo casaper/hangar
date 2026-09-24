@@ -156,10 +156,12 @@ pr)
 
   # Past the TTL, hand the question to a detached `hangar pr refresh` and draw the OLD value
   # now. Nothing here ever waits for the network: the fresh answer lands at the next redraw.
-  # This is also why a hangar nobody is looking at makes no requests -- the only thing that
-  # starts a refresh is a pane being drawn.
+  # This is also why a hangar nobody is looking at makes no requests -- a refresh starts only
+  # when a pane is drawn or somebody runs `hangar list`.
   now=$(date +%s 2>/dev/null) || now=0
   if [ "$now" -gt 0 ] && [ "$((now - c_at))" -ge "$PR_TTL" ]; then
+    # The same name and the same epoch file `takePrRefreshLock` in pr-cache.ts uses, so a
+    # redraw and `hangar list` never both ask about one clone.
     lock="$PR_DIR/.lock-$clone"
     # A refresher that was killed leaves its lock behind, which would wedge this clone's
     # field for good. The epoch inside the lock is what lets the next redraw tell a run in

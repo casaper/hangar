@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import {
@@ -81,6 +81,50 @@ export const prCacheTtlSeconds = (hangar: Hangar): number =>
 
 export const prCachePath = (hangar: Hangar, clone: Clone): string =>
   join(hangar.paths.prCache, clone.name);
+
+/**
+ * How long a refresh may hold the lock before the next redraw assumes it died.
+ *
+ * Fixed rather than derived from the TTL: this bounds a CRASH, not a cadence. Two API calls take
+ * under a second and `openPullRequests` gives up at eight, so five minutes is far past any run
+ * that is still alive -- and the cost of guessing high is one clone's field staying stale a
+ * little longer, against the cost of guessing low, which is two refreshers running at once.
+ */
+export const PR_LOCK_STALE_SECONDS = 300;
+
+/**
+ * The bar's stampede lock, taken from TypeScript: a function that releases it, or undefined when
+ * a refresh is already running.
+ *
+ * The bar's `pr` arm is the other holder, and the two have to agree on the name, on the epoch
+ * file inside it and on the staleness rule -- which is why all three are here beside the record
+ * path and the shell copy reads `PR_LOCK_STALE_SECONDS` out of this module. A held lock is not a
+ * failure: somebody is already asking, and the answer lands in the record either way.
+ */
+export const takePrRefreshLock = (
+  hangar: Hangar,
+  clone: Clone,
+  now = Math.floor(Date.now() / 1000),
+): (() => void) | undefined => {
+  const lock = join(hangar.paths.prCache, `.lock-${clone.name}`);
+  try {
+    mkdirSync(hangar.paths.prCache, { recursive: true });
+    let at = 0;
+    try {
+      at = Number(readFileSync(join(lock, 'at'), 'utf8').trim()) || 0;
+    } catch {
+      /* no lock, or one with no epoch in it -- which reads as 0, and so as stale */
+    }
+    if (now - at >= PR_LOCK_STALE_SECONDS) rmSync(lock, { recursive: true, force: true });
+    mkdirSync(lock);
+    writeFileSync(join(lock, 'at'), String(now), 'utf8');
+  } catch {
+    return undefined;
+  }
+  return () => {
+    rmSync(lock, { recursive: true, force: true });
+  };
+};
 
 /** The whole file, newline included: `read` returns non-zero at an EOF with no newline. */
 export const prCacheLine = (pr: CachedPullRequest): string =>
@@ -198,13 +242,15 @@ export type PrRefresh = {
  * Ask Bitbucket what this branch's pull request is doing, and write the answer down.
  *
  * **The one writer of the cache record**, and that is a correctness property rather than tidiness.
- * `sync`, `browse` and `hangar pr refresh` all come through here, so no path can leave a record
- * that is half-filled but freshly stamped -- which would read as current to the bar and suppress
- * the refresh that would have completed it. It is also why the record is BUILT here and handed
- * back: a caller that assembled its own would be the second writer by another name.
+ * `sync`, `browse`, `list` and `hangar pr refresh` all come through here, so no path can leave a
+ * record that is half-filled but freshly stamped -- which would read as current to the bar and
+ * suppress the refresh that would have completed it. It is also why the record is BUILT here and
+ * handed back: a caller that assembled its own would be the second writer by another name.
  *
  * Two round trips, ~0.7s together, which is why no caller is on a redraw path. A branch with no
  * pull request costs one: there is no id to ask CI about.
+ *
+ * `signal` is a caller's own deadline, on top of the per-request timeout; an abort writes nothing.
  *
  * `write: false` does everything except touch the disk, so `-n` can report the URL it would have
  * opened. This CLI's `-n` output is its regression record, so a dry run that answered from a cold
@@ -215,10 +261,13 @@ export const refreshPullRequest = async (
   hangar: Hangar,
   clone: Clone,
   branch: string,
-  opts: { readonly write?: boolean } = {},
+  opts: { readonly write?: boolean; readonly signal?: AbortSignal | undefined } = {},
 ): Promise<PrRefresh> => {
   const ref = repoRef(hangar, clone.path);
-  const lookup = await openPullRequests(hangar, ref, branch, { anyState: true });
+  const lookup = await openPullRequests(hangar, ref, branch, {
+    anyState: true,
+    signal: opts.signal,
+  });
   if (!lookup.ok) return { reason: lookup.reason };
   const pr = pickPullRequest(lookup.pullRequests);
   const now = Math.floor(Date.now() / 1000);
@@ -227,7 +276,13 @@ export const refreshPullRequest = async (
    * is waiting on, and asking would spend the second round trip on it at every TTL for as long
    * as the branch stays checked out.
    */
-  const ci = pr?.state === 'open' ? await pullRequestCiState(hangar, ref, pr.id) : 'none';
+  const ci =
+    pr?.state === 'open' ? await pullRequestCiState(hangar, ref, pr.id, opts.signal) : 'none';
+  /*
+   * An abort between the two calls reads as `ci: none`, and writing that would be the half-filled,
+   * freshly stamped record this function exists to rule out. So a caller's deadline writes nothing.
+   */
+  if (opts.signal?.aborted === true) return { reason: 'gave up waiting for Bitbucket' };
   const record: CachedPullRequest =
     pr === undefined
       ? {

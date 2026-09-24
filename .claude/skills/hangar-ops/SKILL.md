@@ -49,7 +49,7 @@ tool call goes through without stopping, it reported.
 
 | Reports only | Acts |
 | --- | --- |
-| `list`, `ports`, `status` (`--fetch` reaches the network but touches no tree), `doctor` **bare**, `colours list`, `config show`, `config validate`, `resume` (see below) | `sync` / `merge-default` / `rebase-default`, `checkout-default`, `open`, `edit`, `add-clone`, `install`, `remove-clone`, `exec` (**never yours**), `colours change`, `doctor --fix`, `setup`, `teach-rg`, `config schema`, `ide <kind> sync`, `colours sync`, `tmp merge`, `plans collect`, `plans stamp` |
+| `list` (refreshes stale pull-request state from Bitbucket, touches no tree), `ports`, `status` (`--fetch` reaches the network but touches no tree), `doctor` **bare**, `colours list`, `config show`, `config validate`, `resume` (see below) | `sync` / `merge-default` / `rebase-default`, `checkout-default`, `open`, `edit`, `add-clone`, `install`, `remove-clone`, `exec` (**never yours**), `colours change`, `doctor --fix`, `setup`, `teach-rg`, `config schema`, `ide <kind> sync`, `colours sync`, `tmp merge`, `plans collect`, `plans stamp` |
 
 **The hangar's own `CLAUDE.md` reserves eleven of those for the user, from the hangar root:**
 `sync` under any of its three names, `checkout-default`, `open`, `edit`, `close`, `reload`,
