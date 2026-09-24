@@ -111,8 +111,10 @@ Otherwise act on the strategy the dry run printed:
 **Rebase only what nobody else has.** The pull request having reviewers, or the branch having
 been pushed at all, means merge, whatever the dry run said. `hangar-rewrite rebase` enforces this
 itself: it refuses when any commit in the range is reachable from a remote-tracking ref. **Exit
-2** means it hit a conflict, aborted, and left the branch exactly as it was. In both cases fall
-back to `git merge origin/<target>`.
+2** means it hit a conflict, aborted, and left the branch exactly as it was. **Any non-zero exit
+means merge instead** (`git merge origin/<target>`): a published commit, a merge commit in the
+range, even a branch name it mistakes for a remote. The one exception is "No origin/<target>
+here", which means fetch and try again. Whatever it refused, the branch was left untouched.
 
 A merge that conflicts is resolved **here, in this tree**: read both sides and keep what each
 side meant. Conclude with `git add` and `git commit --no-edit`, and never with a force of any
