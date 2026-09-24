@@ -37,6 +37,7 @@ hangar-rewrite amend -m "<message>"    # redo the last commit
 hangar-rewrite amend --no-edit         # fold staged changes into it, message unchanged
 hangar-rewrite fixup <sha>             # a fixup commit aimed at an earlier one
 hangar-rewrite autosquash <base>       # apply the fixups, non-interactively
+hangar-rewrite rebase <branch>         # replay onto origin/<branch>; exit 2 = conflict, merge instead
 hangar-rewrite reset soft <ref>        # uncommit, keep the changes staged
 ```
 

@@ -986,7 +986,7 @@ Five more root files are hand-maintained and belong to this package rather than 
   because an agent that can release its own gate has no gate — and the hook refuses those verbs
   and any command naming its own state file, because a permission rule matches only the START of
   a command string and `hangar-commit-gate status && … release` sails straight past one.
-- **`bin/hangar-rewrite`** — amend, fixup, autosquash and reset, for history that has never been
+- **`bin/hangar-rewrite`** — amend, fixup, autosquash, rebase and reset, for history that has never been
   published. A blanket "never rewrite" rule is a proxy for the thing that actually matters, which
   is never rewriting what other people already have; this enforces the real rule instead of the
   proxy, by refusing any commit reachable from a remote-tracking ref. Every verb records a

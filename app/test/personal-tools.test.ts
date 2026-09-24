@@ -214,6 +214,23 @@ test('the rewrite tool refuses published history and never publishes', () => {
   }
 });
 
+test('the rewrite tool rebases only an unpublished range, and never leaves one stopped', () => {
+  /*
+   * A repo that forbids `git rebase` forbids `--abort` and `--continue` with it, so a session left
+   * mid-rebase has no way out through git. The verb aborts on conflict and exits 2 for "merge
+   * instead". Checking HEAD alone would let one local commit on top of pushed ones through, so the
+   * whole range is checked. Both were exercised against a scratch upstream and clone.
+   */
+  const text = script('hangar-rewrite');
+  const verb = /const rebase = [\s\S]*?\n};\n/.exec(text)?.[0] ?? '';
+  assert.ok(verb !== '', 'the rebase verb must exist');
+  assert.match(verb, /refusePublishedRange\(/);
+  assert.match(verb, /waypoint\(/);
+  assert.match(verb, /'rebase', '--abort'/);
+  assert.match(verb, /process\.exit\(2\)/);
+  assert.match(text, /--not', '--remotes'/);
+});
+
 test('the rewrite tool is deliberately NOT pre-approved', () => {
   // "Only if I ask for it" is enforced by absence: with no allow entry, every call prompts.
   assert.ok(

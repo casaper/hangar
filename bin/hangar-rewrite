@@ -5,6 +5,7 @@
  *   hangar-rewrite amend [-m "<msg>"]     # redo the last commit
  *   hangar-rewrite fixup <sha>            # a fixup commit aimed at <sha>
  *   hangar-rewrite autosquash <base>      # apply the fixups, non-interactively
+ *   hangar-rewrite rebase <branch>        # replay this branch onto origin/<branch>
  *   hangar-rewrite reset <soft|mixed> <ref>
  *   hangar-rewrite status                 # what is safe to rewrite here
  *
@@ -88,7 +89,7 @@ const isPublished = (rev) => {
   return contained !== undefined && contained !== '';
 };
 
-const refusePublished = (rev, what) => {
+const refusePublished = (rev, what, instead = 'Correct it forward with a new commit instead.') => {
   if (!isPublished(rev)) return;
   const where = gitTry(['branch', '--remotes', '--contains', rev]) ?? '';
   fail(
@@ -99,8 +100,22 @@ const refusePublished = (rev, what) => {
         .join('\n') +
       '\n\nRewriting a published commit rewrites history under everyone who has it. That is the\n' +
       'reason the blanket rule exists, and it is the one case this tool will not make an\n' +
-      'exception for. Correct it forward with a new commit instead.',
+      `exception for. ${instead}`,
   );
+};
+
+/**
+ * Every commit `<base>..HEAD` would rewrite, checked one by one.
+ *
+ * Checking HEAD alone is not enough for a verb that replays a range: one local commit on top of
+ * pushed ones passes that check, and the replay then rewrites the pushed ones underneath it.
+ */
+const refusePublishedRange = (base, what, instead) => {
+  const all = gitTry(['rev-list', `${base}..HEAD`]);
+  if (all === undefined) fail(`Not a range this repo knows: ${base}..HEAD`);
+  const local = new Set((gitTry(['rev-list', `${base}..HEAD`, '--not', '--remotes']) ?? '').split('\n'));
+  const published = all.split('\n').find((sha) => sha !== '' && !local.has(sha));
+  if (published !== undefined) refusePublished(published, what, instead);
 };
 
 /** Nothing is rewritten on a tree that is mid-rebase or mid-merge. */
@@ -181,6 +196,62 @@ const autosquash = (rest, root) => {
   process.exit(res.status ?? 1);
 };
 
+/**
+ * Replay this branch onto `origin/<branch>`, and only when none of it has been published.
+ *
+ * The argument is a bare branch name, because `refuseRemoteArgs` refuses the word `origin` and
+ * that refusal is worth more than the shorter spelling. The verb names the remote-tracking ref
+ * itself and never fetches: a fetch is the caller's, and is not a rewrite.
+ *
+ * **It never leaves a rebase stopped.** A repo that forbids `git rebase` forbids `--continue`
+ * and `--abort` with it, so a session left mid-rebase has no way out through git. A conflict is
+ * therefore aborted here, the files named, and exit 2 means "merge instead" -- a merge's
+ * conflicts conclude with a plain commit.
+ */
+const rebase = (rest, root) => {
+  refuseRemoteArgs(rest);
+  const branch = rest[0];
+  if (branch === undefined || rest.length > 1) {
+    fail('hangar-rewrite rebase takes one bare branch name: rebase <branch> (not origin/<branch>)');
+  }
+  const onto = `refs/remotes/origin/${branch}`;
+  if (gitTry(['rev-parse', '--verify', '--quiet', onto]) === undefined) {
+    fail(`No origin/${branch} here. Fetch it first, then run this again.`);
+  }
+  if (git(['status', '--porcelain'], { cwd: root }) !== '') {
+    fail('Refusing: the tree has uncommitted changes. Commit them first; a rebase replays commits.');
+  }
+  if (gitTry(['merge-base', '--is-ancestor', onto, 'HEAD']) !== undefined) {
+    console.log(`Nothing to rebase: this branch already contains origin/${branch}.`);
+    return;
+  }
+  const merges = gitTry(['rev-list', '--merges', `${onto}..HEAD`]) ?? '';
+  if (merges !== '') {
+    fail(
+      `Refusing: this branch has merge commits since origin/${branch}, and a rebase would\n` +
+        `flatten them. Merge instead: git merge origin/${branch}`,
+    );
+  }
+  refusePublishedRange(
+    onto,
+    `rebase this branch onto origin/${branch}`,
+    `Merge instead: git merge origin/${branch}`,
+  );
+  waypoint(`rebase onto origin/${branch}`);
+  const res = spawnSync('git', ['rebase', onto], { cwd: root, encoding: 'utf8' });
+  process.stdout.write(res.stdout ?? '');
+  if (res.status === 0) return;
+  const conflicted = gitTry(['diff', '--name-only', '--diff-filter=U']) ?? '';
+  spawnSync('git', ['rebase', '--abort'], { cwd: root, stdio: 'inherit' });
+  console.error(
+    (res.stderr ?? '').trim() +
+      `\n\nRebase aborted; the branch is exactly as it was.` +
+      (conflicted === '' ? '' : `\nConflicts in:\n${conflicted.replace(/^/gm, '  ')}`) +
+      `\nMerge instead: git merge origin/${branch}`,
+  );
+  process.exit(2);
+};
+
 const reset = (rest, root) => {
   refuseRemoteArgs(rest);
   const [mode, ref] = rest;
@@ -219,6 +290,7 @@ const usage = () => {
       '  hangar-rewrite amend [-m "<msg>" | --no-edit | ...]',
       '  hangar-rewrite fixup <sha>',
       '  hangar-rewrite autosquash <base>',
+      '  hangar-rewrite rebase <branch>          (onto origin/<branch>; exit 2 = conflict, merge instead)',
       '  hangar-rewrite reset <soft|mixed|hard> <ref>',
       '',
       'Refused: anything already on a remote, and anything that could reach one.',
@@ -242,6 +314,7 @@ const main = () => {
   if (command === 'amend') return amend(rest, root);
   if (command === 'fixup') return fixup(rest, root);
   if (command === 'autosquash') return autosquash(rest, root);
+  if (command === 'rebase') return rebase(rest, root);
   if (command === 'reset') return reset(rest, root);
 
   usage();
