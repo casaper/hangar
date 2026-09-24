@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.31.0](https://github.com/casaper/hangar/compare/v0.30.0...v0.31.0) (2026-09-24)
+
+### Features
+
+* **doctor:** Say that a skill waiting on its branch needs nothing done here ([af4ab53](https://github.com/casaper/hangar/commit/af4ab536b610390fa24f1eb924252a88246a7662))
+* **doctor:** Say when the emulator is not reporting the clicks the bar is built on ([6c9daba](https://github.com/casaper/hangar/commit/6c9daba063d0406e0603a18712b1b21708e7993b))
+* **doctor:** Say when the tmux server has no node, since the bar cannot start anything without one ([bd90db5](https://github.com/casaper/hangar/commit/bd90db5f1d9a78a27ef6097acd8a16ace857fb48))
+* **fleet:** Show each clone's ticket, pull request, build and review in hangar list ([35b9455](https://github.com/casaper/hangar/commit/35b9455def5968add5c2e844ace6c94083564987))
+* **ports:** Pin clones to their ports, so a layout change reaches a busy fleet one clone at a time ([4e36cee](https://github.com/casaper/hangar/commit/4e36ceeda8987ef7fd29516464b4cce1de63789b))
+* **pr:** Tell reviewers-assigned from nobody-asked, and count the approvals ([009f80b](https://github.com/casaper/hangar/commit/009f80bd216f809de72a35364cabe2248ca30a2b)), closes [#917](https://github.com/casaper/hangar/issues/917) [#915](https://github.com/casaper/hangar/issues/915) [#913](https://github.com/casaper/hangar/issues/913)
+* **skills:** Track granular-commits, and adopt it before its branch lands ([a7a6c3a](https://github.com/casaper/hangar/commit/a7a6c3a115e96009b04f155c0267e34aa36e7e67))
+
+### Bug Fixes
+
+* **config:** Describe the port-base rule the loader enforces, not the congruence it replaced ([657354e](https://github.com/casaper/hangar/commit/657354e1c79972e80e9a1b331917f398987367ce))
+* **skills:** Let shorten-changed-comments' frontmatter parse at all ([cf282a9](https://github.com/casaper/hangar/commit/cf282a9fed657ec1a3d1d5681517cfed20d36a88))
+* **skills:** Say a skill's original is not on the default branch, rather than gone from it ([88988fb](https://github.com/casaper/hangar/commit/88988fbcf48336852b8890b807f57f1c29da44b5))
+* **skills:** Stop reading a skill adopted ahead of its merge as a problem ([a4923fe](https://github.com/casaper/hangar/commit/a4923fedf3c063464f928b8db4eb28924b8c72c4))
+* **terminal:** Make a click on the issue key and the pull request actually open them ([4571706](https://github.com/casaper/hangar/commit/45717065fa1bd964ea65dc0d3fc0f2f23eca760c))
+
+### Documentation
+
+* **modes:** Say which hangar-root session shares the fleet memory, and what the shim swallows ([b9a2550](https://github.com/casaper/hangar/commit/b9a2550acd2906bb2e91afbe4800739e0f66d5f8))
+* **modes:** Tell developer mode to commit to main, and correct three stale instructions ([d5eb81f](https://github.com/casaper/hangar/commit/d5eb81f421e69971c59b64ad2d19dfccbecfe647))
+* **skills:** Name the branch granular-commits was adopted from ([7dccc66](https://github.com/casaper/hangar/commit/7dccc665d56a8f01d6ed7152986deacd744790b9))
+
+### Build & Dependencies
+
+* **deps:** Add typescript-language-server 6.0.0 as a dev dependency ([66bfbed](https://github.com/casaper/hangar/commit/66bfbed5419cc5e4fec8b6319ace4d69f7ae8192))
+* **deps:** Take TypeScript 6.0.3, typescript-eslint 8.70.0 and pnpm 11.26.0, and clear five transitive advisories ([84ba24b](https://github.com/casaper/hangar/commit/84ba24b0d425306aa2415f283250be361686c2af))
+
 ## [0.30.0](https://github.com/casaper/hangar/compare/v0.29.0...v0.30.0) (2026-09-22)
 
 ### Features
