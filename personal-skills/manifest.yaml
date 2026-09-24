@@ -78,3 +78,10 @@ skills:
   - name: new-plan
     divergence: standalone
     reason: No tracked counterpart in any managed repo -- this one exists only at user level.
+
+  - name: pr-readiness
+    divergence: standalone
+    reason: >-
+      No tracked counterpart. It drives the repo's own pr-description, test and storybook skills
+      rather than replacing any of them, and integrates through `hangar-rewrite rebase` where the
+      repo's rules deny `git rebase`.
