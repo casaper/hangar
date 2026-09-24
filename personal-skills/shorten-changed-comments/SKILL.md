@@ -2,7 +2,7 @@
 name: shorten-changed-comments
 description: |
   Sweeps every comment you added or edited in a diff and applies the shorten-comment judgment to each one, editing in place after taking a revertable snapshot. Use this whenever comments across several files need reviewing rather than one specific comment — "clean up the comments I added", "shorten all the new comments", "sweep the comments before I commit", "did I leave any bloated JSDoc in this branch". Trigger it proactively before committing any change that touched comments in build code, since CLAUDE.md's shorten-comment rule requires every added or modified comment to pass the shorten-comment test. Also reach for it after a large refactor, after generating code with doc blocks, or when the user asks whether the comments on this branch are in good shape. For a single comment the user points at directly, use shorten-comment instead.
-argument-hint: '[base-ref, e.g. master — optional; defaults to this branch'"'"'s fork point]'
+argument-hint: "[base-ref, e.g. master — optional; defaults to this branch's fork point]"
 allowed-tools: Read, Edit, Grep, Glob, Bash, Skill, AskUserQuestion
 ---
 
