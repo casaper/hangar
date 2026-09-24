@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.32.0](https://github.com/casaper/hangar/compare/v0.31.0...v0.32.0) (2026-09-24)
+
+### Features
+
+* **skills:** Add pr-readiness, a personal skill that judges whether a PR is done ([764772b](https://github.com/casaper/hangar/commit/764772bbb42eab0b57d7dde0c884c1f7f1226d3e))
+* **waypoint:** Let hangar-rewrite rebase an unpublished branch onto its target ([95b7321](https://github.com/casaper/hangar/commit/95b73216554c38db28939bfff4253aabf8e9d352))
+
+### Bug Fixes
+
+* **waypoint:** Check autosquash's whole range, and never leave it stopped ([d02034f](https://github.com/casaper/hangar/commit/d02034f6d4367e130f11ac7e4db9ca66fe51cfe8))
+
+### Documentation
+
+* **cli:** Say that no gate wraps a comment at 100 columns ([833de27](https://github.com/casaper/hangar/commit/833de2748c09c36d94c924ad8745d86c676f2c4c))
+* **skills:** Treat every hangar-rewrite rebase refusal in pr-readiness as merge instead ([b148f52](https://github.com/casaper/hangar/commit/b148f523a513ab48ccb96690e508b6970a11f461))
+
+### Chores
+
+* **config:** Mirror the one-apart port layout in the example config ([ebc2e55](https://github.com/casaper/hangar/commit/ebc2e555ddd8daabd367cd16cad70a372f83c5d9))
+
 ## [0.31.0](https://github.com/casaper/hangar/compare/v0.30.0...v0.31.0) (2026-09-24)
 
 ### Features
