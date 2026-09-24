@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { ciStateOf, reviewStateOf } from '../src/bitbucket.ts';
+import { ciStateOf, reviewStateOf, reviewSummaryOf } from '../src/bitbucket.ts';
 import { cloneAt } from '../src/fleet.ts';
 import {
   parsePrCacheLine,
@@ -33,6 +33,8 @@ const RECORD: CachedPullRequest = {
   draft: true,
   ci: 'fail',
   review: 'changes',
+  reviewers: 2,
+  approvals: 1,
 };
 
 test('a cache line round-trips, and anything else is not a cache line', () => {
@@ -43,7 +45,7 @@ test('a cache line round-trips, and anything else is not a cache line', () => {
   // Every field has to survive the trip, or the bar draws a state nobody is in.
   for (const state of ['open', 'merged', 'declined', 'superseded'] as const) {
     for (const ci of ['pass', 'fail', 'running', 'none'] as const) {
-      for (const review of ['approved', 'changes', 'none'] as const) {
+      for (const review of ['approved', 'changes', 'pending', 'none'] as const) {
         const record = { ...RECORD, state, ci, review, draft: false };
         assert.deepEqual(parsePrCacheLine(prCacheLine(record)), record);
       }
@@ -80,6 +82,9 @@ test('an unknown trailing field is tolerated, and a short line still names its p
   assert.equal(old.draft, false);
   assert.equal(old.ci, 'none');
   assert.equal(old.review, 'none');
+  // A line from before the counts existed reads as 0 of 0, which draws what it always drew.
+  assert.equal(old.reviewers, 0);
+  assert.equal(old.approvals, 0);
 
   // An unreadable value falls back rather than propagating: the bar has no way to draw "?".
   const bogus = parsePrCacheLine('b 1 u 2 sideways yes purple maybe\n');
@@ -87,6 +92,7 @@ test('an unknown trailing field is tolerated, and a short line still names its p
   assert.equal(bogus.state, 'open');
   assert.equal(bogus.ci, 'none');
   assert.equal(bogus.review, 'none');
+  assert.equal(parsePrCacheLine('b 1 u 2 open 0 none pending two -1\n')?.reviewers, 0);
 });
 
 test('id 0 is the negative record — asked, and there is none', () => {
@@ -141,9 +147,24 @@ test('a change request outranks an approval, and only reviewers count', () => {
   );
   assert.equal(reviewStateOf([{ role: 'REVIEWER', state: 'approved' }]), 'approved');
   assert.equal(reviewStateOf([]), 'none');
-  assert.equal(reviewStateOf([{ role: 'REVIEWER', state: null }]), 'none');
+  // Asked and undecided is `pending`, and is not `none`: that difference is what the bar shows.
+  assert.equal(reviewStateOf([{ role: 'REVIEWER', state: null }]), 'pending');
   // Bitbucket adds a PARTICIPANT for anybody who comments. They were never asked for a verdict.
   assert.equal(reviewStateOf([{ role: 'PARTICIPANT', state: 'approved' }]), 'none');
+});
+
+test('the review counts say how many were asked and how many approved', () => {
+  assert.deepEqual(
+    reviewSummaryOf([
+      { role: 'REVIEWER', state: 'approved' },
+      { role: 'REVIEWER', state: null },
+      { role: 'PARTICIPANT', state: 'approved' },
+    ]),
+    { review: 'approved', reviewers: 2, approvals: 1 },
+  );
+  // Assigned in `reviewers` and absent from `participants` still counts as asked.
+  assert.deepEqual(reviewSummaryOf([], 3), { review: 'pending', reviewers: 3, approvals: 0 });
+  assert.deepEqual(reviewSummaryOf([]), { review: 'none', reviewers: 0, approvals: 0 });
 });
 
 test('the worst build state on a commit is the one that counts', () => {
@@ -167,6 +188,8 @@ test('an open pull request wins over a closed one on the same branch', () => {
     url: '',
     headCommit: '',
     review: 'none',
+    reviewers: 0,
+    approvals: 0,
     author: '',
     authorName: '',
   } as const;

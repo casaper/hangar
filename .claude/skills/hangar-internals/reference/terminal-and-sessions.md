@@ -977,7 +977,15 @@ stale base and resolve conflicts against it.
 | --- | --- |
 | pull request | `✎` draft · *(nothing)* open and ready · `✔` merged · `✖` declined |
 | build | `✓` pass · `✗` fail · `◌` running · *(nothing)* no build reported |
-| review | `+` approved · `≈` changes requested · `·` nobody yet |
+| review | `+a/n` approved (`a` of `n` reviewers) · `≈` changes requested · `◷` reviewers assigned, none decided · `·` nobody asked |
+
+**`◷` and `·` are two glyphs because they are two answers.** Bitbucket's `participants` carries a
+`REVIEWER` entry with a null `state` for everyone who has been asked and not answered, and
+collapsing that into "nobody" would draw the one moment worth seeing on the bar — a pull request
+just handed to its reviewers — exactly like one nobody has been asked to look at. The count is
+`max(reviewers[], REVIEWER participants)`, because `reviewers` is the list somebody assigned and
+`participants` the one with the verdicts. The two numbers are appended fields of the cache record,
+and a line without them reads as 0 of 0 and draws a bare `+`.
 
 A merged or declined pull request draws its glyph and its number and nothing else: the build and
 the reviews are settled, and a green tick beside a merged PR is a fact nobody is deciding anything

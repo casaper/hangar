@@ -255,6 +255,8 @@ test('what Bitbucket answered is compared with what it was asked', () => {
       draft: true,
       headCommit: '',
       review: 'none' as const,
+      reviewers: 0,
+      approvals: 0,
       author: '',
       authorName: '',
     },

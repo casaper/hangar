@@ -110,6 +110,8 @@ test('the pull-request link is the branch search until the number is known', () 
     draft: false,
     ci: 'none',
     review: 'none',
+    reviewers: 0,
+    approvals: 0,
   } as const;
   const known = pullRequestLink(ref, 'fixes/BE-12_x', record);
   assert.deepEqual(known, { kind: 'url', url: 'https://example.invalid/852', what: '#852' });

@@ -92,10 +92,21 @@ export type PrState = 'open' | 'merged' | 'declined' | 'superseded';
 /**
  * What the reviewers have said, collapsed to one answer.
  *
- * Three values and not four: the user-facing "declined" is a property of the PULL REQUEST
- * (`PrState`), not of a review, and folding it in here would make one field mean two things.
+ * `pending` is "reviewers are assigned and none has decided", and `none` is "nobody was asked".
+ * They are two values because they are two answers: folded together, a pull request just handed
+ * to its reviewers would read exactly like one nobody has been asked to look at.
+ *
+ * "Declined" is not here: it is a property of the PULL REQUEST (`PrState`), not of a review, and
+ * folding it in would make one field mean two things.
  */
-export type ReviewState = 'approved' | 'changes' | 'none';
+export type ReviewState = 'approved' | 'changes' | 'pending' | 'none';
+
+/** The verdict, plus how many reviewers there are and how many of them approved. */
+export type ReviewSummary = {
+  readonly review: ReviewState;
+  readonly reviewers: number;
+  readonly approvals: number;
+};
 
 /** What CI has said about the head commit. `none` is "no build reported", not "no news". */
 export type CiState = 'pass' | 'fail' | 'running' | 'none';
@@ -111,6 +122,8 @@ export type PullRequest = {
   /** The source commit CI reports against. `''` when the API did not say. */
   readonly headCommit: string;
   readonly review: ReviewState;
+  readonly reviewers: number;
+  readonly approvals: number;
   /**
    * The author's account uuid, bare. `''` when the API did not say.
    *
@@ -142,15 +155,33 @@ export const bareUuid = (raw: string): string => raw.replace(/^\{/, '').replace(
  *
  * `PARTICIPANT` entries are ignored: Bitbucket adds one for anybody who so much as comments, and
  * their `state` is null. Only a `REVIEWER` has been asked for a verdict.
+ *
+ * `reviewerCount` is the length of the pull request's own `reviewers` list, and the larger of it
+ * and the `REVIEWER` participants is the count. `participants` is the list with the verdicts in
+ * it, but `reviewers` is the list somebody assigned -- so a reviewer who is in the second and not
+ * yet in the first still makes the pull request `pending` rather than `none`.
  */
+export const reviewSummaryOf = (
+  participants: readonly { readonly role?: string; readonly state?: string | null }[],
+  reviewerCount = 0,
+): ReviewSummary => {
+  const reviewers = participants.filter((p) => p.role === 'REVIEWER');
+  const approvals = reviewers.filter((p) => p.state === 'approved').length;
+  const count = Math.max(reviewers.length, reviewerCount);
+  const review: ReviewState = reviewers.some((p) => p.state === 'changes_requested')
+    ? 'changes'
+    : approvals > 0
+      ? 'approved'
+      : count > 0
+        ? 'pending'
+        : 'none';
+  return { review, reviewers: count, approvals };
+};
+
 export const reviewStateOf = (
   participants: readonly { readonly role?: string; readonly state?: string | null }[],
-): ReviewState => {
-  const reviewers = participants.filter((p) => p.role === 'REVIEWER');
-  if (reviewers.some((p) => p.state === 'changes_requested')) return 'changes';
-  if (reviewers.some((p) => p.state === 'approved')) return 'approved';
-  return 'none';
-};
+  reviewerCount = 0,
+): ReviewState => reviewSummaryOf(participants, reviewerCount).review;
 
 /**
  * The build verdict across every status on the commit, **worst state wins**.
@@ -240,10 +271,11 @@ const prStateOf = (raw: unknown): PrState =>
         ? 'superseded'
         : 'open';
 
-const parseParticipants = (raw: unknown): ReviewState => {
-  if (!Array.isArray(raw)) return 'none';
-  return reviewStateOf(
-    raw.flatMap((value: unknown) => {
+const parseReviews = (participants: unknown, reviewers: unknown): ReviewSummary => {
+  const assigned = Array.isArray(reviewers) ? reviewers.length : 0;
+  if (!Array.isArray(participants)) return reviewSummaryOf([], assigned);
+  return reviewSummaryOf(
+    participants.flatMap((value: unknown) => {
       const p = asRecord(value);
       if (p === undefined) return [];
       const role = p['role'];
@@ -255,6 +287,7 @@ const parseParticipants = (raw: unknown): ReviewState => {
         },
       ];
     }),
+    assigned,
   );
 };
 
@@ -278,6 +311,7 @@ const parseOnePullRequest = (value: unknown, ref: RepoRef): PullRequest | undefi
   const head = asRecord(asRecord(pr?.['source'])?.['commit'])?.['hash'];
   const author = asRecord(pr?.['author'])?.['uuid'];
   const authorName = asRecord(pr?.['author'])?.['display_name'];
+  const reviews = parseReviews(pr?.['participants'], pr?.['reviewers']);
   return {
     id,
     title: typeof title === 'string' ? title : '',
@@ -286,7 +320,9 @@ const parseOnePullRequest = (value: unknown, ref: RepoRef): PullRequest | undefi
     state: prStateOf(pr?.['state']),
     draft: pr?.['draft'] === true,
     headCommit: typeof head === 'string' ? head : '',
-    review: parseParticipants(pr?.['participants']),
+    review: reviews.review,
+    reviewers: reviews.reviewers,
+    approvals: reviews.approvals,
     author: typeof author === 'string' ? bareUuid(author) : '',
     authorName: typeof authorName === 'string' ? authorName : '',
   };
@@ -361,7 +397,8 @@ export const openPullRequests = async (
     'values.id,values.title,values.destination.branch.name,values.links.html.href,' +
       'values.state,values.draft,values.source.commit.hash,' +
       'values.author.uuid,values.author.display_name,' +
-      'values.participants.role,values.participants.state,values.updated_on',
+      'values.reviewers.uuid,values.participants.role,values.participants.state,' +
+      'values.updated_on',
   );
   try {
     const res = await fetch(url, {

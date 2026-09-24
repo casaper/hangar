@@ -140,7 +140,9 @@ export const describeRecord = (record: CachedPullRequest): string => {
   if (record.id === 0) return 'no pull request for this branch';
   const bits = [`#${String(record.id)}`, record.draft ? 'draft' : record.state];
   if (record.state === 'open') {
-    bits.push(`ci ${record.ci}`, `review ${record.review}`);
+    const counts =
+      record.reviewers > 0 ? ` ${String(record.approvals)}/${String(record.reviewers)}` : '';
+    bits.push(`ci ${record.ci}`, `review ${record.review}${counts}`);
   }
   return bits.join(' · ');
 };

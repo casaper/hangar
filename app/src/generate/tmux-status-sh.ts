@@ -122,8 +122,11 @@ const GLYPHS = {
  * the build and the reviews are settled, and a green tick beside a merged PR is a fact nobody is
  * deciding anything on. `open` is the only state where the other two axes are still live.
  *
- * `·` for "nobody has reviewed yet" is drawn rather than omitted, so the field has a fixed shape
- * and a missing review reads as a missing review instead of as a script that stopped early.
+ * `·` for "nobody was asked to review" is drawn rather than omitted, so the field has a fixed
+ * shape and a missing review reads as a missing review instead of as a script that stopped early.
+ * `◷` is "reviewers are assigned and none has decided" -- the moment a pull request is handed to
+ * its reviewers, which `·` alone could not tell apart from nobody being asked. An approval carries
+ * its count, `+1/2`, because one approval of two is not the same answer as two of two.
  */
 const PR_GLYPHS = {
   draft: '✎',
@@ -135,6 +138,7 @@ const PR_GLYPHS = {
   ciRunning: '◌',
   approved: '+',
   changes: '≈',
+  pending: '◷',
   noReview: '·',
 } as const;
 
@@ -296,14 +300,20 @@ export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
     "  # naming another branch is not this branch's pull request, so it is dropped rather than",
     '  # shown: that is what keying the record on the branch is for.',
     '  c_branch="" c_id="" c_at="" c_state="" c_draft="" c_ci="" c_review=""',
+    '  c_reviewers="" c_approvals=""',
     '  if [ -f "$PR_DIR/$clone" ]; then',
-    '    read -r c_branch c_id _c_url c_at c_state c_draft c_ci c_review _rest \\',
+    '    read -r c_branch c_id _c_url c_at c_state c_draft c_ci c_review c_reviewers c_approvals \\',
+    '      _rest \\',
     '      <"$PR_DIR/$clone" || c_branch=""',
     '  fi',
     '  if [ "$c_branch" != "$branch" ]; then',
     '    c_branch="" c_id="" c_at="" c_state="" c_draft="" c_ci="" c_review=""',
+    '    c_reviewers="" c_approvals=""',
     '  fi',
     '  case "$c_at" in "" | *[!0-9]*) c_at=0 ;; esac',
+    '  # A record without the two counts reads as 0 of 0.',
+    '  case "$c_reviewers" in "" | *[!0-9]*) c_reviewers=0 ;; esac',
+    '  case "$c_approvals" in "" | *[!0-9]*) c_approvals=0 ;; esac',
     '',
     '  # Past the TTL, hand the question to a detached `hangar pr refresh` and draw the OLD value',
     '  # now. Nothing here ever waits for the network: the fresh answer lands at the next redraw.',
@@ -359,8 +369,15 @@ export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
     `    running) out="$out #[fg=${CI_COLOURS.running}]${PR_GLYPHS.ciRunning}#[default]" ;;`,
     '    esac',
     '    case "$c_review" in',
-    `    approved) out="$out ${PR_GLYPHS.approved}" ;;`,
+    '    approved)',
+    '      if [ "$c_reviewers" -gt 0 ]; then',
+    `        out="$out ${PR_GLYPHS.approved}$c_approvals/$c_reviewers"`,
+    '      else',
+    `        out="$out ${PR_GLYPHS.approved}"`,
+    '      fi',
+    '      ;;',
     `    changes) out="$out ${PR_GLYPHS.changes}" ;;`,
+    `    pending) out="$out ${PR_GLYPHS.pending}" ;;`,
     `    *) out="$out ${PR_GLYPHS.noReview}" ;;`,
     '    esac',
     `    printf '%s ' "$out"`,

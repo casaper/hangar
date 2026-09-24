@@ -54,6 +54,8 @@ import type { Hangar } from './hangar.ts';
  * **Fields are appended, never reordered**, the rule `clone-colours.sh` already lives by, and the
  * parser tolerates trailing fields it does not know so that a record written by a newer CLI reads
  * as valid rather than as corrupt. That tolerance is what makes appending actually safe.
+ * `reviewers` and `approvals` are appended fields: a line without them reads as 0 of 0, and the
+ * bar draws a bare approval rather than a count.
  */
 export type CachedPullRequest = {
   readonly branch: string;
@@ -66,6 +68,9 @@ export type CachedPullRequest = {
   readonly draft: boolean;
   readonly ci: CiState;
   readonly review: ReviewState;
+  /** How many reviewers are assigned, and how many of them approved. `0` when unknown. */
+  readonly reviewers: number;
+  readonly approvals: number;
 };
 
 /** The default when `forge.prCacheTtlSeconds` says nothing. CI is what moves fastest. */
@@ -88,11 +93,16 @@ export const prCacheLine = (pr: CachedPullRequest): string =>
     pr.draft ? '1' : '0',
     pr.ci,
     pr.review,
+    String(pr.reviewers),
+    String(pr.approvals),
   ].join(' ') + '\n';
 
 const PR_STATES = new Set<string>(['open', 'merged', 'declined', 'superseded']);
 const CI_STATES = new Set<string>(['pass', 'fail', 'running', 'none']);
-const REVIEW_STATES = new Set<string>(['approved', 'changes', 'none']);
+const REVIEW_STATES = new Set<string>(['approved', 'changes', 'pending', 'none']);
+
+const count = (raw: string | undefined): number =>
+  raw !== undefined && /^\d+$/.test(raw) ? Number(raw) : 0;
 
 /**
  * The inverse, and undefined for anything without at least a branch and a numeric id.
@@ -106,7 +116,9 @@ const REVIEW_STATES = new Set<string>(['approved', 'changes', 'none']);
  * say". Rejecting it would blank the bar on the first run after an upgrade.
  */
 export const parsePrCacheLine = (line: string): CachedPullRequest | undefined => {
-  const [branch, id, url, fetchedAt, state, draft, ci, review] = line.trim().split(' ');
+  const [branch, id, url, fetchedAt, state, draft, ci, review, reviewers, approvals] = line
+    .trim()
+    .split(' ');
   if (branch === undefined || branch === '' || id === undefined || url === undefined) {
     return undefined;
   }
@@ -120,6 +132,8 @@ export const parsePrCacheLine = (line: string): CachedPullRequest | undefined =>
     draft: draft === '1',
     ci: ci !== undefined && CI_STATES.has(ci) ? (ci as CiState) : 'none',
     review: review !== undefined && REVIEW_STATES.has(review) ? (review as ReviewState) : 'none',
+    reviewers: count(reviewers),
+    approvals: count(approvals),
   };
 };
 
@@ -225,6 +239,8 @@ export const refreshPullRequest = async (
           draft: false,
           ci: 'none',
           review: 'none',
+          reviewers: 0,
+          approvals: 0,
         }
       : {
           branch,
@@ -235,6 +251,8 @@ export const refreshPullRequest = async (
           draft: pr.draft,
           ci,
           review: pr.review,
+          reviewers: pr.reviewers,
+          approvals: pr.approvals,
         };
   if (opts.write !== false) writeCachedPr(hangar, clone, record);
   return { pr, record };

@@ -139,14 +139,20 @@ pr)
   # naming another branch is not this branch's pull request, so it is dropped rather than
   # shown: that is what keying the record on the branch is for.
   c_branch="" c_id="" c_at="" c_state="" c_draft="" c_ci="" c_review=""
+  c_reviewers="" c_approvals=""
   if [ -f "$PR_DIR/$clone" ]; then
-    read -r c_branch c_id _c_url c_at c_state c_draft c_ci c_review _rest \
+    read -r c_branch c_id _c_url c_at c_state c_draft c_ci c_review c_reviewers c_approvals \
+      _rest \
       <"$PR_DIR/$clone" || c_branch=""
   fi
   if [ "$c_branch" != "$branch" ]; then
     c_branch="" c_id="" c_at="" c_state="" c_draft="" c_ci="" c_review=""
+    c_reviewers="" c_approvals=""
   fi
   case "$c_at" in "" | *[!0-9]*) c_at=0 ;; esac
+  # A record without the two counts reads as 0 of 0.
+  case "$c_reviewers" in "" | *[!0-9]*) c_reviewers=0 ;; esac
+  case "$c_approvals" in "" | *[!0-9]*) c_approvals=0 ;; esac
 
   # Past the TTL, hand the question to a detached `hangar pr refresh` and draw the OLD value
   # now. Nothing here ever waits for the network: the fresh answer lands at the next redraw.
@@ -202,8 +208,15 @@ pr)
     running) out="$out #[fg=#d9a800]◌#[default]" ;;
     esac
     case "$c_review" in
-    approved) out="$out +" ;;
+    approved)
+      if [ "$c_reviewers" -gt 0 ]; then
+        out="$out +$c_approvals/$c_reviewers"
+      else
+        out="$out +"
+      fi
+      ;;
     changes) out="$out ≈" ;;
+    pending) out="$out ◷" ;;
     *) out="$out ·" ;;
     esac
     printf '%s ' "$out"
