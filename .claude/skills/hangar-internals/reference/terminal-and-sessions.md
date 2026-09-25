@@ -2,7 +2,7 @@
 
 `app/src/commands/open.ts`, `app/src/tmux.ts`, `resume.ts`, `app/src/claude-sessions.ts` and
 `sessions.ts`. The emulator capability table -- who can open a window and who can raise one -- is
-in `app/CLAUDE.md`; this is what the two commands do with it.
+under **Which emulator opens the window** below, before the tmux layer it hands off to.
 
 - **`hangar open` gives a clone ONE window and reuses the one it already has.** The emulator tab
   it opens is a client attached to that clone's session on this hangar's own tmux socket
@@ -382,6 +382,49 @@ generated one leaves the mode badge broken. And `environment.ts`'s install hints
 from the seam (`Tool.pkg` carries the package name, which is almost never platform-specific);
 `installHint` is a function rather than a field because `TOOLS` is a module constant, and a hint
 baked in at import is the trap `hangar.ts` records.
+
+## Which emulator opens the window, and what each one can do
+
+`app/src/terminal/**`. `hangar open` gives a clone **one tab of the developer's emulator**, and
+that tab is a client attached to **that clone's tmux session** — one tmux window inside it per `terminal.tabs[]` role,
+named for the clone and the role. `--window` puts it in a window of its own and
+`terminal.placement` sets the default. So the emulator is asked for two things and nothing else:
+**open one tab or window running one command**, and **bring one it opened to the front**.
+Everything that happens inside — creating the roles, naming them, ordering them, moving between
+them, typing a `SYNC PAUSE` into a live session — is `src/tmux.ts`, which is the same program on
+macOS and on Linux.
+
+Which emulator hosts that tab comes from the environment (`ITERM_SESSION_ID`, `TERM_PROGRAM`,
+`KONSOLE_VERSION`, `VTE_VERSION`, …), then from what is running, and `terminal.kind` overrides
+both. **There is no system setting to consult** — macOS has no default-terminal preference at all,
+and the `.command` handler answers Terminal.app for a developer who lives in iTerm2 — so the
+terminal `hangar` was typed into is the only honest reading of "the terminal I use". Drivers
+declare **capabilities** rather than pretending to be equivalent:
+
+| driver         | new tab                                                     | new window | raise a window it opened |
+| -------------- | ----------------------------------------------------------- | ---------- | ------------------------ |
+| iTerm2         | yes                                                         | yes        | yes                      |
+| Terminal.app   | needs Accessibility                                         | yes        | yes                      |
+| Konsole        | yes                                                         | yes        | with `qdbus`             |
+| GNOME Terminal | yes                                                         | yes        | **no**                   |
+| none           | no — the session is still built and the attach line printed |            |                          |
+
+**Raising is the only capability a caller degrades around**, and its absence costs one line: the
+clone's window is open and not in front, and `open` prints the `attach` line that finishes the
+job. Opening is the floor — a driver that cannot open a window is `none`, which is a mode rather
+than a failure.
+
+Three things about that table are decisions rather than gaps. iTerm2 is handed its command at
+creation and never typed into afterwards, for the three measured reasons under **Exercised**
+below; nothing is typed at a raw tty, for the reason under the platform seam above; and:
+
+- **Terminal.app is the one place a tab costs something.** Its `window`'s `tab` element is
+  declared `access="r"` in the AppleScript dictionary, so there is no `make new tab` and a tab can
+  only be created by sending Cmd-T through System Events, which needs Accessibility permission for
+  whichever terminal `hangar` runs from. `do script` with no `in` clause creates a WINDOW and needs
+  none of it. So a tab is attempted, the tab count is checked to have actually grown — System
+  Events reports success for a key it delivered nowhere — and a refusal falls back to a window
+  naming what to allow. The developer asked for their clone, not for a piece of window furniture.
 
 ## The tmux layer
 

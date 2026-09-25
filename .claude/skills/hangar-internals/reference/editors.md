@@ -1,7 +1,7 @@
 # The editors: what `ide sync` rewrites, and why VS Code outranks the rest
 
-`app/src/commands/vscode.ts` (319), `app/src/editor/**` (nine drivers). The user-visible table of
-which editor gets launched how, and what Hangar keeps in step for each, is in `app/CLAUDE.md`.
+`app/src/commands/vscode.ts` (319), `app/src/editor/**` (nine drivers). The table of which
+editor gets launched how, and what Hangar keeps in step for each, is the first section below.
 
 **`hangar ide vscode sync` is a text transform, not a copy**, and it is the only editor for which
 that is true — `$PROJECT_DIR$` and project-relative settings spare all the others. Two reasons. A
@@ -38,6 +38,55 @@ Three things follow that are worth knowing:
 - **There is no source clone.** Each untracked artifact independently syncs from the most recently
   modified copy of _that_ file (they drift separately), which is printed; `--from <clone>`
   overrides it and `-n` shows the changed keys per clone without writing.
+
+## Which kind launches how, and what each keeps in step
+
+`editor.kinds` in `hangar.config.yaml` is a **list**, because a clone can be open in more than one
+editor at once — their project files are different files. `hangar open -e` opens every one of
+them and `hangar edit` is that half on its own — the editor is opt-in, because opening a clone is
+frequent and its editor is often already up; `hangar ide <kind> sync` keeps one editor's shareable
+project files in step.
+
+| kind                                                                      | launch                                                 | Hangar syncs                       |
+| ------------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------- |
+| `vscode` `cursor` `windsurf` `vscodium` `code-insiders` `positron` `trae` | the workspace copy it already has open                 | `.vscode/*` + the workspace pair   |
+| `jetbrains` (`product:` idea, webstorm, pycharm, …)                       | the clone directory                                    | the shareable half of `.idea/`     |
+| `zed`                                                                     | the clone directory                                    | `.zed/settings.json`, `tasks.json` |
+| `emacs`                                                                   | `emacsclient -n`, else fresh `emacs`                   | `.dir-locals.el`                   |
+| `vim`                                                                     | `mvim`/`gvim --remote-silent`, else **a clone window** | nothing                            |
+| `xcode` `eclipse`                                                         | the clone directory                                    | nothing                            |
+
+Three things in that table are decisions rather than gaps, beyond the `rootPathKeys` transform
+above and the `*.code-workspace` gate below:
+
+- **Only the VS Code family needs deduplicating.** It identifies a workspace by its config
+  file's URI, so a clone's two byte-identical `*.code-workspace` twins are two different
+  workspaces to it and it has to be handed the copy it already has open. Every other editor here
+  keys on the project DIRECTORY and focuses its own window; `focusExisting: false` means "the
+  editor handles it", not "expect duplicates". **A fork has its own window-state file**
+  (`Cursor`, `Windsurf`, `Code - Insiders`, …) — reading the wrong one answers about another
+  application's windows.
+- **`vim` may not be a window at all.** With `mvim` or `gvim` it behaves like any other editor.
+  With only `nvim`/`vim` it gets **an extra window in the clone's tmux session**, built alongside
+  the configured roles so it sits beside them. Launching terminal vim as a
+  subprocess would attach it to the tty `hangar` itself is on and hold the command hostage.
+- **`xcode` and `eclipse` are launch-only, deliberately.** Xcode's `.xcodeproj` is a directory of
+  generated state — copying it imports another checkout's index rather than a setting. Eclipse's
+  `.project`/`.classpath` are normally tracked, so the sync engine refuses them anyway, and its
+  per-user state lives in the `-data` workspace, which Hangar puts in the gitignored
+  `.hangar/eclipse/<clone>` — outside every clone, one per clone.
+
+**Trackedness is a floor, never a verdict.** `launch.json` and `tasks.json` are declared tracked
+and are compared, never written, with no flag to force it — they are versioned per branch, so the
+newest copy is not the right one. Git can only ADD to that: any artifact a clone turns out to
+track is protected too, which is what catches `.idea/` (gitignored in this repo, tracked in
+plenty of others). Never the reverse — a purely dynamic test would make the protection depend on
+which branch happens to be checked out.
+
+Of these, **only the VS Code path is exercised**: nothing else is installed on this machine. Each
+driver header says so, and `hangar doctor` prints a row per configured editor with whether it can
+actually be launched — a `code` command never installed into PATH and a Toolbox that generated no
+shell scripts both mean `hangar open` silently opens no editor at all.
 
 ## The workspace file carries the clone's own name and hue, and a sync rebuilds them
 

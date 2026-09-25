@@ -59,9 +59,9 @@ one shared statusline script, one theme file per clone, the two shell helpers at
 that colour the terminal itself whenever `PWD` is inside a clone, and the config the fleet's own
 tmux server starts under with the status script its bar calls. `hangar colours change
 <clone> <colour>` is the only way to change a hue, and it rebuilds every artifact that names it.
-What each artifact is and how the hues derive from `src/palette.ts` is in `app/CLAUDE.md`; the
-user-facing side — which terminals get which layer, the `HANGAR_CLONE*` variables, why a theme
-change needs a restart — is in the `hangar-ops` skill.
+What each artifact is and how the hues derive from `src/palette.ts` is in the `hangar-internals`
+skill; the user-facing side — which terminals get which layer, the `HANGAR_CLONE*` variables, why
+a theme change needs a restart — is in the `hangar-ops` skill.
 
 Each clone also carries an untracked `CLAUDE.local.md` at its root naming itself, its colour and
 its ports, so a session knows which clone it is without being told. It holds only what is true of

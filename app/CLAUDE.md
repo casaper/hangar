@@ -420,244 +420,44 @@ four literals — this fleet's Bitbucket repo, workspace, Jira host and origin U
 
 ## Which editors it opens
 
-`editor.kinds` in `hangar.config.yaml` is a **list**, because a clone can be open in more than one
-editor at once — their project files are different files. `hangar open -e` opens every one of
-them and `hangar edit` is that half on its own — the editor is opt-in, because opening a clone is
-frequent and its editor is often already up; `hangar ide <kind> sync` keeps one editor's shareable
-project files in step.
+**VS Code is the default and the only editor that has to work; every other kind is best effort**,
+and only the VS Code path is exercised — nothing else is installed on this machine. That is a
+rank enforced in code: `DEFAULT_EDITOR_KIND` in `editor/kinds.ts` is the one place that names it,
+and every configured driver is built, probed and launched inside its own catch, so a clone
+configured `[zed, vscode]` cannot lose VS Code to Zed's launcher. `hangar ide <kind> sync` is the
+deliberate exception: there the developer named the editor, so its failure is the answer.
 
-**VS Code is the default and the only editor that has to work; every other kind is best effort.**
-That is a rank, not a disclaimer, and it is enforced rather than hoped for: `DEFAULT_EDITOR_KIND`
-in `app/src/editor/kinds.ts` is the one place that names it (the schema default reads it, and the
-fallback for a config that will not parse goes through that same default, so the two cannot
-disagree). `editors()` builds each configured driver in a loop with a per-kind catch, and `open`
-and `doctor` isolate each one again around `isAvailable`/`launch` — so a clone configured
-`[zed, vscode]` cannot lose VS Code to Zed's launcher, which listing order alone would have done.
-`hangar ide <kind> sync` is the deliberate exception: there the developer named the editor, so its
-failure is the answer to their command rather than something to step over.
+**Trackedness is a floor, never a verdict.** `launch.json` and `tasks.json` are compared and never
+written, and any artifact a clone turns out to track is protected too — never the reverse.
 
-| kind                                                                      | launch                                                 | Hangar syncs                       |
-| ------------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------- |
-| `vscode` `cursor` `windsurf` `vscodium` `code-insiders` `positron` `trae` | the workspace copy it already has open                 | `.vscode/*` + the workspace pair   |
-| `jetbrains` (`product:` idea, webstorm, pycharm, …)                       | the clone directory                                    | the shareable half of `.idea/`     |
-| `zed`                                                                     | the clone directory                                    | `.zed/settings.json`, `tasks.json` |
-| `emacs`                                                                   | `emacsclient -n`, else fresh `emacs`                   | `.dir-locals.el`                   |
-| `vim`                                                                     | `mvim`/`gvim --remote-silent`, else **a clone window** | nothing                            |
-| `xcode` `eclipse`                                                         | the clone directory                                    | nothing                            |
-
-**`hangar close` closes an editor's window, and `hangar reload` does not reload one.** The
-asymmetry is measured rather than chosen. Closing needs the clone NAMED from outside, which the
-generated `window.title` arranges, plus a way to press that window's close button, which
-`platform.closeAppWindow` is — macOS and System Events only, and only with Accessibility granted,
-so `EditorCapabilities.closeWindow` is a capability with a `denied` outcome of its own rather than
-a boolean. Reloading has no such route: `workbench.action.reloadWindow` is registered
-`when: isDevelopment` in the shipped bundle, so a release build has **no** default keybinding for
-it, and the only thing left is typing into the command palette — a fuzzy search that runs whatever
-it ranked first, in the developer's editor. VS Code applies a workspace settings change live, so
-`reload` rewrites nothing there and names the gesture instead.
-
-Four things in that table are decisions rather than gaps:
-
-- **Only the VS Code family needs `rootPathKeys`.** A handful of its settings take an absolute
-  path into the checkout and it resolves them against nothing, so those values must differ per
-  clone — which is what makes `ide vscode sync` a text transform. Everyone else escapes it:
-  JetBrains has `$PROJECT_DIR$`, Zed resolves from the project root itself. So the config's
-  cross-check asks "is there a kind that CONSUMES these keys", not "is an editor configured".
-  **The `*.code-workspace` pair follows the same rule and through the same predicate**
-  (`wantsWorkspaceFiles` in `clone-config.ts`): `add-clone`, `doctor` and the golden capture write,
-  check and record it only where a configured kind reads one. It was unconditional, so a
-  JetBrains-only hangar got the file anyway and `doctor --fix` put it back after you deleted it.
-- **Only the VS Code family needs deduplicating.** It identifies a workspace by its config
-  file's URI, so a clone's two byte-identical `*.code-workspace` twins are two different
-  workspaces to it and it has to be handed the copy it already has open. Every other editor here
-  keys on the project DIRECTORY and focuses its own window; `focusExisting: false` means "the
-  editor handles it", not "expect duplicates". **A fork has its own window-state file**
-  (`Cursor`, `Windsurf`, `Code - Insiders`, …) — reading the wrong one answers about another
-  application's windows.
-- **`vim` may not be a window at all.** With `mvim` or `gvim` it behaves like any other editor.
-  With only `nvim`/`vim` it gets **an extra window in the clone's tmux session**, built alongside
-  the configured roles so it sits beside them. Launching terminal vim as a
-  subprocess would attach it to the tty `hangar` itself is on and hold the command hostage.
-- **`xcode` and `eclipse` are launch-only, deliberately.** Xcode's `.xcodeproj` is a directory of
-  generated state — copying it imports another checkout's index rather than a setting. Eclipse's
-  `.project`/`.classpath` are normally tracked, so the sync engine refuses them anyway, and its
-  per-user state lives in the `-data` workspace, which Hangar puts in the gitignored
-  `.hangar/eclipse/<clone>` — outside every clone, one per clone.
-
-**Trackedness is a floor, never a verdict.** `launch.json` and `tasks.json` are declared tracked
-and are compared, never written, with no flag to force it — they are versioned per branch, so the
-newest copy is not the right one. Git can only ADD to that: any artifact a clone turns out to
-track is protected too, which is what catches `.idea/` (gitignored in this repo, tracked in
-plenty of others). Never the reverse — a purely dynamic test would make the protection depend on
-which branch happens to be checked out.
-
-Of these, **only the VS Code path is exercised**: nothing else is installed on this machine. Each
-driver header says so, and `hangar doctor` prints a row per configured editor with whether it can
-actually be launched — a `code` command never installed into PATH and a Toolbox that generated no
-shell scripts both mean `hangar open` silently opens no editor at all.
+`hangar-internals/reference/editors.md` has the table of which kind launches how and syncs what,
+why only the VS Code family needs `rootPathKeys` and deduplicating, and the `vim`, `xcode` and
+`eclipse` decisions; `terminal-and-sessions.md` has why `close` closes an editor window and
+`reload` does not reload one.
 
 ## Which terminal it drives, and what tmux owns
 
-`hangar open` gives a clone **one tab of the developer's emulator**, and that tab is a client
-attached to **that clone's tmux session** — one tmux window inside it per `terminal.tabs[]` role,
-named for the clone and the role. `--window` puts it in a window of its own and
-`terminal.placement` sets the default. So the emulator is asked for two things and nothing else:
-**open one tab or window running one command**, and **bring one it opened to the front**.
-Everything that happens inside — creating the roles, naming them, ordering them, moving between
-them, typing a `SYNC PAUSE` into a live session — is `src/tmux.ts`, which is the same program on
-macOS and on Linux.
+`hangar open` gives a clone **one tab of the developer's emulator**, attached to **that clone's
+tmux session** — one tmux window per `terminal.tabs[]` role. The emulator is asked for two things
+only: **open one tab or window running one command**, and **bring one it opened to the front**.
+Everything inside — the roles, their names and order, typing a `SYNC PAUSE` into a live session —
+is `src/tmux.ts`, the same program on macOS and Linux. Raising is the only capability a caller
+degrades around; a driver that cannot open a window is `none`, which is a mode, not a failure.
 
-**That server is Hangar's own: `tmux -L hangar-<id>`, started from a config this CLI generates.**
-A private socket is what makes the layer safe to be opinionated in — prefix keys, status-line
-format and, the reason it has to be private, SERVER options. `extended-keys`, which is what makes
-Shift+Enter a newline in Claude Code, is a server option, and writing one onto the server somebody
-keeps their own work on is not a trade this tool gets to make for them. Two hangars are two
-sockets, for the same reason they get differently named files under `~/.claude`. The cost is real
-and is printed rather than hidden: these sessions are invisible to a bare `tmux ls`, so
-`tmux -L hangar-<id> ls` is the fleet's window list and `tmux -L hangar-<id> attach -t '=<clone>:'`
-is the way back into one whose tab was closed.
+**The server is Hangar's own: `tmux -L hangar-<id>`, from a config this CLI generates**, because
+the settings Claude Code needs there (`extended-keys` among them) are SERVER options, and writing
+those onto the server somebody keeps their own work on is not this tool's trade to make. These
+sessions are invisible to a bare `tmux ls`.
 
-**Identity is the session NAME, not a tag stamped on a window.** The socket says which hangar and
-the session says which clone, so "is this clone already open" has an exact answer —
-`has-session` — instead of an inference from where some window's shell happens to be standing,
-and a window the developer splits, renames or `cd`s elsewhere cannot lie about which clone it
-belongs to. That is the check that keeps a clone from ending up with two Claude Code sessions in
-it, which is this fleet's worst failure. It also makes the good case possible at all: a session
-outlives the tab attached to it, so a clone whose tab was closed still has `claude` running in it
-and opening the clone again reattaches.
+**Identity is the session NAME, not a tag stamped on a window**, so "is this clone already open"
+is `has-session` rather than an inference — the check that keeps a clone from getting two Claude
+Code sessions, this fleet's worst failure. **Nothing is ever typed at a raw tty**: tmux is the
+mechanism precisely because there is no portable other one.
 
-Which emulator hosts that tab comes from the environment (`ITERM_SESSION_ID`, `TERM_PROGRAM`,
-`KONSOLE_VERSION`, `VTE_VERSION`, …), then from what is running, and `terminal.kind` overrides
-both. **There is no system setting to consult** — macOS has no default-terminal preference at all,
-and the `.command` handler answers Terminal.app for a developer who lives in iTerm2 — so the
-terminal `hangar` was typed into is the only honest reading of "the terminal I use". Drivers
-declare **capabilities** rather than pretending to be equivalent:
-
-| driver         | new tab                                                     | new window | raise a window it opened |
-| -------------- | ----------------------------------------------------------- | ---------- | ------------------------ |
-| iTerm2         | yes                                                         | yes        | yes                      |
-| Terminal.app   | needs Accessibility                                         | yes        | yes                      |
-| Konsole        | yes                                                         | yes        | with `qdbus`             |
-| GNOME Terminal | yes                                                         | yes        | **no**                   |
-| none           | no — the session is still built and the attach line printed |            |                          |
-
-**Raising is the only capability a caller degrades around**, and its absence costs one line: the
-clone's window is open and not in front, and `open` prints the `attach` line that finishes the
-job. Opening is the floor — a driver that cannot open a window is `none`, which is a mode rather
-than a failure.
-
-Three things about that table are decisions rather than gaps:
-
-- **Terminal.app is the one place a tab costs something.** Its `window`'s `tab` element is
-  declared `access="r"` in the AppleScript dictionary, so there is no `make new tab` and a tab can
-  only be created by sending Cmd-T through System Events, which needs Accessibility permission for
-  whichever terminal `hangar` runs from. `do script` with no `in` clause creates a WINDOW and needs
-  none of it. So a tab is attempted, the tab count is checked to have actually grown — System
-  Events reports success for a key it delivered nowhere — and a refusal falls back to a window
-  naming what to allow. The developer asked for their clone, not for a piece of window furniture.
-- **iTerm2 is handed the command at CREATION, never typed into afterwards**, and every part of
-  that is measured rather than chosen. `iterm2.ts` records the three findings: `write text` into a
-  session that was just created is accepted and dropped, a bare `create tab with default profile`
-  returns `missing value`, and `command` is argv rather than a shell line — so a builtin like
-  `exec` starts nothing and PATH is the application's, which is why `attachCommand` names tmux by
-  absolute path.
-- **Nothing is ever typed at a raw tty, and there is no portable way to.** VTE exposes no API for
-  writing into a running terminal, and the generic POSIX route (the `TIOCSTI` ioctl) has been
-  disabled by default since Linux 6.2, because injecting keystrokes into another process's
-  terminal is a privilege-escalation primitive. tmux is the mechanism precisely because it needs
-  neither — which is what makes `SYNC PAUSE` available on a Linux box with no KDE, and what makes
-  a session started by hand OUTSIDE hangar's tmux unreachable. `sync` attributes that miss rather
-  than reporting a generic one, and still asks before touching the clone.
-
-**The colour is the generated shell hook's, in every emulator.** `clone-terminal.sh` paints
-whatever `$PWD` is in, so a window the developer made with `C-b c` is coloured too — which nothing
-that only paints what `hangar open` created can manage. Inside tmux it sets window options rather
-than emitting escapes, since tmux swallows those. The hue lands at full strength on both pane
-borders, and on the status bar it is a **background** rather than text: the current window-status
-entry gets `bg=<hue>` with `colour.ink` in front of it, and the others get the hue as text in its
-`barText` form. The status line's `status-left` is the one piece `open` paints itself, at SESSION
-scope when it creates the session — a badge in the clone's hue, same shape — because the bar has
-to be right the instant the client attaches, which is before any shell has printed a prompt, and
-it is a session option the hook could only reach with `-g`. `generate/terminal-sh.ts` carries the
-rest, including why every `tmux set -w` names `$TMUX_PANE`.
-
-**The bar is two lines, and which fact goes on which is decided by how much width it needs.** The
-top line is the tabs and then the two SHORT facts, the issue key and the pull request — which are
-also the two clickable ones, because clicking is a status-line feature the border does not have.
-The bottom line is the pane border in the clone's own hue, and it carries everything that needs
-room: the clone, where in it the pane is standing, its git state and its branch. It is the pane
-border because `pane-border-status bottom` is the only bottom line tmux has — `status-position` is
-one option for the whole status block, so a header at the top and a footer at the bottom is not
-reachable. `status-left` is empty: a badge up there would be the third place one window says which
-clone it is, after the footer and `set-titles-string`, and a window's name is the ROLE alone for
-the same reason. `barOptions` in `generate/tmux-conf.ts` is the one table both the conf and
-`TmuxServer.restyle` read, which is what lets a bar change reach a server that is already running;
-the footer carries one clone's hue, so `paneBorderFormat` beside it is written per SESSION by
-`paintSession` — from that same live pass, which is what keeps it inside the guarantee.
-
-**The git state on the footer is glyphs and never colour**, and that is a contrast property rather
-than a style: the footer is `colour.ink` on the hue, so `palette.ts`'s proof covers every
-character on it, and a red mark on the red clone would be invisible in the one case out of sixteen
-nobody checks. One `git status --porcelain=v1 -b --no-optional-locks` answers the branch, the
-ahead and behind counts and every file state together, and the flag is load-bearing — a plain
-`git status` takes `index.lock`, ten seconds apart, in every attached pane.
-
-**The TOP line may use colour, and that is the same property rather than an exception**: it sits on
-`STATUS_BAR_BG`, the one neutral the whole fleet shares, so a floor can be proved against it. The
-build state of the pull request is the one thing that takes it — through `barTextFor`, never a
-hand-picked hex, because the obvious red measures 4.43:1 and fails. Even there colour is
-reinforcement and not the carrier: pass and fail are 1.18:1 against _each other_, the red/green
-pair, so the three states are three different SHAPES and the bar reads in monochrome.
-
-**The pull request's state is fetched by nobody in the redraw path.** `pr-cache.ts` holds one
-record per clone — number, state, draft, build, review — and the bar draws it and, past
-`forge.prCacheTtlSeconds`, spawns a detached `hangar pr refresh` under an atomic `mkdir` lock. So
-the bar is current without ever blocking, a branch with no pull request is asked once (`id` 0 is
-a real record, not an absence), and `refreshPullRequest` is the ONE writer — a caller assembling
-its own record would stamp `fetchedAt` on missing fields and suppress the refresh that would fill
-them in.
-
-Clicking works through `range=user` regions and one `MouseDown1Status` binding whose fall-through
-**selects the window under the mouse, because tmux's own default for that key does not**: the
-default is `switch-client -t =`, and tmux's manual restricts `-t` to changing the window only for
-a target containing `:`, `.` or `%`, which `=` has none of. So the default changes the session, and
-on a socket holding one session per clone that is a click onto the session you are already in. The
-fall-through names `select-window` instead; it runs `hangar browse`, the only part of the bar that
-can afford the CLI — through `if-shell -b` with both streams redirected, because `run-shell` puts
-a command's stdout in view mode over whatever the pane was showing. **What the bar starts runs in
-the SERVER's environment**, which is launchd's when the emulator created the server, so
-`TmuxServer.ensureNodeOnPath` puts Node on its global PATH from the live-apply pass rather than
-from the conf — the conf only ever reaches servers whose PATH was already fine. **A correct binding is half of it — the emulator has to report button presses
-at all**, which iTerm2 settles under a different setting from the wheel, so a bar whose clicks all
-do nothing while scrolling works is an emulator finding rather than a tmux one; `doctor`'s
-`emulator` row says which. tmux cannot emit an OSC 8 hyperlink into a status
-line at all — measured, the escape is stripped and the rest is drawn as text — so this is the
-mechanism rather than a workaround. `hangar-internals/reference/terminal-and-sessions.md` has the
-five refusals, the measurement that says the border redraws as often as the status line does, the
-job-keying rule that decides where the clone name comes from, and why the pull request is read off
-disk (`pr-cache.ts`) instead of asked for every ten seconds.
-
-**The bar names its own background, and that is not decoration.** With no `status-style` tmux uses
-its built-in `bg=green,fg=black` — a saturated default, not a neutral one — so every hue was being
-drawn as text on green: measured, the whole palette between 1.00:1 and 2.64:1, with the `green`
-clone at exactly 1.00, invisible. `palette.ts` owns the three neutrals and the two contrast
-derivations, and the reason the ink is restricted to pure black and pure white is that it makes
-the floor provable rather than measured — best-of-the-two can never fall below 4.58:1 for any
-sRGB colour, so every hue anyone appends to the palette is readable without anybody checking.
-`test/contrast.test.ts` is what holds that, and it is a case where a golden capture structurally
-cannot help: it records what the colours are and says nothing about whether one reads on the
-other.
-
-**tmux is exercised; two of the four emulators are not.** Against tmux 3.7c here: a session per
-clone with a window per role, read back by role in `tabs[]` order, four sessions carrying four
-distinct hues with no global leak, a clone raised and a clone reattached with its scrollback
-intact, and a real `SYNC PAUSE` landed in the pane on a named tty and — confirmed with
-`capture-pane` — in **no** other of four. iTerm2 is exercised on this machine. Konsole and GNOME
-Terminal are written from Konsole's documented D-Bus interface and gnome-terminal's documented
-command line and have **not been exercised against live ones** — macOS is the platform this fleet
-runs on, and what is unverified there is which window comes up, not what happens inside it, which
-is tmux either way. `hangar doctor` prints the detected emulator and the state of the tmux server,
-which is the first thing to look at.
+`hangar-internals/reference/terminal-and-sessions.md` has the rest: the emulator capability table
+and how the emulator is detected, the tmux layer and the six things it enforces silently, the
+colour hook, the two-line bar and the five things tmux would not let it say, the contrast proof
+`test/contrast.test.ts` holds, the pull-request cache, and what has and has not been exercised.
 
 ## What operator mode reaches instead of a shell
 
@@ -714,92 +514,34 @@ stays open, and why the enumeration is a test while the coverage is a warning.
 
 **The rule that settles every naming question here: what a hangar writes OUTSIDE its own root
 carries its id; what it writes inside does not.** `~/.claude` is the same directory for every
-hangar on the machine, so the statusline script and the theme files are `<id>-clone-…`; the two
+hangar on the machine, so the statusline script and the theme files are `<id>-clone-…`; the
 shell helpers at the hangar root are inside it, and their FUNCTION names still carry the id
 because two hangars can be sourced into one shell. Renaming any of them is a three-phase
 operation rather than an edit -- see `hangar-internals/reference/doctor.md`.
 
-The hues are data in **`src/palette.ts`** and everything else is derived from them: shimmer is the
-main hue 40% of the way toward white, border is main x 0.8, statusline dim is main x 0.6. So these
-files are **generated by `hangar colours sync` — never hand-edit them**:
+The hues are data in **`src/palette.ts`** and everything else is derived from them. These files
+are **generated by `hangar colours sync` — never hand-edit them**:
 
-- `~/.claude/<id>-clone-statusline.sh` — **one script, all clones of one hangar.** It derives the hue from the
-  clone directory in its stdin payload rather than hardcoding one, so every clone runs identical
-  code. Shows `● 233k/1M · 23% · <model> · <session>`: the clone's name and branch are on the tmux
-  footer, so the line spends its width on what only Claude Code can answer, and the coloured `●`
-  stays because it is the clone's identity in a session started outside hangar's tmux, where there
-  is no footer. Three things it cannot show, each checked against a captured payload rather than
-  taken from the docs — **the task list** (not a field, and the on-disk session format is
-  documented as internal and version-fragile), **the active plan** (no name and no path;
-  `session_name` is a session name and is not stood in for one), and **the `NNNNNN tokens` badge**,
-  which is Claude Code's own footer row with no setting to hide or reformat it — so the humanised
-  figure sits beside it and earns the space with the window size and the percentage.
-- `~/.claude/themes/<id>-clone-NN-*.json` — one per clone, structurally identical, differing only
-  in hue (`claude`, `claudeShimmer`, `briefLabelClaude`, `promptBorder`, `promptBorderShimmer`).
-- `clone-colours.sh` — the hue table for shell consumers. `hangar_dvb_gn_colour <clone>` prints
-  `<r;g;b> <xterm-256 index> <name> <ink> <bar text>`. **The function name carries the hangar id**
-  because two hangars can be sourced into one shell, and a bare name would have the last one
-  sourced answer for both. **Fields are appended, never reordered** — `$1..$3` are what a
-  developer's own prompt may already read out of `set --`, and the split in `clone-terminal.sh`
-  has to move in the same edit: a split whose last step is `name=${rest#* }` takes everything
-  after that space, so an appended field lands inside `$name` and is exported as
-  `HANGAR_CLONE_COLOUR`, with every gate still green.
-- `clone-terminal.sh` — the terminal colour hook, sourced from `~/.zshrc` or `~/.bashrc`. It also
-  owns **the prompt inside a clone's tmux windows**, and that layer alone is gated on the SOCKET
-  rather than on the clone: it takes the user, host, path, git state and time away, down to one
-  `❯` in the clone's hue, which is only safe where the footer is saying them. `$TMUX` is matched
-  against `hangar-<id>` and a comma, so the `-claude` modes socket and a hand-made tmux session in
-  a clone both keep the developer's own prompt. `PROMPT`/`RPROMPT` (or `PS1`) are saved on the way
-  in and put back on the way out, and `HANGAR_KEEP_PROMPT` turns the layer off.
-  **One thing in it is not colour**: `hangar_<id>_allow`, which is `hangar allow` for the shell
-  that needs it most. direnv considers only the NEAREST `.envrc` and reverts the environment
-  outright when that one is blocked, so a clone waiting to be allowed is a clone where
-  `PATH_add "<hangar>/bin"` has not run — measured. This file is sourced from the shell rc, which
-  direnv has no say in, so it is the one artifact that survives that; it names `bin/hangar`
-  absolutely and delegates rather than reimplementing, because a shell version would have to bake
-  `repo.envrcDirs` into generated text.
-- `clone-tmux-status.sh` — everything on the clone bar tmux cannot answer itself: the whole footer,
-  the issue key and the pull request with its state, one field per call. It is also the one
-  generated artifact that STARTS something: past the pull-request cache's TTL it spawns a detached
-  `hangar pr refresh`, which is the single place the bar is allowed to cost a Node startup, and
-  only because nothing waits for it. Called from `#()` jobs in the conf below,
-  once per field per status refresh — the pane border re-expands exactly as often as the status
-  line, measured, which is what makes a git-state glyph down there worth drawing. So it is shell
-  rather than the CLI: 0.02-0.14s measured, against 0.24-0.28s for `bin/hangar`. Generated because
-  it carries this hangar's root, its `tracker.keyPrefixes` and its default branch, and
-  **self-contained because every failure in it is a silent `exit 0`**: a status bar redrawn every
-  ten seconds is no place for an error message. The cost of that silence is that a stale copy says
-  nothing, which is why `doctor` byte-compares it like the conf.
-  `hangar-internals/reference/terminal-and-sessions.md` has the five things tmux refuses to do
-  here, each measured, and the glyph table.
-- `clone-tmux.conf` — the config this hangar's own tmux server starts under
-  (`tmux -L hangar-<id> -f <this>`). It carries no per-clone hue: that is a session option `open`
-  sets when it creates a clone's session, and the window options are the hook's. It does carry the
-  **status bar's own neutral background and text**, which are hangar-level and which nothing else
-  can set — see the contrast note above. It holds the four settings Claude Code documents for
-  running inside tmux, two of which are SERVER options and are the reason the socket is private at
-  all. **It is read once, when the server starts**, so regenerating it reaches nothing already
-  running — `hangar doctor` reads the live server's options back and says when they disagree, and
-  `--fix` deliberately will not `kill-server`, because that would end every live agent in the
-  fleet. **`colours sync` closes most of that gap without a restart:** every option the bar needs
-  is a global _session_ option, so it writes them onto a running server and re-paints each live
-  session's badge and windows. `kill-server` is left as the answer for the two settings that
-  genuinely are server-scope, which is the only thing it was ever needed for.
+- `~/.claude/<id>-clone-statusline.sh` — one script for every clone of one hangar
+- `~/.claude/themes/<id>-clone-NN-*.json` — one per clone, differing only in hue
+- `clone-colours.sh` — the hue table for shell consumers, `hangar_<id>_colour <clone>`
+- `clone-terminal.sh` — the terminal colour hook and the in-tmux prompt, sourced from the shell rc
+- `clone-tmux-status.sh` — every field of the clone bar tmux cannot answer itself
+- `clone-tmux.conf` — the config this hangar's tmux server starts under
 
-Not generated, because it holds no per-clone data: each clone's untracked
-`.claude/settings.local.json` (`theme` + the shared `statusLine`).
+Two things about them break silently, with every gate green:
 
-**Claude Code takes arbitrary 24-bit hex in a custom theme** — the generated
-`~/.claude/themes/<id>-clone-NN-*.json` files already do exactly that for `claude`,
-`claudeShimmer`, `briefLabelClaude`, `promptBorder` and `promptBorderShimmer` — so the palette is
-limited by what a human can tell apart at a glance, not by anything Claude Code enforces. It
-holds 16 hues; the last four fill the gaps left by the first twelve and are the least
-distinguishable, so low indices stay the good ones.
+- **`clone-colours.sh`'s fields are appended, never reordered**, and the split in
+  `clone-terminal.sh` moves in the same edit. A split whose last step is `name=${rest#* }` takes
+  everything after that space, so an appended field lands inside `$name` and is exported as
+  `HANGAR_CLONE_COLOUR`.
+- **`clone-tmux.conf` is read once, when the server starts.** `colours sync` writes every bar
+  option onto a running server itself; `doctor --fix` deliberately never runs `kill-server`,
+  because that would end every live agent in the fleet.
 
-Two consumers cannot source
-`clone-colours.sh` and carry their own copy — the theme JSONs (static JSON) and the statusline
-script (self-contained so it can never fail) — but both are generated from the same data, so
-they cannot drift. A theme change needs a Claude Code restart in that clone to show up.
+`hangar-internals/reference/colours.md` has what each file carries and why — the derivations, the
+statusline's three measured blind spots, the prompt layer's socket gate, `hangar_<id>_allow`, and
+why the status script is shell rather than the CLI.
 
 ## What is tracked at the hangar root, and what is generated
 
@@ -1054,9 +796,8 @@ write, what `doctor` checks and the two rules for anything generated into a clon
 fail-open design, and why `forge.defaultBranch` is stored rather than derived.
 
 Load it before editing anything here. Its `SKILL.md` is a short index; the depth is in
-`reference/{sync,jira-cache,editors,terminal-and-sessions,config,doctor}.md`, which are not loaded
-until they are read — so take the one that matches the subsystem you are touching rather than all
-six.
+`reference/*.md`, one subsystem each, which are not loaded until they are read — so take the one
+that matches the subsystem you are touching rather than all of them.
 
 **The reason those notes read the way they do:** the test suite is a seed covering the pure core,
 so for everything outside it every "this exists because it caught something" paragraph is still the

@@ -7,7 +7,7 @@ is wired the same way in every clone and none of it is in git (it cannot be:
 every developer).
 
 What `hangar colours sync` writes, and how the hues are derived from `src/palette.ts`, is in
-`app/CLAUDE.md`. This file is the part a user asks about.
+`hangar-internals/reference/colours.md`. This file is the part a user asks about.
 
 ## Changing a colour
 
