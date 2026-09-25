@@ -986,13 +986,20 @@ Five more root files are hand-maintained and belong to this package rather than 
   because an agent that can release its own gate has no gate — and the hook refuses those verbs
   and any command naming its own state file, because a permission rule matches only the START of
   a command string and `hangar-commit-gate status && … release` sails straight past one.
-- **`bin/hangar-rewrite`** — amend, fixup, autosquash, rebase and reset, for history that has never been
-  published. A blanket "never rewrite" rule is a proxy for the thing that actually matters, which
-  is never rewriting what other people already have; this enforces the real rule instead of the
-  proxy, by refusing any commit reachable from a remote-tracking ref. Every verb records a
-  waypoint first, so all of it is undoable. **It is deliberately absent from `personalToolAllows`**
-  — rewriting history should be asked for, never reached for, and absence is what makes every call
-  prompt.
+- **`bin/hangar-rewrite`** — amend, fixup, autosquash, rebase and reset, for history that has
+  never been published. A blanket "never rewrite" rule is a proxy for the thing that actually
+  matters, which is never rewriting what other people already have; this enforces the real rule
+  instead of the proxy, by refusing any commit reachable from a remote-tracking ref. Every verb
+  records a waypoint first, so all of it is undoable. **It is deliberately absent from
+  `personalToolAllows`** — rewriting history should be asked for, never reached for, and absence
+  is what makes every call prompt. **A verb that replays commits must never exit with the
+  operation stopped**: a repo rule that denies `git rebase` denies `--abort` and `--continue` with
+  it, so the verb aborts itself and says so. Arguments naming `origin`, `push` or `remote` are
+  refused, which is why `rebase` takes a bare branch name. **Test it in a scratchpad fixture,
+  never a clone, and publish by fetching**: `hangar-exec-guard` refuses `git push` even to a bare
+  scratch remote, so the fixture fetches the branch into its upstream (`git fetch ../w feat:feat`)
+  instead. Edit a scratch copy and `mv` it into `bin/`, because the file is live fleet-wide the
+  moment it is saved.
 - **`bin/hangar-exec-guard` also refuses publishing**, and the remit widened with `hangar-rewrite`
   rather than before it: a rewritten branch has diverged from its remote, which is the one moment
   a force-push looks like the obvious next step. The capability and the refusal were one decision.
