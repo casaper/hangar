@@ -166,6 +166,13 @@ test('publishing is refused in every spelling, and nothing else is', () => {
     'gh pr create --fill',
     'gh pr merge 42',
     '/usr/bin/git push',
+    // hangar's own two forge writers, `-y` being the spelling that skips their confirmation.
+    'hangar pr create -y',
+    'hangar pr update 2 --ready -y',
+    'cd /x && hangar --hangar /h pr create',
+    'node app/src/cli.ts pr update',
+    // A dry run elsewhere on the line is not this invocation's.
+    'hangar pr create -y && ls -n',
   ]) {
     assert.ok(guardSays(command), `publishing was ALLOWED: ${command}`);
   }
@@ -180,6 +187,10 @@ test('publishing is refused in every spelling, and nothing else is', () => {
     'git fetch origin',
     'gh pr view 42',
     'docker exec -it c sh',
+    'hangar pr create -n',
+    'hangar pr update --dry-run',
+    'hangar pr refresh',
+    'hangar status 2',
   ]) {
     assert.ok(!guardSays(command), `ordinary work was denied: ${command}`);
   }

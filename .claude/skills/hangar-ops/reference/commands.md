@@ -225,7 +225,7 @@ separate `<thing>_preview`.
 
 
 - **`pr create` and `pr update` are the only commands that write to the FORGE**, which makes their
-  mistakes the only ones the whole team can see. Four things follow, and each one is a refusal
+  mistakes the only ones the whole team can see. Five things follow, and each one is a refusal
   rather than a warning:
   - **The clone comes from where the command runs.** In a clone's own shell the argument may be
     left out; naming a DIFFERENT clone is refused, and from the hangar root the argument is
@@ -237,6 +237,9 @@ separate `<thing>_preview`.
     cannot tell whose it is. With neither `--draft` nor `--ready` it leaves the draft state alone.
   - **It refuses when the branch, or its latest commits, are not on origin** and prints the `push`
     command. Pushing stays the user's own action; do not offer to do it.
+  - **No agent may run either through Bash.** `bin/hangar-exec-guard` refuses both unless the
+    invocation carries `-n`, because `-y` skips the confirmation. The `pr_create` and
+    `pr_update` tools are not Bash calls and stay behind their `ask` rules.
 - **The title and body come from the description the repo's own agent writes**, found in that
   clone's own `tmp/`, and a description written BEFORE the branch's last commit counts as out of
   date.

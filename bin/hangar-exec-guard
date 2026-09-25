@@ -110,6 +110,34 @@ function publishes(command) {
       if (verb === 'create' || verb === 'merge') return true;
     }
   }
+  return writesPullRequest(command);
+}
+
+/**
+ * Does this command line open or rewrite a pull request through hangar itself?
+ *
+ * `hangar pr create` and `pr update` default to the clone they are run in, which makes them the
+ * obvious thing for a clone agent to reach for, and `-y` skips their `/dev/tty` confirmation --
+ * so without this they were the one publishing path the guard left open. The dry run is let
+ * through: it writes nothing to the forge, and `pr_create_preview` is pre-approved as a tool.
+ * That test is per INVOCATION, which is why this splits into shell segments first:
+ * `hangar pr create -y && ls -n` must not borrow the `-n` from `ls`.
+ */
+function writesPullRequest(command) {
+  const bare = (t) => t.replace(/^["']|["']$/g, '');
+  for (const segment of command.split(/[;&|()`\n]+/)) {
+    const tokens = segment.split(/\s+/).filter(Boolean).map(bare);
+    for (let i = 0; i < tokens.length; i += 1) {
+      if (!/(^|\/)hangar$/.test(tokens[i]) && !/(^|\/)cli\.ts$/.test(tokens[i])) continue;
+      let j = i + 1;
+      // Step over the global flags, and `--hangar`'s value with its flag.
+      while (j < tokens.length && tokens[j].startsWith('-')) j += tokens[j] === '--hangar' ? 2 : 1;
+      if (tokens[j] !== 'pr') continue;
+      if (tokens[j + 1] !== 'create' && tokens[j + 1] !== 'update') continue;
+      const rest = tokens.slice(j + 2);
+      if (!rest.includes('-n') && !rest.includes('--dry-run')) return true;
+    }
+  }
   return false;
 }
 
