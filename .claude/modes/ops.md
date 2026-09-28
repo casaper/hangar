@@ -20,7 +20,7 @@ own. **A dry run is a different tool, not a flag** — `sync_preview` beside `sy
 of the tool list: preview, report what it says, then call the real one and let the prompt do its
 work. The shell is still there for whatever the tools do not cover.
 
-**Two of those tools reach outside this machine.** `pr_create` and `pr_update` write to
+**Two of those tools write outside this machine.** `pr_create` and `pr_update` write to
 Bitbucket, so their mistakes are the only ones a stranger sees: a pull request is on somebody's
 review queue the moment it exists, and one opened `--ready` has notified its reviewers before you
 read the result. Preview first, like everything else — and then read the preview's title line back

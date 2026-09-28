@@ -224,13 +224,13 @@ the README or the skills and nothing else.
 **Scopes** are the subsystem: `sync` `doctor` `open` `tmp` `plans` `pr` `jira` `colours` `config`
 `editor` `terminal` `platform` `setup` `add-clone` `install` `resume` `ide` `status` `golden`
 `cli` `fleet` `ports` `modes` `exec` `servers` `allow` `waypoint` `commit-gate` `skills` `scrub`
-`test` `mcp` `deps`. `release` is semantic-release's own `chore(release)` and is never written by
-hand. That list is documented and deliberately **not** enforced — a `scope-enum` rule goes red the
-first time somebody adds a subsystem, and this repo already knows what a check that is red in
-normal operation is worth.
+`test` `mcp` `release` `deps` — `release` being `hangar dev release`, and also the scope
+semantic-release gives its own `chore(release)` commits. That list is documented and deliberately
+**not** enforced — a `scope-enum` rule goes red the first time somebody adds a subsystem, and this
+repo already knows what a check that is red in normal operation is worth.
 
-Three rules in `.commitlintrc.json` are worth knowing, and the first two differ from the defaults
-because the defaults reject this repo's own history:
+Three commitlint rules are worth knowing. The two in `.commitlintrc.json` differ from the defaults
+because the defaults reject this repo's own history; the third is the default, kept:
 
 - **`header-max-length` is 120, not 100.** A Sentence-case subject that says what changed routinely
   runs past 100 once `type(scope): ` is in front of it, and cutting hand-written subjects down to
