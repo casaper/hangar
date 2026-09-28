@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.33.0](https://github.com/casaper/hangar/compare/v0.32.1...v0.33.0) (2026-09-28)
+
+### Features
+
+* **skills:** Add a personal copy-to-clipboard that works from any repo and can paste ([b89ab91](https://github.com/casaper/hangar/commit/b89ab910bcd6aac8482dac94b715643be9824255))
+* **skills:** Add deutsch-korrektur and english-correction, proofreaders with levels that flag hurtful wording ([3d22598](https://github.com/casaper/hangar/commit/3d22598a4babbe2c8ea74530c8e51efc285d5782))
+
+### Documentation
+
+* **cli:** Make both CLAUDE.md files describe only the present, and drop counts nothing checks ([ebde314](https://github.com/casaper/hangar/commit/ebde314787cac5477aeb86a86d2093648ef9ed29))
+* **cli:** Name release as a hand-written scope, and count commitlint's rules right ([e9dc124](https://github.com/casaper/hangar/commit/e9dc12454671ee898c7d0a9a9319ff0345eedda9))
+* **cli:** Say that a corrected claim needs grepping across every prose surface ([3e3e0e7](https://github.com/casaper/hangar/commit/3e3e0e76dafd81a038166a884802c2ab15e3e0a0))
+* **skills:** Make the release rationale describe only the present ([169c7bb](https://github.com/casaper/hangar/commit/169c7bbc0bddf81b277b911f1eceffd6fb09742b))
+* **skills:** Move the release depth out of app/CLAUDE.md ([b982941](https://github.com/casaper/hangar/commit/b9829413e3780ae3631d502b23eb38934811ea99))
+* **skills:** Say that a new personal skill needs a manifest row ([6bea7c3](https://github.com/casaper/hangar/commit/6bea7c367e355a173af3ea73ecb862aae795c6a3))
+
 ## [0.32.1](https://github.com/casaper/hangar/compare/v0.32.0...v0.32.1) (2026-09-28)
 
 ### Bug Fixes
