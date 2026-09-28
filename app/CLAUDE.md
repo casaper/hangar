@@ -758,6 +758,9 @@ More root files are hand-maintained and belong to this package rather than to th
   reads the existing link's target and refuses when it belongs elsewhere. `--adopt` replaces a
   real directory only when its content already matches byte for byte, so the failure mode is a
   refusal and never a discarded edit.
+  **A new skill there also needs a row in `personal-skills/manifest.yaml`** — `name`, a
+  `divergence` (`standalone` when no tracked skill carries its name) and a `reason` — then
+  `hangar skills sync -n`, `sync` and `list` to link it.
 - **`.nvmrc` and `app/.nvmrc`** are a pair, both `24`. Move them together.
 - **`.claude/skills/**` is tracked, and both skills are artifacts of this package.** A command
   whose flags change is a `hangar-ops/reference/commands.md` edit; a design decision that changes
