@@ -3,14 +3,14 @@
  *
  * semantic-release does the release: the version from the commit types, the CHANGELOG, the
  * version bump, the release commit, the tag, the push and the GitHub release, all from
- * `.releaserc.json`. It used to run from a GitHub workflow, which never successfully cut
- * anything -- **no tag had ever been pushed to origin**, so in CI it found zero releases, would
- * have treated the next one as the first and published 1.0.0. Run from a developer's machine it
- * sees the local tags and gets the right answer, which is why moving it here fixed it.
+ * `.releaserc.json`. It runs from a terminal because semantic-release versions from the tags it
+ * can see: a CI checkout sees only origin's, and where origin carries none it finds zero releases,
+ * treats the next one as the first and publishes 1.0.0. A developer's machine has the local tags,
+ * and the preflight's tag check keeps them agreeing with origin.
  *
  * What this command adds is everything semantic-release will not do for itself:
  *
- * - the preflight, including the tag check that would have caught the failure above;
+ * - the preflight, including that tag check;
  * - a refusal on a breaking marker while the CLI is 0.x, which semantic-release has no setting
  *   for and would answer by cutting 1.0.0;
  * - every gate this repo has, since there is no CI to run them;
@@ -76,12 +76,12 @@ type Gate = {
  * and `app/.husky/commit-msg` both do it: pnpm lives inside an fnm multishell and moves with the
  * Node version, so anything needing it fails in a shell direnv has not touched.
  *
- * Two of these carry a note the deleted workflow was the only record of. **commitlint needs its
+ * Two of these carry a note recorded nowhere else. **commitlint needs its
  * config named** -- `.commitlintrc.json` is in `app/` and this runs from the hangar root, so a
  * bare invocation errors on a missing config instead of linting anything. And **`scan:secrets`
  * fails rather than skips when gitleaks is absent**: `app/.husky/pre-commit` skips deliberately,
- * because a per-machine developer tool must not block a commit, and the workflow's `scan` job
- * used to be the place that could not be skipped. This is that place now.
+ * because a per-machine developer tool must not block a commit, so this is the one place the
+ * scan cannot be skipped.
  */
 const gates = (root: string, from: string | undefined): Gate[] => {
   const app = join(root, 'app');
@@ -276,9 +276,9 @@ const preflight = (root: string): string | undefined => {
  *
  * semantic-release runs `prepare` (changelog, version bump, release commit), then tags, then
  * **pushes**, and only then `publish` (the GitHub release). So the most likely failure -- a token
- * that can read the repo but not write a release -- leaves everything already on origin, and the
- * first version of this hint said the opposite and told the reader to `git reset --hard`. On a
- * pushed release that is wrong and needs a force-push to carry out. Hence: ask git, do not guess.
+ * that can read the repo but not write a release -- leaves everything already on origin, where a
+ * reflexive `git reset --hard` is wrong and needs a force-push to carry out. Hence: ask git, do
+ * not guess.
  */
 const failureHint = (root: string, dryRun: boolean): string | undefined => {
   if (dryRun) return undefined;

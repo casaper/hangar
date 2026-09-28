@@ -5,32 +5,26 @@
 commit types, the CHANGELOG, the bump, the release commit, the tag, the push and the GitHub
 release. `app/CLAUDE.md`'s **Releasing** section is the how. This is the why.
 
-## The workflow did not fail because of semantic-release
+## Why a terminal: semantic-release versions from the tags it can see
 
-`.github/workflows/release.yml` ran the same tool on every push to `main`, and it had never cut
-anything. The cause was not in the workflow and not in the tool:
+semantic-release reads the last release off the tags in the checkout it runs in, and a CI checkout
+has only what origin has. **A repository whose tags live in one working copy and not on origin**
+looks, to a CI run, like one with zero releases — so semantic-release treats the next one as the
+first and publishes **1.0.0**. That is the exact outcome the "no `!` and no `BREAKING CHANGE:`
+while the CLI is 0.x" rule exists to prevent, reached by a route that rule never looks at. The
+same absence turns every `compare/v0.12.0...v0.13.0` link in `CHANGELOG.md` into a 404 while the
+commit-SHA links beside them resolve.
 
-```
-$ git ls-remote origin
-77381f43…  HEAD
-77381f43…  refs/heads/main
-```
+This repo was in exactly that state (`git ls-remote origin` listed `HEAD` and `refs/heads/main`
+and nothing else), which is why the release runs where the tags are: on a developer's machine.
+Measured, not assumed: `semantic-release --dry-run --no-ci` in a throwaway clone answers `The next
+release version is 0.14.0`.
 
-**No tag had ever been pushed.** All fourteen existed only in one working copy, and
-`actions/checkout` fetches refs — there was nothing to fetch. semantic-release finding zero
-releases treats the next one as the first and publishes **1.0.0**, the exact outcome the "no `!`
-and no `BREAKING CHANGE:` while the CLI is 0.x" rule exists to prevent, reached by a route that
-rule never looked at. The same absence made every `compare/v0.12.0...v0.13.0` link in
-`CHANGELOG.md` a 404 while the commit-SHA links beside them resolved.
-
-**Run from a developer's machine, the same tool gets the right answer** — the local tags are
-there — which is why moving it here fixed it rather than merely relocating it. Measured, not
-assumed: `semantic-release --dry-run --no-ci` in a throwaway clone answers `The next release
-version is 0.14.0`.
-
-That is now a preflight check as well: local tags and `git ls-remote --tags origin` must agree, or
-the release refuses and names the missing ones. A tag in one place and not the other means two
-readers of the same commits compute different versions, which is the whole failure in a sentence.
+**The tag check is what keeps the two readers agreeing.** Local tags and `git ls-remote --tags
+origin` must match, or the release refuses and names the missing ones: a tag in one place and not
+the other means two readers of the same commits compute different versions, which is the whole
+failure in a sentence. It is also why running from a terminal stays correct rather than merely
+convenient — without the check, a local clone missing a tag would make the same mistake CI did.
 
 ## What the command adds, and why each piece is not semantic-release's job
 
@@ -56,9 +50,10 @@ readers of the same commits compute different versions, which is the whole failu
 refuses to run at all; with it, the branch check, the up-to-date check and the whole
 `verifyConditions` pipeline still run. It says "a human is doing this", nothing else.
 
-**It does not compute a version, deliberately.** An earlier draft of this command did, with its
-own `RELEASE_RULES` table. That is two tables that must agree — the drift this repo keeps finding
-— so it was deleted. `.releaserc.json` is the only thing that decides a version.
+**It does not compute a version, deliberately.** A release-rules table of its own would be a
+second table that must agree with `.releaserc.json` — the drift this repo keeps finding — so
+`.releaserc.json` is the only thing that decides a version, and the command only reports what
+semantic-release decided.
 
 ## What `.releaserc.json` decides, and the one file that reads it
 
@@ -102,16 +97,17 @@ read.
 
 ## Probes
 
-Run before the design settled, because most of it reads as obviously-fine and one part was not.
+Each design choice here rests on one, because most of it reads as obviously fine and one part is
+not.
 
 | Probe | Answer |
 | --- | --- |
 | `semantic-release --dry-run --no-ci` in a throwaway clone | `The next release version is 0.14.0`; `Allowed to push to the Git repository` over SSH; the only failing step is the GitHub token |
 | `{ "type": "chore", "scope": "release", "hidden": true }` ahead of the bare `chore` entry | the commit disappears from the regenerated file; behind it, nothing changes |
-| A `preinstall` script exiting 1, as the guard on the new hangar-root `package.json` | **does not fire.** pnpm 10 does not run it, not even with a dependency present to install — `pnpm run preinstall` does, `pnpm install` does not, and npm skipped it too |
+| A `preinstall` script exiting 1, as a guard on the hangar-root `package.json` | **does not fire.** pnpm 10 does not run it, not even with a dependency present to install — `pnpm run preinstall` does, `pnpm install` does not, and npm skipped it too |
 
-The third one changed the design: the guard is `dev/scrub-check.sh` asserting the root
-`package.json`'s shape instead, and `app/CLAUDE.md`'s package blockquote carries the reasoning.
+The third is why the guard is `dev/scrub-check.sh` asserting the root `package.json`'s shape
+rather than an install hook; `app/CLAUDE.md`'s package blockquote carries the reasoning.
 
 ## The token, and the two failures that look alike
 
@@ -143,11 +139,11 @@ in a response header, `x-accepted-github-permissions: contents=write`. A fine-gr
 well, because `@semantic-release/github` comments on the issues and PRs a release closes.
 
 Checked in the preflight rather than left to `verifyConditions`, because that step runs after the
-whole gate suite — so the answer arrived several minutes late, as a forty-line `AggregateError`,
-for a question `gh api user` answers in a second. `gh` is a per-machine developer tool, so its
+whole gate suite — so the answer would arrive several minutes late, as a forty-line
+`AggregateError`, for a question `gh api user` answers in a second. `gh` is a per-machine developer tool, so its
 absence is a note and a skip, not a failure; semantic-release still does its own check.
 
-## Two things to know before the first real run
+## What a release leaves behind
 
 **The tag is lightweight.** Confirmed at v0.14.0: `git cat-file -t v0.14.0` answers `commit`.
 `@semantic-release/git` tags with `git tag <name> <sha>` — no `-a`, no message — while the fourteen
@@ -163,10 +159,10 @@ version bump, release commit), then tag, then **push**, and only then `publish` 
 release. So the likeliest failure of all, a token that can read the repository but not create a
 release, fails after the push, and the only missing artifact is the GitHub release object.
 
-The first version of this note said the opposite, and `commands/release.ts`'s hint told the reader
-to `git reset --hard HEAD~1`. That is wrong on a pushed release and needs a force-push to carry
-out — it was written from reading the plugin order rather than from watching one fail, and v0.14.0
-failed exactly this way an hour later. `failureHint` now asks git which of three states it is in:
+**So never answer a failed release with `git reset --hard HEAD~1` by reflex**: on a pushed release
+that is wrong, and it needs a force-push to carry out. Reading the plugin order suggests the
+opposite; watching one fail does not — v0.14.0 failed exactly this way. `failureHint` asks git
+which of three states it is in rather than guessing:
 
 | State | What to do |
 | --- | --- |
@@ -179,18 +175,18 @@ the tag is the last release, and there are no commits after it.
 
 ## What enforcement looks like without CI
 
-`.github/` is gone entirely. The husky hooks are fast feedback for whoever ran `pnpm hooks`, and
-the release preflight is the place nothing can be skipped. Two details the deleted workflow was
-the only record of now live in `commands/release.ts`:
+There is no `.github/` and no CI. The husky hooks are fast feedback for whoever ran `pnpm hooks`,
+and the release preflight is the place nothing can be skipped. Two details of it live in
+`commands/release.ts` and nowhere else:
 
 - **commitlint needs `--config app/.commitlintrc.json`.** The config is in `app/`, the release
   runs from the hangar root because `.releaserc.json` is there and semantic-release takes the
   repository from the working directory, and a bare invocation errors on a missing config rather
   than linting anything.
 - **`scan:secrets` fails rather than skips when gitleaks is absent.** `app/.husky/pre-commit`
-  skips deliberately — a per-machine developer tool must not block a commit — and the workflow's
-  `scan` job used to be the place that could not be skipped. A release cut without a history scan
-  is a release nobody scanned.
+  skips deliberately — a per-machine developer tool must not block a commit — so the release is
+  the one place the scan cannot be skipped. A release cut without a history scan is a release
+  nobody scanned.
 
 ## Why `dev`, and what does not change
 
