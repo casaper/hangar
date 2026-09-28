@@ -60,6 +60,30 @@ refuses to run at all; with it, the branch check, the up-to-date check and the w
 own `RELEASE_RULES` table. That is two tables that must agree — the drift this repo keeps finding
 — so it was deleted. `.releaserc.json` is the only thing that decides a version.
 
+## What `.releaserc.json` decides, and the one file that reads it
+
+**It is the single source of the CHANGELOG's section list.** `app/changelog.preset.ts` — the
+preset behind `pnpm changelog` — reads `presetConfig.types` out of it rather than declaring its
+own. Two copies of a twelve-entry table that must agree is the drift this repo keeps finding, and
+the symptom would be sections with different titles in one file with nothing saying why.
+
+**The list exists at all because the preset's defaults hide everything but `feat`, `fix` and
+`perf`.** With them, v0.11.0 — the release that added the whole `node:test` suite — renders as a
+heading with nothing under it.
+
+**`docs`, `refactor`, `test` and `build` are given `patch`** rather than the default of no
+release, because in this repo a documentation commit is a real change.
+
+**`pnpm changelog` is `dev/changelog.sh` rather than a one-line script entry**, for the same
+reason `pnpm golden` is: it has to be reproducible. The bare `conventional-changelog` invocation
+regenerates every section and drops the `# Changelog` heading, which would show the next developer
+a one-line diff they did not make, so the script puts the heading back. That heading is
+load-bearing: `.releaserc.json` sets `changelogTitle` to it, and semantic-release prepends _under_
+it.
+
+**`hangar --version` reads `app/package.json`** rather than repeating it, so a release bump moves
+one file. A literal copy is the kind of duplicate nothing notices until a tool moves the other one.
+
 ## The release commit is hidden from its own changelog
 
 `@semantic-release/git` writes `chore(release): <version>` **before** the tag is made, so that

@@ -286,65 +286,32 @@ row red forever, which is the check nobody reads.
 ### Releasing
 
 **`pnpm release` cuts one, from a terminal.** It is `hangar dev release`, and it runs this repo's
-gates and then hands over to **semantic-release**, which does the release itself: the version from
-the commit types, the CHANGELOG, the version bump, the release commit, the tag, the push and the
-GitHub release, all from `.releaserc.json`. `-n` runs the gates and `semantic-release --dry-run`,
-changing nothing, and it is the first thing to run. `-y` releases without asking.
+gates and then hands over to **semantic-release**, which does the release itself from
+`.releaserc.json`: the version, the CHANGELOG, the bump, the release commit, the tag, the push and
+the GitHub release. `-n` runs the gates and `semantic-release --dry-run`, changing nothing, and it
+is the first thing to run. `-y` releases without asking.
 
-That used to be a GitHub workflow and it never successfully cut anything: **no tag had ever been
-pushed to origin**, so in CI semantic-release found zero releases, would have treated the next one
-as the first and published 1.0.0. Run from a developer's machine it sees the local tags and gets
-the right answer — moving it here is what fixed it, and the tag check below is what keeps it fixed.
+**It runs from a terminal and not from CI** because semantic-release versions from the tags it can
+see: a checkout that sees none on origin treats the next release as the first and publishes
+1.0.0. A developer's machine has the local tags; `--no-ci` is what makes that run legal, and
+weakens nothing.
 
-**What the command adds is everything semantic-release will not do for itself:**
+What the command adds is what semantic-release will not do for itself:
 
-- **The preflight.** On `main`, clean tree, not behind origin, a token in `GH_TOKEN` or
-  `GITHUB_TOKEN`, and **local tags agreeing with `git ls-remote --tags origin`** — the check that
-  would have caught the failure above. Each is a sentence rather than a stack trace halfway
-  through the pipeline.
-- **A refusal on a breaking marker while the CLI is 0.x.** semantic-release has no setting for
-  this and would answer by cutting 1.0.0. `release/commits.ts` finds them and the release stops,
-  naming the commits; `test/release-commits.test.ts` pins both spellings of the footer and the
-  `!`, because missing one IS the failure.
-- **Every gate**, since there is no CI to run them: typecheck, lint, format, the suite, both
-  scans, the golden gate, and `commitlint` over the whole range being released.
-- **A confirmation**, because the next thing that happens is a push. It reads `/dev/tty` and
-  **fails closed where there is none**, so an unattended run declines rather than releasing;
-  `-y` is the only way past it, and it has to be typed. Inferring consent from the absence of a
-  terminal is the same bug the other way round — it skips the question and nothing else.
+- **The preflight** — on `main`, clean tree, not behind origin, a token in `GH_TOKEN` or
+  `GITHUB_TOKEN`, and **local tags agreeing with `git ls-remote --tags origin`**. Each is one
+  sentence before anything starts.
+- **A refusal on a breaking marker while the CLI is 0.x**, naming the commits.
+  `release/commits.ts` finds them; `test/release-commits.test.ts` pins both footer spellings and
+  the `!`, because missing one IS the failure.
+- **Every gate**, since there is no CI to run them — including `commitlint` over the range.
+- **A confirmation** that reads `/dev/tty` and **fails closed where there is none**; `-y` is the
+  only way past it.
 
-**`--no-ci` is what makes a local run legal**, not a weakening: without it semantic-release detects
-no CI environment and refuses outright. The branch check, the up-to-date check and the whole
-`verifyConditions` pipeline still run.
-
-Four things about `.releaserc.json` are load-bearing:
-
-- **It is the single source of the CHANGELOG's section list.** `app/changelog.preset.ts` — the
-  preset behind `pnpm changelog` — reads `presetConfig.types` out of it rather than declaring its
-  own. Two copies of a twelve-entry table that must agree is the drift this repo keeps finding,
-  and the symptom would be sections with different titles in one file with nothing saying why.
-- **The list exists at all because the preset's defaults hide everything but `feat`, `fix` and
-  `perf`.** With them, v0.11.0 — the release that added the whole `node:test` suite — rendered as
-  a heading with nothing under it.
-- **`docs`, `refactor`, `test` and `build` are given `patch`** rather than the default of no
-  release, because in this repo a documentation commit is a real change.
-- **`{ "type": "chore", "scope": "release", "hidden": true }` keeps `pnpm changelog`
-  reproducible, and its POSITION is the whole trick.** `@semantic-release/git` writes
-  `chore(release): <version>` before the tag is made, so that commit falls inside its own tag's
-  range and a later regeneration would add a `Chores` line nobody wrote. The preset matches with
-  `Array.find`, so the scoped entry only works while it precedes the bare `chore` one —
-  `changelog.preset.ts` throws if it does not, which is the only place that parses the table.
-
-`pnpm changelog` is `dev/changelog.sh` rather than a one-line script entry, for the same reason
-`pnpm golden` is: **it has to be reproducible.** The bare `conventional-changelog` invocation
-regenerates every section and drops the `# Changelog` heading, so running it would show the next
-developer a one-line diff they did not make. The script puts the heading back. That heading is
-load-bearing — `.releaserc.json` sets `changelogTitle` to it, and semantic-release prepends
-_under_ it. Producing no diff at a released state is the check that the hidden entry above works.
-
-`hangar --version` reads `app/package.json` rather than repeating it, so a release bump moves one
-file. It used to be a literal, which is the kind of duplicate nothing notices until a tool starts
-moving the other copy.
+**`.releaserc.json`, `app/changelog.preset.ts` and `dev/changelog.sh` are load-bearing** — the
+section list, the patch-level types, the hidden `chore(release)` entry whose POSITION matters, the
+`# Changelog` heading. `pnpm changelog` producing no diff at a released state is the check that
+they hold. Read `hangar-internals/reference/release.md` before editing any of them.
 
 ### The history was rewritten once
 
