@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.32.1](https://github.com/casaper/hangar/compare/v0.32.0...v0.32.1) (2026-09-28)
+
+### Bug Fixes
+
+* **exec:** Refuse hangar pr create and update through Bash unless dry-run ([d4e73b4](https://github.com/casaper/hangar/commit/d4e73b453e5530e73b4af4d736f8c53b79a28590))
+
+### Documentation
+
+* **cli:** Close the gaps a CLAUDE.md audit found in the command list and code map ([4676d06](https://github.com/casaper/hangar/commit/4676d06120a710a1f305f959be37a667c9e1a09d))
+* **skills:** Move the editor, terminal and colours depth out of app/CLAUDE.md ([b52ce65](https://github.com/casaper/hangar/commit/b52ce65b7592c44d5fa65516702897f0c38cb2b1))
+* **waypoint:** Record how hangar-rewrite verbs must fail, and how to test them ([6167817](https://github.com/casaper/hangar/commit/61678172c53dee5f4df2582141238d207b870388))
+
 ## [0.32.0](https://github.com/casaper/hangar/compare/v0.31.0...v0.32.0) (2026-09-24)
 
 ### Features
