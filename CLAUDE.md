@@ -110,7 +110,8 @@ All three are at the hangar root, so a clone session has none of them and should
 skills load only as far as the repository root, and each clone is its own repo.
 
 **Read freely; do not integrate.** `list`, `ports`, `status`, `servers list`, `colours list`,
-`skills list`, `scrub` and a bare `doctor` only report, and every `-n` is a dry run — except
+`skills list`, `scrub`, `config show`, `config validate`, `colours sync --check` and a bare
+`doctor` only report, and every `-n` is a dry run — except
 `hangar resume`'s, which is `--limit`, the one place in this CLI where `-n` does not mean "change
 nothing". A clone session is welcome to all of them, and `plans collect` and `tmp merge --quiet`
 already run there from `SessionEnd` hooks. **Every other command acts, and is the user's, from
@@ -119,7 +120,7 @@ the hangar root** — among them `sync` (under any of its three names), `checkou
 `servers kill`, `colours change`, `ports pin`, `ports unpin` and `doctor --fix`.
 
 **`hangar pr create` and `hangar pr update` write to the forge** — the only two commands that
-reach outside this machine. They default to the clone you are in, which is what makes them
+write anywhere outside this machine. They default to the clone you are in, which is what makes them
 tempting, and `-y` skips their confirmation. Opening or rewriting a pull request is the user's:
 name the command and let them run it. The same `PreToolUse` hook that refuses `hangar exec`
 refuses both, and lets their `-n` through.

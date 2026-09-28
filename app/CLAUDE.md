@@ -223,26 +223,27 @@ the README or the skills and nothing else.
 
 **Scopes** are the subsystem: `sync` `doctor` `open` `tmp` `plans` `pr` `jira` `colours` `config`
 `editor` `terminal` `platform` `setup` `add-clone` `install` `resume` `ide` `status` `golden`
-`cli` `fleet` `ports` `modes` `exec` `servers` `allow` `waypoint` `commit-gate` `skills` `scrub` `test`
-`deps`. That list is documented and deliberately **not** enforced — a
-`scope-enum` rule goes red the first time somebody adds a subsystem, and this repo already knows
-what a check that is red in normal operation is worth.
+`cli` `fleet` `ports` `modes` `exec` `servers` `allow` `waypoint` `commit-gate` `skills` `scrub`
+`test` `mcp` `deps`. `release` is semantic-release's own `chore(release)` and is never written by
+hand. That list is documented and deliberately **not** enforced — a `scope-enum` rule goes red the
+first time somebody adds a subsystem, and this repo already knows what a check that is red in
+normal operation is worth.
 
-Three rules in `.commitlintrc.json` differ from the defaults, and each one is there because the
-default rejected this repo's own history:
+Three rules in `.commitlintrc.json` are worth knowing, and the first two differ from the defaults
+because the defaults reject this repo's own history:
 
-- **`header-max-length` is 120, not 100.** The longest subject here is 89 characters and a
-  `fix(golden): ` prefix puts it at 102. Cutting eighty-four hand-written subjects down to fit a
-  round number is the wrong side of that trade.
+- **`header-max-length` is 120, not 100.** A Sentence-case subject that says what changed routinely
+  runs past 100 once `type(scope): ` is in front of it, and cutting hand-written subjects down to
+  fit a round number is the wrong side of that trade.
 - **`subject-case` is off.** `config-conventional` forbids Sentence case, which is the case every
   subject in this repo is written in.
-- **`body-max-line-length` is left at 100** and needs no exception: the longest body line in the
-  whole history is 88.
+- **`body-max-line-length` is left at 100** and needs no exception: no hand-written body exceeds
+  it. The long lines in `chore(release)` bodies are semantic-release's changelog links.
 
-`footer-leading-blank` warns on about a quarter of the history and is left warning. The parser
-reads any `word: value` line in a prose body as a footer token, and these bodies are full of them
-(`kind: none`, `type: module`). Reflowing twenty-one bodies to satisfy a heuristic would damage
-the record to silence a warning that blocks nothing.
+`footer-leading-blank` warns on a good share of the history and is left warning. The parser reads
+any `word: value` line in a prose body as a footer token, and these bodies are full of them
+(`kind: none`, `type: module`). Reflowing bodies to satisfy a heuristic would damage the record to
+silence a warning that blocks nothing.
 
 **No `!` and no `BREAKING CHANGE:` footer while the CLI is 0.x.** Several changes here are
 breaking by content — the `orch-util` → `hangar` rename, untracking files a command rewrites — and
@@ -270,8 +271,8 @@ range. The release stops and names the commit.
 So the hooks are fast feedback for whoever installed them, and **`hangar dev release` is where
 none of it can be skipped**: it runs typecheck, lint, format, the suite, both scans, the golden
 gate and `commitlint` over the whole range being released, before it hands over to
-semantic-release. There was a `.github/workflows/release.yml` running the same checks; it is gone,
-because the release it gated never worked from CI. `hangar-internals/reference/release.md` says why.
+semantic-release. There is no CI workflow: the release these gates protect cannot run from CI, and
+`hangar-internals/reference/release.md` says why.
 
 **A missing gitleaks is an error there, not a skip.** The hook's leniency is deliberate and stays
 — a per-machine developer tool must not block a commit — but a release cut without a history scan
@@ -411,12 +412,12 @@ fixes with no seam of their own, and the one open question the seam does **not**
 `ps` under procps reports a Claude Code process as `claude` at all.
 
 One thing in here is known and deliberate rather than waiting to be found:
-`resolve-conflicts.ts` reads `ORCH_UTIL_RESOLVE_TIMEOUT_MS`, the last `ORCH_UTIL_` name left in
-the CLI. **`paths.ts` is gone** — its hangar-derived half became `HangarPaths` (threaded from
-`cli.ts`, never a module constant, because a value derived from a root that comes from a file
-cannot be evaluated at import time), its `homedir()` half became `user-paths.ts`, and its last
-four literals — this fleet's Bitbucket repo, workspace, Jira host and origin URL — became
-`forge.originUrl` and `tracker.{baseUrl,issueUrlTemplate}`.
+`resolve-conflicts.ts` reads `ORCH_UTIL_RESOLVE_TIMEOUT_MS`, the one `ORCH_UTIL_` name in the
+CLI. Everything else about paths is threaded, never a module constant: hangar-derived paths are
+`HangarPaths`, handed down from `cli.ts` because a value derived from a root read from a file
+cannot be evaluated at import time; `homedir()` paths are `user-paths.ts`; and the forge and
+tracker locations are config (`forge.originUrl`, `tracker.{baseUrl,issueUrlTemplate}`), never
+literals.
 
 ## Which editors it opens
 
@@ -545,9 +546,9 @@ why the status script is shell rather than the CLI.
 
 ## What is tracked at the hangar root, and what is generated
 
-**This inventory used to be in the root `CLAUDE.md`, which every clone session pays for and no
-clone session can act on.** It moved here because a session editing `app/src/**` is the only one
-that needs it — the same reason the rest of this file is here.
+**This inventory is here rather than in the root `CLAUDE.md`** because every clone session pays
+for that file and none can act on this; a session editing `app/src/**` is the only one that needs
+it — the same reason the rest of this file is here.
 
 One rule decides every row: _a tracked file that a `hangar` command rewrites is a merge conflict
 on every `git pull` from a published upstream._
@@ -612,12 +613,11 @@ no hook in `.git/hooks`.
 | `palette.ts`, `generate/colours-sh.ts`, `generate/terminal-sh.ts`, `generate/tmux-conf.ts`, `generate/tmux-status-sh.ts` | `hangar colours sync`  | `clone-colours.sh`, `clone-terminal.sh`, `clone-tmux.conf` **and** `clone-tmux-status.sh` — gitignored |
 | any new config key                                                                                                       | by hand                | `hangar.config.example.yaml` — **tracked**                                                             |
 
-**Only one generated root file is still tracked, and the rule that decides it is publication:** a
+**Only one generated root file is tracked, and the rule that decides it is publication:** a
 tracked file that a `hangar` command rewrites is a merge conflict on every `git pull` from
-upstream. `hangar.schema.json` survives because nothing but `hangar config schema` writes it and
-its content is the same in every hangar; the two shell helpers do not, because `colours sync`
-rewrites them from the palette, the hangar id and the clone list. `git rm --cached` left both on
-disk, so no shell rc that sources `clone-terminal.sh` broke.
+upstream. `hangar.schema.json` is tracked because nothing but `hangar config schema` writes it and
+its content is the same in every hangar; the two shell helpers are not, because `colours sync`
+rewrites them from the palette, the hangar id and the clone list.
 
 - **`hangar config validate` now also compares `hangar.config.example.yaml` with the live file**,
   whenever the two declare the same `id`. The invariant was stated in
@@ -634,11 +634,11 @@ disk, so no shell rc that sources `clone-terminal.sh` broke.
   `toJSONSchema` change across a version leaves exactly the same stale schema with
   `config/schema.ts` untouched and this rule, read by the letter, never firing.
 - **`clone-colours.sh` and `clone-terminal.sh` are gitignored**, like the artifacts under
-  `~/.claude/` (one statusline plus one theme per clone) — so a `palette.ts` edit no longer puts
-  two hangar-root files into your commit, and **nothing in git records that they are stale.** Both
+  `~/.claude/` (one statusline plus one theme per clone) — so a `palette.ts` edit puts no
+  hangar-root file into your commit, and **nothing in git records that they are stale.** Both
   are headed `GENERATED by hangar colours sync -- do not edit by hand`, and
-  `hangar colours sync -n` reports whether they are current: that dry run is now the only check
-  there is, so run it after a palette change rather than looking at `git status`.
+  `hangar colours sync -n` reports whether they are current: that dry run is the only check there
+  is, so run it after a palette change rather than looking at `git status`.
 - **`hangar.config.example.yaml` is the committed record and a faithful SUPERSET of the
   gitignored live `hangar.config.yaml`.** A new schema key belongs there too — with its default,
   and any alternative as a **comment** beside the one live choice, because `superRefine` rejects
