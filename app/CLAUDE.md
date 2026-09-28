@@ -733,6 +733,9 @@ More root files are hand-maintained and belong to this package rather than to th
   whose flags change is a `hangar-ops/reference/commands.md` edit; a design decision that changes
   is the matching `hangar-internals/reference/*.md`. That edit starts on this side of the
   boundary, which is why it is named here and not only in the skills.
+  **A claim corrected in one prose surface is usually stated in another**: grep its key phrase
+  across both `CLAUDE.md` files, `.claude/modes/*.md` and both skills before committing. The
+  root file's "reach outside this machine" was also in `ops.md`.
 
 **One thing that looks broken and is not: `pnpm --version` differs by directory.** corepack reads
 `packageManager` from the NEAREST `package.json` walking up, so inside `app/` it answers the
