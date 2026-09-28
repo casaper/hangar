@@ -97,3 +97,17 @@ skills:
       `--paste` (deutsch-korrektur's clipboard mode reads through it), drops the one trailing
       newline a heredoc adds unless `--keep-newline`, verifies the copy by reading it back, and
       drops `model: haiku`, because another skill now invokes it mid-turn.
+
+  - name: deutsch-korrektur
+    divergence: standalone
+    reason: >-
+      No tracked counterpart: a de-CH proofreader ported from a Claude Desktop project prompt.
+      It reaches the clipboard only through the personal `copy-to-clipboard`, so the two are
+      synced together.
+
+  - name: english-correction
+    divergence: standalone
+    reason: >-
+      No tracked counterpart: an en-NZ/en-GB proofreader ported from a Claude Desktop project
+      prompt, the English sibling of deutsch-korrektur with the same modes, levels and flagging.
+      It reaches the clipboard only through the personal `copy-to-clipboard`.
