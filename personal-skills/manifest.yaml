@@ -85,3 +85,15 @@ skills:
       No tracked counterpart. It drives the repo's own pr-description, test and storybook skills
       rather than replacing any of them, and integrates through `hangar-rewrite rebase` where the
       repo's rules deny `git rebase`.
+
+  - name: copy-to-clipboard
+    divergence: intentional
+    mirrors: .claude/skills/copy-to-clipboard/SKILL.md
+    basedOn: 6968e70c00801f5e3defa6f4564bde7c5ac60262
+    reason: >-
+      A personal skill is active in every repo, and the original is reachable only from its own
+      repo's root: it runs `.claude/skills/copy-to-clipboard/clip.cjs` by relative path. This one
+      is called through the `~/.claude/skills` link, so it works from any directory. It also adds
+      `--paste` (deutsch-korrektur's clipboard mode reads through it), drops the one trailing
+      newline a heredoc adds unless `--keep-newline`, verifies the copy by reading it back, and
+      drops `model: haiku`, because another skill now invokes it mid-turn.
