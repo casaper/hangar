@@ -70,6 +70,7 @@ another name.
 | `plans stamp` | `plans_stamp_preview` | `plans_stamp` |
 | `skills list` | `skills_list` | — |
 | `skills sync` | `skills_sync_preview` | `skills_sync` |
+| `bookmarks sync` | `bookmarks_sync_preview` | `bookmarks_sync` |
 | `ide <kind> sync` | `ide_<kind>_sync_preview` | `ide_<kind>_sync` |
 
 **`colours sync` is the one command with two read-only tools**, because `--check` and `-n` answer
@@ -175,7 +176,8 @@ stderr as having no tool at all, is the developer tab's to fix, not yours.
 | `plans stamp` | — | `-n, --dry-run` · `--no-transcript-scan` · `--in-use-window <minutes>` | act |
 | `tmp merge` | — | `-n, --dry-run` · `-q, --quiet` | act (runs from each clone's `SessionEnd` hook) |
 | `skills list` | — | — | report (each personal skill: whether it is linked, and whether the tracked original moved under it) |
-| `skills sync` | — | `-n, --dry-run` · `--adopt` | **act [user]** — the one command that writes OUTSIDE the hangar, into `~/.claude/skills` |
+| `skills sync` | — | `-n, --dry-run` · `--adopt` | **act [user]** — writes OUTSIDE the hangar, into `~/.claude/skills` |
+| `bookmarks sync` | — | `-n, --dry-run` · `--profile <dir>` (default `Default`) | **act [user]** — writes Brave's `Bookmarks` file: one folder per `ports.roles[].bookmark`, one `clone N - <label>` link per clone, anything else in that folder removed. **Refuses while Brave runs** (it would overwrite the file from memory); `-n` works regardless |
 | `ide <kind> sync` (group alias `editor`) | — | `--from <clone>` · `-n, --dry-run` | act |
 | `colours sync` (group alias `colors`) | — | `-n, --dry-run` · `--check` | act |
 | `colours change` | `<clone> <colour>` | `--force` | **act [user]**, no `-n` |

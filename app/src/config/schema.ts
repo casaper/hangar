@@ -309,6 +309,17 @@ const portStartSchema = z.strictObject({
   dir: z.string().default(''),
 });
 
+/**
+ * Where `hangar bookmarks sync` lists a role's URL: one folder on the browser's Bookmarks bar,
+ * one link per clone named `clone <index> - <label>`. A role without it is not bookmarked.
+ */
+const portBookmarkSchema = z.strictObject({
+  /** The folder's name on the Bookmarks bar. */
+  folder: z.string().min(1),
+  /** The word after the clone: `clone 2 - <label>`. */
+  label: z.string().min(1),
+});
+
 const portRoleSchema = z.strictObject({
   id: z.string().regex(/^[a-z][A-Za-z0-9]*$/, 'must be a lowerCamelCase identifier'),
   envKey: z.string().regex(/^[A-Z][A-Z0-9_]*$/, 'must be an UPPER_SNAKE env var name'),
@@ -318,6 +329,7 @@ const portRoleSchema = z.strictObject({
   url: z.string().min(1).nullable().default('http://localhost:{port}'),
   healthCheck: healthCheckSchema.optional(),
   start: portStartSchema.optional(),
+  bookmark: portBookmarkSchema.optional(),
 });
 
 /**

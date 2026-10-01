@@ -25,6 +25,7 @@ import { reloadClones, type ReloadOptions } from './commands/reload.ts';
 import { plansCollect, plansStamp } from './commands/plans.ts';
 import { scrub } from './commands/scrub.ts';
 import { skillsList, skillsSync } from './commands/skills.ts';
+import { bookmarksSync } from './commands/bookmarks.ts';
 import { prCreate, prRefresh, prUpdate } from './commands/pr.ts';
 import { ports, portsPin, portsUnpin } from './commands/ports.ts';
 import { removeClone } from './commands/remove-clone.ts';
@@ -823,6 +824,24 @@ skills
   .option('--adopt', 'replace a real directory with a link, only when its content already matches')
   .action((options) => {
     skillsSync(requireHangar(), options);
+  });
+
+const bookmarks = program
+  .command('bookmarks')
+  .description('Browser bookmarks for the fleet’s servers');
+
+bookmarks
+  .command('sync')
+  .description(
+    [
+      'Make each bookmarked port role’s folder on Brave’s Bookmarks bar hold one link per clone',
+      'Folders and labels come from ports.roles[].bookmark. A folder that exists is adopted: its links are matched by clone index, renamed and re-pointed in place, and anything else in it is removed. Brave must be closed to write, because it rewrites the file from memory.',
+    ].join('\n\n'),
+  )
+  .option('-n, --dry-run', 'print what would change, change nothing (works while Brave runs)')
+  .option('--profile <dir>', 'the Brave profile directory', 'Default')
+  .action((options) => {
+    bookmarksSync(requireHangar(), options);
   });
 
 const pr = program

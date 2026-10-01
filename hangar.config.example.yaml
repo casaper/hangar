@@ -365,6 +365,11 @@ ports:
       # another role's port verifies the wrong code without erroring.
       base: 4200
       label: Angular dev server
+      # `hangar bookmarks sync` keeps one link per clone, `clone <index> - <label>`, in this
+      # folder on Brave's Bookmarks bar. Omit it and the role is not bookmarked.
+      bookmark:
+        folder: devservers
+        label: devserver
       # Default "http://localhost:{port}". `null` for a role that has no URL.
       # url: http://localhost:{port}
       # What `hangar servers start` runs to bring this one up, in a window of the clone's own
@@ -382,6 +387,9 @@ ports:
       envKey: STORYBOOK_DEV_SERVER_PORT
       base: 6100
       label: Storybook
+      bookmark:
+        folder: storybooks
+        label: storybook
       # Declaring the check is what lets the `permissions.allow` matcher be GENERATED and stay
       # fully anchored. A looser hand-written pattern rewrites the wrong allow entry and leaves
       # a health check aimed at a SIBLING clone's port.

@@ -247,6 +247,13 @@ export const EXPOSURES: readonly Exposure[] = [
     lede: previewLede,
   },
   { name: 'skills_list', path: ['skills', 'list'], acts: false },
+  {
+    name: 'bookmarks_sync_preview',
+    path: ['bookmarks', 'sync'],
+    fixed: [PREVIEW],
+    acts: false,
+    lede: previewLede,
+  },
   { name: 'scrub', path: ['scrub'], acts: false },
   {
     name: 'skills_sync_preview',
@@ -352,6 +359,7 @@ export const EXPOSURES: readonly Exposure[] = [
    * is which skills every session on this machine loads, in every repo. That is worth a human.
    */
   { name: 'skills_sync', path: ['skills', 'sync'], hides: [PREVIEW], acts: true },
+  { name: 'bookmarks_sync', path: ['bookmarks', 'sync'], hides: [PREVIEW], acts: true },
   { name: 'teach_rg', path: ['teach-rg'], hides: [PREVIEW], acts: true },
   /*
    * `--no-describe` is FIXED on both, which is a limit on the tool rather than on the command.

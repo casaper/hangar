@@ -36,7 +36,7 @@ take the one that matches what you are touching:
 | changing `sync`, `merge-default`, `rebase-default`, `checkout-default`, `pr create` or `pr update`; debugging a `SYNC PAUSE`, a stash that did not come back, a headless run, or a pull request that opened wrong | `reference/sync.md` |
 | changing `tmp merge`, `plans collect`, `jira hook` or the ticket record store; explaining a `.from-<clone>` copy, a lost `relation:` key or a denied fetch | `reference/jira-cache.md` |
 | changing `ide <kind> sync`, any `editor/*.ts` driver, or the per-clone absolute-path rewriting | `reference/editors.md` |
-| changing `open`'s window handling, an emulator driver, the tmux layer or the clone bar, or `resume`'s session discovery | `reference/terminal-and-sessions.md` |
+| changing `open`'s window handling, an emulator driver, the tmux layer or the clone bar, `resume`'s session discovery, or `bookmarks sync` | `reference/terminal-and-sessions.md` |
 | changing `palette.ts`, anything under `generate/`, or what `colours sync` writes | `reference/colours.md` |
 | changing the zod schema, the loader, discovery, the no-config gate, or `forge.defaultBranch` | `reference/config.md` |
 | changing `doctor`, any generated per-clone artifact, or the plan archive | `reference/doctor.md` |

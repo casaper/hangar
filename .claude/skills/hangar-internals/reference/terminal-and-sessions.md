@@ -1165,3 +1165,34 @@ rather than here because they are that driver's own: `write text` into a session
 created is accepted and dropped, a bare `create tab with default profile` returns `missing
 value`, and `command` is argv rather than a shell line -- so `exec` starts nothing and PATH is the
 application's, which is why the attach command names tmux by absolute path.
+
+## `bookmarks sync` — Brave's file belongs to Brave
+
+`commands/bookmarks.ts` is the command and `bookmarks/brave.ts` its pure half. A port role that
+carries `bookmark: { folder, label }` in the config gets one folder on Brave's Bookmarks bar and
+one `clone <index> - <label>` link per clone; nothing in the code knows what an Angular dev server
+is, and two roles naming one folder is refused because the folder is matched by clone index and
+each would delete the other's links on every run.
+
+Three decisions, each of which is a way this would otherwise report success and be wrong:
+
+- **It refuses to write while Brave runs.** The browser keeps its bookmarks in memory and rewrites
+  the file from there, so an edit behind its back is overwritten the next time it saves — success
+  printed, nothing changed. `-n` is exempt, because it writes nothing. `braveIsRunning` counts
+  only the main process: on macOS the helpers are `Brave Browser Helper …`, on Linux they carry
+  `--type=`, and the crash handler is another binary.
+- **The `checksum` is recomputed, and the algorithm is checked against a real file.** Chromium
+  MD5s id, title (UTF-16LE), type and — for a link — the URL, depth first over `bookmark_bar`,
+  `other`, `synced`, and discards a file it cannot reproduce. `bookmarksChecksum` reproduced a live
+  profile's own value exactly before anything was written; `test/bookmarks.test.ts` pins the
+  properties, and a fresh Brave profile is the probe if the format ever moves.
+- **A hand-made link is adopted by clone index, not matched by name.** `clone_01 - storybook` and
+  `clone 1 - storybook` are one clone, so the entry is renamed and re-pointed in place and keeps
+  its `id`, `guid` and `date_added`; everything else in the folder, a sub-folder and a hand-made
+  one-off included, is removed, because "the folder is exactly the fleet" is the property worth
+  having. Unknown keys on every node pass through, and URLs are normalised through `new URL`, so
+  `http://localhost:4201` and the `…/` Brave writes are one URL and a second run changes nothing.
+
+The profile directory comes from `platform().machineConfigDir` — no new capability, so the golden
+manifest did not move — and the write is a sibling file renamed over the original, three-space
+indent kept so the diff against Brave's own `Bookmarks.bak` stays what changed.
