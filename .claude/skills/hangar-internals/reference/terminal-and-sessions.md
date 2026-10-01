@@ -1166,33 +1166,53 @@ created is accepted and dropped, a bare `create tab with default profile` return
 value`, and `command` is argv rather than a shell line -- so `exec` starts nothing and PATH is the
 application's, which is why the attach command names tmux by absolute path.
 
-## `bookmarks sync` — Brave's file belongs to Brave
+## `bookmarks sync` — the browser's file belongs to the browser
 
-`commands/bookmarks.ts` is the command and `bookmarks/brave.ts` its pure half. A port role that
-carries `bookmark: { folder, label }` in the config gets one folder on Brave's Bookmarks bar and
-one `clone <index> - <label>` link per clone; nothing in the code knows what an Angular dev server
-is, and two roles naming one folder is refused because the folder is matched by clone index and
-each would delete the other's links on every run.
+`commands/bookmarks.ts` is the command; `bookmarks/chromium.ts` is the pure builder for Brave and
+Chrome, whose `Bookmarks` file has one format, and `bookmarks/firefox.ts` the planner and SQL for
+Firefox's `places.sqlite`. A port role that carries `bookmark: { folder, label }` in the config
+gets one folder on each browser's Bookmarks bar and one `clone <index> - <label>` link per clone;
+nothing in the code knows what an Angular dev server is, and two roles naming one folder is
+refused because the folder is matched by clone index and each would delete the other's links on
+every run. A browser with no profile is skipped with a note; only "none of the three" is an error.
+The three are read and planned concurrently and printed in table order, so the output does not
+depend on which read finished first.
 
-Three decisions, each of which is a way this would otherwise report success and be wrong:
+Decisions, each of which is a way this would otherwise report success and be wrong:
 
-- **It refuses to write while Brave runs.** The browser keeps its bookmarks in memory and rewrites
-  the file from there, so an edit behind its back is overwritten the next time it saves — success
-  printed, nothing changed. `-n` is exempt, because it writes nothing. `braveIsRunning` counts
-  only the main process: on macOS the helpers are `Brave Browser Helper …`, on Linux they carry
-  `--type=`, and the crash handler is another binary.
-- **The `checksum` is recomputed, and the algorithm is checked against a real file.** Chromium
-  MD5s id, title (UTF-16LE), type and — for a link — the URL, depth first over `bookmark_bar`,
-  `other`, `synced`, and discards a file it cannot reproduce. `bookmarksChecksum` reproduced a live
-  profile's own value exactly before anything was written; `test/bookmarks.test.ts` pins the
-  properties, and a fresh Brave profile is the probe if the format ever moves.
-- **A hand-made link is adopted by clone index, not matched by name.** `clone_01 - storybook` and
-  `clone 1 - storybook` are one clone, so the entry is renamed and re-pointed in place and keeps
-  its `id`, `guid` and `date_added`; everything else in the folder, a sub-folder and a hand-made
-  one-off included, is removed, because "the folder is exactly the fleet" is the property worth
-  having. Unknown keys on every node pass through, and URLs are normalised through `new URL`, so
-  `http://localhost:4201` and the `…/` Brave writes are one URL and a second run changes nothing.
+- **It refuses to write while a browser with changes runs, and then writes to none.** Brave and
+  Chrome keep their bookmarks in memory and rewrite the file from there, and Firefox holds
+  `places.sqlite` open, so an edit behind their back is lost or corrupts. The running check covers
+  every browser that has something to write before the first is written, so a refusal never leaves
+  one current and another stale. `-n` is exempt, because it writes nothing. `browserIsRunning`
+  counts only the main process: macOS helpers are `<name> Helper …`, Chromium's carry `--type=`,
+  Firefox's children are `-contentproc` and `plugin-container`, and a crash handler is another
+  binary.
+- **The Chromium `checksum` is recomputed, and the algorithm is checked against a real file.**
+  Chromium MD5s id, title (UTF-16LE), type and — for a link — the URL, depth first over
+  `bookmark_bar`, `other`, `synced`, and discards a file it cannot reproduce. `bookmarksChecksum`
+  reproduced a live profile's own value exactly before anything was written;
+  `test/bookmarks.test.ts` pins the properties, and a fresh profile is the probe if the format ever
+  moves.
+- **A hand-made link is adopted by clone index, not matched by name** — in both engines.
+  `clone_01 - storybook` and `clone 1 - storybook` are one clone, so the entry is renamed and
+  re-pointed in place and keeps its identity; everything else in the folder, a sub-folder and a
+  hand-made one-off included, is removed, because "the folder is exactly the fleet" is the
+  property worth having. URLs are normalised through `new URL`, so `http://localhost:4201` and the
+  `…/` the browsers store are one URL and a second run changes nothing.
+- **Firefox is SQL, and measured rather than assumed.** Against a real profile (schema 86) there
+  are no triggers, so the application owns `moz_places.foreign_count` and the bookmark positions
+  and `applyFirefox` maintains both by hand, in one `BEGIN IMMEDIATE` transaction. `url_hash` is a
+  function Firefox registers on its own connection (the scheme's hash in the top 16 bits, Mozilla's
+  `HashString` of the whole URL below), which a plain SQLite cannot compute; a wrong value makes
+  Firefox miss the place it just bookmarked, and `firefoxUrlHash` reproduces every row of that
+  profile. The profile is the `[Install…] Default=` entry of `profiles.ini`, not the `Default=1`
+  one, which on a machine that has met more than one Firefox names a profile nobody opens. A dry
+  run reads a COPY of the database, so it never opens the file a running Firefox holds.
+  `node:sqlite` is loaded on demand with its experimental notice filtered, so no other command
+  prints it and `hangar mcp` keeps a silent stderr.
 
-The profile directory comes from `platform().machineConfigDir` — no new capability, so the golden
-manifest did not move — and the write is a sibling file renamed over the original, three-space
-indent kept so the diff against Brave's own `Bookmarks.bak` stays what changed.
+The profile directories come from `platform().machineConfigDir` (and `~/.mozilla/firefox` on
+Linux) — no new capability, so the golden manifest carries nothing for it — and a Chromium write
+is a sibling file renamed over the original, three-space indent kept so the diff against the
+browser's own `Bookmarks.bak` stays what changed.

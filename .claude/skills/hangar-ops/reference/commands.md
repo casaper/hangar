@@ -177,7 +177,7 @@ stderr as having no tool at all, is the developer tab's to fix, not yours.
 | `tmp merge` | — | `-n, --dry-run` · `-q, --quiet` | act (runs from each clone's `SessionEnd` hook) |
 | `skills list` | — | — | report (each personal skill: whether it is linked, and whether the tracked original moved under it) |
 | `skills sync` | — | `-n, --dry-run` · `--adopt` | **act [user]** — writes OUTSIDE the hangar, into `~/.claude/skills` |
-| `bookmarks sync` | — | `-n, --dry-run` · `--profile <dir>` (default `Default`) | **act [user]** — writes Brave's `Bookmarks` file: one folder per `ports.roles[].bookmark`, one `clone N - <label>` link per clone, anything else in that folder removed. **Refuses while Brave runs** (it would overwrite the file from memory); `-n` works regardless |
+| `bookmarks sync` | — | `-n, --dry-run` · `--profile <dir>` (default `Default`; Firefox: its installation's own) · `--browser <all\|brave\|chrome\|firefox>` (default `all`) | **act [user]** — writes the Bookmarks bar of Brave, Chrome and Firefox in one run: one folder per `ports.roles[].bookmark`, one `clone N - <label>` link per clone, anything else in that folder removed. A browser that is not installed is skipped. **Refuses while any browser that has changes is running** (it would overwrite the file from memory) and then writes to none; `-n` works regardless |
 | `ide <kind> sync` (group alias `editor`) | — | `--from <clone>` · `-n, --dry-run` | act |
 | `colours sync` (group alias `colors`) | — | `-n, --dry-run` · `--check` | act |
 | `colours change` | `<clone> <colour>` | `--force` | **act [user]**, no `-n` |

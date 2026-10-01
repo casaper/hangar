@@ -366,7 +366,7 @@ ports:
       base: 4200
       label: Angular dev server
       # `hangar bookmarks sync` keeps one link per clone, `clone <index> - <label>`, in this
-      # folder on Brave's Bookmarks bar. Omit it and the role is not bookmarked.
+      # folder on the Bookmarks bar of Brave, Chrome and Firefox. Omit it and the role is not bookmarked.
       bookmark:
         folder: devservers
         label: devserver

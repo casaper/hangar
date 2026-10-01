@@ -834,14 +834,22 @@ bookmarks
   .command('sync')
   .description(
     [
-      'Make each bookmarked port role’s folder on Brave’s Bookmarks bar hold one link per clone',
-      'Folders and labels come from ports.roles[].bookmark. A folder that exists is adopted: its links are matched by clone index, renamed and re-pointed in place, and anything else in it is removed. Brave must be closed to write, because it rewrites the file from memory.',
+      'Make each bookmarked port role’s folder on the Bookmarks bar of Brave, Chrome and Firefox hold one link per clone',
+      'Folders and labels come from ports.roles[].bookmark. A folder that exists is adopted: its links are matched by clone index, renamed and re-pointed in place, and anything else in it is removed. A browser that is not installed is skipped. Each browser must be closed to be written, because it holds its bookmarks in memory; when any of them is running nothing is written to any.',
     ].join('\n\n'),
   )
-  .option('-n, --dry-run', 'print what would change, change nothing (works while Brave runs)')
-  .option('--profile <dir>', 'the Brave profile directory', 'Default')
-  .action((options) => {
-    bookmarksSync(requireHangar(), options);
+  .option('-n, --dry-run', 'print what would change, change nothing (works while a browser runs)')
+  .option(
+    '--profile <dir>',
+    'the profile directory name, in every browser (default: Default for Brave and Chrome, the installation’s own for Firefox)',
+  )
+  .addOption(
+    new Option('--browser <name>', 'which browser to update')
+      .choices(['all', 'brave', 'chrome', 'firefox'])
+      .default('all'),
+  )
+  .action(async (options) => {
+    await bookmarksSync(requireHangar(), options);
   });
 
 const pr = program
