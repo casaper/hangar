@@ -172,7 +172,10 @@ a report in your hands and not in the user's: at a real terminal, picking a row 
 `(default)` marker on a port meaning direnv never loaded, and which `doctor` rows warn rather than
 fail.
 
-Two more, for questions that arrive often:
+Three more, for questions that arrive often:
+
+- `reference/root-sessions.md` — how a hangar-root session differs from a clone's (its generated
+  settings, shared memory, transcript keying) and how the two `CLAUDE.md` files reach each.
 
 - `reference/colours-and-terminal.md` — the per-clone colour identity, how to change a hue, which
   terminals get which paint layer, and the `HANGAR_CLONE*` variables.

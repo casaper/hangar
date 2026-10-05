@@ -330,26 +330,33 @@ throwaway clone and fetch the result back.
 
 **`commands/doctor.ts` and `commands/sync.ts` are the two worth reading in full before changing
 either** — they are the two largest files here, and the two whose mistakes reach a live working
-tree. The table names files without sizing them on purpose, this pair included: a
+tree. Files are named here without sizing them on purpose, this pair included: a
 count here goes stale on the next commit and nothing checks it, so run `wc -l` when you want one.
 
-| Role                  | Files                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| entry point           | `cli.ts` — every command, option and alias is registered here, plus the `preAction` config gate and the `configureHelp` that prints all of a command's aliases                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| maintainer            | `commands/dev.ts` — `hangar dev golden`, the capture behind `pnpm golden`; `commands/release.ts` — `hangar dev release`, the gates and preflight in front of semantic-release, with `release/commits.ts` beside it reading the range. **Both are hidden in `cli.ts`, and that is their interface contract**: nothing about either is promised to an operator, so neither gets a row in `hangar-ops/reference/commands.md`. `dev` is deliberately NOT in `NEEDS_NO_CONFIG` — a capture, or a release, derived from a hangar with no config would be derived from the schema defaults, the one output neither may be mistaken for |
-| commands              | `commands/*.ts`, one per command: `sync`, `doctor`, `tmp`, `jira`, `setup`, `open`, `checkout-default`, `vscode`, `plans`, `add-clone`, `resume`, `colours`, `status`, `remove-clone`, `teach-rg`, `config`, `ports`, `list`, `install`, `claude`, `browse`, `close`, `reload`, `pr`, `mcp`, `exec`, `edit`, `servers`, `allow`, `scrub`, `skills`, `bookmarks`                                                                                                                                                                                                                                                                 |
-| config                | `config/schema.ts` (the zod authority), `default-branch.ts`, `load.ts` (discovery + precedence), `derive.ts`, `json-schema.ts`, `drift.ts` (the example-vs-live comparison `config validate` runs), `presets.ts` (what `setup` SUGGESTS for the two questions no checkout can answer)                                                                                                                                                                                                                                                                                                                                           |
-| per-clone artifacts   | `clone-config.ts` — the byte-compared builders `doctor` holds every clone to; `colour-assignments.ts`; `ports.ts`; `port-pins.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| hangar-root artifacts | `hangar-files.ts` — the pair to `clone-config.ts`, for the files a hangar writes into its OWN root. Every one of them names this machine's home directory, which is what puts them on the untracked side of the inventory below                                                                                                                                                                                                                                                                                                                                                                                                 |
-| generators            | `generate/` — `terminal-sh.ts`, `tmux-conf.ts`, `tmux-status-sh.ts`, `claude-tmux-conf.ts`, `statusline-sh.ts`, `colours-sh.ts`, `theme-json.ts`, `index.ts` (the dry-run-aware writer)                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| tool server           | `mcp/` — `tools.ts` (which commands are exposed, and the schema read off the commander registry), `server.ts` (the stdio JSON-RPC loop). **Nothing here may import `ui.ts`**: stdout is the protocol                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| editor drivers        | `editor/` — `vscode.ts`, `jetbrains.ts`, `index.ts`, `kinds.ts`, `types.ts`, `launch-only.ts`, `emacs.ts`, `vim.ts`, `zed.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| emulator drivers      | `terminal/` — one window-opener each: `iterm2.ts`, `apple-terminal.ts`, `konsole.ts`, `gnome-terminal.ts`, `none.ts`, plus `applescript.ts`, `index.ts`, `types.ts`. Everything a window CONTAINS is `tmux.ts`, in the shared row                                                                                                                                                                                                                                                                                                                                                                                               |
-| platform              | `platform/` — `darwin.ts`, `linux.ts`, `index.ts`, `types.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| git / forge / tracker | `git.ts`, `bitbucket.ts`, `jira-records.ts`, `jira.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| fleet                 | `fleet.ts` — clone discovery, and everything per-clone derived from the index                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| tests                 | `test/**/*.test.ts` — run by `pnpm test`; `test/fixture.ts` builds the synthetic hangar they all use                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| shared                | `dedupe.ts`, `pr-cache.ts`, `pr-description.ts`, `claude-sessions.ts`, `resolve-conflicts.ts`, `claude-headless.ts`, `procs.ts`, `plans.ts`, `environment.ts`, `install.ts`, `secrets.ts`, `tui.ts`, `palette.ts`, `tmp.ts`, `sessions.ts`, `adopt.ts`, `ui.ts`, `hangar.ts`, `user-paths.ts`, `template.ts`, `exec.ts`, `tmux.ts`                                                                                                                                                                                                                                                                                              |
+The layout under `src/` is what `ls` shows; only what a listing cannot say is kept here:
+
+- **`cli.ts`** — every command, option and alias is registered here, plus the `preAction` config
+  gate and the `configureHelp` that prints all of a command's aliases.
+- **`commands/dev.ts` and `commands/release.ts`** — `hangar dev golden`, the capture behind
+  `pnpm golden`, and `hangar dev release`, the gates and preflight in front of semantic-release
+  (`release/commits.ts` reads the range). **Both are hidden in `cli.ts`, and that is their interface
+  contract**: nothing about either is promised to an operator, so neither gets a row in
+  `hangar-ops/reference/commands.md`. `dev` is deliberately NOT in `NEEDS_NO_CONFIG` — a capture, or
+  a release, derived from a hangar with no config would be derived from the schema defaults, the one
+  output neither may be mistaken for.
+- **`config/`** — `schema.ts` is the zod authority; `load.ts` is discovery and precedence;
+  `drift.ts` is the example-vs-live comparison `config validate` runs; `presets.ts` is what `setup`
+  SUGGESTS for the two questions no checkout can answer.
+- **`clone-config.ts`** — the byte-compared builders `doctor` holds every clone to.
+  **`hangar-files.ts`** is its pair for the files a hangar writes into its OWN root; every one of
+  them names this machine's home directory, which is what puts them on the untracked side of the
+  inventory below.
+- **`generate/index.ts`** — the dry-run-aware writer every generator goes through.
+- **`mcp/`** — `tools.ts` (which commands are exposed, and the schema read off the commander
+  registry) and `server.ts` (the stdio JSON-RPC loop). **Nothing here may import `ui.ts`**: stdout
+  is the protocol.
+- **`terminal/`** — one window-opener per emulator. Everything a window CONTAINS is `tmux.ts`.
+- **`test/`** — run by `pnpm test`; `test/fixture.ts` builds the synthetic hangar they all use.
 
 **Five seams**, each a capability record plus a driver interface rather than a pretence that the
 implementations are equivalent. Adding a kind means implementing the interface and registering it;
@@ -683,51 +690,13 @@ More root files are hand-maintained and belong to this package rather than to th
   cannot be suppressed for either of them, the socket and the singleton rules, four probes that
   answered wrongly, and two more that could not answer at all — the status line does not run
   under `claude -p`, and `$CLAUDE_PROJECT_DIR` is not exported to tool subprocesses.
-- **`bin/hangar-waypoint` and `bin/hangar-commit-gate`** — the two personal tools every clone gets
-  on PATH, and the reason both are scripts rather than `hangar` subcommands is the one
-  `hangar-exec-guard` already records: the gate is a `PreToolUse` hook that runs before EVERY Bash
-  call, where loading `cli.ts` costs ~0.25s of type stripping against a bare node start, and the
-  waypoint is typed often enough for the same argument to hold. They are CommonJS, because the
-  hangar root's `package.json` declares no `"type"` — do not "modernise" them to `import`.
-  `waypoint` is pre-approved WHOLE, `restore` included, and that rests on two properties together:
-  a restore records an undo snapshot before it writes, AND it refuses any path resolving to the
-  repo root. The gate is pre-approved only as `status`; `lock`, `release` and `unlock` prompt,
-  because an agent that can release its own gate has no gate — and the hook refuses those verbs
-  and any command naming its own state file, because a permission rule matches only the START of
-  a command string and `hangar-commit-gate status && … release` sails straight past one.
-- **`bin/hangar-rewrite`** — amend, fixup, autosquash, rebase and reset, for history that has
-  never been published. A blanket "never rewrite" rule is a proxy for the thing that actually
-  matters, which is never rewriting what other people already have; this enforces the real rule
-  instead of the proxy, by refusing any commit reachable from a remote-tracking ref. Every verb
-  records a waypoint first, so all of it is undoable. **It is deliberately absent from
-  `personalToolAllows`** — rewriting history should be asked for, never reached for, and absence
-  is what makes every call prompt. **A verb that replays commits must never exit with the
-  operation stopped**: a repo rule that denies `git rebase` denies `--abort` and `--continue` with
-  it, so the verb aborts itself and says so. Arguments naming `origin`, `push` or `remote` are
-  refused, which is why `rebase` takes a bare branch name. **Test it in a scratchpad fixture,
-  never a clone, and publish by fetching**: `hangar-exec-guard` refuses `git push` even to a bare
-  scratch remote, so the fixture fetches the branch into its upstream (`git fetch ../w feat:feat`)
-  instead. Edit a scratch copy and `mv` it into `bin/`, because the file is live fleet-wide the
-  moment it is saved.
-- **`bin/hangar-exec-guard` also refuses publishing**, and the remit widened with `hangar-rewrite`
-  rather than before it: a rewritten branch has diverged from its remote, which is the one moment
-  a force-push looks like the obvious next step. The capability and the refusal were one decision.
-  It covers `push`, `send-pack`, `http-push`, `gh pr create|merge` and hangar's own
-  `pr create|update` unless the invocation carries `-n`, token-based so
-  `git log --grep=push` and a file called `push.ts` survive. A managed repo may forbid pushing in
-  its own rules; this is not per-project, and holds in a fresh clone and in a repo that has no
-  such rule.
-- **`personal-skills/` is tracked, and is the one thing this repo writes OUTSIDE its own root.**
-  `hangar skills sync` links `~/.claude/skills/<name>` at it, which shadows a same-named project
-  skill entirely and silently. **It is also the one artifact that cannot carry the hangar id** —
-  the directory name is what makes a skill shadow, so `<id>-<name>` would shadow nothing. The
-  collision with a second hangar is therefore made INSPECTABLE rather than named away: `sync`
-  reads the existing link's target and refuses when it belongs elsewhere. `--adopt` replaces a
-  real directory only when its content already matches byte for byte, so the failure mode is a
-  refusal and never a discarded edit.
-  **A new skill there also needs a row in `personal-skills/manifest.yaml`** — `name`, a
-  `divergence` (`standalone` when no tracked skill carries its name) and a `reason` — then
-  `hangar skills sync -n`, `sync` and `list` to link it.
+- **`bin/hangar-waypoint`, `bin/hangar-commit-gate`, `bin/hangar-rewrite`, `bin/hangar-exec-guard`
+  and `personal-skills/`** — scripts rather than `hangar` subcommands, because the gate runs before
+  EVERY Bash call and `cli.ts` costs ~0.25s to load. They are CommonJS, so do not "modernise" them
+  to `import`. **Edit a scratch copy and `mv` it into `bin/`: each is live fleet-wide the moment it
+  is saved.** `hangar-internals/reference/root-tools.md` has what each refuses and why,
+  including `hangar-rewrite`'s published-commit rule, the `personal-skills/` manifest row a new
+  skill needs, and how to test any of them.
 - **`.nvmrc` and `app/.nvmrc`** are a pair, both `24`. Move them together.
 - **`.claude/skills/**` is tracked, and both skills are artifacts of this package.** A command
   whose flags change is a `hangar-ops/reference/commands.md` edit; a design decision that changes
