@@ -77,6 +77,10 @@ version moves. The hangar root's `.envrc` activates it through `hangar_use_pnpm`
 of those commands is not found, the answer is almost always that direnv has not loaded: run
 `direnv allow` at the hangar root.
 
+**Prefer bullet lists to wide tables in any CLAUDE.md under `app/`.** `format:check` pads every row
+to the widest cell, so one long cell inflates the whole table; the old code-by-role table was ~13.9k
+characters, mostly spaces. Keep table cells short.
+
 **`hangar_use_gnu` puts GNU coreutils first on PATH, so `sed -i` takes no `''` argument.** The
 BSD spelling fails partway through a multi-file edit, and a half-edited `src/**` is live at once
 — every clone's `SessionEnd` hook runs this working tree.
@@ -665,6 +669,8 @@ More root files are hand-maintained and belong to this package rather than to th
   own argv or from `$HANGAR_MODE` — which `hangar claude` sets per tmux window and nothing else
   may, since from `.envrc` it would reach every shell in the hangar and make the badge
   meaningless.
+  **`claude --version` at the hangar root reports hangar's version, not Claude Code's**, because the
+  shim intercepts it; the cask binary (`/opt/homebrew/bin/claude`) answers for the real one.
   **The shim cannot be a shell function in `.envrc.hangar`**: direnv exports an environment diff,
   and a function is not an environment variable — `PATH_add` is what actually reaches the shell.
   **It also cannot be in `bin/`**, and that is the one thing to know before moving it: every
