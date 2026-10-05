@@ -23,7 +23,7 @@ hangar root for the reason below.
 > directory is an ancestor of every clone, and Node resolves both a file's module type and its
 > imports from the nearest `package.json` and `node_modules` walking up. A clone has no
 > `package.json` at its own root — only in `angular/` — so whatever is at this level is what every
-> clone file outside `angular/` reads. It has already broken things once: `"type": "module"` here
+> clone file outside `angular/` reads. A `"type": "module"` here would break things: it
 > flipped `clone_NN/.claude/hooks/*.js` to ESM, so every one of them died with
 > `ReferenceError: require is not defined in ES module scope` at session start, and
 > `npm pkg get name` run at a clone root answered the fleet's package. That is why the CLI is in
@@ -37,7 +37,7 @@ hangar root for the reason below.
 > `app/pnpm-lock.yaml` stays the lockfile.
 >
 > **`dev/scrub-check.sh` enforces that shape, because the obvious guard does not work.** A
-> `preinstall` script exiting 1 was written and then measured: **pnpm 10 does not run it** — not
+> `preinstall` script exiting 1 is measured not to work: **pnpm 10 does not run it** — not
 > even with a dependency present to install (probed both ways; `pnpm run preinstall` fires,
 > `pnpm install` does not), and npm skipped it too. So a stray `pnpm install` here still leaves an
 > empty `node_modules`, which resolves nothing and harms nothing. What must never happen is this
@@ -67,8 +67,8 @@ caught the Atlassian token, an `ATBB` Bitbucket token, an AWS key id, a GitHub P
 `db_password` — and **missed both plain `USER_READWRITE_PASSWORD=<human-chosen value>` lines**,
 because low entropy defeats its `generic-api-key` rule. That is one of this hangar's four real
 credentials and the exact shape a person pastes, so `scrub-check.sh` carries the pattern for it.
-Both also run in `app/.husky/pre-commit` (on what is staged) and in the workflow's `scan` job,
-which `release` needs — the same fast-feedback-plus-enforcement shape as `commitlint`.
+Both also run in `app/.husky/pre-commit` (on what is staged) and inside `hangar dev release` —
+the same fast-feedback-plus-enforcement shape as `commitlint`.
 
 `pnpm` is not assumed to be on PATH: it lives inside an fnm multishell and so moves when the Node
 version moves. The hangar root's `.envrc` activates it through `hangar_use_pnpm` (defined in
@@ -78,8 +78,8 @@ of those commands is not found, the answer is almost always that direnv has not 
 `direnv allow` at the hangar root.
 
 **Prefer bullet lists to wide tables in any CLAUDE.md under `app/`.** `format:check` pads every row
-to the widest cell, so one long cell inflates the whole table; the old code-by-role table was ~13.9k
-characters, mostly spaces. Keep table cells short.
+to the widest cell, so one long cell inflates the whole table, and a wide
+code-by-role table runs to ~14k characters, mostly spaces. Keep table cells short.
 
 **`hangar_use_gnu` puts GNU coreutils first on PATH, so `sed -i` takes no `''` argument.** The
 BSD spelling fails partway through a multi-file edit, and a half-edited `src/**` is live at once
@@ -104,9 +104,8 @@ Both exist because they caught something, and both apply to every edit under `ap
   - **`gated/` is a gate, portable, and expected to diff for NOBODY.** Everything in it renders
     from a checked-in fixture config in a temp directory with `%HANGAR%`/`%HOME%` normalised
     away, so `pnpm golden` in a fresh clone of this repo on another machine produces no diff and
-    any diff is a finding. It did not always: a capture of this hangar was gated too, and the
-    first developer gate a colleague ran opened with a 120-file diff that looked like a broken
-    tool. **The one legitimate exception is the platform** — each fixture's `manifest.txt` carries
+    any diff is a finding. A capture of this hangar is never gated: it would open a colleague's
+    first gate run with a 120-file diff that looks like a broken tool. **The one legitimate exception is the platform** — each fixture's `manifest.txt` carries
     the platform driver's own answers, including the capability record, and a Linux run diffs
     those rows. They are captured rather
     than normalised because a capture that hid them would hide the seam that only exists at all
@@ -317,18 +316,13 @@ section list, the patch-level types, the hidden `chore(release)` entry whose POS
 `# Changelog` heading. `pnpm changelog` producing no diff at a released state is the check that
 they hold. Read `hangar-internals/reference/release.md` before editing any of them.
 
-### The history was rewritten once
+### Rewriting history
 
-All 84 commits up to `v0.13.0` were originally prose subjects with no type; they were rewritten in
-place — prefix added, body byte-identical, GPG signature re-made, committer date preserved — and
-tagged into fourteen milestone releases. `git filter-repo` cannot re-sign and was ruled out for
-that reason; `git rebase --root --exec` re-signs from `commit.gpgsign`.
-
-One thing that rewrite found, worth knowing before anyone tries it again: **a root rebase cannot
-run in a live hangar.** `.claude/settings.json`, `clone-colours.sh`, `clone-terminal.sh` and
-`hangar.config.yaml` are generated and untracked _now_, but were tracked earlier in this history —
-so replaying the root commit tries to overwrite the live files and git refuses. Do it in a
-throwaway clone and fetch the result back.
+**A root rebase cannot run in a live hangar.** `.claude/settings.json`, `clone-colours.sh`,
+`clone-terminal.sh` and `hangar.config.yaml` are generated and untracked, but were tracked earlier
+in this history — so replaying the root commit tries to overwrite the live files and git refuses.
+Do it in a throwaway clone and fetch the result back. `git filter-repo` cannot re-sign;
+`git rebase --root --exec` re-signs from `commit.gpgsign`.
 
 ## The code, by role
 
@@ -379,10 +373,9 @@ callers degrade one capability at a time instead of branching on a product name:
 - `generate/index.ts` — every generated artifact is a pure function of the clone plus a path
 - `fleet.ts` — clone discovery is filesystem-only; there is no list of clones in any file
 
-The platform seam arrived last, and the reason is worth keeping: this fleet runs on macOS, so
-every platform difference here was invisible until the tool was published for someone else to
-run. Three were already in the code, written as if `darwin` were the only case — and none of
-them **failed**. `vscodeWindowState` returned a plausible path under a `~/Library` that is not
+The platform seam exists because this fleet runs on macOS, so
+a platform difference is invisible until someone else runs the tool. Three were written as if
+`darwin` were the only case — and none of them **failed**. `vscodeWindowState` returned a plausible path under a `~/Library` that is not
 there, the read threw, the catch said "no opinion", and `hangar open` opened a second window on
 a workspace that was already open. That is how two Claude Code sessions end up in one clone.
 `hangar-internals/reference/terminal-and-sessions.md` has the capability table, the two Linux
@@ -472,16 +465,15 @@ is the one excluded for a permission reason rather than a mechanical one**: ever
 thing a per-tool rule buys.
 
 **`exec` is also the one command no agent may run at all**, and that is enforced by a hook rather
-than by a rule. `bin/hangar-exec-guard` is a `PreToolUse` matcher on `Bash`, wired into both mode
-settings files and into every clone's `settings.local.json`; it reads the whole command line and
-refuses any invocation of `hangar exec`. The `Bash(hangar exec)` deny entries in both modes stay
+than by a rule. `bin/hangar-exec-guard` (listed with the root files below) is a `PreToolUse` matcher on `Bash`
+that reads the whole command line and refuses any invocation of that command. The `Bash(hangar exec)` deny entries in both modes stay
 beside it, but they are the weaker half and cannot be the only one: a permission rule matches the
 START of the command string, so `cd /elsewhere && hangar exec ...` never matches it. The reason
 the bar is higher here than for `remove-clone` is not blast radius but generality — a command
 that takes an arbitrary snippet can spell every other command that is denied, and it reaches every
 clone in one call, which is the rule the fleet's own `CLAUDE.md` is built around. `setup` IS exposed, and that closes a
-hole rather than opening one — `modes.md` had it recorded as escalation-adjacent and unlisted, and
-it now has a rule in both spellings. The one flag no tool offers is `--quiet`, which exists so a
+hole rather than opening one — `modes.md` records it as escalation-adjacent, and it has a
+rule in both spellings. The one flag no tool offers is `--quiet`, which exists so a
 `SessionEnd` hook and the bar's own spawn can stay silent; a caller reading the result wants the
 opposite. A `.hideHelp()` option is dropped by the same rule that keeps it out of `--help`, unless
 an exposure names it in `shows` — `add-clone --remote` is the only one that does.
