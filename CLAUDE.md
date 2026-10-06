@@ -72,16 +72,10 @@ is working in.
 
 **One builder renders it, and `doctor` holds every clone to it.** `add-clone`, `doctor --fix` and
 `colours change` all write `claudeLocalMdContent(clone)`, and `doctor` compares each file against
-that same render — so the four cannot drift apart, and improving the text is one edit plus
-`doctor --all --fix`. It takes the clone and nothing else: an earlier version listed the siblings
-by name, which would have made `doctor` red on every surviving clone after each `add-clone` or
-`remove-clone` until someone re-ran `--fix`. Which clones exist stays underived from any file,
-here included. That file is excluded via the clone's `.git/info/exclude` (not the tracked
-`.gitignore`), so it never commits and never travels to a sibling. Because that exclude line lives
-inside `.git/`, **a re-clone loses both the identity file and its exclusion** — recreate the pair
-together, or `CLAUDE.local.md` shows up as untracked noise in a clean tree and eventually gets
-committed into every branch. An agent that does not know which clone it is in is the failure this
-fleet is most prone to.
+that same render, so the four cannot drift apart. The file is excluded via the clone's
+`.git/info/exclude`, which lives inside `.git/`: **a re-clone loses both the identity file and its
+exclusion** — recreate the pair together, or it gets committed into every branch. Why the builder
+takes the clone and nothing else is in the `hangar-internals` skill.
 
 The clones are **interchangeable and equal in rank** — none is a primary. Each has whatever branch
 it has checked out at the moment; never infer a clone's branch, task or freshness from its number
@@ -233,11 +227,9 @@ reaches the others at the next `hangar tmp merge`, which every clone runs from a
 hook. `tmp merge` is idempotent and never overwrites: anything that differs is kept beside the
 winner as `<name>.from-<clone>`, so run it again rather than forcing it.
 
-**Dev-server PID files are why `tmp/` is a real directory and not a link.** A repo's own scripts
-refuse a name that is already live and find a server by that file, so a shared `tmp/` would let
-the first clone to start a dev server block the others and let a kill reach into a sibling. With
-the links one level down, **`tmp merge` never moves, links or even reads a PID file** — a running
-dev server is no obstacle to sharing.
+**`tmp/` is a real directory because of dev-server PID files**: a shared one would let the first
+clone to start a server block the others and let a kill reach into a sibling. **`tmp merge` never
+moves, links or even reads a PID file**, so a running dev server is no obstacle to sharing.
 
 **Never hand-edit a file under `tmp/`.** Each cached issue record is a **symlink** into one record
 store the whole fleet shares, so an in-place edit writes every clone's copy of it, and nothing
@@ -261,11 +253,9 @@ working-tree diff, so it is shared as a side effect and is last-writer-wins when
 one ticket at once. One ticket normally belongs to one clone, so this is bounded, but do not trust
 a PR description you did not just generate in this clone.
 
-`tmp/` is gitignored by the tracked `/tmp/` rule, which matches the real directory and everything
-under it — the per-entry links included. So nothing about `tmp` belongs in `.git/info/exclude`;
-that file hides `/CLAUDE.local.md` alone. **How the store is built** — one record per ticket and
-why it cannot carry `relation:` frontmatter, the hard-linking pass for attachments, the freshness
-ranking, and the cache hook's five design properties — is in the `hangar-internals` skill.
+`tmp/` is gitignored by the tracked `/tmp/` rule, so nothing about it belongs in
+`.git/info/exclude`. **How the store is built** and the cache hook's design are in the
+`hangar-internals` skill.
 
 ## Claude Code settings layering
 
@@ -284,20 +274,14 @@ on exit — `doctor` checks what is on disk, and a green report says nothing abo
 sessions are running.
 
 **Plans cannot be shared by a setting.** Claude Code requires `plansDirectory` to resolve _inside_
-the project root and silently falls back to `~/.claude/plans` otherwise — the derivation, and the
-day three clones spent doing exactly that unnoticed, is in the `hangar-internals` skill. So the
-value stays the repo's own tracked `"plansDirectory": ".claude/plans"` — each clone writes into its
-own directory, and the per-clone settings carry no copy of it — and the sharing is
-**`hangar plans collect`**, which moves finished plans into the hangar's `plans/`, collapses
-byte-identical copies and puts the plan's date in front of the name. It is not something to
-remember: each clone's untracked `.claude/settings.local.json` runs it from a **`SessionEnd` hook**,
-so a session's plan reaches the archive the moment that session ends — which is also the first
-moment it is safe to move, because nothing can rewrite it any more. **A plan stays in its own clone
-while its session is alive; that is the guarantee, not a delay.** `hangar plans stamp` dates
-anything that arrives unstamped, and `hangar doctor` checks both the effective `plansDirectory`
-and the hook. A hangar-root session needs neither: its project root _is_ the hangar root, so
-`"plansDirectory": "plans"` in the generated `.claude/settings.json` writes into the archive
-directly.
+the project root and silently falls back to `~/.claude/plans` otherwise (the derivation is in the
+`hangar-internals` skill). So the value stays the repo's own tracked
+`"plansDirectory": ".claude/plans"`, and the sharing is **`hangar plans collect`**, which moves
+finished plans into the hangar's `plans/` from a **`SessionEnd` hook** in each clone's untracked
+`.claude/settings.local.json`. **A plan stays in its own clone while its session is alive; that is
+the guarantee, not a delay.** `hangar doctor` checks both the effective `plansDirectory` and the
+hook. A hangar-root session needs neither: its generated `.claude/settings.json` already writes
+into the archive.
 
 ## Git topology
 

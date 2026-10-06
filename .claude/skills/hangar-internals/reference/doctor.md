@@ -55,6 +55,13 @@ untracked, excluded via `.git/info/exclude`, generated from one builder and held
 — so a rule put here reaches every session in every clone from its first turn, and changes not
 one tracked byte in the repo being managed.
 
+**The builder takes the clone and nothing else.** Listing the siblings by name would turn `doctor`
+red on every surviving clone after each `add-clone` or `remove-clone` until someone re-ran
+`--fix`, so which clones exist is underived from any file. Improving the text is one edit plus
+`doctor --all --fix`. The exclusion lives in the clone's `.git/info/exclude`, not the tracked
+`.gitignore`, so a re-clone loses the file and its exclusion together; recreate the pair, or
+`CLAUDE.local.md` shows up as untracked noise and eventually gets committed into every branch.
+
 That is what the closing section uses: **nothing about the fleet goes into anything the session
 writes.** A commit message naming a helper on this PATH, a code comment naming a sibling clone,
 an identifier carrying a colour — each is a reference to something no contributor with one
