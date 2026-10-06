@@ -48,12 +48,13 @@ test('every tool is named by exactly one of operator mode’s three lists', () =
   for (const exposure of EXPOSURES) {
     const rule = permissionRule(exposure.name);
     const holding = (['allow', 'ask', 'deny'] as const).filter((key) => lists[key].includes(rule));
+    const expected = exposure.acts && exposure.preapproved !== true ? 'ask' : 'allow';
     assert.deepEqual(
       holding,
-      [exposure.acts ? 'ask' : 'allow'],
+      [expected],
       // In `auto` a tool with no rule is classifier-approved, so an omission here is a mutating
       // command that runs unasked -- and it looks exactly like a tool that works.
-      `${rule} should be in exactly ${exposure.acts ? 'ask' : 'allow'}, and is in [${holding.join(', ')}]`,
+      `${rule} should be in exactly ${expected}, and is in [${holding.join(', ')}]`,
     );
   }
 });

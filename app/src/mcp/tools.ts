@@ -54,6 +54,11 @@ export type Exposure = {
   readonly shows?: readonly string[];
   /** `false` puts it in operator mode's `allow` list; `true` puts it in `ask`. */
   readonly acts: boolean;
+  /**
+   * An acting tool the operator has chosen to run unasked, so it sits in `allow` beside the
+   * reports. Only meaningful with `acts: true`; the schema still refuses `dry-run`.
+   */
+  readonly preapproved?: boolean;
   /** Prepended to the registry's own text when the fixed flags change what the command means. */
   readonly lede?: string;
 };
@@ -97,13 +102,13 @@ const ideExposures: readonly Exposure[] = IDE_KINDS.flatMap((kind) => [
 /**
  * The whole tool surface.
  *
- * **Five commands are deliberately absent, and the Bash denials stay in force beside them:**
+ * **Six commands are deliberately absent, and the Bash denials stay in force beside them:**
  * `claude` is operator mode's escalation boundary -- `ops.settings.json` denies it and the
  * command itself refuses when `$CLAUDECODE` is set; `dev golden` and `dev release` are hidden
  * maintainer commands whose whole interface contract is that nothing about them is promised to
  * an operator; `jira hook` is a `PreToolUse` hook rather than a command, with a fail-open
- * contract a tool call would defeat; and `setup` writes `hangar.config.yaml`, which a hangar
- * that is already running has.
+ * contract a tool call would defeat; `mcp` is this server; and `exec` takes a shell snippet no
+ * schema could constrain. `setup` IS exposed, as a preview and an acting tool.
  */
 export const EXPOSURES: readonly Exposure[] = [
   // ---- reports ----------------------------------------------------------------------------
@@ -294,8 +299,14 @@ export const EXPOSURES: readonly Exposure[] = [
 
   // ---- acts -------------------------------------------------------------------------------
   { name: 'sync', path: ['sync'], hides: [PREVIEW], acts: true },
-  { name: 'checkout_default', path: ['checkout-default'], hides: [PREVIEW], acts: true },
-  { name: 'open', path: ['open'], hides: [PREVIEW], acts: true },
+  {
+    name: 'checkout_default',
+    path: ['checkout-default'],
+    hides: [PREVIEW],
+    acts: true,
+    preapproved: true,
+  },
+  { name: 'open', path: ['open'], hides: [PREVIEW], acts: true, preapproved: true },
   { name: 'edit', path: ['edit'], hides: [PREVIEW], acts: true },
   { name: 'close', path: ['close'], hides: [PREVIEW], acts: true },
   {
