@@ -455,6 +455,9 @@ Three things about it belong here rather than only in the skill:
   on stderr when it starts, and refuses outright only for the two errors that would be wrong
   rather than missing: a table naming a command that is not there, and an acting tool whose schema
   offers `dry-run`.
+- **An acting exposure sits in `ask` unless it says `preapproved: true`**, which moves it to
+  `allow` in `ops.settings.json`; `test/mcp-tools.test.ts` expects exactly that, so the field and
+  the settings file change in one edit. `open` and `checkout_default` are the two that carry it.
 
 **Coverage is every command but six, and every documented flag but one.** `claude` could only
 ever fail (`$CLAUDECODE` refuses on every tool call) and is the boundary the mode pair exists for;
@@ -697,7 +700,8 @@ More root files are hand-maintained and belong to this package rather than to th
   skill needs, and how to test any of them.
 - **`.nvmrc` and `app/.nvmrc`** are a pair, both `24`. Move them together.
 - **`.claude/skills/**` is tracked, and both skills are artifacts of this package.** A command
-  whose flags change is a `hangar-ops/reference/commands.md` edit; a design decision that changes
+  whose flags change is a `hangar-ops/reference/commands.md` edit (the tables and tool map; the
+  per-command traps are in `command-notes.md`); a design decision that changes
   is the matching `hangar-internals/reference/*.md`. That edit starts on this side of the
   boundary, which is why it is named here and not only in the skills.
   **A claim corrected in one prose surface is usually stated in another**: grep its key phrase
