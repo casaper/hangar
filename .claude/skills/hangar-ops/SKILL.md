@@ -128,9 +128,12 @@ Run it with `run_in_background: true`, or `timeout: 600000`. **Never bare.** The
 
 **These two are the exception to preferring the tool.** A tool call has no timeout you can set and
 no background mode; it runs under Claude Code's own MCP timeout, and a `sync` cut off there leaves
-exactly the half-applied rebase described above. So use `mcp__hangar__sync_preview` to report, and
-hand the real `sync` over as a shell line rather than calling `mcp__hangar__sync` — the one place
-where a shell line the user runs beats a prompt they answer.
+exactly the half-applied rebase described above. So use `mcp__hangar__sync_preview` to report, then
+**run the real `sync` yourself through Bash** with `run_in_background: true` — `Bash(hangar
+sync:*)` is an `ask` rule, so the user's answer to that prompt is the consent. Do not call
+`mcp__hangar__sync`, and do not hand the user a shell line to run: the user came to you so they
+would not have to. `sync` asks its own question only when a live session could not be reached, and
+then it skips and says so; report that rather than retrying.
 
 While the resolver runs it streams a dim line per tool call. That is progress, not a hang.
 
