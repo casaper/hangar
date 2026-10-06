@@ -37,6 +37,12 @@ For every request, in this order:
 | "close / restart clone N" | `close_preview` / `reload_preview`; warn that it ends a live Claude session |
 | "open a PR" | `pr_create_preview`, read the title back, then `pr_create` (draft) |
 
+**A tool that skips is not a failure to retry.** `open`, `checkout_default`, `close` and `reload`
+ask their own question where a human could answer it — a live Claude session in the clone, a dev
+server that dies with it — and a tool has no terminal, so they skip and say why. Tell the user
+what was skipped and why, ask whether to go ahead, and only on a yes re-run with the flag that
+answers it (`include-busy` for `checkout_default`, `yes` for `close` and `reload`).
+
 Anything not in the table: load the `hangar-ops` skill for the right command, then follow the same
 four steps.
 

@@ -1,6 +1,6 @@
 ---
 name: hangar-ops
-description: How to drive the hangar CLI on the user's behalf — addressing clones by index, which commands only report and which move git state or open windows, previewing before acting, the four commands that ask a human a yes/no question on /dev/tty and skip when there is no terminal, the Bash timeout that will kill a sync mid-rebase, and how the mcp__hangar__* tools relate to the shell commands. Load when the user asks what the fleet is doing, to sync or check out or open a clone, to add or remove one, to recolour one, why doctor is red, or for any hangar command's flags. This is the operator's manual; hangar-internals is why the commands are built the way they are.
+description: Operator's manual for the hangar CLI — load before running a command whose flags you are not certain of, before sync/add-clone/close/reload (timeouts, live sessions, no-tty confirmations), or when a report such as doctor needs interpreting. Not needed for routine list/status/open requests, which the mode's own playbook covers. hangar-internals is the why behind the commands.
 ---
 
 # Driving `hangar`
@@ -9,7 +9,7 @@ The user is steering a fleet of clones through you. Your job is to run the right
 output correctly, and know which commands are not yours to run.
 
 `reference/commands.md` has the full surface — every command, its tool name, every flag and
-default, and whether it reports or acts. **Check a spelling there rather than recalling it**;
+default, and whether it reports or acts; `reference/command-notes.md` has the traps per command. **Check a spelling there rather than recalling it**;
 several flags are unusual, and one is actively misleading (see `resume` below).
 
 **Two ways in, and they run the same code.** A mode session has one MCP tool per command
