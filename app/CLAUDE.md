@@ -85,6 +85,9 @@ code-by-role table runs to ~14k characters, mostly spaces. Keep table cells shor
 BSD spelling fails partway through a multi-file edit, and a half-edited `src/**` is live at once
 — every clone's `SessionEnd` hook runs this working tree.
 
+**Dev-mode Bash runs zsh:** `$VAR` holding `cmd -flag` is not word-split, so call
+`/opt/homebrew/bin/tmux -L hangar-<id> …` directly, and `type -P` does not exist (use `command -v`).
+
 ## Two conventions for changing it
 
 Both exist because they caught something, and both apply to every edit under `app/src/**`.
@@ -446,6 +449,9 @@ Three things about it belong here rather than only in the skill:
   strategy from `process.argv`, about twenty `console.log` sites bypass `ui.ts`'s `emit`, and
   `captureOutput()` is a module-level global — so an in-process server would silently mis-run
   `sync` and corrupt its own protocol stream. **Nothing under `src/mcp/` may import `ui.ts`.**
+- **Anything `server.ts` puts in a spawned child's env (`NO_COLOR`) reaches whatever that child
+  starts and outlives it** — a tmux server most of all. Scrub at the spawn site (`tmux.ts`'s
+  `scrubbedEnv`), never rely on the caller's environment being clean.
 - **`src/mcp/tools.ts` is the table and the commander registry is the schema.** Descriptions,
   arguments and `.choices()` are read off `cli.ts`'s own entries, so a flag is declared once; what
   the table adds is the two facts the registry cannot carry — whether an exposure only reports,

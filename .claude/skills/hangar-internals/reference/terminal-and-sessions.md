@@ -563,6 +563,15 @@ single window the wrong target and the right one are the same window.
 options -- the first styles a window that is not current. With only the second, the clone you are
 actually looking at is the one window with no colour.
 
+**A tmux server inherits the environment of whatever starts it.** `hangar open` run as an MCP
+tool started clone 5's server with operator mode's `NO_COLOR=1` (set by `mcp/server.ts`),
+`CLAUDECODE=1`, `HANGAR_MODE=ops` and `CLAUDE_CODE_*`, and every window made later inherited
+them: Claude Code drew no colour at all, with every generated colour file correct. `tmux.ts` now
+spawns tmux through `scrubbedEnv` and `createSession` unsets the same names from a standing
+server (`isSessionLeak` is the list). A running Claude Code process keeps what it started with,
+so a healed server still needs `hangar reload`. Diagnose with
+`tmux -L hangar-<id> show-environment -g`.
+
 ## The status bar had no background, and so had tmux's own green
 
 **The bug, because it is the reason half of the above reads the way it does.** `clone-tmux.conf`
