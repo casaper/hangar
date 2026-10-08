@@ -10,7 +10,7 @@ import {
   TMUX_SETTINGS,
   tmuxConfArtifact,
 } from '../src/generate/tmux-conf.ts';
-import { pathWithNode } from '../src/tmux.ts';
+import { leakedInEnvironment, pathWithNode, scrubbedEnv } from '../src/tmux.ts';
 import {
   claudeTmuxConfArtifact,
   KEY_BINDINGS as CLAUDE_KEY_BINDINGS,
@@ -373,4 +373,26 @@ test('node is prepended to the server PATH, once, and never replaces what is the
   assert.equal(pathWithNode(undefined, node), node);
   assert.equal(pathWithNode('', node), node);
   assert.equal(pathWithNode(':/usr/bin:', node), '/opt/node/bin:/usr/bin');
+});
+
+test('a tmux server never inherits the session that started it', () => {
+  /*
+   * Property, not text: whatever else the environment carries survives, and what names the
+   * calling session does not. `NO_COLOR` is the one that cost a clone its colours, because the MCP
+   * server sets it on every `hangar` it spawns.
+   */
+  const env = scrubbedEnv({
+    NO_COLOR: '1',
+    CLAUDECODE: '1',
+    HANGAR_MODE: 'ops',
+    CLAUDE_CODE_SESSION_ID: 'x',
+    PATH: '/usr/bin',
+    HOME: '/home/a',
+  });
+  assert.deepEqual(Object.keys(env).sort(), ['HOME', 'PATH']);
+  // A server already standing: removals (`-NAME`) are not values, and unrelated names stay.
+  assert.deepEqual(
+    leakedInEnvironment('NO_COLOR=1\nPATH=/usr/bin\n-CLAUDECODE\nHANGAR_MODE=ops\nCLAUDE_CODE_X=1'),
+    ['NO_COLOR', 'HANGAR_MODE', 'CLAUDE_CODE_X'],
+  );
 });

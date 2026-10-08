@@ -430,12 +430,43 @@ export const pathWithNode = (base: string | undefined, nodeBin: string): string 
   return [nodeBin, ...parts].join(':');
 };
 
+/**
+ * Whether an environment variable belongs to the session that ran `hangar`, and so must never
+ * become part of a clone's tmux server.
+ *
+ * The first command to find the server absent STARTS it, and a tmux server's global environment
+ * is the environment of whatever started it -- which every window created later inherits. When
+ * that was `hangar open` run through an MCP tool, the server carried operator mode's `NO_COLOR=1`
+ * (which `mcp/server.ts` sets so picocolors stays quiet), `CLAUDECODE=1` and `HANGAR_MODE=ops`,
+ * and every Claude Code session in that clone then rendered with no colour at all and believed it
+ * was nested. A `NO_COLOR` the developer exports from their own profile is not lost: the pane's
+ * login shell sets it again.
+ */
+export const isSessionLeak = (name: string): boolean =>
+  name === 'NO_COLOR' ||
+  name === 'CLAUDECODE' ||
+  name === 'HANGAR_MODE' ||
+  name.startsWith('CLAUDE_CODE_');
+
+/** `env` without what {@link isSessionLeak} names -- what a tmux child is spawned with. */
+export const scrubbedEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv =>
+  Object.fromEntries(Object.entries(env).filter(([name]) => !isSessionLeak(name)));
+
+/** The leaked names in `tmux show-environment -g` output, which prints `-NAME` for a removal. */
+export const leakedInEnvironment = (shown: string): string[] =>
+  shown
+    .split('\n')
+    .map((line) => line.split('=')[0] ?? '')
+    .filter((name) => name !== '' && !name.startsWith('-') && isSessionLeak(name));
+
 export const tmuxServer = (hangar: Hangar): TmuxServer => {
   const tmux = (
     args: readonly string[],
     opts?: { readonly withConf?: boolean },
   ): { readonly ok: boolean; readonly out: string } => {
-    const res = run('tmux', tmuxArgv(hangar, args, opts));
+    const res = run('tmux', tmuxArgv(hangar, args, opts), {
+      env: scrubbedEnv(process.env),
+    });
     return { ok: res.ok, out: res.stdout.trim() };
   };
 
@@ -449,6 +480,17 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
     if (!shown.ok || !shown.out.startsWith('PATH=')) return undefined;
     const value = shown.out.slice('PATH='.length);
     return value === '' ? undefined : value;
+  };
+
+  /**
+   * Take out of a server that is ALREADY standing what an earlier start let in. Scrubbing the
+   * spawn env fixes servers from now on; this fixes the one that was started from an MCP tool
+   * yesterday, without the `kill-server` that would end every live agent.
+   */
+  const dropLeakedEnvironment = (): void => {
+    const shown = tmux(['show-environment', '-g']);
+    if (!shown.ok) return;
+    for (const name of leakedInEnvironment(shown.out)) tmux(['set-environment', '-g', '-u', name]);
   };
 
   const ensureNodeOnPath = (): void => {
@@ -621,6 +663,7 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
       // The server may be brand new or may have been standing for days -- and it exists either
       // way now, which is the only moment this can be written.
       ensureNodeOnPath();
+      dropLeakedEnvironment();
       const [, window] = created.out.split(SEP);
       if (window === undefined || window === '') return false;
       paintSession(clone);
