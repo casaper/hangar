@@ -445,6 +445,7 @@ export const pathWithNode = (base: string | undefined, nodeBin: string): string 
 export const isSessionLeak = (name: string): boolean =>
   name === 'NO_COLOR' ||
   name === 'CLAUDECODE' ||
+  name === 'CLAUDE_PROJECT_DIR' ||
   name === 'HANGAR_MODE' ||
   name.startsWith('CLAUDE_CODE_');
 
