@@ -139,7 +139,7 @@ through the same Bitbucket adapter.
   STARTED when found on the way in (a `pre-rebase` hook refusing, unstaged files the stash
   missed). Reading the second as the first is how a paused agent is told its branch moved while
   nothing happened at all.
-- **`hangar open` lands each clone on a branch before it opens a single window**, through the same
+- **`hangar open -c` lands each clone on a branch before it opens a single window**, through the same
   `landOnBranch` that `checkout-default` is built on — one implementation, so the two cannot end
   up with different ideas of which trees are safe to move. Order matters: one of those windows runs
   `claude`, and a session that starts before the checkout reads one tree while the developer
@@ -148,8 +148,11 @@ through the same Bitbucket adapter.
   it already has — and a landing that FAILS without throwing, which is what a rebase that stopped
   on a conflict is, gets the same one warning before the window opens — refusing a window over a dirty tree would be the worse trade, and it is the
   same degradation `open` already applies to an editor that will not launch. `--branch <name>`
-  overrides the default-branch resolution and nothing else about the landing; `--no-checkout`
-  skips it entirely.
+  overrides the default-branch resolution and nothing else about the landing, and implies it.
+  **Without either flag there is no landing at all**, and that default is the decision: a clone
+  is reopened to go back to its ticket far more often than to start a new one, and a clean tree
+  between commits is exactly when a landing that ran by default would move it to the default branch.
+  `--include-busy` is refused without a landing, since it governs nothing else.
 
 ## `pr create` and `pr update`: the only writes that leave the machine
 

@@ -5,6 +5,7 @@ import { cloneAt } from '../src/fleet.ts';
 import {
   describeAction,
   openPlan,
+  opensOnNewBranch,
   tabsFor,
   type OpenAction,
   type OpenFacts,
@@ -240,4 +241,17 @@ test('--no-claude keeps every window and drops every command', () => {
   const quiet = tabsFor(hangar, clone, { claude: false }, []);
   assert.equal(quiet.length, roles.length, 'a window with no command is a shell, not an absence');
   for (const role of quiet) assert.equal(role.command, undefined);
+});
+
+test('a bare open moves no branch; -c and --branch each do', () => {
+  // The default is the clone's own branch: reopening one is usually going back to its ticket,
+  // and a clean tree between commits is exactly when a default-on checkout would have moved it.
+  assert.equal(opensOnNewBranch({}), false);
+  assert.equal(
+    opensOnNewBranch({ includeBusy: true }),
+    false,
+    '--include-busy alone moves nothing',
+  );
+  assert.equal(opensOnNewBranch({ checkout: true }), true);
+  assert.equal(opensOnNewBranch({ branch: 'feature/x' }), true, 'naming a branch is a request');
 });

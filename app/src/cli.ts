@@ -20,7 +20,7 @@ import { release } from './commands/release.ts';
 import { list } from './commands/list.ts';
 import { mcp } from './commands/mcp.ts';
 import { closeClones, type CloseOptions } from './commands/close.ts';
-import { open } from './commands/open.ts';
+import { open, opensOnNewBranch, type OpenBranchFlags } from './commands/open.ts';
 import { reloadClones, type ReloadOptions } from './commands/reload.ts';
 import { plansCollect, plansStamp } from './commands/plans.ts';
 import { scrub } from './commands/scrub.ts';
@@ -462,11 +462,11 @@ program
 
 program
   .command('open')
-  .summary('Open clones in their own tmux sessions, on a current default branch')
+  .summary('Open clones in their own tmux sessions, on the branch each one has')
   .description(
     [
       "Open each clone in one terminal tab of its own, attached to that clone's tmux session — one tmux window per `terminal.tabs[]` role. A clone that is already open is brought forward rather than opened twice, and a clone whose tab was closed reattaches to the session it still has, with whatever was running in it. `-e` also opens every editor `editor.kinds` lists; `hangar edit` is the same thing on its own.",
-      "Each clone is first fetched and put on its repo's default branch, up to date — a clone you are opening is one you are starting work in, and starting on last week's branch is never what was wanted. `--branch <name>` names another branch, `--no-checkout` leaves each clone as it is, and a clone whose tree cannot be moved (uncommitted work, a half-applied rebase, a live Claude session) is opened as it is with a warning.",
+      "Each clone opens on the branch it already has — reopening a clone is usually going back to what it was doing. `-c` first fetches each clone and puts it on its repo's default branch, up to date, for starting something new; `--branch <name>` puts it on that branch instead. Either way a clone whose tree cannot be moved (uncommitted work, a half-applied rebase, a live Claude session) is opened as it is with a warning.",
       "The sessions live on this hangar's own tmux socket, so nothing here touches the tmux you run for your own work. `hangar doctor` prints the socket name.",
     ].join('\n\n'),
   )
@@ -476,13 +476,19 @@ program
   .option('-e, --editor', 'also open the clone in every configured editor')
   .option('--tab', "a tab in the terminal's current window (the default)")
   .option('--window', 'a window of its own instead of a tab')
-  .option('-b, --branch <name>', "check this branch out instead of the repo's default branch")
-  .option('--no-checkout', 'open each clone on whatever branch it already has')
+  .option('-c, --checkout', "fetch and check out the repo's default branch, up to date, first")
+  .option('-b, --branch <name>', 'fetch and check out this branch first')
   .option('--include-busy', 'check the branch out even in a clone with a live Claude session')
   .option('-n, --dry-run', 'print every decision — branch, windows, editors — and change nothing')
-  .action((clones: string[], options: { tab?: boolean; window?: boolean }) => {
+  .action((clones: string[], options: { tab?: boolean; window?: boolean } & OpenBranchFlags) => {
     if (options.tab === true && options.window === true) {
       throw new CliError('--tab and --window are the two answers to one question, so pick one');
+    }
+    if (options.includeBusy === true && !opensOnNewBranch(options)) {
+      throw new CliError(
+        '--include-busy governs a checkout, and nothing is checked out here',
+        'Add -c for the default branch, or --branch <name>.',
+      );
     }
     const placement = options.window === true ? 'window' : options.tab === true ? 'tab' : undefined;
     open(requireHangar(), clones, {

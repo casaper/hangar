@@ -69,13 +69,19 @@ export type OpenOptions = {
   claude?: boolean | undefined;
   all?: boolean | undefined;
   /**
-   * The branch each clone is put on before its window opens. Absent means the repo's DEFAULT
-   * branch, which is the default because of what `open` is for: a clone you are opening is a
-   * clone you are starting work in, and starting on last week's ticket branch -- or on a default
-   * branch a week behind origin -- is never what was wanted. `--no-checkout` turns it off, and
-   * `--branch <name>` names another one.
+   * The branch to put each clone on before its window opens. Naming one is a request to move,
+   * so it lands with or without `checkout`.
    */
   branch?: string | undefined;
+  /**
+   * `-c, --checkout`: fetch and put each clone on the repo's default branch, up to date.
+   *
+   * **Off by default, because a clone is opened to go back to what it was doing far more often
+   * than to start something new** -- and the branch it has IS what it was doing. A checkout on
+   * by default would move a clone reopened mid-ticket to the default branch whenever its tree is
+   * clean, which is exactly the state a ticket is in between commits. Starting fresh is the
+   * deliberate act, so it is the one that takes a flag.
+   */
   checkout?: boolean | undefined;
   /**
    * Move the branch of a clone that has a live Claude session in it.
@@ -91,12 +97,18 @@ export type OpenOptions = {
    * Print every decision and change nothing -- the branch, the session and the editors alike.
    *
    * `open` was the one acting command in this CLI without a dry run, and it mattered more than
-   * the omission looked, because `open` grew a checkout: `--all` now fetches and moves a branch in
-   * EVERY clone, and `--no-checkout` is a way to not do that rather than a way to see what it
+   * the omission looked, because `open` can check out: `--all -c` fetches and moves a branch in
+   * EVERY clone, and leaving `-c` off is a way to not do that rather than a way to see what it
    * would do first.
    */
   dryRun?: boolean | undefined;
 };
+
+export type OpenBranchFlags = Pick<OpenOptions, 'branch' | 'checkout' | 'includeBusy'>;
+
+/** Whether `open` moves a clone's branch at all. Pure: either flag is a request to move. */
+export const opensOnNewBranch = (opts: OpenBranchFlags): boolean =>
+  opts.checkout === true || opts.branch !== undefined;
 
 /**
  * The tmux windows a clone gets. Exported and pure.
@@ -526,7 +538,11 @@ export const open = (hangar: Hangar, refs: readonly string[], opts: OpenOptions)
   }
 
   for (const clone of clones) {
-    if (opts.checkout !== false) land(clone, opts, clones.length > 1);
+    if (opensOnNewBranch(opts)) land(clone, opts, clones.length > 1);
+    else
+      note(
+        `${clone.name}: on ${currentBranch(clone.path)}, as it is — -c checks out the default branch`,
+      );
     const facts = factsFor(hangar, clone, opts, server, driver.capabilities, drivers);
     /*
      * Paint a session this command did not create, before anything else touches it.

@@ -108,7 +108,7 @@ rule that cannot tell it from the report.
 | `sync` | `[clone]` | `-a, --all` · `-n, --dry-run` · `--no-session-notify` · `--include-busy` · `--onto <ref>` · `--strategy <rebase\|merge>` | **act [user]** |
 | `merge-default`, `rebase-default` | — | aliases of `sync`, identical options | **act [user]** |
 | `checkout-default` (alias `checkout`) | `[clone]` | `-a, --all` · `-n, --dry-run` · `--include-busy` | **act [user]** |
-| `open` | `[clones...]` | `--all` · `--no-claude` · `-e, --editor` · `-b, --branch <name>` · `--no-checkout` · `--include-busy` · `-n, --dry-run` | **act [user]** |
+| `open` | `[clones...]` | `--all` · `--no-claude` · `-e, --editor` · `-c, --checkout` · `-b, --branch <name>` · `--include-busy` (only with `-c` or `-b`) · `-n, --dry-run` | **act [user]** |
 | `edit` | `[clones...]` | `--all` · `-n, --dry-run` | **act [user]** |
 | `close` | `[clones...]` | `--all` · `--no-editor` · `-y, --yes` · `--force` · `-n, --dry-run` | **act [user]** |
 | `reload` | `[clones...]` | `--all` · `--no-shells` · `--no-claude` · `--no-editor` · `-y, --yes` · `-n, --dry-run` | **act [user]** |

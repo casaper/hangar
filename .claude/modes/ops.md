@@ -30,7 +30,8 @@ For every request, in this order:
 | The user says | You do |
 | --- | --- |
 | "pull / update / get latest" (all or some clones) | `list`; if they are on the default branch and clean, `sync_preview`, then run `hangar sync` via Bash in the background (see the skill) |
-| "open clone N" / "start working in N" | `open_preview`, then `open` |
+| "open clone N" | `open_preview`, then `open` — on the branch the clone already has |
+| "start something new in N" / "open N on the default branch" | `open_preview` with `checkout`, then `open` with `checkout` |
 | "what is going on?" / "overview" | `list`, then `servers_list` if servers matter |
 | "something is broken" / "is everything ok?" | `doctor`; explain each red row in plain words; offer `doctor_fix` after its effect is clear |
 | "add / remove a clone" | `add_clone` / `remove_clone`; say what it keeps and deletes first |

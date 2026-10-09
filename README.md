@@ -652,10 +652,11 @@ hangar checkout-default 2   # fetch, check out the repo's default branch, fast-f
 hangar checkout 2           # alias
 
 hangar open 1 -n            # the branch, windows and editors it would touch, changing nothing
-hangar open 1               # a tab attached to this clone's tmux session, plus its editor
+hangar open 1               # a tab attached to this clone's tmux session, on the branch it has
 hangar open --all
-hangar open 2 -b feature/x  # check out this branch instead of the default one
-hangar open 2 --no-checkout --no-claude --no-editor
+hangar open 2 -c            # fetch and check out the default branch, up to date, first
+hangar open 2 -b feature/x  # fetch and check out this branch first
+hangar open 2 --no-claude
 
 hangar add-clone
 hangar remove-clone 4                 # detach it from the fleet, keep the directory

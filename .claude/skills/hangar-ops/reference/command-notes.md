@@ -78,11 +78,13 @@ separate `<thing>_preview`.
   for a signed commit, a prompt from one of the repo's own hooks — the question appears on screen
   and waits for it. There is no timeout, so a sync sitting silent after the resolver has finished
   is worth LOOKING at rather than killing: something is asking.
-- **`open -n` is worth running before the real thing.** It prints the branch each clone would
-  land on (or why it would be left alone), the tmux session and windows it would create or the
-  window it would bring forward, and the attach line verbatim — and changes nothing.
-  `--no-claude` and `--no-checkout` still narrow what the real run does; `-n` is how you see it
-  first.
+- **`open` leaves each clone on the branch it has unless told otherwise.** `-c` fetches and puts
+  it on the default branch, up to date; `--branch <name>` on that one. `--include-busy` only
+  governs that checkout, so it is refused without one of the two.
+- **`open -n` is worth running before the real thing.** It prints the branch each clone is on or
+  would land on (or why it would be left alone), the tmux session and windows it would create or
+  the window it would bring forward, and the attach line verbatim — and changes nothing.
+  `--no-claude` still narrows what the real run does; `-n` is how you see it first.
 - **`open` opens no editor unless `-e` is passed**, and `hangar edit <clone>` is that half on its
   own — the editors, and nothing else: no fetch, no branch, no session, no window. The clone's own
   tmux windows bind `C-b C-e` to it, so a developer sitting in a clone can open it in VS Code
