@@ -81,7 +81,7 @@
           {
             "type": "command",
             "command": "%HANGAR%/bin/hangar-commit-gate",
-            "timeout": 10
+            "timeout": 60
           }
         ]
       }

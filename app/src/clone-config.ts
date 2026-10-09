@@ -806,19 +806,54 @@ export const withExecGuardHook = (hangar: Hangar, settings: SettingsJson): Setti
  *
  * Named by ABSOLUTE path for `execGuardHookCommand`'s reason: a hook's PATH is whatever the
  * session started with.
+ *
+ * **The two events get different timeouts, and the SessionStart one is not a guess.** 10s on
+ * `PreToolUse` bounds how long a hung gate can hold a Bash call. On `SessionStart` it bounded
+ * nothing, and it cost the one thing that hook is for: the script runs in ~60ms, but a session
+ * starting while the machine is busy -- several clones resuming at once -- saw EVERY start hook
+ * take 6-18s, the repo's own included, and the gate was the only one cancelled, eight times in
+ * three weeks. Every one of those was inert; in a locked clone the cancellation drops the banner
+ * and the session meets the gate only by being refused. 60s is Claude Code's own default.
  */
 export const commitGateHookCommand = (hangar: Hangar): string => hangar.paths.commitGate;
 
-const commitGateMatcher = (hangar: Hangar, matcher?: string): HookMatcher => ({
+const COMMIT_GATE_EVENTS = [
+  { event: 'PreToolUse', matcher: 'Bash', timeout: 10 },
+  { event: 'SessionStart', matcher: undefined, timeout: 60 },
+] as const;
+
+const commitGateMatcher = (
+  hangar: Hangar,
+  matcher: string | undefined,
+  timeout: number,
+): HookMatcher => ({
   ...(matcher === undefined ? {} : { matcher }),
-  hooks: [{ type: 'command', command: commitGateHookCommand(hangar), timeout: 10 }],
+  hooks: [{ type: 'command', command: commitGateHookCommand(hangar), timeout }],
 });
 
 const isCommitGateHook = (command: string | undefined): boolean =>
   command?.endsWith('hangar-commit-gate') === true;
 
+/**
+ * Both events, each at the path AND the timeout this hangar would write today -- so a clone wired
+ * before the timeouts split is reported, and `doctor --fix` rewrites it, rather than passing on
+ * the command alone and keeping the timeout that caused the split.
+ */
 export const hasCommitGateHook = (hangar: Hangar, settings: SettingsJson | undefined): boolean =>
-  (['PreToolUse', 'SessionStart'] as const).every((event) =>
+  COMMIT_GATE_EVENTS.every(({ event, timeout }) =>
+    (settings?.hooks?.[event] ?? []).some((matcher) =>
+      matcher.hooks.some(
+        (hook) => hook.command === commitGateHookCommand(hangar) && hook.timeout === timeout,
+      ),
+    ),
+  );
+
+/**
+ * Wired on both events at today's path, whatever the timeouts -- so `doctor` can tell a gate that
+ * would not be honoured from one that is honoured with a timeout that is not today's.
+ */
+export const hasCommitGateCommand = (hangar: Hangar, settings: SettingsJson | undefined): boolean =>
+  COMMIT_GATE_EVENTS.every(({ event }) =>
     (settings?.hooks?.[event] ?? []).some((matcher) =>
       matcher.hooks.some((hook) => hook.command === commitGateHookCommand(hangar)),
     ),
@@ -827,14 +862,11 @@ export const hasCommitGateHook = (hangar: Hangar, settings: SettingsJson | undef
 /** Reconciles like the others: one gate hook per event, at the path this hangar would write today. */
 export const withCommitGateHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
   const hooks = { ...settings.hooks };
-  for (const [event, matcher] of [
-    ['PreToolUse', 'Bash'],
-    ['SessionStart', undefined],
-  ] as const) {
+  for (const { event, matcher, timeout } of COMMIT_GATE_EVENTS) {
     const existing = (hooks[event] ?? []).filter(
       (entry) => !entry.hooks.some((hook) => isCommitGateHook(hook.command)),
     );
-    hooks[event] = [...existing, commitGateMatcher(hangar, matcher)];
+    hooks[event] = [...existing, commitGateMatcher(hangar, matcher, timeout)];
   }
   return { ...settings, hooks };
 };

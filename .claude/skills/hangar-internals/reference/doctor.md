@@ -34,6 +34,16 @@ branch cannot tell whether it is registered. Both events are checked TOGETHER, b
 gate is the worst of the three states — a `PreToolUse` without its `SessionStart` denies commits
 in a session that was never told why.
 
+**The row compares each event's TIMEOUT as well as its command**, and the two timeouts differ on
+purpose: 10s on `PreToolUse`, where it bounds how long a hung gate holds a Bash call, and 60s on
+`SessionStart`, where a short one bounds nothing. The script runs in ~60ms, but when several
+clones start or resume at once every start hook in each session runs 6-18s — the repo's own
+`check-settings.cjs` included — and at 10s the gate was the only one cancelled, eight times in
+three weeks of transcripts. All eight were inert clones; in a locked one the cancellation drops
+the banner, which is the "never told why" state above reached by a different road. Matching on
+the command alone would have passed every clone wired before the split, so `--fix` would never
+have rewritten one.
+
 Above the clones it also holds the
 hangar's own generated `CLAUDE.local.md` and `.claude/settings.json` to their renders, reports
 the machine's required tooling, reports the shared secrets file and the variables expected in it

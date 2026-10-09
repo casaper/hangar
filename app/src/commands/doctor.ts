@@ -18,6 +18,7 @@ import {
   claudeLocalMdContent,
   effectivePlansDirectory,
   hasAnyJiraHook,
+  hasCommitGateCommand,
   hasCommitGateHook,
   hasExecGuardHook,
   hasJiraHook,
@@ -626,7 +627,9 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
     ok: commitGateOk,
     detail: commitGateOk
       ? 'wired on both events — inert until `hangar-commit-gate lock` is run in this clone'
-      : 'missing or partial — `hangar-commit-gate lock` would not be honoured here',
+      : hasCommitGateCommand(hangar, settings)
+        ? 'wired, but with a timeout that is not today’s — a busy session start can cancel its banner'
+        : 'missing or partial — `hangar-commit-gate lock` would not be honoured here',
     repair:
       settings === undefined
         ? undefined
