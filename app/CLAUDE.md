@@ -83,6 +83,9 @@ BSD spelling fails partway through a multi-file edit, and a half-edited `src/**`
 **Dev-mode Bash runs zsh:** `$VAR` holding `cmd -flag` is not word-split, so call
 `/opt/homebrew/bin/tmux -L hangar-<id> …` directly, and `type -P` does not exist (use `command -v`).
 
+**Probe git behaviour with a script file in the scratchpad** (`sh probe.sh`, its repo under
+`mktemp -d`): a long one-line probe that creates commits is refused permission.
+
 ## Two conventions for changing it
 
 Both exist because they caught something, and both apply to every edit under `app/src/**`.
@@ -190,6 +193,9 @@ Two consequences worth knowing before editing the files they touch:
   leaving a guard that guards nothing while every check stays green. `dev/scrub-check.sh` writes
   its own patterns as `datav[a]ult` and `__D[V]B_` for the same reason, and needs no allow-list at
   all as a result.
+- **A config key that names a repo's own skill or prompt is optional with NO default**
+  (`forge.prDescriptionPrompt`, `tracker.planPrompt`): absent means the command refuses and names
+  the key, because a default would put one repo's skill name into every hangar.
 
 ## Commit messages
 
@@ -319,6 +325,9 @@ The layout under `src/` is what `ls` shows; only what a listing cannot say is ke
   them names this machine's home directory, which is what puts them on the untracked side of the
   inventory below.
 - **`generate/index.ts`** — the dry-run-aware writer every generator goes through.
+- **`git.ts`'s `git` / `gitOut` / `gitTry` are the only way to run git in a clone.** They set no
+  editor AND `GIT_REFLOG_ACTION=hangar`, which is how `jira-plan` tells hangar's own branch moves
+  from a person's; a raw `run('git', …)` skips both without anything noticing.
 - **`mcp/`** — `tools.ts` (which commands are exposed, and the schema read off the commander
   registry) and `server.ts` (the stdio JSON-RPC loop). **Nothing here may import `ui.ts`**: stdout
   is the protocol.
@@ -575,7 +584,11 @@ More root files are hand-maintained and belong to this package rather than to th
   and `personal-skills/`** — scripts rather than `hangar` subcommands, because the gate runs before
   EVERY Bash call and `cli.ts` costs ~0.25s to load. They are CommonJS, so do not "modernise" them
   to `import`. **Edit a scratch copy and `mv` it into `bin/`: each is live fleet-wide the moment it
-  is saved.** `hangar-internals/reference/root-tools.md` has what each refuses and why,
+  is saved.** Keep the copy's own name in a scratch DIRECTORY (`node --check` refuses `*.new`),
+  and probe the gate from a copy under a temp hangar root: it works out where its lock file
+  lives from its own location. `test/personal-tools.test.ts` bans `dvb`, `DN-`, `clone_0`,
+  `angular/`, `bitbucket` and `jira` anywhere in waypoint and the gate, comments included.
+  `hangar-internals/reference/root-tools.md` has what each refuses and why,
   including `hangar-rewrite`'s published-commit rule, the `personal-skills/` manifest row a new
   skill needs, and how to test any of them.
 - **`.nvmrc` and `app/.nvmrc`** are a pair, both `24`. Move them together.
