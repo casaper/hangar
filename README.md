@@ -42,8 +42,8 @@ browser test run — that isolation is the entire reason the fleet exists.
   by default on Linux since 6.2 — and a session in no such pane is reported unreachable rather
   than assumed paused.
 - **One window per clone.** `hangar open 1` opens a tab in your terminal attached to clone 1's own
-  tmux session — one tmux window per configured role — on a freshly fast-forwarded default branch,
-  with the editor opened alongside. Run it again and that window comes to the front; you never get
+  tmux session — one tmux window per configured role — on the branch the clone already has, or with
+  `-c` on a freshly fast-forwarded default branch, and `-e` opens the editor alongside. Run it again and that window comes to the front; you never get
   a second one, and a clone whose tab you closed reattaches with whatever was still running in it.
   The tmux server is Hangar's own, on a private socket, so none of it disturbs the tmux you
   already run.
@@ -456,7 +456,7 @@ report is a report, so read the summary line, never `$?`.
   `hangar config validate` rather than `doctor`, and only while the two files share an `id` —
   which means changing the `id` for a second hangar on the machine is also the moment the check
   goes quiet. It holds `forge.defaultBranch` in particular: an example pointing at a branch the
-  repo does not have aims `checkout-default`, `open`'s fast-forward and `sync`'s fallback at
+  repo does not have aims `checkout-default`, `open -c`'s fast-forward and `sync`'s fallback at
   nothing.
 
 The repository is yours rather than this hangar's. `CLAUDE.md` is generic and the machine-specific

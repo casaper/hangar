@@ -33,7 +33,7 @@ Three properties hold that pair together, and each is a decision:
   fleet for a repo somebody has already configured, which is the fastest and most complete way in
   (`setup` derives from an existing clone, so on a fresh machine it derives nothing and leaves out
   the symlinks, the port-check command and the tracker scripts). So the copy came up naming a
-  branch the repo does not have, and `checkout-default`, `open`'s fast-forward and `sync`'s
+  branch the repo does not have, and `checkout-default`, `open -c`'s fast-forward and `sync`'s
   no-forge fallback all aimed at it. `doctor` catches that eventually — it compares the recorded
   branch with each clone's `origin/HEAD` — but only after the first `add-clone`.
 

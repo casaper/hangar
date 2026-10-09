@@ -827,8 +827,8 @@ takes nothing away, the same rule the click above is built on. `list-keys -T pre
 was checked and is how the next one should be.
 
 **`hangar edit` is a command rather than a flag on `open` BECAUSE of this key.** A key press has
-to cost only what it says: `hangar open --editor` would fetch, move a branch and create tmux
-windows on every press, and pressing it twice by accident in a clone with a live agent is exactly
+to cost only what it says: `hangar open --editor` would create tmux windows on every press — and
+fetch and move a branch whenever `-c` rode along — and pressing it twice by accident in a clone with a live agent is exactly
 the shape of failure this module is otherwise built to prevent. `edit` opens the editors and
 touches no git state, no session and no window, so it is safe to hold down. It is `open.ts`'s own
 `editorsToOpen` and `openEditors` -- one implementation of how an editor is launched, isolated
