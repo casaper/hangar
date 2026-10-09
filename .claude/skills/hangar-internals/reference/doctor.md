@@ -333,12 +333,13 @@ of these are the same structural finding, presented as two rows because they fai
   leaves the recommended tools to `setup`, which is where you are choosing what to install.
   `lsof` is the one that matters most and looks optional: without it nothing attributes a process
   to a clone, and every resulting failure looks exactly like an idle machine.
-- **`homebrew` now asks `brew --prefix`** between `HOMEBREW_PREFIX` and the `/opt/homebrew`
-  default, and that was a precondition for the row rather than scope creep. `brew shellenv` is in
-  the Apple-silicon install instructions and was not in the older Intel one, so an Intel Mac with
-  Homebrew at `/usr/local` very often has the variable unset — and `setup` then refused to
-  continue on a machine that has Homebrew. `.envrc.hangar` still has the same two-step fallback
-  and fails the same way; that one is unfixed.
+- **`homebrew` asks `brew --prefix`** between `HOMEBREW_PREFIX` and the `/opt/homebrew`
+  default, and that is a precondition for the row rather than scope creep. `brew shellenv` is in
+  the Apple-silicon install instructions and not in the older Intel one, so an Intel Mac with
+  Homebrew at `/usr/local` very often has the variable unset — and a two-step fallback makes
+  `setup` refuse to continue on a machine that has Homebrew. `.envrc.hangar`'s `hangar_use_gnu`
+  resolves the prefix in the same three steps, in the same order; `reference/root-tools.md` has
+  why the pair is kept in step.
 
 ## An editor's `rootPathKeys` with no file to apply them to
 
