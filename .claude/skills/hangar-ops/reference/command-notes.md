@@ -91,6 +91,16 @@ separate `<thing>_preview`.
   without naming an index. `close --no-editor` and `reload --no-editor` are the other direction
   and are unchanged: `close` shuts a window that is open, and `reload --no-editor` is about
   rewriting the editors' per-clone files rather than about launching anything.
+- **`jira-plan <KEY>` picks the clone itself, and `-n` is how to see which one and why.** It
+  prints one verdict per clone. A clone on the default branch, on a branch whose pull request is
+  merged, or untouched for 3 weekdays is free; any uncommitted or untracked file, a commit no
+  remote has, a half-applied rebase, a gate armed for another ticket, or a Claude Code session
+  outside the clone's Claude Code window (a VS Code extension session, one in the shell window)
+  rules a clone out. A clone whose Claude Code window is idle is taken before one where a session
+  would end, and ending one asks first; `-y` skips that question. It needs `tracker.planPrompt`.
+- **`reload --close-claude` ends Claude Code rather than restarting it**, and leaves a fresh
+  shell in its window. It runs `plans collect` and `tmp merge` afterwards, as `close` does,
+  because the ended session never runs its `SessionEnd` hook.
 - **`remove-clone --force` is the one genuinely unrecoverable flag in this CLI** — its own help says
   uncommitted work is NOT recoverable. Never pass it without the user asking for it in those terms.
 - **`add-clone --no-install` leaves the clone unusable** until someone runs `hangar install

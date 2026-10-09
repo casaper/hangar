@@ -35,6 +35,29 @@ export const noEditorEnv = (base: NodeJS.ProcessEnv): NodeJS.ProcessEnv => ({
   GIT_SEQUENCE_EDITOR: 'true',
 });
 
+/**
+ * What every reflog entry this CLI writes is labelled with, so "when did anyone last touch this
+ * clone" can tell a person's checkout from `sync --all`'s.
+ *
+ * Without it a fleet sync rebases every idle clone and makes each one look worked on that day,
+ * which is exactly the clone `hangar jira-plan` should be able to call untouched. Measured on git
+ * 2.56: `checkout` replaces its message with the label, `merge` and `rebase` prefix it
+ * (`hangar: Fast-forward`, `hangar (start): checkout main`) -- see `isHangarReflogEntry`.
+ */
+export const HANGAR_REFLOG_ACTION = 'hangar';
+
+/** The environment every git subprocess here runs in: no editor, and a labelled reflog. */
+const hangarGitEnv = (base: NodeJS.ProcessEnv): NodeJS.ProcessEnv => ({
+  ...noEditorEnv(base),
+  GIT_REFLOG_ACTION: HANGAR_REFLOG_ACTION,
+});
+
+/** Whether a reflog subject (`%gs`) was written by this CLI. Pure. */
+export const isHangarReflogEntry = (subject: string): boolean =>
+  subject === HANGAR_REFLOG_ACTION ||
+  subject.startsWith(`${HANGAR_REFLOG_ACTION}:`) ||
+  subject.startsWith(`${HANGAR_REFLOG_ACTION} (`);
+
 export type GitOptions = {
   /**
    * Hand the child this process's terminal instead of capturing it. What that buys is not the
@@ -53,12 +76,12 @@ export type GitOptions = {
  */
 export const git = (repo: string, args: readonly string[], opts: GitOptions = {}): RunResult =>
   run('git', ['-C', repo, ...args], {
-    env: noEditorEnv(process.env),
+    env: hangarGitEnv(process.env),
     inherit: opts.inherit === true,
   });
 
 export const gitOut = (repo: string, args: readonly string[]): string =>
-  runOrThrow('git', ['-C', repo, ...args], { env: noEditorEnv(process.env) });
+  runOrThrow('git', ['-C', repo, ...args], { env: hangarGitEnv(process.env) });
 
 /** Trimmed stdout, or undefined when the command failed (missing ref, detached HEAD, ...). */
 export const gitTry = (repo: string, args: readonly string[]): string | undefined => {
@@ -137,6 +160,40 @@ export const syncState = (repo: string): SyncState => {
 export const isDirty = (repo: string): boolean => {
   const s = syncState(repo);
   return s.dirty > 0 || s.untracked > 0;
+};
+
+/**
+ * Commits reachable from HEAD that no remote-tracking ref has -- work that exists only here.
+ *
+ * Not `syncState().ahead`, which compares with `@{upstream}` and answers 0 when there is none:
+ * a branch never pushed, or one whose source branch the forge deleted on merge, would read as
+ * having nothing to lose. Every sibling clone is a remote here, so a commit fetched from a
+ * sibling counts as safe, which it is.
+ */
+export const unpushedCommits = (repo: string): number => {
+  const count = gitTry(repo, ['rev-list', '--count', 'HEAD', '--not', '--remotes']);
+  return count === undefined ? 0 : Number.parseInt(count, 10) || 0;
+};
+
+/** One HEAD reflog entry: when, in epoch ms, and its subject (`%gs`). */
+export type ReflogEntry = { readonly atMs: number; readonly subject: string };
+
+/** The newest `limit` HEAD reflog entries, newest first. Empty when there is no reflog. */
+export const headReflog = (repo: string, limit = 200): ReflogEntry[] => {
+  const raw = gitTry(repo, [
+    'log',
+    '-g',
+    '--date=unix',
+    `-n${String(limit)}`,
+    '--format=%gd%x1f%gs',
+    'HEAD',
+  ]);
+  if (raw === undefined || raw === '') return [];
+  return raw.split('\n').flatMap((line) => {
+    const [selector = '', subject = ''] = line.split(UNIT_SEP);
+    const at = /\{(\d+)\}$/.exec(selector)?.[1];
+    return at === undefined ? [] : [{ atMs: Number.parseInt(at, 10) * 1000, subject }];
+  });
 };
 
 export const remotes = (repo: string): Map<string, string> => {

@@ -110,8 +110,14 @@ skills load only as far as the repository root, and each clone is its own repo.
 nothing". A clone session is welcome to all of them, and `plans collect` and `tmp merge --quiet`
 already run there from `SessionEnd` hooks. **Every other command acts, and is the user's, from
 the hangar root** — among them `sync` (under any of its three names), `checkout-default`, `open`,
-`edit`, `close`, `reload`, `add-clone`, `install`, `remove-clone`, `exec`, `servers start`,
-`servers kill`, `bookmarks sync`, `colours change`, `ports pin`, `ports unpin` and `doctor --fix`.
+`jira-plan`, `edit`, `close`, `reload`, `add-clone`, `install`, `remove-clone`, `exec`,
+`servers start`, `servers kill`, `bookmarks sync`, `colours change`, `ports pin`, `ports unpin` and
+`doctor --fix`.
+
+**A commit gate can arm itself in your clone without you running anything.** `hangar jira-plan`
+starts a ticket's agent on the default branch with the gate ARMED for that ticket, and the gate
+locks the first branch naming the ticket that gets checked out — so the branch you cut is gated
+from your next Bash call on. `hangar-commit-gate status` says which state it is in.
 
 **`hangar pr create` and `hangar pr update` write to the forge** — the only two commands that
 write anywhere outside this machine. They default to the clone you are in, which is what makes them

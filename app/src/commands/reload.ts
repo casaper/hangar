@@ -7,7 +7,9 @@ import { CliError } from '../exec.ts';
 import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import type { Hangar } from '../hangar.ts';
 import { claudeTranscripts } from '../claude-sessions.ts';
-import { tabsFor } from './open.ts';
+import { CLAUDE_ROLE, tabsFor } from './open.ts';
+import { plansCollect } from './plans.ts';
+import { tmpMerge } from './tmp.ts';
 import { tmuxServer, tmuxSessionName, type TmuxPane, type TmuxServer } from '../tmux.ts';
 import { tildify } from '../user-paths.ts';
 import { confirm, note, ok, step, warn } from '../ui.ts';
@@ -53,6 +55,14 @@ import { confirm, note, ok, step, warn } from '../ui.ts';
  * same id, and it runs that hook when it genuinely ends. Collecting anyway would move a plan out
  * from under a session still working on it, which is the exact race the root `CLAUDE.md` states
  * the hook's timing to avoid.
+ *
+ * ## `--close-claude` is the exception, because there the session IS over
+ *
+ * It ends Claude Code and leaves a fresh shell in its pane rather than bringing the conversation
+ * back -- the clean slate `hangar jira-plan` types a new `claude` into. A pane respawned with a
+ * command runs it under `sh -lc` and closes when it exits, so the shell here is respawned with
+ * none, which keeps the property `open` gives every window: `/exit` leaves a shell behind. And
+ * since nothing comes back to run the `SessionEnd` hook, the collection `close` does runs here.
  */
 export type ReloadOptions = {
   all?: boolean | undefined;
@@ -60,6 +70,8 @@ export type ReloadOptions = {
   shells?: boolean | undefined;
   /** `--no-claude`: leave the Claude Code pane running, settings and all. */
   claude?: boolean | undefined;
+  /** `--close-claude`: end Claude Code and leave a shell in its pane, rather than restart it. */
+  closeClaude?: boolean | undefined;
   /** `--no-editor`: do not rewrite the editor's per-clone artifacts. */
   editor?: boolean | undefined;
   yes?: boolean | undefined;
@@ -124,6 +136,7 @@ export type ReloadAction =
       readonly session: string;
     }
   | { readonly kind: 'restart-claude'; readonly clone: string; readonly pane: string }
+  | { readonly kind: 'close-claude'; readonly clone: string; readonly pane: string }
   | { readonly kind: 'skip-self'; readonly clone: string; readonly pane: string }
   | { readonly kind: 'workspace-stale'; readonly clone: string; readonly paths: readonly string[] };
 
@@ -153,7 +166,8 @@ export const reloadPlan = (facts: ReloadFacts, opts: ReloadOptions): ReloadActio
     const isClaudePane = facts.claudeCommand !== undefined && pane.role === CLAUDE_ROLE;
     if (isClaudePane) {
       if (opts.claude === false) continue;
-      if (facts.liveSessionId !== undefined)
+      if (opts.closeClaude === true) actions.push({ kind: 'close-claude', clone, pane: pane.id });
+      else if (facts.liveSessionId !== undefined)
         actions.push({ kind: 'resume-claude', clone, pane: pane.id, session: facts.liveSessionId });
       else actions.push({ kind: 'restart-claude', clone, pane: pane.id });
       continue;
@@ -164,15 +178,6 @@ export const reloadPlan = (facts: ReloadFacts, opts: ReloadOptions): ReloadActio
   }
   return actions;
 };
-
-/**
- * The role whose pane runs Claude Code.
- *
- * The schema's default first tab, and the name every hangar in this fleet uses. A hangar that
- * renames it gets its Claude pane treated as an ordinary one -- respawned when idle, skipped
- * when busy -- which is the safe way round.
- */
-const CLAUDE_ROLE = 'claude';
 
 export const describeReloadAction = (action: ReloadAction): string => {
   switch (action.kind) {
@@ -188,6 +193,8 @@ export const describeReloadAction = (action: ReloadAction): string => {
       return `${action.clone}: restart Claude Code in ${action.pane}, resuming ${action.session.slice(0, 8)}`;
     case 'restart-claude':
       return `${action.clone}: restart Claude Code in ${action.pane} (no live session to resume)`;
+    case 'close-claude':
+      return `${action.clone}: end Claude Code in ${action.pane} and leave a shell there`;
     case 'skip-self':
       return `${action.clone}: leave ${action.pane} alone — this command is running in it`;
     case 'workspace-stale':
@@ -264,6 +271,22 @@ const ownPaneOf = (server: TmuxServer, clone: Clone): string | undefined => {
   return pane === undefined || pane === '' ? undefined : pane;
 };
 
+/**
+ * End the Claude Code in one pane and leave a plain shell there. Exported for `jira-plan`, which
+ * needs exactly this step and nothing else `reload` does.
+ */
+export const closeClaudePane = (server: TmuxServer, clone: Clone, paneId: string): boolean =>
+  server.respawnPane(paneId, clone.path);
+
+/**
+ * What an ended session's `SessionEnd` hook would have done. `respawn-pane -k` kills Claude Code
+ * without running it, so this is `close`'s collection, once for the whole run.
+ */
+export const collectEndedSessions = (hangar: Hangar): void => {
+  plansCollect(hangar, { quiet: true });
+  tmpMerge(hangar, { quiet: true });
+};
+
 const resolveClones = (hangar: Hangar, refs: readonly string[], opts: ReloadOptions): Clone[] => {
   if (opts.all === true) return discoverClones(hangar);
   if (refs.length === 0)
@@ -302,12 +325,16 @@ export const reloadClones = (
   }
 
   const killsClaude = plans.some(({ actions }) =>
-    actions.some((a) => a.kind === 'resume-claude' || a.kind === 'restart-claude'),
+    actions.some(
+      (a) => a.kind === 'resume-claude' || a.kind === 'restart-claude' || a.kind === 'close-claude',
+    ),
   );
   if (killsClaude && opts.yes !== true) {
-    if (
-      !confirm('Restart Claude Code in the clone(s) above? A tool call in flight is interrupted.')
-    ) {
+    const question =
+      opts.closeClaude === true
+        ? 'End Claude Code in the clone(s) above? A tool call in flight is interrupted.'
+        : 'Restart Claude Code in the clone(s) above? A tool call in flight is interrupted.';
+    if (!confirm(question)) {
       note('nothing was reloaded');
       return;
     }
@@ -358,6 +385,13 @@ export const reloadClones = (
           else warn(`${facts.clone.name}: could not restart Claude Code in ${pane.id}`);
           break;
         }
+        case 'close-claude': {
+          const pane = facts.panes.find((p) => p.id === action.pane);
+          if (pane !== undefined && closeClaudePane(server, facts.clone, pane.id))
+            ok(`${facts.clone.name}: Claude Code ended, a fresh shell in ${pane.id}`);
+          else warn(`${facts.clone.name}: could not end Claude Code in ${action.pane}`);
+          break;
+        }
         case 'workspace-stale':
           warn(
             `${facts.clone.name}: ${action.paths.map((path) => tildify(path)).join(', ')} differ from the builder — \`hangar doctor ${String(facts.clone.index)} --fix\``,
@@ -366,6 +400,9 @@ export const reloadClones = (
       }
     }
   }
+
+  if (plans.some(({ actions }) => actions.some((a) => a.kind === 'close-claude')))
+    collectEndedSessions(hangar);
 
   if (plans.some(({ actions }) => actions.some((a) => a.kind === 'source-conf')))
     note(

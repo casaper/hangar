@@ -6,6 +6,11 @@ The most dangerous command in the CLI and the two that share its machinery.
 that write to the FORGE rather than to a working tree, which is a different blast radius reached
 through the same Bitbucket adapter.
 
+- **Every reflog entry this CLI writes is labelled `hangar`.** `git.ts` runs every git child
+  with `GIT_REFLOG_ACTION=hangar`; measured on git 2.56, `checkout` writes the bare label and
+  `merge`/`rebase` prefix it (`hangar: Fast-forward`, `hangar (start): checkout main`). It exists
+  for `jira-plan`'s "untouched for 3 weekdays", which reads the HEAD reflog and must not count a
+  fleet sync as somebody working.
 - **`hangar sync` types into a live Claude session.** There is no CLI mechanism to message a running
   interactive session, so it finds the session's tty, maps it to the tmux pane on that tty and
   writes a pause message, then a closing message afterwards. Each one leads with a marker — `SYNC

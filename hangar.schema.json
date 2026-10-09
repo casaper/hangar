@@ -139,6 +139,10 @@
         "namerScript": {
           "type": "string",
           "minLength": 1
+        },
+        "planPrompt": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "additionalProperties": false

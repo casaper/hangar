@@ -62,7 +62,12 @@ browser test run — that isolation is the entire reason the fleet exists.
   killed session cannot collect for itself. `hangar reload 1` is the other one: it re-reads the
   tmux config on the live server, restarts each idle shell so it picks up a new environment, and
   brings Claude Code back into the same conversation, leaving any pane that is running something
-  alone.
+  alone; `--close-claude` ends Claude Code instead and leaves a fresh shell in its window.
+- **Starting a ticket is one command.** `hangar jira-plan ABC-1323` finds a clone nobody needs —
+  on the default branch, on a merged pull request, or untouched for three weekdays, and never one
+  with uncommitted or unpushed work — puts it on an up-to-date default branch, arms the commit gate
+  for the ticket, and starts Claude Code there on your repo's own planning prompt
+  (`tracker.planPrompt`). The gate locks the ticket's branch the moment the agent cuts it.
 - **Colour identity.** Near-identical terminal windows are the fleet's usability problem, so every
   clone gets a hue that shows up in its Claude Code status line, its prompt border, and the
   terminal window itself.
@@ -549,9 +554,9 @@ The two sessions live on a tmux socket of their own, `tmux -L hangar-<id>-claude
 invisible to a bare `tmux ls` and separate from the clone sessions `hangar open` creates.
 
 The commands that move git state or files between live working trees — `sync`, `checkout-default`,
-`open`, `add-clone`, `remove-clone`, `colours change`, `doctor --fix` — stay yours by default. An
-operator session runs the dry run, reports it, and hands you a copy-pasteable line; tell it to go
-ahead and it will run them.
+`open`, `jira-plan`, `add-clone`, `remove-clone`, `colours change`, `doctor --fix` — stay yours
+by default. An operator session runs the dry run, reports it, and hands you a copy-pasteable line;
+tell it to go ahead and it will run them.
 
 ## Developer mode's own checks
 
@@ -657,6 +662,10 @@ hangar open --all
 hangar open 2 -c            # fetch and check out the default branch, up to date, first
 hangar open 2 -b feature/x  # fetch and check out this branch first
 hangar open 2 --no-claude
+
+hangar jira-plan ABC-1323 -n  # which clone is free, and why each other one is not
+hangar jira-plan ABC-1323     # start the ticket's planning agent there
+hangar reload 3 --close-claude
 
 hangar add-clone
 hangar remove-clone 4                 # detach it from the fleet, keep the directory

@@ -5,11 +5,22 @@
  *
  *   hangar-commit-gate status              # what the gate is doing here
  *   hangar-commit-gate lock [--ticket X]   # deny commits on the checked-out branch
+ *   hangar-commit-gate arm --ticket X      # lock the branch for X as soon as one is checked out
  *   hangar-commit-gate release --note "…"  # release, recording why
  *   hangar-commit-gate unlock              # release without a note
  *
  * With no verb it behaves as a Claude Code hook, reading a payload on stdin: it announces itself
  * on `SessionStart` and denies `git commit` on `PreToolUse`.
+ *
+ * **`arm` is a lock for a branch that does not exist yet.** The hangar command that starts a
+ * ticket's planning agent starts it on the default branch, which cannot be locked, and the agent
+ * cuts the ticket's branch some minutes later. Arming records the ticket instead of a branch, and the PreToolUse hook -- which already
+ * runs before every Bash call -- turns it into the ordinary lock the first time it finds HEAD on a
+ * lockable branch naming that ticket. The agent's next Bash call after `git checkout -b` is
+ * therefore already gated, and a commit is always a later call than the checkout that made the
+ * branch. A git `post-checkout` hook would catch the same moment without that one-call lag, but it
+ * would live in each clone's `.git/hooks`, beside whatever the repo installs there, and fire on
+ * every checkout anyone makes.
  *
  * **Silent and inert unless this clone's state file says the checked-out branch is locked**, so a
  * clone whose developer never locks anything sees no behavioural change at all. That is what
@@ -103,6 +114,38 @@ const activeLock = (root) => {
   return state.branch === currentBranch(root) ? state : null;
 };
 
+/**
+ * Why a branch cannot carry a lock, or null when it can. One rule for `lock` and for promoting an
+ * armed gate, so the two can never disagree about which branches are lockable.
+ */
+const unlockable = (root, branch) => {
+  if (branch === 'HEAD') return 'a detached HEAD -- check out a branch first';
+  if (branch === defaultBranch(root)) return `${branch} -- it is this repository's default branch`;
+  if (/^release/.test(branch)) return `${branch} -- release branches are protected version branches`;
+  return null;
+};
+
+/**
+ * Turn an armed gate into the lock, once HEAD is on a lockable branch naming its ticket. Returns
+ * the lock when it was written, else null. Called from the hook BEFORE the commit check, so the
+ * very call that first finds the branch is already denied a commit.
+ */
+const promote = (root) => {
+  const state = readState(root);
+  if (!state || !state.armed || !state.ticket) return null;
+  const branch = currentBranch(root);
+  if (unlockable(root, branch) !== null || !branch.includes(state.ticket)) return null;
+  const lock = {
+    locked: true,
+    branch,
+    ticket: state.ticket,
+    locked_at: new Date().toISOString(),
+    armed_at: state.armed_at,
+  };
+  writeState(root, lock);
+  return lock;
+};
+
 const describe = (lock) =>
   `${lock.branch}${lock.ticket ? ` (${lock.ticket})` : ''}, locked ${String(lock.locked_at).slice(0, 10)}`;
 
@@ -176,10 +219,11 @@ const writeState = (root, value) => {
 /** The repo's default branch, or undefined when origin has no HEAD to read it from. */
 const defaultBranch = (root) => {
   try {
-    return git(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { cwd: root }).replace(
-      /^origin\//,
-      '',
-    );
+    // stderr ignored: a clone with no `origin/HEAD` is an answer here, not something to print.
+    return git(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], {
+      cwd: root,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).replace(/^origin\//, '');
   } catch {
     return undefined;
   }
@@ -194,15 +238,8 @@ const lock = (args) => {
   const root = repoRoot();
   const branch = currentBranch(root);
 
-  if (branch === 'HEAD') {
-    fail('Refusing to lock a detached HEAD -- check out a branch first.');
-  }
-  if (branch === defaultBranch(root)) {
-    fail(`Refusing to lock ${branch} -- it is this repository's default branch.`);
-  }
-  if (/^release/.test(branch)) {
-    fail(`Refusing to lock ${branch} -- release branches are protected version branches.`);
-  }
+  const why = unlockable(root, branch);
+  if (why !== null) fail(`Refusing to lock ${why}.`);
 
   const ticket = valueFor(args, '--ticket') ?? (branch.match(/([A-Z]{2,}-\d+)/) ?? [])[1] ?? null;
 
@@ -218,17 +255,42 @@ const lock = (args) => {
   console.log('A new session picks this up at once; a running one sees it on its next commit.');
 };
 
+/**
+ * Arm the gate for a ticket whose branch is not cut yet. Refuses over a lock that is in force
+ * here, which is the one state arming must not quietly replace; a lock for a branch that is no
+ * longer checked out is inert and is replaced.
+ */
+const arm = (args) => {
+  const root = repoRoot();
+  const ticket = valueFor(args, '--ticket');
+  if (!ticket || !/^[A-Z][A-Z0-9]+-\d+$/.test(ticket)) {
+    fail('arm needs --ticket <KEY>, e.g. --ticket ABC-123.');
+  }
+  const active = activeLock(root);
+  if (active) fail(`Refusing to arm -- the gate is already ACTIVE on ${describe(active)}.`);
+
+  writeState(root, { armed: true, ticket, armed_at: new Date().toISOString() });
+  const promoted = promote(root);
+  if (promoted) {
+    console.log(`Commit gate LOCKED on ${describe(promoted)} -- the branch already exists.`);
+    return;
+  }
+  console.log(`Commit gate ARMED for ${ticket} (${basename(root)}).`);
+  console.log(`It locks the first branch naming ${ticket} that is checked out here.`);
+};
+
 const clear = (event, detail) => {
   const root = repoRoot();
   const state = readState(root);
 
-  if (!state || !state.locked) {
+  if (!state || (!state.locked && !state.armed)) {
     console.log('Commit gate is not active here -- nothing to release.');
     return;
   }
 
   rmSync(statePath(root), { force: true });
-  console.log(`Commit gate ${event} on ${state.branch}. Commits are allowed again.`);
+  const what = state.locked ? `on ${state.branch}` : `(armed for ${state.ticket})`;
+  console.log(`Commit gate ${event} ${what}. Commits are allowed again.`);
   if (detail) console.log(`  ${detail}`);
 };
 
@@ -236,6 +298,12 @@ const status = () => {
   const root = repoRoot();
   const state = readState(root);
   const branch = currentBranch(root);
+
+  if (state && state.armed && !state.locked) {
+    console.log(`Commit gate: ARMED for ${state.ticket} since ${String(state.armed_at).slice(0, 10)}.`);
+    console.log(`  It locks the first branch naming ${state.ticket}; ${branch} is checked out.`);
+    return;
+  }
 
   if (!state || !state.locked) {
     console.log(`Commit gate: not active (${basename(root)}, on ${branch}).`);
@@ -252,6 +320,36 @@ const status = () => {
   console.log(`  State: ${statePath(root)}`);
 };
 
+/**
+ * An armed gate denies the same escapes a lock does, and nothing else. Commits are still allowed
+ * -- there is no ticket branch to protect yet -- but an agent that could disarm the gate before
+ * cutting its branch would never meet the lock at all.
+ */
+const guardArmed = (root, payload) => {
+  const state = readState(root);
+  if (!state || !state.armed || state.locked) return;
+  if ((payload.hook_event_name ?? '') !== 'PreToolUse' || payload.tool_name !== 'Bash') return;
+  const command = payload.tool_input?.command ?? '';
+  if (!GATE_RELEASE.test(command) && !GATE_STATE.test(command)) return;
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: [
+          `**The commit gate is armed for ${state.ticket}, and disarming it is the user's.**`,
+          '',
+          `It locks the branch for ${state.ticket} as soon as that branch is checked out. Turning`,
+          'it off -- with `release`, with `unlock`, or by deleting its state file -- is not yours.',
+          '',
+          'Reading the state is fine: `hangar-commit-gate status`.',
+        ].join('\n'),
+      },
+      systemMessage: `Commit gate armed for ${state.ticket} -- disarming it is the user's.`,
+    }),
+  );
+};
+
 /** Hook mode: a JSON payload on stdin, and never a non-zero exit. */
 const hook = () => {
   const raw = readFileSync(0, 'utf8');
@@ -259,9 +357,14 @@ const hook = () => {
 
   const payload = JSON.parse(raw);
   const root = repoRoot(payload.cwd);
+  // Promotion first: the call that first finds the ticket's branch must already be gated.
+  promote(root);
   const lockHere = activeLock(root);
 
-  if (!lockHere) return;
+  if (!lockHere) {
+    guardArmed(root, payload);
+    return;
+  }
 
   if ((payload.hook_event_name ?? '') === 'SessionStart') {
     process.stdout.write(
@@ -301,6 +404,7 @@ const usage = () => {
       'Usage:',
       '  hangar-commit-gate status',
       '  hangar-commit-gate lock [--ticket <KEY>]',
+      '  hangar-commit-gate arm --ticket <KEY>',
       '  hangar-commit-gate release --note "<summary>"',
       '  hangar-commit-gate unlock',
       '',
@@ -314,6 +418,7 @@ const main = () => {
 
   if (command === undefined) return hook();
   if (command === 'lock') return lock(rest);
+  if (command === 'arm') return arm(rest);
   if (command === 'status') return status();
   if (command === 'release') return clear('released', valueFor(rest, '--note') ?? 'checklist passed');
   if (command === 'unlock') return clear('unlocked');

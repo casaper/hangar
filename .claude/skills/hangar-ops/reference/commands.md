@@ -44,6 +44,7 @@ another name.
 | `sync` | `sync_preview` | `sync` (`strategy` picks rebase or merge) |
 | `checkout-default` | `checkout_default_preview` | `checkout_default` |
 | `open` | `open_preview` | `open` |
+| `jira-plan` | `jira_plan_preview` | `jira_plan` |
 | `edit` | `edit_preview` | `edit` |
 | `close` | `close_preview` | `close` |
 | `reload` | `reload_preview` | `reload` |
@@ -111,7 +112,8 @@ rule that cannot tell it from the report.
 | `open` | `[clones...]` | `--all` · `--no-claude` · `-e, --editor` · `-c, --checkout` · `-b, --branch <name>` · `--include-busy` (only with `-c` or `-b`) · `-n, --dry-run` | **act [user]** |
 | `edit` | `[clones...]` | `--all` · `-n, --dry-run` | **act [user]** |
 | `close` | `[clones...]` | `--all` · `--no-editor` · `-y, --yes` · `--force` · `-n, --dry-run` | **act [user]** |
-| `reload` | `[clones...]` | `--all` · `--no-shells` · `--no-claude` · `--no-editor` · `-y, --yes` · `-n, --dry-run` | **act [user]** |
+| `reload` | `[clones...]` | `--all` · `--no-shells` · `--no-claude` · `--close-claude` · `--no-editor` · `-y, --yes` · `-n, --dry-run` | **act [user]** |
+| `jira-plan` | `<key>` | `-y, --yes` · `-n, --dry-run` | **act [user]** — ends what runs in the chosen clone's Claude Code window |
 | `browse` | `<ticket\|pr> <clone>` | `-n, --dry-run` (print the URL, open nothing) | act (opens a browser; `-n` is report) |
 | `pr refresh` | `[clones...]` | `-a, --all` · `--force` · `-q, --quiet` · `-n, --dry-run` | act (writes a cache; the bar spawns it for you) |
 | `pr create` | `[clone]` (defaults to the clone you are in; naming ANOTHER is refused) | `--onto <branch>` · `--title <text>` · `--file <path>` · `--ready` · `--no-describe` · `--include-busy` · `-y, --yes` · `-n, --dry-run` | **act — writes to the forge.** Opens a DRAFT unless `--ready` |

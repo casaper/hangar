@@ -140,6 +140,22 @@ const trackerSchema = z.strictObject({
    * relation slug.
    */
   namerScript: containedPath('tracker.namerScript').optional(),
+  /**
+   * The first prompt `hangar jira-plan <KEY>` starts Claude Code with in a free clone, `{key}`
+   * standing for the ticket. A slash command of the repo's own is the normal value.
+   *
+   * **Optional with no default, for `forge.prDescriptionPrompt`'s reason.** Which skill plans a
+   * ticket is a property of the repo being managed, not of Hangar, and a default would put one
+   * repository's skill name into every other hangar. Absent means `jira-plan` refuses and says
+   * this key is what it needs.
+   */
+  planPrompt: z
+    .string()
+    .min(1)
+    .refine((value) => value.includes('{key}'), {
+      message: 'must contain {key}, where the ticket key goes',
+    })
+    .optional(),
 });
 
 /**

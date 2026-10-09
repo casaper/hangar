@@ -15,6 +15,7 @@ import { configSchema, configShow, configValidate } from './commands/config.ts';
 import { doctor } from './commands/doctor.ts';
 import { edit, type EditOptions } from './commands/edit.ts';
 import { jiraHook } from './commands/jira.ts';
+import { jiraPlan } from './commands/jira-plan.ts';
 import { golden } from './commands/dev.ts';
 import { release } from './commands/release.ts';
 import { list } from './commands/list.ts';
@@ -461,6 +462,23 @@ program
   });
 
 program
+  .command('jira-plan')
+  .summary('Start a ticket in a free clone: default branch, commit gate armed, agent planning')
+  .description(
+    [
+      'Finds a free clone, puts it on its repo’s default branch, fetched and up to date, arms the commit gate for the ticket, and starts Claude Code there with `tracker.planPrompt` as its first prompt — the repo’s own planning skill, which cuts the ticket’s branch later and finds the gate waiting: the gate locks the first branch naming the ticket that is checked out.',
+      'Free means on the default branch, on a branch whose pull request is merged, or untouched for 3 weekdays (Saturday and Sunday do not count; a `hangar` sync does not count as a touch). A clone with any uncommitted or untracked file, a commit no remote has, a half-applied rebase, a gate armed for another ticket, or a Claude Code session outside its Claude Code window is never free. A clone whose Claude Code window is idle is taken before one where a session would have to end, and ending one is asked about first.',
+      'An open clone keeps its windows: only what runs in its Claude Code window is ended, and the new `claude` is started in the shell left there. A clone that is not open is opened, with that command in its Claude Code window.',
+    ].join('\n\n'),
+  )
+  .argument('<key>', 'the ticket key, e.g. ABC-123')
+  .option('-y, --yes', 'do not ask before ending a Claude Code session in the chosen clone')
+  .option('-n, --dry-run', 'print every clone’s verdict and the steps, and change nothing')
+  .action(async (key: string, options: { yes?: boolean; dryRun?: boolean }) => {
+    await jiraPlan(requireHangar(), key, options);
+  });
+
+program
   .command('open')
   .summary('Open clones in their own tmux sessions, on the branch each one has')
   .description(
@@ -543,16 +561,27 @@ program
       'Re-executes `clone-tmux.conf` on the live tmux server, restarts each idle shell so it re-runs direnv and picks up the current PATH and prompt, and restarts Claude Code in the same conversation it was already in — so a config change reaches a clone you are working in.',
       '**This is the path `kill-server` used to be the only answer for.** `colours sync` writes the bar onto a running server but cannot reach a SERVER option, and two of the four settings Claude Code needs inside tmux are server options. `source-file` re-executes the whole conf, `set -s` included, with nothing interrupted. `extended-keys` and `focus-events` are negotiated when a client attaches, so those two still want the tab reopened.',
       "A pane running anything other than a shell — a dev server, a test run — is left alone and named. Claude Code's pane is the exception: it is what holds the settings and `CLAUDE.md` read once at start-up, so it is restarted with `--resume <session-id>` and the conversation continues. `--no-claude` leaves it running and `--no-shells` leaves the shells alone.",
+      '`--close-claude` ends Claude Code instead of restarting it, and leaves a fresh shell in its window — a clean slate for a new session. Nothing comes back to run its `SessionEnd` hook, so the plans and `tmp/` collection `close` does runs here too.',
     ].join('\n\n'),
   )
   .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2) — reloaded in ascending order')
   .option('--all', 'reload every open clone in the fleet')
   .option('--no-shells', 'leave every idle shell pane as it is')
   .option('--no-claude', 'leave Claude Code running, on the settings it started with')
+  .option(
+    '--close-claude',
+    'end Claude Code and leave a shell in its window, instead of restarting it',
+  )
   .option('--no-editor', "do not rewrite the editors' per-clone artifacts")
-  .option('-y, --yes', 'do not ask before restarting Claude Code')
+  .option('-y, --yes', 'do not ask before restarting or ending Claude Code')
   .option('-n, --dry-run', 'print every decision and reload nothing')
   .action((clones: string[], options: ReloadOptions) => {
+    if (options.closeClaude === true && options.claude === false) {
+      throw new CliError(
+        '--close-claude and --no-claude ask for opposite things',
+        'Pick one: --close-claude ends Claude Code, --no-claude leaves it running.',
+      );
+    }
     reloadClones(requireHangar(), clones, options);
   });
 

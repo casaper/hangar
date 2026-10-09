@@ -112,6 +112,42 @@ than certain, and `--no-claude` is the way to decline it.
 `add-clone` and `doctor --fix`, and a second one is how two builders drift; `reload` is the right
 place to NOTICE and the wrong place to fix, so it names `doctor --fix` and moves on.
 
+### `jira-plan` starts a fresh `claude` with a first prompt, and `--close-claude` is its half of `reload`
+
+**Hangar can submit a prompt to a live session** -- `sync`'s `SYNC PAUSE` is `send-keys -l` and a
+separate `Enter` -- so typing `/plan-ticket KEY` into a running Claude Code was possible. It is not
+what `jira-plan` does, because a planning run wants a clean context and Claude Code names a
+session's plan file from its FIRST prompt. So the clone's Claude Code window is emptied and
+`claude '<prompt>'` is typed into the shell left there (`tracker.planPrompt`, `{key}` filled in);
+a clone that is not open gets that command as its window's own, through `open`'s `firstPrompt`.
+
+**`--close-claude` respawns the pane with NO command**, unlike `reload`'s restart, which respawns
+it under `sh -lc` and so closes the pane when Claude Code exits. With no command the pane gets a
+login shell, which keeps the property every `open` window has: `/exit` leaves a shell. A pane
+killed by `respawn-pane -k` never runs its `SessionEnd` hook, and here nothing comes back to run it
+later, so `plans collect` and `tmp merge` run afterwards -- `close`'s reason, not `reload`'s.
+
+**The order is close, then land, then type, and it reverses the obvious one** because
+`landOnBranch` refuses a clone with a live Claude Code. Every refusal that can be read without
+acting -- a dirty or untracked tree, a half-applied rebase, an unpushed commit -- is in the free-clone
+verdict, before anything is ended. After the respawn it polls `claudeSessionsIn` until the process
+is gone, and aborts if it never goes. `landOnBranch` is then called directly and any throw or
+`'failed'` stops the command: `open`'s `land()` catches everything and opens anyway, which is
+right for a developer who asked for a window and wrong for an agent about to cut a branch.
+
+**A session this command cannot end makes the clone busy, not a question.** It matches the pane's
+`#{pane_tty}` against each Claude Code process's tty; a session elsewhere -- the VS Code
+extension's, which has no tty, or one typed into the shell window -- would survive the respawn,
+and `landOnBranch` would then `confirm()` (declined with no tty, so under MCP always) or need
+`--include-busy`, which this command never passes.
+
+**Free is a pure judgement over facts** (`judgeClone`, `pickFreeClone`), so `-n` prints every
+clone's reason and the suite pins the rules. Untouched means 3 x 24 hours with Saturday 00:00 to
+Sunday 24:00 cut out and no office hours, measured from the newest transcript write or HEAD
+reflog entry -- excluding entries this CLI wrote, which `git.ts` labels `GIT_REFLOG_ACTION=hangar`
+so a `sync --all` does not make the whole fleet look worked on. The HEAD commit's time is not a
+signal: a rebase rewrites it.
+
 ### Closing an editor window: what the two halves cost
 
 `platform.closeAppWindow(app, titleContains)` is macOS-only and needs Accessibility permission

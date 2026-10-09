@@ -189,7 +189,8 @@ const sleepSync = (ms: number): void => {
   }
 };
 
-const shellQuote = (value: string): string =>
+/** One word for a POSIX shell: bare when it is safe bare, single-quoted otherwise. */
+export const shellQuote = (value: string): string =>
   /^[A-Za-z0-9_./:=-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`;
 
 /**
@@ -398,6 +399,11 @@ export type TmuxServer = {
    * every caller decides pane by pane rather than sweeping a session.
    */
   readonly respawnPane: (paneId: string, cwd: string, command?: string) => boolean;
+  /**
+   * Type one line into a pane and submit it -- `runIn`'s two `send-keys` calls, aimed at a pane
+   * that already exists. False when tmux refused either half.
+   */
+  readonly typeInPane: (paneId: string, line: string) => boolean;
   readonly killSession: (clone: Clone) => boolean;
 };
 
@@ -414,6 +420,8 @@ export type TmuxPane = {
   readonly role: string | undefined;
   readonly command: string;
   readonly path: string;
+  /** `#{pane_tty}`, as tmux prints it (`/dev/ttys004`). Matched against a process's tty. */
+  readonly tty: string | undefined;
 };
 
 /**
@@ -816,11 +824,12 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
         '#{@hangar_role}',
         '#{pane_current_command}',
         '#{pane_current_path}',
+        '#{pane_tty}',
       ].join(SEP);
       const res = tmux(['list-panes', '-s', '-t', tmuxTarget(clone), '-F', format]);
       if (!res.ok) return [];
       return lines(res.out).flatMap((line) => {
-        const [id, windowId, role, command, path] = line.split(SEP);
+        const [id, windowId, role, command, path, tty] = line.split(SEP);
         if (id === undefined || windowId === undefined) return [];
         return [
           {
@@ -829,10 +838,14 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
             role: orUndefined(role),
             command: command ?? '',
             path: path ?? clone.path,
+            tty: orUndefined(tty),
           },
         ];
       });
     },
+    typeInPane: (paneId, line) =>
+      tmux(['send-keys', '-t', paneId, '-l', '--', line]).ok &&
+      tmux(['send-keys', '-t', paneId, 'Enter']).ok,
     respawnPane: (paneId, cwd, command) =>
       tmux([
         'respawn-pane',

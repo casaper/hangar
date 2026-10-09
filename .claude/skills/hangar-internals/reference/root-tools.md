@@ -16,6 +16,20 @@ rather than `hangar` subcommands, what each refuses, and how `personal-skills/` 
   because an agent that can release its own gate has no gate — and the hook refuses those verbs
   and any command naming its own state file, because a permission rule matches only the START of
   a command string and `hangar-commit-gate status && … release` sails straight past one.
+  **`arm --ticket <KEY>` is a lock for a branch that does not exist yet**, and it exists for
+  `hangar jira-plan`, which starts a planning agent on the default branch -- unlockable -- that
+  cuts the ticket's branch minutes later. The PreToolUse hook PROMOTES an armed gate to the
+  ordinary lock the first time HEAD is on a lockable branch naming the ticket, and promotes
+  BEFORE its commit check, so the call that first finds the branch is already gated; a commit is
+  always a later Bash call than the `checkout -b` that made it. While armed it denies the same
+  escapes a lock does and allows commits, since there is no ticket branch yet. Three ways were
+  weighed and are not used: a `post-checkout` hook (no lag, but it lives in each clone's
+  `.git/hooks` beside the repo's own and fires on every checkout), a `lock` line in the repo's
+  planning skill (hangar tooling in the team's tracked repo, and a step an agent can skip), and a
+  `PostToolUse` registration (a change to every clone's generated settings to close a one-call
+  window the skill never uses). **Edit it as a scratch copy and `mv` it in**: the gate runs before
+  every Bash call in every clone, and the probe that tests it copies it into a temp hangar root,
+  because `statePath` is resolved from the script's own location.
 - **`bin/hangar-rewrite`** — amend, fixup, autosquash, rebase and reset, for history that has
   never been published. A blanket "never rewrite" rule is a proxy for the thing that actually
   matters, which is never rewriting what other people already have; this enforces the real rule

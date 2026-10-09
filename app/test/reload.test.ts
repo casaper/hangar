@@ -27,6 +27,7 @@ const pane = (over: Partial<TmuxPane> = {}): TmuxPane => ({
   role: 'shell',
   command: 'zsh',
   path: '/tmp/x',
+  tty: undefined,
   ...over,
 });
 
@@ -120,6 +121,24 @@ test('reload REPORTS a stale workspace file and never writes one', () => {
   // Named because the fix belongs to another command: the per-clone artifacts have one writer,
   // `add-clone` and `doctor --fix`, and a second one is how two builders drift apart.
   assert.match(describeReloadAction(actions[0] as never), /doctor --fix/);
+});
+
+test('--close-claude ends Claude Code in its pane and leaves every other pane’s treatment alone', () => {
+  const panes = [
+    pane({ id: '%1', role: 'claude', command: 'claude' }),
+    pane({ id: '%2', role: 'shell' }),
+    pane({ id: '%3', role: 'app', command: 'ng' }),
+  ];
+  const facts = reloadFacts({ panes, liveSessionId: 'zz' });
+  // No resume, whatever the live session: the point is a clean slate for a new `claude`.
+  assert.deepEqual(
+    reloadPlan(facts, { closeClaude: true }).map((a) => a.kind),
+    ['source-conf', 'close-claude', 'respawn-shell', 'skip-pane'],
+  );
+  assert.deepEqual(
+    reloadPlan(facts, { closeClaude: true, shells: false }).map((a) => a.kind),
+    ['source-conf', 'close-claude'],
+  );
 });
 
 test('--no-claude and --no-shells each drop exactly their own half', () => {

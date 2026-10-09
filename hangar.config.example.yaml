@@ -219,6 +219,12 @@ tracker:
   keyPrefixes: [DN]
   # keyPrefixes: [PROJ, OPS]
 
+  # The first prompt `hangar jira-plan <KEY>` starts Claude Code with in the free clone it
+  # picks, `{key}` standing for the ticket. Absent when omitted, and absent means `jira-plan`
+  # refuses. OPTIONAL WITH NO DEFAULT, for `forge.prDescriptionPrompt`'s reason: which skill
+  # plans a ticket belongs to the repo, and a built-in default would name one repo's skill.
+  planPrompt: /jira-plan {key}
+
   cache:
     # How long a fetched ticket is served from the store instead of being re-fetched.
     # Default 60. `0` disables the freshness window without disabling the store.

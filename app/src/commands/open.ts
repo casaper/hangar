@@ -15,6 +15,7 @@ import { currentBranch } from '../git.ts';
 import {
   attachCommand,
   attachHint,
+  shellQuote,
   tmuxSessionName,
   tmuxServer,
   type TabSpec,
@@ -102,7 +103,26 @@ export type OpenOptions = {
    * would do first.
    */
   dryRun?: boolean | undefined;
+  /**
+   * The first prompt the Claude Code window starts with, passed as `claude`'s argument. Not a
+   * flag: `hangar jira-plan` is its one caller, and it only reaches a window this run CREATES --
+   * an existing one is never typed into from here.
+   */
+  firstPrompt?: string | undefined;
 };
+
+/**
+ * The role whose window runs Claude Code.
+ *
+ * The schema's default first tab, and the name every hangar in this fleet uses. A hangar that
+ * renames it gets its Claude pane treated as an ordinary one -- by `reload`, respawned when idle
+ * and skipped when busy, which is the safe way round -- and gets no first prompt from `jira-plan`.
+ */
+export const CLAUDE_ROLE = 'claude';
+
+/** A configured Claude Code command with a first prompt appended, quoted for the shell. Pure. */
+export const claudeWithPrompt = (command: string, prompt: string): string =>
+  `${command} ${shellQuote(prompt)}`;
 
 export type OpenBranchFlags = Pick<OpenOptions, 'branch' | 'checkout' | 'includeBusy'>;
 
@@ -129,12 +149,21 @@ export const tabsFor = (
   opts: OpenOptions,
   editorDrivers: readonly EditorDriver[],
 ): TabSpec[] => {
-  const configured = hangar.config.terminal.tabs.map((tab): TabSpec => ({
-    cwd: tab.dir === '.' ? clone.path : join(clone.path, tab.dir),
-    ...(opts.claude === false || tab.command === undefined ? {} : { command: tab.command }),
-    clone: clone.name,
-    role: tab.role,
-  }));
+  const commandOf = (tab: { role: string; command?: string | undefined }): string | undefined => {
+    if (opts.claude === false || tab.command === undefined) return undefined;
+    return tab.role === CLAUDE_ROLE && opts.firstPrompt !== undefined
+      ? claudeWithPrompt(tab.command, opts.firstPrompt)
+      : tab.command;
+  };
+  const configured = hangar.config.terminal.tabs.map((tab): TabSpec => {
+    const command = commandOf(tab);
+    return {
+      cwd: tab.dir === '.' ? clone.path : join(clone.path, tab.dir),
+      ...(command === undefined ? {} : { command }),
+      clone: clone.name,
+      role: tab.role,
+    };
+  });
 
   return [
     ...configured,
@@ -500,8 +529,20 @@ const factsFor = (
   };
 };
 
-export const open = (hangar: Hangar, refs: readonly string[], opts: OpenOptions): void => {
-  const clones = resolveClones(hangar, refs, opts);
+/** What every clone of one `open` run shares: the emulator, the tmux server, the editors. */
+export type OpenContext = {
+  readonly driver: ReturnType<typeof terminal>['driver'];
+  readonly server: TmuxServer;
+  readonly drivers: readonly EditorDriver[];
+};
+
+/**
+ * Everything `open` checks before it touches a clone, and the context it opens them with.
+ *
+ * Exported so a caller that moves a branch FIRST -- `hangar jira-plan` -- can refuse before it
+ * has moved anything, rather than landing a clone and then finding there is no tmux to open it in.
+ */
+export const prepareOpen = (hangar: Hangar, opts: OpenOptions): OpenContext => {
   const { driver, source } = terminal(hangar);
   const server = tmuxServer(hangar);
   // Not even ASKED without `-e`: see `editorsToOpen`.
@@ -536,6 +577,12 @@ export const open = (hangar: Hangar, refs: readonly string[], opts: OpenOptions)
   if (driver.kind === 'none') {
     note('no emulator is driven — each clone’s session is built and the attach line is printed.');
   }
+  return { driver, server, drivers };
+};
+
+export const open = (hangar: Hangar, refs: readonly string[], opts: OpenOptions): void => {
+  const clones = resolveClones(hangar, refs, opts);
+  const context = prepareOpen(hangar, opts);
 
   for (const clone of clones) {
     if (opensOnNewBranch(opts)) land(clone, opts, clones.length > 1);
@@ -543,50 +590,64 @@ export const open = (hangar: Hangar, refs: readonly string[], opts: OpenOptions)
       note(
         `${clone.name}: on ${currentBranch(clone.path)}, as it is — -c checks out the default branch`,
       );
-    const facts = factsFor(hangar, clone, opts, server, driver.capabilities, drivers);
-    /*
-     * Paint a session this command did not create, before anything else touches it.
-     *
-     * `createSession` paints the ones it makes, which left a hole with no name until it cost this
-     * fleet its whole status bar: `attachCommand` is `new-session -A`, so an emulator tab coming
-     * back up with the server gone creates the session ITSELF -- unpainted, carrying no
-     * `@hangar_clone`, and therefore with a blank footer, a blank window title and a click
-     * binding handing `hangar browse` an empty clone. Every restored tab at once, after the
-     * terminal restores its windows.
-     *
-     * Three `set` calls and idempotent, so the reuse path can simply do it rather than first
-     * asking whether it is needed -- and outside a dry run, because a session's tags are state.
-     */
-    if (facts.sessionExists && opts.dryRun !== true) {
-      server.paintSession(clone);
-      // Same reason, and the same case: a server the emulator's own `new-session -A` created has
-      // launchd's PATH, where the bar's `hangar browse` click and its detached `pr refresh` both
-      // find no node. Reaching a session at all means the server is up, so this is safe here.
-      server.ensureNodeOnPath();
-    }
-    for (const action of openPlan(hangar, facts)) {
-      if (opts.dryRun === true) {
-        step(describeAction(action, false));
-        if (action.kind === 'attach-hint' || action.kind === 'cannot-raise') note(action.hint);
-        continue;
-      }
-      if (perform(server, clone, driver, action)) {
-        ok(describeAction(action, true));
-        if (action.kind === 'attach-hint' || action.kind === 'cannot-raise') note(action.hint);
-        const said = driver.lastNote();
-        if (action.kind === 'open-emulator' && said !== undefined) note(said);
-      } else {
-        warn(`${clone.name}: ${describeAction(action, false).replace(/^would /, 'could not ')}`);
-        const said = driver.lastNote();
-        if (said !== undefined) note(said);
-      }
-    }
-    if (opts.editor === true) openEditors(clone, drivers, opts.dryRun === true);
-    note(`ports: ${portSummary(clone.ports)}`);
+    openOne(hangar, clone, opts, context);
   }
 
   if (opts.dryRun === true) {
     console.log('');
     note('(dry run — no branch was moved, no session and no editor was opened)');
   }
+};
+
+/**
+ * Open one clone that is already on the branch it should be on: its session, its windows, its
+ * emulator tab, and with `-e` its editors. No branch is moved here -- that is the caller's.
+ */
+export const openOne = (
+  hangar: Hangar,
+  clone: Clone,
+  opts: OpenOptions,
+  context: OpenContext,
+): void => {
+  const { driver, server, drivers } = context;
+  const facts = factsFor(hangar, clone, opts, server, driver.capabilities, drivers);
+  /*
+   * Paint a session this command did not create, before anything else touches it.
+   *
+   * `createSession` paints the ones it makes, which left a hole with no name until it cost this
+   * fleet its whole status bar: `attachCommand` is `new-session -A`, so an emulator tab coming
+   * back up with the server gone creates the session ITSELF -- unpainted, carrying no
+   * `@hangar_clone`, and therefore with a blank footer, a blank window title and a click
+   * binding handing `hangar browse` an empty clone. Every restored tab at once, after the
+   * terminal restores its windows.
+   *
+   * Three `set` calls and idempotent, so the reuse path can simply do it rather than first
+   * asking whether it is needed -- and outside a dry run, because a session's tags are state.
+   */
+  if (facts.sessionExists && opts.dryRun !== true) {
+    server.paintSession(clone);
+    // Same reason, and the same case: a server the emulator's own `new-session -A` created has
+    // launchd's PATH, where the bar's `hangar browse` click and its detached `pr refresh` both
+    // find no node. Reaching a session at all means the server is up, so this is safe here.
+    server.ensureNodeOnPath();
+  }
+  for (const action of openPlan(hangar, facts)) {
+    if (opts.dryRun === true) {
+      step(describeAction(action, false));
+      if (action.kind === 'attach-hint' || action.kind === 'cannot-raise') note(action.hint);
+      continue;
+    }
+    if (perform(server, clone, driver, action)) {
+      ok(describeAction(action, true));
+      if (action.kind === 'attach-hint' || action.kind === 'cannot-raise') note(action.hint);
+      const said = driver.lastNote();
+      if (action.kind === 'open-emulator' && said !== undefined) note(said);
+    } else {
+      warn(`${clone.name}: ${describeAction(action, false).replace(/^would /, 'could not ')}`);
+      const said = driver.lastNote();
+      if (said !== undefined) note(said);
+    }
+  }
+  if (opts.editor === true) openEditors(clone, drivers, opts.dryRun === true);
+  note(`ports: ${portSummary(clone.ports)}`);
 };

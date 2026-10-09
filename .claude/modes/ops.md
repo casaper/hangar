@@ -32,18 +32,19 @@ For every request, in this order:
 | "pull / update / get latest" (all or some clones) | `list`; if they are on the default branch and clean, `sync_preview`, then run `hangar sync` via Bash in the background (see the skill) |
 | "open clone N" | `open_preview`, then `open` — on the branch the clone already has |
 | "start something new in N" / "open N on the default branch" | `open_preview` with `checkout`, then `open` with `checkout` |
+| "start / plan ticket KEY" (no clone named) | `jira_plan_preview`, read back which clone it picked and why, then `jira_plan` |
 | "what is going on?" / "overview" | `list`, then `servers_list` if servers matter |
 | "something is broken" / "is everything ok?" | `doctor`; explain each red row in plain words; offer `doctor_fix` after its effect is clear |
 | "add / remove a clone" | `add_clone` / `remove_clone`; say what it keeps and deletes first |
 | "close / restart clone N" | `close_preview` / `reload_preview`; warn that it ends a live Claude session |
 | "open a PR" | `pr_create_preview`, read the title back, then `pr_create` (draft) |
 
-**A tool that skips is not a failure to retry.** `open`, `checkout_default`, `close` and `reload`
-ask their own question where a human could answer it — a live Claude session in the clone, a dev
+**A tool that skips is not a failure to retry.** `open`, `checkout_default`, `close`, `reload` and
+`jira_plan` ask their own question where a human could answer it — a live Claude session in the clone, a dev
 server that dies with it — and a tool has no terminal, so they skip and say why. Tell the user
 what was skipped and why, ask whether to go ahead, and only on a yes re-run with the flag that
 answers it (`include-busy` for `checkout_default`, `include-busy` alongside `checkout` for `open`,
-`yes` for `close` and `reload`).
+`yes` for `close`, `reload` and `jira_plan`).
 
 Anything not in the table: load the `hangar-ops` skill for the right command, then follow the same
 four steps.
@@ -86,8 +87,8 @@ clone*. Most of it is true for you; four things are not:
   session. You are at the hangar root, you belong to no clone, and acting across all of them is
   your job.
 - **The commands that file reserves "for the user, from the fleet root" are the ones you are here
-  to drive** — `sync`, `checkout-default`, `open`, `edit`, `close`, `reload`, `add-clone`,
-  `install`, `remove-clone`, `servers start`, `servers kill`, `colours change`, `ports pin`,
+  to drive** — `sync`, `checkout-default`, `open`, `jira-plan`, `edit`, `close`, `reload`,
+  `add-clone`, `install`, `remove-clone`, `servers start`, `servers kill`, `colours change`, `ports pin`,
   `ports unpin`, `doctor --fix`. They move git state, files between
   live working trees, or a window onto the user's screen, so run the preview first —
   `sync_preview`, `open_preview`, `doctor` — report it,
@@ -102,7 +103,8 @@ clone*. Most of it is true for you; four things are not:
   agent in that clone did not ask for. Report `close_preview` or `reload_preview` and let the
   prompt do its work, exactly as for the others. Neither can reach you: `close` refuses the clone
   it is running inside, and `reload` skips its own pane — and your session is on a different
-  socket entirely.
+  socket entirely. `jira-plan` belongs there too: it ends whatever runs in the Claude Code window
+  of the clone it picks, and it says which clone and why before it does.
 
 ## What this mode refuses
 

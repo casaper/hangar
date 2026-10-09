@@ -232,6 +232,13 @@ export const EXPOSURES: readonly Exposure[] = [
     lede: previewLede,
   },
   { name: 'open_preview', path: ['open'], fixed: [PREVIEW], acts: false, lede: previewLede },
+  {
+    name: 'jira_plan_preview',
+    path: ['jira-plan'],
+    fixed: [PREVIEW],
+    acts: false,
+    lede: previewLede,
+  },
   { name: 'edit_preview', path: ['edit'], fixed: [PREVIEW], acts: false, lede: previewLede },
   { name: 'close_preview', path: ['close'], fixed: [PREVIEW], acts: false, lede: previewLede },
   { name: 'reload_preview', path: ['reload'], fixed: [PREVIEW], acts: false, lede: previewLede },
@@ -307,6 +314,7 @@ export const EXPOSURES: readonly Exposure[] = [
     preapproved: true,
   },
   { name: 'open', path: ['open'], hides: [PREVIEW], acts: true, preapproved: true },
+  { name: 'jira_plan', path: ['jira-plan'], hides: [PREVIEW], acts: true },
   { name: 'edit', path: ['edit'], hides: [PREVIEW], acts: true },
   { name: 'close', path: ['close'], hides: [PREVIEW], acts: true },
   {
