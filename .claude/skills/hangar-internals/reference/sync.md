@@ -10,7 +10,9 @@ through the same Bitbucket adapter.
   with `GIT_REFLOG_ACTION=hangar`; measured on git 2.56, `checkout` writes the bare label and
   `merge`/`rebase` prefix it (`hangar: Fast-forward`, `hangar (start): checkout main`). It exists
   for `jira-plan`'s "untouched for 3 weekdays", which reads the HEAD reflog and must not count a
-  fleet sync as somebody working.
+  fleet sync as somebody working. **It does not touch a stash's `%gs`**, measured: a stash pushed
+  with the variable set still lists as `On main: hangar-sync …`, which is what `syncStashes`
+  matches -- so the label cannot lose `sync` its own stash.
 - **`hangar sync` types into a live Claude session.** There is no CLI mechanism to message a running
   interactive session, so it finds the session's tty, maps it to the tmux pane on that tty and
   writes a pause message, then a closing message afterwards. Each one leads with a marker — `SYNC

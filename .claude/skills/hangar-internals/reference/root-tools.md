@@ -22,7 +22,10 @@ rather than `hangar` subcommands, what each refuses, and how `personal-skills/` 
   ordinary lock the first time HEAD is on a lockable branch naming the ticket, and promotes
   BEFORE its commit check, so the call that first finds the branch is already gated; a commit is
   always a later Bash call than the `checkout -b` that made it. While armed it denies the same
-  escapes a lock does and allows commits, since there is no ticket branch yet. Three ways were
+  escapes a lock does, and also `arm` and `lock` in any spelling -- re-pointing the gate at a
+  ticket no branch names, or at another branch, turns it off without releasing anything -- and
+  allows commits, since there is no ticket branch yet. The ticket must be a WHOLE token of the
+  branch name, so a gate armed for `ABC-12` does not promote on `ABC-123_…`. Three ways were
   weighed and are not used: a `post-checkout` hook (no lag, but it lives in each clone's
   `.git/hooks` beside the repo's own and fires on every checkout), a `lock` line in the repo's
   planning skill (hangar tooling in the team's tracked repo, and a step an agent can skip), and a

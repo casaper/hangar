@@ -70,6 +70,13 @@ const GIT_COMMIT = /(?:^|&&|\|\||;|\n)\s*git\s+(?:-C\s+\S+\s+|-c\s+\S+\s+|--\S+\
 const GATE_RELEASE = /hangar-commit-gate\s+(?:--\S+\s+)*(?:release|unlock)\b/;
 
 /**
+ * Re-pointing an ARMED gate, which turns it off without releasing anything: `arm` for a ticket no
+ * branch names, or `lock` on some other branch, and the ticket's own branch is never locked.
+ * Denied only while armed -- under a lock, `arm` already refuses and `lock` re-locks.
+ */
+const GATE_REPOINT = /hangar-commit-gate\s+(?:--\S+\s+)*(?:arm|lock)\b/;
+
+/**
  * Deleting or rewriting the lock, which is the same escape one level down.
  *
  * The hook denies `git commit` by reading a file; a command that removes that file turns the gate
@@ -125,6 +132,10 @@ const unlockable = (root, branch) => {
   return null;
 };
 
+/** The ticket as a whole token of the branch name: `ABC-12` is not in `ABC-123_x`. */
+const namesTicket = (branch, ticket) =>
+  new RegExp(`(?:^|[^A-Za-z0-9])${ticket}(?![0-9])`).test(branch);
+
 /**
  * Turn an armed gate into the lock, once HEAD is on a lockable branch naming its ticket. Returns
  * the lock when it was written, else null. Called from the hook BEFORE the commit check, so the
@@ -134,7 +145,7 @@ const promote = (root) => {
   const state = readState(root);
   if (!state || !state.armed || !state.ticket) return null;
   const branch = currentBranch(root);
-  if (unlockable(root, branch) !== null || !branch.includes(state.ticket)) return null;
+  if (unlockable(root, branch) !== null || !namesTicket(branch, state.ticket)) return null;
   const lock = {
     locked: true,
     branch,
@@ -330,7 +341,8 @@ const guardArmed = (root, payload) => {
   if (!state || !state.armed || state.locked) return;
   if ((payload.hook_event_name ?? '') !== 'PreToolUse' || payload.tool_name !== 'Bash') return;
   const command = payload.tool_input?.command ?? '';
-  if (!GATE_RELEASE.test(command) && !GATE_STATE.test(command)) return;
+  if (!GATE_RELEASE.test(command) && !GATE_STATE.test(command) && !GATE_REPOINT.test(command))
+    return;
   process.stdout.write(
     JSON.stringify({
       hookSpecificOutput: {
@@ -340,7 +352,8 @@ const guardArmed = (root, payload) => {
           `**The commit gate is armed for ${state.ticket}, and disarming it is the user's.**`,
           '',
           `It locks the branch for ${state.ticket} as soon as that branch is checked out. Turning`,
-          'it off -- with `release`, with `unlock`, or by deleting its state file -- is not yours.',
+          'it off -- with `release` or `unlock`, by re-arming or locking something else, or by',
+          'deleting its state file -- is not yours.',
           '',
           'Reading the state is fine: `hangar-commit-gate status`.',
         ].join('\n'),
