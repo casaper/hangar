@@ -648,55 +648,57 @@ More root files are hand-maintained and belong to this package rather than to th
   conditional in both: an Intel Mac without `brew shellenv` in its profile has the variable unset,
   and stopping at the default aborted the whole `.envrc` on a machine that has Homebrew.
 - **`.local/bin/claude`, `bin/hangar-statusline` and `bin/hangar-exec-guard`, plus the six files in `.claude/modes/`** —
-  `ops.md`, `dev.md`, a `*.settings.json` beside each, the shared `mcp.json`, and `statusline.sh`. **`hangar claude` is
-  the one way into either mode** (`src/commands/claude.ts`): it opens both as tabs of one tmux
-  session on its own socket — with a third tab holding a plain shell at the hangar root, which is
-  not a mode and takes no `-m` — and a bare `claude` at the hangar root reaches it through the
-  shim. A mode is `--settings` + `--append-system-prompt-file` + `--mcp-config` + `-n`, read once at
-  startup, and `dev`'s working directory is `app/` so that THIS file is loaded from its first
-  turn.
-  **That working directory is also why `app/.claude/settings.json` exists.** Claude Code reads
-  project settings from the session's OWN directory and does not walk up, so the hangar root's
-  generated `.claude/settings.json` — the shared memory, the mode badge, `plansDirectory` —
-  reaches operator mode and not this one. Developer mode's plans were falling back to
-  `~/.claude/plans`, in with every other project on the machine; that file carries the one key
-  that points them at `app/.claude/plans/` instead, and is tracked because a relative value
-  names no machine path. **They stay there** — nothing collects them into `plans/` the way a
-  clone's are, and nowhere outside `app/` is reachable to write them to in the first place:
-  `plansDirectory` is resolved against the project root and rejected if it escapes, symlinks
-  followed, so `../plans` and an absolute hangar path both fall back silently.
-  `hangar-internals/reference/doctor.md` has the measurement.
-  **`statusline.sh` badges the window `OPS` / `DEV` / a red `NO MODE`**, taking the mode from its
-  own argv or from `$HANGAR_MODE` — which `hangar claude` sets per tmux window and nothing else
-  may, since from `.envrc` it would reach every shell in the hangar and make the badge
-  meaningless.
-  **`claude --version` at the hangar root reports hangar's version, not Claude Code's**, because the
-  shim intercepts it; the cask binary (`/opt/homebrew/bin/claude`) answers for the real one.
-  **The shim cannot be a shell function in `.envrc.hangar`**: direnv exports an environment diff,
-  and a function is not an environment variable — `PATH_add` is what actually reaches the shell.
-  **It also cannot be in `bin/`**, and that is the one thing to know before moving it: every
-  clone's `.envrc.private` repeats `PATH_add <hangar>/bin` so `hangar` works from inside a clone,
-  so a `claude` there would have been on PATH in every clone shell, where `terminal.tabs[]`'s
-  default `command: 'claude'` starts each clone's own session. `.local/bin` gets its own
-  `PATH_add` in the hangar's `.envrc` alone. That same mechanism is why the two settings files say
-  **`hangar-statusline <mode>` and `hangar-exec-guard` rather than absolute paths**: a tracked
-  file cannot name one machine's home directory, and a session running in a mode is proof direnv
-  loaded, because the `hangar` that started it was found the same way. **A clone's settings name
-  the guard absolutely instead**, and that is not an inconsistency — that file is untracked, and
-  a clone session may have been started by something other than `hangar open`, so its PATH proves
-  nothing. All nine are **hand-maintained, so they add no
-  row to the derivation table above and need no `--check`** — nothing derives them from
-  `app/src/**`. The one thing that IS derived is the `mcp__hangar__*` half of
-  `ops.settings.json`, and it is held to `src/mcp/tools.ts` by `test/mcp-tools.test.ts` rather
-  than by a writer, because a command that regenerated that file would let operator mode rewrite
-  its own permission list. Operator mode is denied writes to `app/**`, `.claude/skills/**` and
-  `.claude/modes/**`, **and is denied `hangar claude` itself**, which means **developer mode is
-  the only one that can improve operator mode's instructions**; that asymmetry is the reason the
-  pair exists, and the denial is what stops a pass-through `-p` from getting around it.
-  `hangar-internals/reference/modes.md` has the rationale, including why the root `CLAUDE.md`
-  cannot be suppressed for either of them, the socket and the singleton rules, four probes that
-  answered wrongly, and two more that could not answer at all — the status line does not run
-  under `claude -p`, and `$CLAUDE_PROJECT_DIR` is not exported to tool subprocesses.
+  `ops.md`, `dev.md`, a `*.settings.json` beside each, the shared `mcp.json`, and `statusline.sh`.
+  - **`hangar claude` is the one way into either mode** (`src/commands/claude.ts`): it opens both
+    as tabs of one tmux session on its own socket — with a third tab holding a plain shell at the
+    hangar root, which is not a mode and takes no `-m` — and a bare `claude` at the hangar root
+    reaches it through the shim. A mode is `--settings` + `--append-system-prompt-file` +
+    `--mcp-config` + `-n`, read once at startup, and `dev`'s working directory is `app/` so that
+    THIS file is loaded from its first turn.
+  - **That working directory is also why `app/.claude/settings.json` exists.** Claude Code reads
+    project settings from the session's OWN directory and does not walk up, so the hangar root's
+    generated `.claude/settings.json` — the shared memory, the mode badge, `plansDirectory` —
+    reaches operator mode and not this one. Without its own file, developer mode's plans would
+    fall back to `~/.claude/plans`, in with every other project on the machine; that file carries
+    the one key that points them at `app/.claude/plans/` instead, and is tracked because a
+    relative value names no machine path. **They stay there** — nothing collects them into
+    `plans/` the way a clone's are, and nowhere outside `app/` is reachable to write them to in
+    the first place: `plansDirectory` is resolved against the project root and rejected if it
+    escapes, symlinks followed, so `../plans` and an absolute hangar path both fall back silently.
+    `hangar-internals/reference/doctor.md` has the measurement.
+  - **`statusline.sh` badges the window `OPS` / `DEV` / a red `NO MODE`**, taking the mode from
+    its own argv or from `$HANGAR_MODE` — which `hangar claude` sets per tmux window and nothing
+    else may, since from `.envrc` it would reach every shell in the hangar and make the badge
+    meaningless.
+  - **`claude --version` at the hangar root reports hangar's version, not Claude Code's**, because
+    the shim intercepts it; the cask binary (`/opt/homebrew/bin/claude`) answers for the real one.
+  - **Where the shim lives.** **It cannot be a shell function in `.envrc.hangar`**: direnv exports
+    an environment diff, and a function is not an environment variable — `PATH_add` is what
+    actually reaches the shell. **It also cannot be in `bin/`**, and that is the one thing to know
+    before moving it: every clone's `.envrc.private` repeats `PATH_add <hangar>/bin` so `hangar`
+    works from inside a clone, so a `claude` there would be on PATH in every clone shell, where
+    `terminal.tabs[]`'s default `command: 'claude'` starts each clone's own session. `.local/bin`
+    gets its own `PATH_add` in the hangar's `.envrc` alone.
+  - **Bare names in the settings.** That same mechanism is why the two settings files say
+    **`hangar-statusline <mode>` and `hangar-exec-guard` rather than absolute paths**: a tracked
+    file cannot name one machine's home directory, and a session running in a mode is proof direnv
+    loaded, because the `hangar` that started it was found the same way. **A clone's settings name
+    the guard absolutely instead**, and that is not an inconsistency — that file is untracked, and
+    a clone session may have been started by something other than `hangar open`, so its PATH proves
+    nothing.
+  - **Maintenance.** All nine are **hand-maintained, so they add no row to the derivation table
+    above and need no `--check`** — nothing derives them from `app/src/**`. The one thing that IS
+    derived is the `mcp__hangar__*` half of `ops.settings.json`, and it is held to
+    `src/mcp/tools.ts` by `test/mcp-tools.test.ts` rather than by a writer, because a command that
+    regenerated that file would let operator mode rewrite its own permission list.
+  - **The asymmetry.** Operator mode is denied writes to `app/**`, `.claude/skills/**` and
+    `.claude/modes/**`, **and is denied `hangar claude` itself**, which means **developer mode is
+    the only one that can improve operator mode's instructions**; that asymmetry is the reason the
+    pair exists, and the denial is what stops a pass-through `-p` from getting around it.
+    `hangar-internals/reference/modes.md` has the rationale, including why the root `CLAUDE.md`
+    cannot be suppressed for either of them, the socket and the singleton rules, four probes that
+    answered wrongly, and two more that could not answer at all — the status line does not run
+    under `claude -p`, and `$CLAUDE_PROJECT_DIR` is not exported to tool subprocesses.
 - **`bin/hangar-waypoint`, `bin/hangar-commit-gate`, `bin/hangar-rewrite`, `bin/hangar-exec-guard`
   and `personal-skills/`** — scripts rather than `hangar` subcommands, because the gate runs before
   EVERY Bash call and `cli.ts` costs ~0.25s to load. They are CommonJS, so do not "modernise" them
