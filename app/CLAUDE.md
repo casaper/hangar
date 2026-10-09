@@ -29,7 +29,7 @@ hangar root for the reason below.
 > `npm pkg get name` run at a clone root answered the fleet's package. That is why the CLI is in
 > `app/`.
 >
-> **There is now one file at that level, and it is scripts and nothing else.** The root
+> **There is one file at that level, and it is scripts and nothing else.** The root
 > `package.json` exists so `pnpm release` and the other gates can be run from the hangar root
 > instead of `cd app` first, and it declares **no `dependencies`, no `devDependencies`, no
 > `"type"`, no `workspaces` and no `packageManager`** — which is what keeps the paragraph above
@@ -60,15 +60,10 @@ pnpm hooks    # ONCE per clone of this repo: installs the two git hooks. See Com
 pnpm release -n   # what the next release would be. See Releasing
 ```
 
-**`pnpm scan` is two gates and they are not interchangeable.** `scan:secrets` is gitleaks over the
-whole history; `scan:literals` is `dev/scrub-check.sh` over the tracked tree. The split is
-measured rather than stylistic: gitleaks was run against a canary of seven planted credentials and
-caught the Atlassian token, an `ATBB` Bitbucket token, an AWS key id, a GitHub PAT and a quoted
-`db_password` — and **missed both plain `USER_READWRITE_PASSWORD=<human-chosen value>` lines**,
-because low entropy defeats its `generic-api-key` rule. That is one of this hangar's four real
-credentials and the exact shape a person pastes, so `scrub-check.sh` carries the pattern for it.
-Both also run in `app/.husky/pre-commit` (on what is staged) and inside `hangar dev release` —
-the same fast-feedback-plus-enforcement shape as `commitlint`.
+**`pnpm scan` is two gates and they are not interchangeable**: `scan:secrets` is gitleaks over
+the history, `scan:literals` is `dev/scrub-check.sh` over the tree, and gitleaks measurably misses
+a low-entropy pasted password that the second one catches (`hangar-internals/reference/release.md`
+has the canary). Both also run in `app/.husky/pre-commit` and inside `hangar dev release`.
 
 `pnpm` is not assumed to be on PATH: it lives inside an fnm multishell and so moves when the Node
 version moves. The hangar root's `.envrc` activates it through `hangar_use_pnpm` (defined in
@@ -121,19 +116,10 @@ Both exist because they caught something, and both apply to every edit under `ap
     that could not simply be re-aimed at a fixture — the example-vs-live comparison is its whole
     value and a temp directory has no committed example — so it moved rather than being weakened
     in place.
-  - **Two fixtures, and the second one is not a variant.** A fixture disagreeing with the schema
-    defaults is what proves the config file was read at all: while a config agrees with the
-    defaults, "read the config file" and "fell into a catch and used the defaults" produce
-    identical output. Two fixtures that also disagree with EACH OTHER are what no single
-    swallowed error can satisfy. `dev/fixture.config.yaml` is Zed-shaped — no app subdirectory,
-    one workspace directory, a literal install `command`, a non-zero port offset.
-    `dev/fixture-vscode.config.yaml` is the shape the DEFAULT editor takes, and its header lists
-    the seven things it is the only capture of: an editor kind that consumes `rootPathKeys`, a
-    non-empty `rootPathKeys` table, two `workspaceDirs`, a non-empty `repo.appDir`, `manager:`
-    install steps with and without an `INSTALL_MARKERS` entry, `skipIfDirMissing: true`, and
-    `ports.offset: 0`. Adding a kind or a key means asking which of the two should carry it.
-    The manifest also records the discovery `source` and `EditorSelection.fellBack`, for the
-    same reason the fixtures disagree.
+  - **Two fixtures, and the second one is not a variant.** Each disagrees with the schema
+    defaults AND with the other, so no single swallowed error can make both look read.
+    **Adding a kind or a key means asking which of the two should carry it** — each header lists
+    what it is the only capture of, and the README has why.
   - **An expected diff is fine; an unenumerated one is the finding.** Making a config key live for
     the first time is _supposed_ to change the fixture half, and that change is the proof. Write
     the expected delta down before making the change.
@@ -222,9 +208,8 @@ feat(sync):  Stream the headless conflict resolver, and refuse to sync onto a ha
 docs(test):  Say the suite exists, and say exactly what it does not cover
 ```
 
-**Types** are `@commitlint/config-conventional`'s: `feat` `fix` `docs` `style` `refactor` `perf`
-`test` `build` `ci` `chore` `revert`. What they mean here — `feat` adds a command, a flag, a seam,
-a driver or a generated artifact; `fix` corrects behaviour that was wrong; `docs` is `CLAUDE.md`,
+**Types** are `@commitlint/config-conventional`'s. What they mean here — `feat` adds a command, a
+flag, a seam, a driver or a generated artifact; `fix` corrects behaviour that was wrong; `docs` is `CLAUDE.md`,
 the README or the skills and nothing else.
 
 **Scopes** are the subsystem: `sync` `doctor` `open` `tmp` `plans` `pr` `jira` `colours` `config`
@@ -291,33 +276,14 @@ row red forever, which is the check nobody reads.
 
 ### Releasing
 
-**`pnpm release` cuts one, from a terminal.** It is `hangar dev release`, and it runs this repo's
-gates and then hands over to **semantic-release**, which does the release itself from
-`.releaserc.json`: the version, the CHANGELOG, the bump, the release commit, the tag, the push and
-the GitHub release. `-n` runs the gates and `semantic-release --dry-run`, changing nothing, and it
-is the first thing to run. `-y` releases without asking.
+**`pnpm release` cuts one, from a terminal and never from CI** — it is `hangar dev release`: a
+preflight, every gate, a refusal on any breaking marker while the CLI is 0.x, and a confirmation
+that fails closed without a tty, then semantic-release. **`-n` changes nothing and is the first
+thing to run**; `-y` releases without asking.
 
-**It runs from a terminal and not from CI** because semantic-release versions from the tags it can
-see: a checkout that sees none on origin treats the next release as the first and publishes
-1.0.0. A developer's machine has the local tags; `--no-ci` is what makes that run legal, and
-weakens nothing.
-
-What the command adds is what semantic-release will not do for itself:
-
-- **The preflight** — on `main`, clean tree, not behind origin, a token in `GH_TOKEN` or
-  `GITHUB_TOKEN`, and **local tags agreeing with `git ls-remote --tags origin`**. Each is one
-  sentence before anything starts.
-- **A refusal on a breaking marker while the CLI is 0.x**, naming the commits.
-  `release/commits.ts` finds them; `test/release-commits.test.ts` pins both footer spellings and
-  the `!`, because missing one IS the failure.
-- **Every gate**, since there is no CI to run them — including `commitlint` over the range.
-- **A confirmation** that reads `/dev/tty` and **fails closed where there is none**; `-y` is the
-  only way past it.
-
-**`.releaserc.json`, `app/changelog.preset.ts` and `dev/changelog.sh` are load-bearing** — the
-section list, the patch-level types, the hidden `chore(release)` entry whose POSITION matters, the
-`# Changelog` heading. `pnpm changelog` producing no diff at a released state is the check that
-they hold. Read `hangar-internals/reference/release.md` before editing any of them.
+**`.releaserc.json`, `app/changelog.preset.ts` and `dev/changelog.sh` are load-bearing**, and
+`pnpm changelog` producing no diff at a released state is the check that they hold. Read
+`hangar-internals/reference/release.md` before editing any of them, or the release command.
 
 ### Rewriting history
 
@@ -376,14 +342,11 @@ callers degrade one capability at a time instead of branching on a product name:
 - `generate/index.ts` — every generated artifact is a pure function of the clone plus a path
 - `fleet.ts` — clone discovery is filesystem-only; there is no list of clones in any file
 
-The platform seam exists because this fleet runs on macOS, so
-a platform difference is invisible until someone else runs the tool. Three were written as if
-`darwin` were the only case — and none of them **failed**. `vscodeWindowState` returned a plausible path under a `~/Library` that is not
-there, the read threw, the catch said "no opinion", and `hangar open` opened a second window on
-a workspace that was already open. That is how two Claude Code sessions end up in one clone.
-`hangar-internals/reference/terminal-and-sessions.md` has the capability table, the two Linux
-fixes with no seam of their own, and the one open question the seam does **not** answer: whether
-`ps` under procps reports a Claude Code process as `claude` at all.
+**A platform assumption fails silently rather than loudly**: this fleet runs on macOS, and three
+`darwin`-only paths returned plausible wrong answers instead of errors — one of them opened a
+second window on an open workspace, which is how two Claude Code sessions end up in one clone.
+`hangar-internals/reference/terminal-and-sessions.md` has the capability table and the one open
+question the seam does not answer.
 
 One thing in here is known and deliberate rather than waiting to be found:
 `resolve-conflicts.ts` reads `ORCH_UTIL_RESOLVE_TIMEOUT_MS`, the one `ORCH_UTIL_` name in the
@@ -413,82 +376,41 @@ why only the VS Code family needs `rootPathKeys` and deduplicating, and the `vim
 ## Which terminal it drives, and what tmux owns
 
 `hangar open` gives a clone **one tab of the developer's emulator**, attached to **that clone's
-tmux session** — one tmux window per `terminal.tabs[]` role. The emulator is asked for two things
-only: **open one tab or window running one command**, and **bring one it opened to the front**.
-Everything inside — the roles, their names and order, typing a `SYNC PAUSE` into a live session —
-is `src/tmux.ts`, the same program on macOS and Linux. Raising is the only capability a caller
-degrades around; a driver that cannot open a window is `none`, which is a mode, not a failure.
+tmux session**. The emulator only opens a window and raises one; everything inside is
+`src/tmux.ts`. Three rules hold everywhere:
 
-**The server is Hangar's own: `tmux -L hangar-<id>`, from a config this CLI generates**, because
-the settings Claude Code needs there (`extended-keys` among them) are SERVER options, and writing
-those onto the server somebody keeps their own work on is not this tool's trade to make. These
-sessions are invisible to a bare `tmux ls`.
+- **The server is Hangar's own, `tmux -L hangar-<id>`** — the options Claude Code needs are
+  server-wide, and never written onto somebody else's server. A bare `tmux ls` does not see it.
+- **Identity is the session NAME**, so "is this clone open" is `has-session` — the check that
+  keeps a clone from getting two Claude Code sessions, this fleet's worst failure.
+- **Nothing is ever typed at a raw tty**; tmux is the only portable mechanism.
 
-**Identity is the session NAME, not a tag stamped on a window**, so "is this clone already open"
-is `has-session` rather than an inference — the check that keeps a clone from getting two Claude
-Code sessions, this fleet's worst failure. **Nothing is ever typed at a raw tty**: tmux is the
-mechanism precisely because there is no portable other one.
-
-`hangar-internals/reference/terminal-and-sessions.md` has the rest: the emulator capability table
-and how the emulator is detected, the tmux layer and the six things it enforces silently, the
-colour hook, the two-line bar and the five things tmux would not let it say, the contrast proof
-`test/contrast.test.ts` holds, the pull-request cache, and what has and has not been exercised.
+`hangar-internals/reference/terminal-and-sessions.md` has the rest: the emulator table, the tmux
+layer, the colour hook, the bar, the contrast proof and the pull-request cache.
 
 ## What operator mode reaches instead of a shell
 
 `hangar mcp` serves one MCP tool per command over stdio, and `hangar claude` hands both modes
-`.claude/modes/mcp.json` as `--mcp-config`. **It exists for one reason and it is a permission
-one:** `Bash(hangar doctor:*)` cannot separate the report from the writer, whereas an MCP rule has
-no arguments to widen across — so `doctor` and `doctor_fix` are two names with two rules, and so
-is every `<thing>_preview` against the command it previews. That is what makes "run the dry run
-first" a property of the tool list rather than a habit.
+`.claude/modes/mcp.json` as `--mcp-config`. **It exists for a permission reason:** an MCP rule has
+no arguments to widen across, so `doctor` and `doctor_fix` are two names with two rules, and so is
+every `<thing>_preview` against the command it previews.
 
-Three things about it belong here rather than only in the skill:
-
-- **A tool call spawns `bin/hangar`; it never calls the command in-process.** `sync` recovers its
-  strategy from `process.argv`, about twenty `console.log` sites bypass `ui.ts`'s `emit`, and
-  `captureOutput()` is a module-level global — so an in-process server would silently mis-run
-  `sync` and corrupt its own protocol stream. **Nothing under `src/mcp/` may import `ui.ts`.**
+- **A tool call spawns `bin/hangar`; it never calls the command in-process**, and **nothing under
+  `src/mcp/` may import `ui.ts`** — stdout is the protocol.
 - **Anything `server.ts` puts in a spawned child's env (`NO_COLOR`) reaches whatever that child
-  starts and outlives it** — a tmux server most of all. Scrub at the spawn site (`tmux.ts`'s
-  `scrubbedEnv`), never rely on the caller's environment being clean.
-- **`src/mcp/tools.ts` is the table and the commander registry is the schema.** Descriptions,
-  arguments and `.choices()` are read off `cli.ts`'s own entries, so a flag is declared once; what
-  the table adds is the two facts the registry cannot carry — whether an exposure only reports,
-  and which flags it fixes. `cli.ts` cannot be imported to reach that registry, because its last
-  statement is `program.parseAsync()`; it is handed in from the action instead.
-- **Adding a command means adding an exposure.** `hangar mcp` prints the ones it found no tool for
-  on stderr when it starts, and refuses outright only for the two errors that would be wrong
-  rather than missing: a table naming a command that is not there, and an acting tool whose schema
-  offers `dry-run`.
-- **An acting exposure sits in `ask` unless it says `preapproved: true`**, which moves it to
-  `allow` in `ops.settings.json`; `test/mcp-tools.test.ts` expects exactly that, so the field and
-  the settings file change in one edit. `open` and `checkout_default` are the two that carry it.
+  starts and outlives it**, a tmux server most of all. Scrub at the spawn site (`tmux.ts`'s
+  `scrubbedEnv`).
+- **`src/mcp/tools.ts` is the table and the commander registry is the schema**, so a flag is
+  declared once.
+- **Adding a command means adding an exposure AND a rule in `ops.settings.json`** — `ask` for
+  anything that acts unless it says `preapproved: true`. `test/mcp-tools.test.ts` holds the two
+  together, and `hangar mcp` names any command it found no tool for on stderr.
+- **`exec` is never exposed, and no agent may run it at all.** `bin/hangar-exec-guard` refuses it
+  from a `PreToolUse` hook however it is spelled; the `Bash(hangar exec)` deny entries are the
+  weaker half, because a rule matches only the START of a command string.
 
-**Coverage is every command but six, and every documented flag but one.** `claude` could only
-ever fail (`$CLAUDECODE` refuses on every tool call) and is the boundary the mode pair exists for;
-`dev release` completes as a tool only in its `-y` form; `dev golden` would be a partial capture
-reading as the gate; `jira hook` takes its payload on stdin; `mcp` is the server itself. **`exec`
-is the one excluded for a permission reason rather than a mechanical one**: everything after its
-`--` is a shell snippet, so a schema could describe it and never constrain it — which is the only
-thing a per-tool rule buys.
-
-**`exec` is also the one command no agent may run at all**, and that is enforced by a hook rather
-than by a rule. `bin/hangar-exec-guard` (listed with the root files below) is a `PreToolUse` matcher on `Bash`
-that reads the whole command line and refuses any invocation of that command. The `Bash(hangar exec)` deny entries in both modes stay
-beside it, but they are the weaker half and cannot be the only one: a permission rule matches the
-START of the command string, so `cd /elsewhere && hangar exec ...` never matches it. The reason
-the bar is higher here than for `remove-clone` is not blast radius but generality — a command
-that takes an arbitrary snippet can spell every other command that is denied, and it reaches every
-clone in one call, which is the rule the fleet's own `CLAUDE.md` is built around. `setup` IS exposed, and that closes a
-hole rather than opening one — `modes.md` records it as escalation-adjacent, and it has a
-rule in both spellings. The one flag no tool offers is `--quiet`, which exists so a
-`SessionEnd` hook and the bar's own spawn can stay silent; a caller reading the result wants the
-opposite. A `.hideHelp()` option is dropped by the same rule that keeps it out of `--help`, unless
-an exposure names it in `shows` — `add-clone --remote` is the only one that does.
-
-`hangar-internals/reference/modes.md` has the rest — the measured separation, why the Bash path
-stays open, and why the enumeration is a test while the coverage is a warning.
+`hangar-internals/reference/modes.md` has the rest — which commands are not tools and why, the
+measured separation, why a call is a subprocess, and why the Bash path stays open.
 
 ## What `colours sync` generates
 
@@ -598,13 +520,9 @@ upstream. `hangar.schema.json` is tracked because nothing but `hangar config sch
 its content is the same in every hangar; the two shell helpers are not, because `colours sync`
 rewrites them from the palette, the hangar id and the clone list.
 
-- **`hangar config validate` now also compares `hangar.config.example.yaml` with the live file**,
-  whenever the two declare the same `id`. The invariant was stated in
-  `hangar-internals/reference/config.md` from the start and run by nothing, and the pair had
-  drifted by the worst available line: `forge.defaultBranch`, `main` in the committed example
-  against `master` live. A colleague adopting this fleet by copying the example — which is the
-  fastest and most correct way in — got a config naming a branch the repo does not have. The
-  `id` gate is what keeps the check quiet in a hangar the example is only a template for.
+- **`hangar config validate` also compares `hangar.config.example.yaml` with the live file**
+  whenever the two declare the same `id` — the `id` gate keeps it quiet in a hangar the example is
+  only a template for. `hangar-internals/reference/config.md` has the drift that made it a check.
 - **`hangar config schema --check` fails instead of writing**, which makes it the fourth thing to
   run after touching `config/schema.ts`. Both YAML files open with
   `# yaml-language-server: $schema=./hangar.schema.json`, so a stale committed schema silently
@@ -626,79 +544,33 @@ rewrites them from the palette, the hangar id and the clone list.
 
 More root files are hand-maintained and belong to this package rather than to the fleet:
 
-- **`bin/hangar`** — a short `sh` entry point. It resolves the hangar root from **its own
-  location** and never from `$PWD`, then `exec`s `node "$hangar/app/src/cli.ts"`. A Node flag, or a
-  move of the entry point, is edited here rather than in `app/`. It uses **`${0%/*}` and two
-  builtins rather than `dirname`**, because it also has to work when PATH is degraded — with
-  `dirname` unavailable the substitution came back empty, the root resolved to `/`, and the advice
-  below printed a path to somewhere nobody asked about.
-  It carries **the one check that has to run before Node does**: no `node` on PATH, or no
-  `app/node_modules`, and it names which of the two and the command that fixes it. That check
-  cannot live in `app/`, because the failure it reports is the CLI being unable to load at all —
-  Node's own `ERR_MODULE_NOT_FOUND` stack trace is the first thing a fresh clone of this repo
-  would otherwise see. **`jira hook` is exempt and exits 0 silently**, for the same reason
-  `cli.ts`'s config gate exempts it: a non-zero exit from a `PreToolUse` hook blocks the tool call.
+- **`bin/hangar`** — a short `sh` entry point that resolves the hangar root from **its own
+  location**, never `$PWD`, and checks for `node` and `app/node_modules` before Node runs. A Node
+  flag is edited here rather than in `app/`. It uses `${0%/*}` rather than `dirname`, and
+  **`jira hook` exits 0 silently** there, because a non-zero `PreToolUse` exit blocks the tool
+  call. `hangar-internals/reference/config.md` has why each holds.
 - **`.envrc.hangar`** — `hangar_use_node`, `hangar_use_pnpm`, `hangar_use_gnu`. **Functions only,
-  no side effects**: direnv's `source_env` does a `pushd` into this file's own directory, so a
-  relative path written here would resolve against the hangar root instead of the caller, and
-  every caller invokes the functions itself. `.envrc` is the only consumer.
-  `hangar_use_gnu` resolves the Homebrew prefix in three steps —
-  `HOMEBREW_PREFIX`, then `/opt/homebrew`, then `brew --prefix` — and `environment.ts`'s
-  `resolveBrewPrefix` does the same three in the same order, deliberately. The probe is last and
-  conditional in both: an Intel Mac without `brew shellenv` in its profile has the variable unset,
-  and stopping at the default aborted the whole `.envrc` on a machine that has Homebrew.
+  no side effects**, and its Homebrew lookup moves in step with `environment.ts`'s
+  `resolveBrewPrefix`; `hangar-internals/reference/root-tools.md` has why.
 - **`.local/bin/claude`, `bin/hangar-statusline` and `bin/hangar-exec-guard`, plus the six files in `.claude/modes/`** —
   `ops.md`, `dev.md`, a `*.settings.json` beside each, the shared `mcp.json`, and `statusline.sh`.
-  - **`hangar claude` is the one way into either mode** (`src/commands/claude.ts`): it opens both
-    as tabs of one tmux session on its own socket — with a third tab holding a plain shell at the
-    hangar root, which is not a mode and takes no `-m` — and a bare `claude` at the hangar root
-    reaches it through the shim. A mode is `--settings` + `--append-system-prompt-file` +
-    `--mcp-config` + `-n`, read once at startup, and `dev`'s working directory is `app/` so that
-    THIS file is loaded from its first turn.
-  - **That working directory is also why `app/.claude/settings.json` exists.** Claude Code reads
-    project settings from the session's OWN directory and does not walk up, so the hangar root's
-    generated `.claude/settings.json` — the shared memory, the mode badge, `plansDirectory` —
-    reaches operator mode and not this one. Without its own file, developer mode's plans would
-    fall back to `~/.claude/plans`, in with every other project on the machine; that file carries
-    the one key that points them at `app/.claude/plans/` instead, and is tracked because a
-    relative value names no machine path. **They stay there** — nothing collects them into
-    `plans/` the way a clone's are, and nowhere outside `app/` is reachable to write them to in
-    the first place: `plansDirectory` is resolved against the project root and rejected if it
-    escapes, symlinks followed, so `../plans` and an absolute hangar path both fall back silently.
-    `hangar-internals/reference/doctor.md` has the measurement.
-  - **`statusline.sh` badges the window `OPS` / `DEV` / a red `NO MODE`**, taking the mode from
-    its own argv or from `$HANGAR_MODE` — which `hangar claude` sets per tmux window and nothing
-    else may, since from `.envrc` it would reach every shell in the hangar and make the badge
-    meaningless.
-  - **`claude --version` at the hangar root reports hangar's version, not Claude Code's**, because
-    the shim intercepts it; the cask binary (`/opt/homebrew/bin/claude`) answers for the real one.
-  - **Where the shim lives.** **It cannot be a shell function in `.envrc.hangar`**: direnv exports
-    an environment diff, and a function is not an environment variable — `PATH_add` is what
-    actually reaches the shell. **It also cannot be in `bin/`**, and that is the one thing to know
-    before moving it: every clone's `.envrc.private` repeats `PATH_add <hangar>/bin` so `hangar`
-    works from inside a clone, so a `claude` there would be on PATH in every clone shell, where
-    `terminal.tabs[]`'s default `command: 'claude'` starts each clone's own session. `.local/bin`
-    gets its own `PATH_add` in the hangar's `.envrc` alone.
-  - **Bare names in the settings.** That same mechanism is why the two settings files say
-    **`hangar-statusline <mode>` and `hangar-exec-guard` rather than absolute paths**: a tracked
-    file cannot name one machine's home directory, and a session running in a mode is proof direnv
-    loaded, because the `hangar` that started it was found the same way. **A clone's settings name
-    the guard absolutely instead**, and that is not an inconsistency — that file is untracked, and
-    a clone session may have been started by something other than `hangar open`, so its PATH proves
-    nothing.
-  - **Maintenance.** All nine are **hand-maintained, so they add no row to the derivation table
-    above and need no `--check`** — nothing derives them from `app/src/**`. The one thing that IS
-    derived is the `mcp__hangar__*` half of `ops.settings.json`, and it is held to
-    `src/mcp/tools.ts` by `test/mcp-tools.test.ts` rather than by a writer, because a command that
-    regenerated that file would let operator mode rewrite its own permission list.
-  - **The asymmetry.** Operator mode is denied writes to `app/**`, `.claude/skills/**` and
-    `.claude/modes/**`, **and is denied `hangar claude` itself**, which means **developer mode is
-    the only one that can improve operator mode's instructions**; that asymmetry is the reason the
-    pair exists, and the denial is what stops a pass-through `-p` from getting around it.
-    `hangar-internals/reference/modes.md` has the rationale, including why the root `CLAUDE.md`
-    cannot be suppressed for either of them, the socket and the singleton rules, four probes that
-    answered wrongly, and two more that could not answer at all — the status line does not run
-    under `claude -p`, and `$CLAUDE_PROJECT_DIR` is not exported to tool subprocesses.
+  **`hangar claude` is the one way into either mode** (`src/commands/claude.ts`), and `dev`'s
+  working directory is `app/` so that THIS file loads from its first turn — which is also why
+  `app/.claude/settings.json` exists, for `plansDirectory`.
+  - **The shim cannot move into `bin/`**: every clone puts `bin/` on PATH, so a `claude` there
+    would replace each clone's own session command.
+  - **The mode settings name `hangar-statusline` and `hangar-exec-guard` by bare name**, because
+    a tracked file cannot name one machine's home; a clone's untracked settings name the guard
+    absolutely.
+  - **All nine are hand-maintained** — no derivation-table row, no `--check`. Only the
+    `mcp__hangar__*` half of `ops.settings.json` is derived, held to `src/mcp/tools.ts` by
+    `test/mcp-tools.test.ts` rather than by a writer, so operator mode cannot rewrite its own
+    permission list.
+  - **Operator mode is denied writes to `app/**`, `.claude/skills/**` and `.claude/modes/**`, and
+    `hangar claude` itself**, so developer mode is the only one that can improve its instructions.
+  - **The rest is in `hangar-internals/reference/modes.md`** — the shim's PATH rules, the badge,
+    the socket and singleton rules, and the probes that answered wrongly; `doctor.md` has the
+    `plansDirectory` measurement.
 - **`bin/hangar-waypoint`, `bin/hangar-commit-gate`, `bin/hangar-rewrite`, `bin/hangar-exec-guard`
   and `personal-skills/`** — scripts rather than `hangar` subcommands, because the gate runs before
   EVERY Bash call and `cli.ts` costs ~0.25s to load. They are CommonJS, so do not "modernise" them
@@ -723,13 +595,7 @@ pinned 11.26.0, while the hangar root — whose `package.json` is scripts only a
 root script is `pnpm --dir app`, so the pin governs every real invocation. `.envrc.hangar` records this beside `hangar_use_pnpm`; do not
 "fix" it.
 
-## Do not run project work from the hangar root
-
-**`ng`, `jest`, `playwright`, the project's lint and format and the project skills all require a
-clone's root** (or its `angular/` subdirectory) as the working directory, and the repo's
-`SessionStart` hooks resolve paths via `git rev-parse --show-toplevel`, which fails here. Start a
-session in the clone instead. The CLI's own checks are the exception and are the ones above, from
-`app/`.
+## The root `.gitignore`
 
 `.gitignore` here is load-bearing, not leftover: `clone_*/`, `.env.shared`, `node_modules/`,
 `plans/`, `app/.claude/plans/`, `tmp/` and `hangar.config.yaml` are the only reason the clones,

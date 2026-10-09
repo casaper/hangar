@@ -49,3 +49,12 @@ rather than `hangar` subcommands, what each refuses, and how `personal-skills/` 
   **A new skill there also needs a row in `personal-skills/manifest.yaml`** — `name`, a
   `divergence` (`standalone` when no tracked skill carries its name) and a `reason` — then
   `hangar skills sync -n`, `sync` and `list` to link it.
+- **`.envrc.hangar`** — `hangar_use_node`, `hangar_use_pnpm`, `hangar_use_gnu`. **Functions only,
+  no side effects**: direnv's `source_env` does a `pushd` into this file's own directory, so a
+  relative path written here would resolve against the hangar root instead of the caller, and
+  every caller invokes the functions itself. `.envrc` is the only consumer. `hangar_use_gnu`
+  resolves the Homebrew prefix in three steps — `HOMEBREW_PREFIX`, then `/opt/homebrew`, then
+  `brew --prefix` — and `environment.ts`'s `resolveBrewPrefix` does the same three in the same
+  order, deliberately. The probe is last and conditional in both: an Intel Mac without
+  `brew shellenv` in its profile has the variable unset, and stopping at the default aborts the
+  whole `.envrc` on a machine that has Homebrew.

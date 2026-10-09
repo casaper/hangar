@@ -183,6 +183,13 @@ and the release preflight is the place nothing can be skipped. Two details of it
   runs from the hangar root because `.releaserc.json` is there and semantic-release takes the
   repository from the working directory, and a bare invocation errors on a missing config rather
   than linting anything.
+- **`pnpm scan` is two gates, and they are not interchangeable.** `scan:secrets` is gitleaks over
+  the whole history; `scan:literals` is `dev/scrub-check.sh` over the tracked tree. The split is
+  measured: against a canary of seven planted credentials gitleaks caught the Atlassian token, an
+  `ATBB` Bitbucket token, an AWS key id, a GitHub PAT and a quoted `db_password`, and **missed both
+  plain `USER_READWRITE_PASSWORD=<human-chosen value>` lines**, because low entropy defeats its
+  `generic-api-key` rule. That is one of this hangar's four real credentials and the exact shape a
+  person pastes, so `scrub-check.sh` carries the pattern for it.
 - **`scan:secrets` fails rather than skips when gitleaks is absent.** `app/.husky/pre-commit`
   skips deliberately — a per-machine developer tool must not block a commit — so the release is
   the one place the scan cannot be skipped. A release cut without a history scan is a release

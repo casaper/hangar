@@ -270,12 +270,16 @@ the gate without being it, and aimed at `dev/golden/gated` would half-overwrite 
 `jira hook` reads its payload from stdin. Everything else is exposed, `setup` included — see the
 section on why the mode settings stay tracked for the gap that closes. The only flag no tool
 offers is `--quiet`, which exists for the `SessionEnd` hooks and the bar's own detached spawn.
+A `.hideHelp()` option is dropped by the same rule that keeps it out of `--help`, unless an
+exposure names it in `shows` — `add-clone --remote` is the only one that does.
 
 **So a dry run is a separate TOOL, not a parameter.** `sync_preview` fixes `--dry-run` and removes
 it from its own schema; `sync` hides it. A `dry-run` boolean would have put both under one rule,
 and pre-approving the preview would have pre-approved the sync — the same bug as `doctor:*`, moved
 rather than fixed. `serveMcp` refuses to start if an acting tool's generated schema offers
-`dry-run`, because only the live registry knows which commands have the flag.
+`dry-run`, because only the live registry knows which commands have the flag — and likewise if the
+table names a command the registry does not have. Those two are wrong rather than missing, which
+is why they refuse while an unexposed command is only a warning.
 
 **`colours sync` is the one command with two read-only tools**, and that is not redundancy:
 `--check` is a gate that exits non-zero when an artifact is stale, `-n` is the report that says
@@ -321,7 +325,9 @@ The two directions fail differently, so they are held differently.
 where an MCP tool matching no rule is decided by a classifier rather than by the user — so a
 mutating tool added to `app/src/mcp/tools.ts` and forgotten in `ops.settings.json` simply runs.
 `test/mcp-tools.test.ts` asserts every exposure appears in exactly one of the three lists and that
-a reporting one is in `allow`.
+a reporting one is in `allow`. **An acting exposure sits in `ask` unless it says
+`preapproved: true`**, which moves it to `allow`; the test expects exactly that, so the field and
+the settings file change in one edit. `open` and `checkout_default` are the two that carry it.
 
 **`dev.settings.json` enumerates none of them, and that is the deliberate asymmetry rather than the
 same omission.** The enumeration is a boundary, and developer mode has none to hold — it may already
