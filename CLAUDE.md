@@ -235,6 +235,13 @@ winner as `<name>.from-<clone>`, so run it again rather than forcing it.
 **`tmp/` is a real directory because of dev-server PID files**: a shared one would let the first
 clone to start a server block the others and let a kill reach into a sibling. **`tmp merge` never
 moves, links or even reads a PID file**, so a running dev server is no obstacle to sharing.
+Dotfiles and Claude Code's own temp roots (`claude-<uid>/`, `cc-socks/`) are never shared either:
+Claude Code refuses to start where one of those has become a symlink.
+
+**Writing through those links does not prompt.** Claude Code checks a write against the path the
+link resolves to, which is outside the clone, so each clone's generated
+`.claude/settings.local.json` names the hangar's `tmp/` in `permissions.additionalDirectories`.
+A clone missing it asks before every write under its own `tmp/`; `doctor` reports that.
 
 **Never hand-edit a file under `tmp/`.** Each cached issue record is a **symlink** into one record
 store the whole fleet shares, so an in-place edit writes every clone's copy of it, and nothing
@@ -258,7 +265,7 @@ working-tree diff, so it is shared as a side effect and is last-writer-wins when
 one ticket at once. One ticket normally belongs to one clone, so this is bounded, but do not trust
 a PR description you did not just generate in this clone.
 
-`tmp/` is gitignored by the tracked `/tmp/` rule, so nothing about it belongs in
+`tmp/` is gitignored by the repo's tracked `tmp/` rule, so nothing about it belongs in
 `.git/info/exclude`. **How the store is built** and the cache hook's design are in the
 `hangar-internals` skill.
 

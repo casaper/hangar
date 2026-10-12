@@ -11,8 +11,12 @@
     "deny": [
       "Read(./.env)",
       "Read(%HANGAR%/.env.fixture-shared)"
+    ],
+    "additionalDirectories": [
+      "%HANGAR%/tmp"
     ]
   },
+  "plansDirectory": ".claude/plans",
   "hooks": {
     "SessionEnd": [
       {

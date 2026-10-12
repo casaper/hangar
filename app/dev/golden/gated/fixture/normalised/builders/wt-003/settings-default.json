@@ -8,6 +8,9 @@
     ],
     "deny": [
       "Read(%HANGAR%/.env.fixture-shared)"
+    ],
+    "additionalDirectories": [
+      "%HANGAR%/tmp"
     ]
   },
   "statusLine": {

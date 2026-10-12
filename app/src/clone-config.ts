@@ -560,23 +560,10 @@ export type SettingsJson = {
   /** Must resolve INSIDE the clone -- Claude Code rejects a path that escapes the project root. */
   plansDirectory?: string;
   hooks?: Record<string, HookMatcher[]>;
-  permissions?: { allow?: string[]; deny?: string[] };
+  permissions?: { allow?: string[]; deny?: string[]; additionalDirectories?: string[] };
   [key: string]: unknown;
 };
 
-/**
- * The `SessionEnd` hook that keeps the shared plan archive current.
- *
- * Claude Code will not write plans outside the project root -- it resolves `plansDirectory`
- * against the root and rejects anything that escapes it, symlinks followed -- so a clone
- * cannot write into `<fleet>/plans` however the setting is spelled. The clone writes to its
- * own `.claude/plans`, and this hook sweeps a session's plan into the shared archive the
- * moment that session ends, which is also the first moment it is safe to move: nothing can
- * rewrite it any more.
- *
- * It lives in the untracked per-clone settings, not in the repo: it names an absolute path in
- * this fleet, and a teammate with a single checkout has nothing to collect into.
- */
 /**
  * Does this hook command invoke THIS hangar's CLI with this subcommand, whatever the binary was
  * called at the time it was written?
@@ -619,6 +606,19 @@ const invokesOurCli = (hangar: Hangar, command: string | undefined, subcommand: 
   command.includes(subcommand) &&
   (command.startsWith(`${join(hangar.root, 'bin')}/`) || MOVED_ROOT_INVOCATION.test(command));
 
+/**
+ * The `SessionEnd` hook that keeps the shared plan archive current.
+ *
+ * Claude Code will not write plans outside the project root -- it resolves `plansDirectory`
+ * against the root and rejects anything that escapes it, symlinks followed -- so a clone
+ * cannot write into `<fleet>/plans` however the setting is spelled. The clone writes to its
+ * own `.claude/plans`, and this hook sweeps a session's plan into the shared archive the
+ * moment that session ends, which is also the first moment it is safe to move: nothing can
+ * rewrite it any more.
+ *
+ * It lives in the untracked per-clone settings, not in the repo: it names an absolute path in
+ * this fleet, and a teammate with a single checkout has nothing to collect into.
+ */
 export const plansHookCommand = (hangar: Hangar): string =>
   `${hangar.paths.bin} --hangar ${hangar.root} plans collect --quiet`;
 
@@ -744,13 +744,6 @@ export const withTmpHook = (hangar: Hangar, settings: SettingsJson): SettingsJso
   return { ...settings, hooks };
 };
 
-/**
- * Settings with the plan-collecting hook in place and no `plansDirectory` override.
- *
- * The override is removed deliberately: the repo's own tracked `.claude/settings.json` already
- * says `.claude/plans`, which is the only value that works, so a per-clone copy of it is one
- * more place to drift.
- */
 /**
  * The `PreToolUse` hook that keeps `hangar exec` the user's alone.
  *
@@ -906,15 +899,22 @@ export const withScrubHook = (hangar: Hangar, settings: SettingsJson): SettingsJ
   return { ...settings, hooks };
 };
 
+/**
+ * Settings with the plan-collecting hook in place, and `plansDirectory` left as it was.
+ *
+ * Left, not dropped. The repo's own tracked `.claude/settings.json` normally says `.claude/plans`
+ * and a clone needs no copy, but `doctor` has a repair that WRITES one for the case where the
+ * tracked value resolves outside the clone, and repairs a missing hook through this writer in the
+ * same `--fix`. A writer that dropped the key would undo the first repair with the second.
+ */
 export const withPlansHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
-  const { plansDirectory: _dropped, ...rest } = settings;
-  const hooks = { ...rest.hooks };
+  const hooks = { ...settings.hooks };
   const existing = (hooks['SessionEnd'] ?? []).filter(
     (matcher) =>
       !matcher.hooks.some((hook) => invokesOurCli(hangar, hook.command, 'plans collect')),
   );
   hooks['SessionEnd'] = [...existing, plansHook(hangar)];
-  return { ...rest, hooks };
+  return { ...settings, hooks };
 };
 
 /**
@@ -927,10 +927,10 @@ export const withPlansHook = (hangar: Hangar, settings: SettingsJson): SettingsJ
  * The split between this and the sibling copy is the interesting part, and it is deliberate:
  *
  * - **DERIVED, here**: the shared secrets deny rule, the read allow for the hangar root, one
- *   health-check allow per role that declares one, the four `SessionEnd`/`PreToolUse` hooks, the
- *   statusline, the shared memory directory and the theme. Every one of them is a function of the
- *   hangar and the clone index, and every one lives outside git -- which is exactly what
- *   `doctor` exists to hold in place.
+ *   health-check allow per role that declares one, the shared `tmp/` store as an additional
+ *   directory, every `with*Hook` writer's hook, the statusline, the shared memory directory and
+ *   the theme. Every one of them is a function of the hangar and the clone index, and every one
+ *   lives outside git -- which is exactly what `doctor` exists to hold in place.
  * - **PERSONAL, and so sibling-copy-only**: `enabledMcpjsonServers`, `enabledPlugins` and the
  *   `terminal.*` keys. Those are one developer's setup on one machine. Emitting them as defaults
  *   would ship this machine's seven MCP servers to a stranger's fresh hangar, where none of them
@@ -954,6 +954,18 @@ export const withPlansHook = (hangar: Hangar, settings: SettingsJson): SettingsJ
  */
 export const hangarRootAllow = (hangar: Hangar): string => `Read(${hangar.root}/**)`;
 export const secretsDeny = (hangar: Hangar): string => `Read(${hangar.paths.envShared})`;
+
+/**
+ * The shared `tmp/` store, as one of the session's working directories.
+ *
+ * Every entry of a clone's `tmp/` is a symlink into this store, and Claude Code checks a write
+ * against the RESOLVED path -- so without this, an agent creating or editing anything under its
+ * own `tmp/` is told the target is "outside the allowed working directories" and asked, even in
+ * `acceptEdits`. Measured with `claude -p --permission-mode acceptEdits` against a project whose
+ * `tmp/x` linked outside it: refused without the key, written with it. Reading needs nothing
+ * extra; `hangarRootAllow` already covers it.
+ */
+export const sharedTmpDirectory = (hangar: Hangar): string => hangar.paths.tmp;
 
 /**
  * The personal tools every clone may reach without a prompt.
@@ -984,6 +996,7 @@ export const defaultSettings = (clone: Clone): SettingsJson => {
     permissions: {
       allow: [hangarRootAllow(hangar), ...personalToolAllows(), ...healthCheckAllows(clone)],
       deny: [secretsDeny(hangar)],
+      additionalDirectories: [sharedTmpDirectory(hangar)],
     },
     statusLine: { type: 'command', command: hangar.paths.statuslineScript },
     autoMemoryDirectory: hangar.paths.memory,
@@ -1052,18 +1065,12 @@ export const settingsContentFor = (clone: Clone, template: SettingsJson): string
   const deny = permissions.deny ?? [];
   const wantDeny = secretsDeny(hangar);
   permissions.deny = deny.includes(wantDeny) ? deny : [...deny, wantDeny];
+  const dirs = permissions.additionalDirectories ?? [];
+  const wantDir = sharedTmpDirectory(hangar);
+  permissions.additionalDirectories = dirs.includes(wantDir) ? dirs : [...dirs, wantDir];
   settings.permissions = permissions;
 
-  /*
-   * `plansDirectory` is carried across, and that is why the three hook writers are applied here
-   * rather than `withPlansHook` alone being trusted with it: that one DROPS the key, because a
-   * per-clone copy of the repo's own tracked `.claude/plans` is one more place to drift. But
-   * `doctor` has a separate repair that WRITES an explicit `plansDirectory` for the one case
-   * that needs it -- a tracked value resolving outside the clone, which Claude Code rejects
-   * silently. Letting this builder strip it would undo that repair on the next `--fix`.
-   */
-  const plansDirectory = settings.plansDirectory;
-  const withHooks = withCommitGateHook(
+  const final = withCommitGateHook(
     hangar,
     withExecGuardHook(
       hangar,
@@ -1073,8 +1080,6 @@ export const settingsContentFor = (clone: Clone, template: SettingsJson): string
       ),
     ),
   );
-  const final: SettingsJson =
-    plansDirectory === undefined ? withHooks : { ...withHooks, plansDirectory };
   return `${JSON.stringify(final, null, 2)}\n`;
 };
 

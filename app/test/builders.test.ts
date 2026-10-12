@@ -14,6 +14,8 @@ import {
   healthCheckAllows,
   secretsDeny,
   settingsContentFor,
+  sharedTmpDirectory,
+  type SettingsJson,
   workspaceContent,
   workspacePaths,
 } from '../src/clone-config.ts';
@@ -332,4 +334,31 @@ test('settingsContentFor adds the secrets deny without discarding a foreign one'
   assert.deepEqual(permissions.deny, ['Read(./.env)', secretsDeny(clone.hangar)]);
   assert.ok(permissions.allow.includes('Read(./docs/**)'));
   assert.ok(permissions.allow.includes(hangarRootAllow(clone.hangar)));
+});
+
+test('the shared tmp store is an additional directory, added once and beside foreign ones', () => {
+  /*
+   * Every `tmp/` entry is a symlink into the store, and Claude Code checks a write against the
+   * resolved path -- so without this entry an agent is asked before every write under its own
+   * `tmp/`. Add-if-absent for the same reason as the secrets deny: a developer's own directories
+   * survive, and a second `--fix` writes nothing new.
+   */
+  const clone = cloneAt(hangar(), 2);
+  const want = sharedTmpDirectory(clone.hangar);
+  assert.equal(want, join(clone.hangar.root, 'tmp'));
+
+  const dirsOf = (text: string): string[] =>
+    (JSON.parse(text) as { permissions: { additionalDirectories: string[] } }).permissions
+      .additionalDirectories;
+  const fresh = settingsContentFor(clone, defaultSettings(clone));
+  assert.deepEqual(dirsOf(fresh), [want]);
+  assert.deepEqual(dirsOf(settingsContentFor(clone, JSON.parse(fresh) as SettingsJson)), [want]);
+
+  const template = defaultSettings(clone);
+  const foreign = settingsContentFor(clone, {
+    ...template,
+    permissions: { ...template.permissions, additionalDirectories: ['/srv/shared'] },
+  });
+  assert.deepEqual(dirsOf(foreign), ['/srv/shared', want]);
+  assert.ok(namesNoMachinePath(want), want);
 });

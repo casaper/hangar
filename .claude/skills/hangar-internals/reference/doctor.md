@@ -22,9 +22,10 @@ the check for a while, and three clones spent it telling their sessions the flee
 clones), `.envrc.private`, **one row per `repo.symlinks[]` entry** (printing that entry's `why`
 when it is missing), the theme and whether the file it names resolves, **one health-check allow per
 port role that declares one**, one declaration-only row per `repo.install[]` step, that `tmp/` is
-the clone's own directory, the five hooks in `settings.local.json` (plan collection, the cache
-merge, the ticket record hook, the exec guard and the commit gate — each repair re-reads the file,
-so a clone missing two of them gets both in one `--fix` pass), the sibling remotes in both
+the clone's own directory, the shared `tmp/` store named in `permissions.additionalDirectories`
+(part of the `settings.local.json` row), the six hooks in `settings.local.json` (plan collection,
+the cache merge, the scrub, the ticket record hook, the exec guard and the commit gate — each
+repair re-reads the file, so a clone missing two of them gets both in one `--fix` pass), the sibling remotes in both
 directions, and the
 `checkout.defaultRemote=origin` those remotes make necessary.
 
@@ -577,8 +578,9 @@ A sibling is still preferred, and that is not a fallback ordering. The split is:
 - **Derived, in `defaultSettings`**: `Read(<hangar root>/**)`, `Read(<secretsFile>)` in `deny` (an
   ABSOLUTE path, because the secrets file sits outside every clone so no clone can commit it —
   which also means no clone-relative rule can reach it), one health-check allow per role that
-  declares one, the three hooks through the same `with*Hook` writers a `doctor --fix` repair uses,
-  `statusLine.command`, `autoMemoryDirectory` and `theme`. Every one is a function of the hangar
+  declares one, the shared `tmp/` store in `permissions.additionalDirectories`, every hook through
+  the same `with*Hook` writers a `doctor --fix` repair uses, `statusLine.command`,
+  `autoMemoryDirectory` and `theme`. Every one is a function of the hangar
   and the clone index, and every one lives outside git.
 - **Personal, and so sibling-copy-only**: `enabledMcpjsonServers`, `enabledPlugins` and the
   `terminal.*` keys. Emitting those as defaults would ship one machine's seven MCP servers into a
@@ -634,8 +636,8 @@ So the check and the builder moved together:
 
 ### The one hook row whose right answer comes from the config
 
-Two of the three hook rows are unconditional: every clone wants the plan collector and the `tmp`
-merger, so the row asks "is it wired" and `--fix` wires it. **The tracker hook is not**, and it
+Every hook row but one is unconditional: every clone wants the plan collector, the `tmp` merger,
+the scrub, the exec guard and the commit gate, so the row asks "is it wired" and `--fix` wires it. **The tracker hook is not**, and it
 went a long time behaving as if it were. `withJiraHook` and `hasJiraHook` read no config at all,
 so a hangar declaring `tracker.kind: none` — which is the schema DEFAULT, and so every hangar
 adopting this tool before configuring a tracker — got the hook written into every clone by

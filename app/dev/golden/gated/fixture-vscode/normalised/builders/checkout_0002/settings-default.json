@@ -8,6 +8,9 @@
     ],
     "deny": [
       "Read(%HANGAR%/.env.vsfix-shared)"
+    ],
+    "additionalDirectories": [
+      "%HANGAR%/tmp"
     ]
   },
   "statusLine": {

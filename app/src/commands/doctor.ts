@@ -52,6 +52,7 @@ import {
   healthCheckAllows,
   hangarRootAllow,
   secretsDeny,
+  sharedTmpDirectory,
   workspacePaths,
   workspaceContent,
   workspacePath,
@@ -479,10 +480,19 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
   const rootAllowOk = allow.includes(wantRootAllow);
   const wantDeny = secretsDeny(clone.hangar);
   const denyOk = (settings?.permissions?.deny ?? []).includes(wantDeny);
+  const wantTmpDir = sharedTmpDirectory(clone.hangar);
+  const tmpDirOk = (settings?.permissions?.additionalDirectories ?? []).includes(wantTmpDir);
   checks.push({
     name: 'settings.local.json',
     ok:
-      settings !== undefined && themeOk && allowOk && statusOk && memoryOk && rootAllowOk && denyOk,
+      settings !== undefined &&
+      themeOk &&
+      allowOk &&
+      statusOk &&
+      memoryOk &&
+      rootAllowOk &&
+      denyOk &&
+      tmpDirOk,
     detail:
       settings === undefined
         ? 'missing or unparseable'
@@ -501,6 +511,9 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
             denyOk
               ? undefined
               : `the shared secrets are not denied (${wantDeny}) — and ${wantRootAllow} would reach them`,
+            tmpDirOk
+              ? undefined
+              : `${tildify(wantTmpDir)} is not an additional directory — every write under this clone's tmp/ asks for permission`,
           ]
             .filter((x) => x !== undefined)
             .join('; ') || `${wantTheme}, ${String(wantAllows.length)} health check(s)`,
