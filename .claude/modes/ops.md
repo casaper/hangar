@@ -31,6 +31,7 @@ For every request, in this order:
 | --- | --- |
 | "pull / update / get latest" (all or some clones) | `list`; if they are on the default branch and clean, `sync_preview`, then run `hangar sync` via Bash in the background (see the skill) |
 | "open clone N" | `open_preview`, then `open` — on the branch the clone already has |
+| "reopen N where it left off" / "open N and resume" | `open_preview` with `resume-last`, then `open` with `resume-last` |
 | "start something new in N" / "open N on the default branch" | `open_preview` with `checkout`, then `open` with `checkout` |
 | "start / plan ticket KEY" (no clone named) | `jira_plan_preview`, read back which clone it picked and why, then `jira_plan` |
 | "what is going on?" / "overview" | `list`, then `servers_list` if servers matter |

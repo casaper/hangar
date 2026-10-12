@@ -38,6 +38,24 @@ under **Which emulator opens the window** below, before the tmux layer it hands 
   nothing can tell which transcript a running session owns, and resuming the one already open
   puts two Claude Code sessions in one clone.
 
+- **`open --resume-last` is that resume with nobody choosing, so it decides more carefully.** The
+  Claude Code window it CREATES starts as `claude --resume <id>`; a window that already exists is
+  left alone and named, for `firstPrompt`'s reason -- it may hold a live session, and `open` types
+  into nothing. Four rules follow from there being no human to read the pick:
+  - **The session is the one whose last ENTRY is newest**, read from the transcript's own
+    `timestamp`, rather than the newest FILE. Being touched is not being talked in.
+  - **Only that one is considered.** The session before it is not "the last session", and
+    resuming it unannounced would be a surprise.
+  - **The window starts in the session's own directory, not the tab's**, because `--resume <id>`
+    finds nothing from anywhere else. So a clone whose last session was in `angular/` gets its
+    Claude Code window there.
+  - **Everything that cannot resume gets a fresh `claude` and a warning, never a question.** That
+    covers no transcript, a directory that is gone, and a newest session with a live `claude` in
+    its directory -- the case `hangar resume` asks about. `open --all` must not stall once per
+    clone, and a fresh session is no worse than what `open` does without the flag. The command is
+    typed into a shell (`runIn`), so a resume that fails at once leaves that shell and the rest
+    of the session standing.
+
 ## Taking a clone down, and putting one back on current config
 
 `app/src/commands/close.ts` and `reload.ts`. Both end processes somebody is working in, so both

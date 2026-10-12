@@ -21,7 +21,7 @@ import { release } from './commands/release.ts';
 import { list } from './commands/list.ts';
 import { mcp } from './commands/mcp.ts';
 import { closeClones, type CloseOptions } from './commands/close.ts';
-import { open, opensOnNewBranch, type OpenBranchFlags } from './commands/open.ts';
+import { open, opensOnNewBranch, type OpenOptions } from './commands/open.ts';
 import { reloadClones, type ReloadOptions } from './commands/reload.ts';
 import { plansCollect, plansStamp } from './commands/plans.ts';
 import { scrub } from './commands/scrub.ts';
@@ -485,12 +485,14 @@ program
     [
       "Open each clone in one terminal tab of its own, attached to that clone's tmux session — one tmux window per `terminal.tabs[]` role. A clone that is already open is brought forward rather than opened twice, and a clone whose tab was closed reattaches to the session it still has, with whatever was running in it. `-e` also opens every editor `editor.kinds` lists; `hangar edit` is the same thing on its own.",
       "Each clone opens on the branch it already has — reopening a clone is usually going back to what it was doing. `-c` first fetches each clone and puts it on its repo's default branch, up to date, for starting something new; `--branch <name>` puts it on that branch instead. Either way a clone whose tree cannot be moved (uncommitted work, a half-applied rebase, a live Claude session) is opened as it is with a warning.",
+      "`--resume-last` starts the Claude Code window as `claude --resume` of the clone's most recently active session, in the directory that session was started in. Only a window this run creates is affected; a clone whose last session is gone, or may still be running somewhere, gets a fresh one with a warning.",
       "The sessions live on this hangar's own tmux socket, so nothing here touches the tmux you run for your own work. `hangar doctor` prints the socket name.",
     ].join('\n\n'),
   )
   .argument('[clones...]', 'clone names, e.g. clone_02 (or just 2) — opened in ascending order')
   .option('--all', 'open every clone in the fleet')
   .option('--no-claude', 'do not start Claude Code in any of the clone’s windows')
+  .option('--resume-last', "resume the clone's last Claude Code session instead of a fresh one")
   .option('-e, --editor', 'also open the clone in every configured editor')
   .option('--tab', "a tab in the terminal's current window (the default)")
   .option('--window', 'a window of its own instead of a tab')
@@ -498,9 +500,12 @@ program
   .option('-b, --branch <name>', 'fetch and check out this branch first')
   .option('--include-busy', 'check the branch out even in a clone with a live Claude session')
   .option('-n, --dry-run', 'print every decision — branch, windows, editors — and change nothing')
-  .action((clones: string[], options: { tab?: boolean; window?: boolean } & OpenBranchFlags) => {
+  .action((clones: string[], options: { tab?: boolean; window?: boolean } & OpenOptions) => {
     if (options.tab === true && options.window === true) {
       throw new CliError('--tab and --window are the two answers to one question, so pick one');
+    }
+    if (options.resumeLast === true && options.claude === false) {
+      throw new CliError('--resume-last resumes Claude Code, and --no-claude starts none');
     }
     if (options.includeBusy === true && !opensOnNewBranch(options)) {
       throw new CliError(

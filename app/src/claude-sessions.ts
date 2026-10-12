@@ -39,6 +39,12 @@ export type ClaudeTranscript = {
   readonly lastPrompt: string | undefined;
   readonly startedAt: Date | undefined;
   readonly modifiedAtMs: number;
+  /**
+   * When the conversation itself last moved: the newest entry's own `timestamp`, falling back to
+   * the mtime. Not the mtime alone, because a file can be touched without being talked in, and
+   * `hangar open --resume-last` picks by this with no human looking at the list.
+   */
+  readonly lastActiveAtMs: number;
   readonly bytes: number;
   /**
    * A live `claude` in the same directory may be this very session -- resume it and the clone
@@ -46,6 +52,10 @@ export type ClaudeTranscript = {
    */
   readonly live: boolean;
 };
+
+/** What the session was about, in one line: its own title if it earned one, else its opener. */
+export const headline = (session: ClaudeTranscript): string =>
+  session.title ?? session.firstPrompt ?? '(no summary)';
 
 /** Enough for the opening entries and the first real request. */
 const HEAD_BYTES = 64 * 1024;
@@ -238,6 +248,8 @@ const readTranscript = (file: string): ClaudeTranscript | undefined => {
     lastPrompt: lastPrompt === firstPrompt ? undefined : lastPrompt,
     startedAt: firstOf(head, timestampOf),
     modifiedAtMs: stats.mtimeMs,
+    lastActiveAtMs:
+      (lastOf(tail, timestampOf) ?? lastOf(head, timestampOf))?.getTime() ?? stats.mtimeMs,
     bytes: stats.size,
     live: false,
   };

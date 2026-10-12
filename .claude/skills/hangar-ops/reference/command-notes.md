@@ -81,6 +81,10 @@ separate `<thing>_preview`.
 - **`open` leaves each clone on the branch it has unless told otherwise.** `-c` fetches and puts
   it on the default branch, up to date; `--branch <name>` on that one. `--include-busy` only
   governs that checkout, so it is refused without one of the two.
+- **`open --resume-last` resumes the clone's last Claude Code session, but only in a window it
+  creates.** On a clone that is already open it changes nothing and names `hangar resume <n>`.
+  Where it cannot resume (no session, its directory gone, or a `claude` possibly still running
+  it) it starts a fresh session and warns. It refuses alongside `--no-claude`.
 - **`open -n` is worth running before the real thing.** It prints the branch each clone is on or
   would land on (or why it would be left alone), the tmux session and windows it would create or
   the window it would bring forward, and the attach line verbatim — and changes nothing.

@@ -2,7 +2,7 @@ import { relative } from 'node:path';
 
 import pc from 'picocolors';
 
-import { claudeTranscripts, type ClaudeTranscript } from '../claude-sessions.ts';
+import { claudeTranscripts, headline, type ClaudeTranscript } from '../claude-sessions.ts';
 import { CliError, run } from '../exec.ts';
 import { cloneForCwd, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import { paint } from '../palette.ts';
@@ -51,10 +51,6 @@ const pad = (n: number): string => String(n).padStart(2, '0');
 const stamp = (date: Date): string =>
   `${String(date.getFullYear())}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
   `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-
-/** What the session was about, in one line: its own title if it earned one, else its opener. */
-const headline = (session: ClaudeTranscript): string =>
-  session.title ?? session.firstPrompt ?? '(no summary)';
 
 /**
  * `<age>  <subdirectory>  <what it was about>            <branch>`, with the branch pushed to

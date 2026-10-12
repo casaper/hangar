@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { join } from 'node:path';
+
+import type { ClaudeTranscript } from '../src/claude-sessions.ts';
 import { cloneAt } from '../src/fleet.ts';
 import {
+  CLAUDE_ROLE,
   describeAction,
   openPlan,
   opensOnNewBranch,
+  resumeChoice,
   tabsFor,
   type OpenAction,
   type OpenFacts,
@@ -254,4 +259,81 @@ test('a bare open moves no branch; -c and --branch each do', () => {
   );
   assert.equal(opensOnNewBranch({ checkout: true }), true);
   assert.equal(opensOnNewBranch({ branch: 'feature/x' }), true, 'naming a branch is a request');
+});
+
+const transcript = (over: Partial<ClaudeTranscript> = {}): ClaudeTranscript => ({
+  id: '00000000-0000-0000-0000-000000000001',
+  file: '/nowhere.jsonl',
+  cwd: join(clone.path, 'sub'),
+  branch: 'feature/x',
+  title: 'a session',
+  firstPrompt: undefined,
+  lastPrompt: undefined,
+  startedAt: undefined,
+  modifiedAtMs: 1000,
+  lastActiveAtMs: 1000,
+  bytes: 1,
+  live: false,
+  ...over,
+});
+
+test('--resume-last rewrites the claude window, and only that one', () => {
+  const session = transcript();
+  const resumed = tabsFor(hangar, clone, { resumeLast: true }, [], session);
+  assert.equal(resumed.length, roles.length);
+  for (const [i, tab] of resumed.entries()) {
+    const plain = roles[i];
+    if (tab.role !== CLAUDE_ROLE || plain?.command === undefined) {
+      assert.deepEqual(tab, plain, `${tab.role} is untouched`);
+      continue;
+    }
+    const command = tab.command ?? '';
+    assert.ok(command.startsWith(plain.command), 'the configured command is kept');
+    assert.ok(command.includes(`--resume ${session.id}`));
+    // Transcripts are keyed to where a session started; `--resume` finds nothing anywhere else.
+    assert.equal(tab.cwd, session.cwd);
+  }
+  assert.ok(
+    resumed.some((tab) => tab.role === CLAUDE_ROLE && tab.command !== undefined),
+    'the fixture has a claude role with a command, or this test asserts nothing',
+  );
+});
+
+test('--no-claude wins over a resume', () => {
+  const quiet = tabsFor(hangar, clone, { claude: false }, [], transcript());
+  assert.deepEqual(quiet, tabsFor(hangar, clone, { claude: false }, []));
+});
+
+test('a resume beats a first prompt: the session already has its conversation', () => {
+  const tab = tabsFor(hangar, clone, { firstPrompt: 'hello' }, [], transcript()).find(
+    (t) => t.role === CLAUDE_ROLE,
+  );
+  const command = tab?.command ?? '';
+  assert.ok(command.includes('--resume'));
+  assert.ok(!command.includes('hello'));
+});
+
+const always = (): boolean => true;
+
+test('resumeChoice: nothing to resume is not an error', () => {
+  assert.equal(resumeChoice([], always).kind, 'none');
+});
+
+test('resumeChoice picks the last ACTIVE session, not the newest file', () => {
+  const touched = transcript({ id: 'touched', modifiedAtMs: 9000, lastActiveAtMs: 100 });
+  const talked = transcript({ id: 'talked', modifiedAtMs: 500, lastActiveAtMs: 500 });
+  assert.deepEqual(resumeChoice([touched, talked], always), { kind: 'resume', session: talked });
+});
+
+test('resumeChoice never resumes a session that may be running', () => {
+  const choice = resumeChoice(
+    [transcript({ live: true, lastActiveAtMs: 2000 }), transcript({ id: 'older' })],
+    always,
+  );
+  // Not the older one either: that is not the last session, and resuming it would be a surprise.
+  assert.equal(choice.kind, 'live');
+});
+
+test('resumeChoice does not resume into a directory that is gone', () => {
+  assert.equal(resumeChoice([transcript()], () => false).kind, 'gone');
 });

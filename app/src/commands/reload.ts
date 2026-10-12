@@ -7,7 +7,7 @@ import { CliError } from '../exec.ts';
 import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import type { Hangar } from '../hangar.ts';
 import { claudeTranscripts } from '../claude-sessions.ts';
-import { CLAUDE_ROLE, tabsFor } from './open.ts';
+import { CLAUDE_ROLE, claudeResuming, tabsFor } from './open.ts';
 import { plansCollect } from './plans.ts';
 import { tmpMerge } from './tmp.ts';
 import { tmuxServer, tmuxSessionName, type TmuxPane, type TmuxServer } from '../tmux.ts';
@@ -378,7 +378,7 @@ export const reloadClones = (
           if (pane === undefined) break;
           const command =
             action.kind === 'resume-claude'
-              ? `${facts.claudeCommand ?? 'claude'} --resume ${action.session}`
+              ? claudeResuming(facts.claudeCommand ?? 'claude', action.session)
               : (facts.claudeCommand ?? 'claude');
           if (server.respawnPane(pane.id, facts.clone.path, command))
             ok(`${facts.clone.name}: Claude Code restarted in ${pane.id}`);

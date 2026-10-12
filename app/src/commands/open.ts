@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { landOnBranch } from './checkout-default.ts';
+import { claudeTranscripts, headline, type ClaudeTranscript } from '../claude-sessions.ts';
 import { editors, type EditorDriver } from '../editor/index.ts';
 import { CliError } from '../exec.ts';
 import {
@@ -109,6 +110,18 @@ export type OpenOptions = {
    * an existing one is never typed into from here.
    */
   firstPrompt?: string | undefined;
+  /**
+   * `--resume-last`: start the Claude Code window as `claude --resume <id>` of the clone's most
+   * recently active session, instead of a fresh one.
+   *
+   * **Only a window this run CREATES**, for the same reason as `firstPrompt`: an existing window
+   * may hold a live session, and nothing here types into one. The window starts in the session's
+   * own directory rather than the tab's, because transcripts are keyed to the directory a session
+   * was started in and `--resume <id>` finds nothing from anywhere else -- a `clone_01/angular`
+   * session is not resumable from `clone_01`. Every way it cannot resume degrades to the plain
+   * command with a warning; see `resumeChoice`.
+   */
+  resumeLast?: boolean | undefined;
 };
 
 /**
@@ -123,6 +136,96 @@ export const CLAUDE_ROLE = 'claude';
 /** A configured Claude Code command with a first prompt appended, quoted for the shell. Pure. */
 export const claudeWithPrompt = (command: string, prompt: string): string =>
   `${command} ${shellQuote(prompt)}`;
+
+/** A configured Claude Code command resuming one session. Pure; `reload` uses it too. */
+export const claudeResuming = (command: string, sessionId: string): string =>
+  `${command} --resume ${sessionId}`;
+
+/**
+ * What `--resume-last` will do in one clone. Every kind but `resume` starts the plain command.
+ *
+ * - `window-exists` -- the clone's Claude Code window is already there, and is left alone.
+ * - `no-window` -- the config gives no `claude` role a command, so there is nothing to resume in.
+ * - `none` -- the clone has no resumable session.
+ * - `live` -- a `claude` is running in the newest session's directory and may BE that session.
+ *   Resuming it would put two Claude Code sessions on one conversation, the fleet's worst
+ *   failure. `hangar resume` asks; this does not, because `open --all` must not stall per clone.
+ * - `gone` -- the directory the newest session was started in no longer exists.
+ */
+export type ResumeChoice =
+  | { readonly kind: 'resume'; readonly session: ClaudeTranscript }
+  | { readonly kind: 'live'; readonly session: ClaudeTranscript }
+  | { readonly kind: 'gone'; readonly session: ClaudeTranscript }
+  | { readonly kind: 'none' }
+  | { readonly kind: 'window-exists' }
+  | { readonly kind: 'no-window' };
+
+/**
+ * The session `--resume-last` resumes, from a clone's transcripts. Pure: `exists` is the one
+ * filesystem question, passed in.
+ *
+ * By `lastActiveAtMs` and never by list order: `claudeTranscripts` sorts by mtime for a picker a
+ * human reads, and this choice has nobody reading it. Only the newest is ever considered -- the
+ * one before it is not "the last session", and resuming it silently would be a surprise.
+ */
+export const resumeChoice = (
+  transcripts: readonly ClaudeTranscript[],
+  exists: (dir: string) => boolean,
+): ResumeChoice => {
+  let newest: ClaudeTranscript | undefined;
+  for (const t of transcripts) {
+    if (newest === undefined || t.lastActiveAtMs > newest.lastActiveAtMs) newest = t;
+  }
+  if (newest === undefined) return { kind: 'none' };
+  if (newest.live) return { kind: 'live', session: newest };
+  if (!exists(newest.cwd)) return { kind: 'gone', session: newest };
+  return { kind: 'resume', session: newest };
+};
+
+/**
+ * One line for a `ResumeChoice`, for the dry run and the real run alike. Pure. `warn` says which
+ * channel it belongs on: everything that falls back to a fresh session is worth noticing.
+ */
+export const describeResume = (
+  clone: Clone,
+  choice: ResumeChoice,
+  done: boolean,
+): { readonly text: string; readonly warn: boolean } => {
+  const name = clone.name;
+  const fresh = done ? 'started a fresh session' : 'would start a fresh session';
+  switch (choice.kind) {
+    case 'resume': {
+      const { session } = choice;
+      const branch = session.branch === undefined ? '' : ` (${session.branch})`;
+      return {
+        text: `${name}: ${done ? 'resuming' : 'would resume'} ${headline(session)}${branch} in ${tildify(session.cwd)}`,
+        warn: false,
+      };
+    }
+    case 'live':
+      return {
+        text: `${name}: a claude is running in ${tildify(choice.session.cwd)} and may be its last session — ${fresh} instead`,
+        warn: true,
+      };
+    case 'gone':
+      return {
+        text: `${name}: its last session was in ${tildify(choice.session.cwd)}, which no longer exists — ${fresh} instead`,
+        warn: true,
+      };
+    case 'none':
+      return { text: `${name}: no resumable Claude Code session — ${fresh}`, warn: true };
+    case 'window-exists':
+      return {
+        text: `${name}: its Claude Code window already exists, so nothing is resumed — \`hangar resume ${String(clone.index)}\` picks a session from inside it`,
+        warn: false,
+      };
+    case 'no-window':
+      return {
+        text: `${name}: no \`${CLAUDE_ROLE}\` role in terminal.tabs runs a command, so there is nothing to resume in`,
+        warn: true,
+      };
+  }
+};
 
 export type OpenBranchFlags = Pick<OpenOptions, 'branch' | 'checkout' | 'includeBusy'>;
 
@@ -148,17 +251,27 @@ export const tabsFor = (
   clone: Clone,
   opts: OpenOptions,
   editorDrivers: readonly EditorDriver[],
+  resume?: ClaudeTranscript,
 ): TabSpec[] => {
+  // A resumed session already has its conversation, so it wins over a first prompt; no caller
+  // passes both (`jira-plan` never resumes).
+  const resuming = (tab: { role: string; command?: string | undefined }): boolean =>
+    resume !== undefined &&
+    opts.claude !== false &&
+    tab.role === CLAUDE_ROLE &&
+    tab.command !== undefined;
   const commandOf = (tab: { role: string; command?: string | undefined }): string | undefined => {
     if (opts.claude === false || tab.command === undefined) return undefined;
+    if (resuming(tab) && resume !== undefined) return claudeResuming(tab.command, resume.id);
     return tab.role === CLAUDE_ROLE && opts.firstPrompt !== undefined
       ? claudeWithPrompt(tab.command, opts.firstPrompt)
       : tab.command;
   };
   const configured = hangar.config.terminal.tabs.map((tab): TabSpec => {
     const command = commandOf(tab);
+    const dir = tab.dir === '.' ? clone.path : join(clone.path, tab.dir);
     return {
-      cwd: tab.dir === '.' ? clone.path : join(clone.path, tab.dir),
+      cwd: resuming(tab) && resume !== undefined ? resume.cwd : dir,
       ...(command === undefined ? {} : { command }),
       clone: clone.name,
       role: tab.role,
@@ -210,6 +323,8 @@ export type OpenFacts = {
   readonly currentSession: string | undefined;
   readonly placement: Placement;
   readonly emulator: EmulatorCapabilities;
+  /** What `--resume-last` decided; undefined without the flag. `openPlan` never reads it. */
+  readonly resume?: ResumeChoice | undefined;
 };
 
 export type OpenAction =
@@ -508,6 +623,18 @@ const land = (clone: Clone, opts: OpenOptions, sweeping: boolean): void => {
   }
 };
 
+/** `resumeChoice` for one clone, reading its transcripts only when a window would take it. */
+const resumeFor = (
+  hangar: Hangar,
+  clone: Clone,
+  existingRoles: readonly string[],
+): ResumeChoice => {
+  if (existingRoles.includes(CLAUDE_ROLE)) return { kind: 'window-exists' };
+  const tab = hangar.config.terminal.tabs.find((t) => t.role === CLAUDE_ROLE);
+  if (tab?.command === undefined) return { kind: 'no-window' };
+  return resumeChoice(claudeTranscripts(clone), existsSync);
+};
+
 const factsFor = (
   hangar: Hangar,
   clone: Clone,
@@ -517,11 +644,20 @@ const factsFor = (
   drivers: readonly EditorDriver[],
 ): OpenFacts => {
   const sessionExists = server.hasSession(clone);
+  const existingRoles = sessionExists ? server.roles(clone) : [];
+  const resume = opts.resumeLast === true ? resumeFor(hangar, clone, existingRoles) : undefined;
   return {
     clone,
-    roles: tabsFor(hangar, clone, opts, drivers),
+    roles: tabsFor(
+      hangar,
+      clone,
+      opts,
+      drivers,
+      resume?.kind === 'resume' ? resume.session : undefined,
+    ),
     sessionExists,
-    existingRoles: sessionExists ? server.roles(clone) : [],
+    existingRoles,
+    ...(resume === undefined ? {} : { resume }),
     clientTtys: sessionExists ? server.clientTtys(clone) : [],
     currentSession: server.currentSession(),
     placement: opts.placement ?? hangar.config.terminal.placement,
@@ -630,6 +766,25 @@ export const openOne = (
     // launchd's PATH, where the bar's `hangar browse` click and its detached `pr refresh` both
     // find no node. Reaching a session at all means the server is up, so this is safe here.
     server.ensureNodeOnPath();
+  }
+  if (facts.resume !== undefined) {
+    const said = describeResume(clone, facts.resume, opts.dryRun !== true);
+    if (said.warn) warn(said.text);
+    else note(said.text);
+    // The conversation was about the branch it recorded; a clone moved since -- by `-c`, by
+    // `--branch`, or by anything between the two sessions -- puts it in front of another tree.
+    const recorded = facts.resume.kind === 'resume' ? facts.resume.session.branch : undefined;
+    if (recorded !== undefined) {
+      // A dry run moved nothing, so it compares against where the real run would land.
+      const now =
+        opts.dryRun === true && opensOnNewBranch(opts)
+          ? (opts.branch ?? hangar.config.forge.defaultBranch)
+          : currentBranch(clone.path);
+      if (now !== recorded)
+        warn(
+          `${clone.name}: that session was on ${recorded}, and the clone ${opts.dryRun === true && opensOnNewBranch(opts) ? 'would land on' : 'is on'} ${now}`,
+        );
+    }
   }
   for (const action of openPlan(hangar, facts)) {
     if (opts.dryRun === true) {
