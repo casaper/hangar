@@ -81,10 +81,19 @@ BSD spelling fails partway through a multi-file edit, and a half-edited `src/**`
 — every clone's `SessionEnd` hook runs this working tree.
 
 **Dev-mode Bash runs zsh:** `$VAR` holding `cmd -flag` is not word-split, so call
-`/opt/homebrew/bin/tmux -L hangar-<id> …` directly, and `type -P` does not exist (use `command -v`).
+`/opt/homebrew/bin/tmux -L hangar-<id> …` directly, `type -P` does not exist (use `command -v`),
+and an unquoted glob that matches nothing is an error (`--include=*.ts`, `echo ===`), so quote it.
+
+**Search a clone with `git -C <clone> grep`, never `grep -r`**: a clone carries `node_modules`
+and a multi-GB `tmp/`, and `grep -r` over one runs past the Bash timeout.
 
 **Probe git behaviour with a script file in the scratchpad** (`sh probe.sh`, its repo under
 `mktemp -d`): a long one-line probe that creates commits is refused permission.
+
+**Probe Claude Code permissions with `claude -p … --permission-mode acceptEdits < /dev/null`** in
+a `mktemp -d` project with its own `.claude/settings.local.json` — `default` mode refuses every
+write, inside the project too, so it cannot tell a rule from no rule. One measured answer: a
+file-write deny is an `Edit(...)` rule, and `Write(...)` deny rules are never matched.
 
 ## Two conventions for changing it
 
