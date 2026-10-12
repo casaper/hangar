@@ -243,11 +243,11 @@ link resolves to, which is outside the clone, so each clone's generated
 `.claude/settings.local.json` names the hangar's `tmp/` in `permissions.additionalDirectories`.
 A clone missing it asks before every write under its own `tmp/`; `doctor` reports that.
 
-**Never hand-edit a file under `tmp/`.** Each cached issue record is a **symlink** into one record
-store the whole fleet shares, so an in-place edit writes every clone's copy of it, and nothing
-inside the clone shows you that. Read them, regenerate them with the skill, and leave the links
-alone. **A ticket fetched within the cache TTL is not fetched again**: `hangar jira hook` is
-a `PreToolUse` hook that links the cached records into place and **denies** the fetch, telling you
+**Never hand-edit a cached issue record.** Each one under `tmp/` is a **symlink** into one record
+store the whole fleet shares, so an in-place edit writes every clone's copy of it, nothing inside
+the clone shows you that, and no permission prompt stops it. Read them, regenerate them with the
+skill, and leave the links alone. **A ticket fetched within the cache TTL is not fetched again**:
+`hangar jira hook` is a `PreToolUse` hook that links the cached records into place and **denies** the fetch, telling you
 what it gave you instead. The config's `tracker.cache.bypassEnvKey`, set in front of the command,
 bypasses it — an env var and not a flag, because the repo's own sync script dies on an unknown
 flag.

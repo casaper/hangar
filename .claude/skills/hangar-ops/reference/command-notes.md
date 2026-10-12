@@ -278,6 +278,9 @@ separate `<thing>_preview`.
   could not run is not a guard that passed — without `lsof` nothing can tell whether the clone is
   still serving. Check its ports by hand, or install `lsof`; `--force` overrides, and on a
   `--delete` that is unrecoverable.
+- **`remove-clone --delete` refuses while the clone's `tmp/` holds real entries the shared store
+  would take.** `tmp/` is ignored, so the git guards cannot see them, and until `tmp merge` moves
+  them they are the only copies. Run `hangar tmp merge` first; the refusal names up to five.
 - **A clone's `*.code-workspace` is compared by content, and `--fix` rewrites it.** Everything in
   it is generated — the folder label, the clone path, and the per-clone settings that put the clone
   name and its branch in the VS Code title bar and its hue on the activity bar. So it is hand-edit-

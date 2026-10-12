@@ -71,7 +71,7 @@ the marker file IS the hangar, and running without one means running on schema d
 looking like a configured run. Two exemptions, both load-bearing rather than convenient —
 `setup`, which writes the file, and **`jira hook`, whose `PreToolUse` contract is fail-open**,
 because a non-zero exit from a PreToolUse hook can block the tool call it exists to accelerate.
-The two `SessionEnd` hooks (`plans collect`, `tmp merge`) are deliberately NOT exempt: a missing
+The three `SessionEnd` hooks (`plans collect`, `tmp merge`, `scrub`) are deliberately NOT exempt: a missing
 config there is worth surfacing, and a session ending is the safe moment to surface it.
 
 The gate tests EXISTENCE and never parses. That is what keeps `config validate` and `doctor`
