@@ -288,14 +288,6 @@ const readRecord = (
   };
 };
 
-/**
- * Cached names whose symlink reaches nothing.
- *
- * `readRecord` cannot see these -- reading through a dangling link throws, so they drop out of
- * the grouping and would be repaired by nothing and reported by nobody. There is nothing to
- * re-point them at either: the record they named is gone, so the answer is a re-sync, and this is
- * what lets the command say so instead of reporting a clean run.
- */
 const linkTargetOf = (path: string): string | undefined => {
   try {
     return lstatSync(path).isSymbolicLink() ? readlinkSync(path) : undefined;
@@ -313,6 +305,14 @@ const isSymlink = (path: string): boolean => {
   }
 };
 
+/**
+ * Cached names whose symlink reaches nothing.
+ *
+ * `readRecord` cannot see these -- reading through a dangling link throws, so they drop out of
+ * the grouping and would be repaired by nothing and reported by nobody. There is nothing to
+ * re-point them at either: the record they named is gone, so the answer is a re-sync, and this is
+ * what lets the command say so instead of reporting a clean run.
+ */
 export const danglingStoreLinks = (paths: readonly string[]): string[] =>
   paths.filter((path) => {
     if (!isSymlink(path)) return false;

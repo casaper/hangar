@@ -621,8 +621,8 @@ from the zod schema, and both YAML files point at it for editor validation.)
 
 Everything about _why_ each command is built the way it is lives in the **`hangar-internals`**
 skill: why `sync` asks Bitbucket for a branch's pull-request target instead of guessing, why
-`merge-default` reads the invocation out of `process.argv`, how `tmp merge` collapses a ticket's
-many cached names onto one inode, what `ide vscode sync` rewrites per clone and what it refuses to
+`merge-default` reads the invocation out of `process.argv`, how `tmp merge` points a ticket's
+many cached names at one record, what `ide vscode sync` rewrites per clone and what it refuses to
 write, what `doctor` checks and the two rules for anything generated into a clone, the Jira hook's
 fail-open design, and why `forge.defaultBranch` is stored rather than derived.
 

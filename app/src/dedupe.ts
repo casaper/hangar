@@ -19,12 +19,11 @@ import { issueKeysIn } from './jira.ts';
  * - **Byte-identical copies.** Real duplication, and safe to collapse into one inode, which is
  *   what `jdupes -L` does. Attachments are the ones that matter: a 4 MB screen recording
  *   fetched under two relation paths is the same file twice.
- * - **Copies that differ.** Reported, never touched -- see `nearDuplicates`. The skill's own
- *   template puts `relation:` and `relatedTo:` in a relation copy's frontmatter and omits them
- *   from the ticket's own file, and every copy carries its own `fetched:` timestamp, so two
- *   renderings of one ticket are REQUIRED to differ. Hard-linking them would mean picking one
- *   and destroying the other's relation metadata -- and the skill says in as many words:
- *   "the duplication between the two is intended ... Never dedupe them."
+ * - **Copies that differ.** A ticket RECORD never reaches this file: the store pass in
+ *   `commands/tmp.ts` points every cached name at one record per ticket. What is left -- a
+ *   `plan_<KEY>.md`, a `pr_description_<KEY>.md` under two names -- is resolved by
+ *   `resolveSameTicketCopies` there, where the freshest copy wins and the others become hard
+ *   links to it.
  *
  * Content matching is delegated to `jdupes` rather than reimplemented: size, then partial hash,
  * then full compare, and it treats already-linked files as non-duplicates so a second run does

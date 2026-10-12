@@ -1,7 +1,7 @@
 import { lstatSync, readdirSync, readlinkSync, symlinkSync, type Dirent } from 'node:fs';
 import { basename, join } from 'node:path';
 
-import type { Clone } from './fleet.ts';
+import { cloneDirRe, type Clone } from './fleet.ts';
 import type { Hangar } from './hangar.ts';
 
 /**
@@ -22,15 +22,13 @@ import type { Hangar } from './hangar.ts';
  * sharing, and no branch has to have landed anything first -- which is what sharing the whole
  * directory had to wait for.
  *
- * It needs no change to the tracked skill tooling either:
- * `.claude/skills/jira-scope/jira-cache.mjs` hardcodes `<git toplevel>/tmp/<KEY>` with no
- * configuration, but only ever does `mkdirSync(..., {recursive: true})` on it, which follows
- * a symlink.
+ * It needs no change to the tracked skill tooling either: the tracker skill hardcodes
+ * `<git toplevel>/tmp/<KEY>` with no configuration and `mkdirSync`s it, which follows a symlink,
+ * and finds the shared record store by reading where the clone's other `tmp/` links point.
  */
 
 export const cloneTmpPath = (clone: Clone): string => join(clone.path, 'tmp');
 
-/** Named from the path itself, so the two can never say different things. */
 /** Derived from the path, so the name and the place it names cannot disagree. */
 export const jiraTicketsDirname = (hangar: Hangar): string => basename(hangar.paths.jiraTickets);
 
@@ -43,6 +41,30 @@ const lstatOrUndefined = (path: string): ReturnType<typeof lstatSync> | undefine
 };
 
 export const isPidFile = (name: string): boolean => name.endsWith('.pid');
+
+/**
+ * Claude Code's own temp root entries: `claude-<uid>/` and `cc-socks/`.
+ *
+ * A clone that points `CLAUDE_CODE_TMPDIR` at its `tmp/` gets both created directly in it, and
+ * Claude Code refuses to start once either has become a symlink ("may be an attacker-planted
+ * symlink"). Sharing them is therefore never a cache hit, only a fleet that will not start -- and
+ * a session whose temp root is the bare `tmp/` rather than a dot-named directory inside it puts
+ * both where `tmp merge` would otherwise adopt them.
+ */
+export const isClaudeCodeTmpRoot = (name: string): boolean =>
+  name === 'cc-socks' || /^claude-\d+$/.test(name);
+
+/**
+ * An entry no clone shares, decided by its NAME alone, so the store and the clone side cannot
+ * disagree: dotfiles, PID files, Claude Code's temp roots, and a `_<clone>/` PID directory under
+ * any clone's name -- the store cannot ask which clone it came from, and every one of them is
+ * somebody's private state.
+ */
+export const isNeverSharedName = (hangar: Hangar, name: string): boolean =>
+  name.startsWith('.') ||
+  isPidFile(name) ||
+  isClaudeCodeTmpRoot(name) ||
+  (name.startsWith('_') && cloneDirRe(hangar).test(name.slice(1)));
 
 /**
  * A REAL directory holding at least one file, all of them PID files.
@@ -96,7 +118,7 @@ const holdsOnlyPidFiles = (dir: string): boolean => {
  * neither is worth carrying into the store or linking back out of it.
  */
 export const isPrivateTmpEntry = (clone: Clone, name: string): boolean => {
-  if (name.startsWith('.') || isPidFile(name)) return true;
+  if (isNeverSharedName(clone.hangar, name)) return true;
   if (name === `_${clone.name}`) return true;
   // A directory holding nothing but PID files: `_<clone>/` under a name this fleet no longer
   // generates, or one left behind by a clone that has since been renumbered.
@@ -104,7 +126,7 @@ export const isPrivateTmpEntry = (clone: Clone, name: string): boolean => {
 };
 
 /**
- * The store's entries worth linking into a clone -- everything except dotfiles and PID files.
+ * The store's entries worth linking into a clone -- everything `isNeverSharedName` lets through.
  *
  * **`jira-tickets` is one of them, and writing through that link is the point.** The tracker
  * skill resolves the record store by looking for it beside the per-ticket directories, writes
@@ -114,7 +136,7 @@ export const isPrivateTmpEntry = (clone: Clone, name: string): boolean => {
  * already be the fleet's one copy, rather than something a later merge has to go and collect.
  */
 export const shareableStoreEntries = (hangar: Hangar, names: readonly string[]): string[] =>
-  names.filter((name) => !name.startsWith('.') && !isPidFile(name)).sort();
+  names.filter((name) => !isNeverSharedName(hangar, name)).sort();
 
 export const storeEntries = (hangar: Hangar): string[] => {
   try {
@@ -150,6 +172,29 @@ export const linkStoreEntriesInto = (
     linked.push(name);
   }
   return { linked, taken };
+};
+
+/**
+ * The entries of a clone's `tmp/` that exist nowhere else: real files and directories the store
+ * would take, which `tmp merge` has not moved yet. A real `jira-tickets` is one of them -- a
+ * private record store holding records the fleet's may lack.
+ *
+ * Everything shareable lives in the store and the clone holds only links to it, so deleting a
+ * clone loses nothing -- except for these, written in a session that never reached its
+ * `SessionEnd`, or since the last merge.
+ */
+export const unsharedTmpEntries = (clone: Clone): string[] => {
+  const tmp = cloneTmpPath(clone);
+  let names: string[];
+  try {
+    names = readdirSync(tmp);
+  } catch {
+    return [];
+  }
+  return names
+    .filter((name) => name !== '.DS_Store' && !isPrivateTmpEntry(clone, name))
+    .filter((name) => lstatOrUndefined(join(tmp, name))?.isSymbolicLink() === false)
+    .sort();
 };
 
 /** Where a `tmp/` entry points, or undefined when it is not a symlink. */

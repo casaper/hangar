@@ -1,7 +1,7 @@
 # The shared `tmp/` store, the Jira record store and the cache hook
 
-`app/src/commands/tmp.ts` (607), `jira-records.ts` (373), `dedupe.ts` (311), `adopt.ts` (162) and
-`commands/jira.ts` (432). Also covers `plans collect`, which shares the never-overwrite rules.
+`app/src/commands/tmp.ts`, `tmp.ts`, `jira-records.ts`, `dedupe.ts`, `adopt.ts` and
+`commands/jira.ts`. Also covers `plans collect`, which shares the never-overwrite rules.
 
 - **`hangar plans collect` and `tmp merge` move files between the clones and the fleet root.**
   Both are idempotent and neither ever overwrites: byte-identical copies collapse to one, anything
@@ -34,13 +34,13 @@
   re-fetch in a sibling and never a wrong answer — `jira hook` reads `fetched_at:` out of the file
   and refuses to hand back anything older than the copy the clone already holds.
 
-## Both hooks are on the exit path, and the exit is as slow as the slowest
+## The SessionEnd hooks are on the exit path, and the exit is as slow as the slowest
 
-`tmp merge --quiet` and `plans collect --quiet` are two SessionEnd hooks in every clone, and
-Claude Code runs the hooks for one event in parallel and waits for all of them before the session
-terminates. So a developer's wait on `exit` is whichever of the two is slower, and neither may be
-deferred or backgrounded to fix that: the whole point of collecting at SessionEnd is that it is
-the first moment nothing can rewrite a plan any more.
+`tmp merge --quiet`, `plans collect --quiet` and `scrub --quiet --recent` are SessionEnd hooks in
+every clone, and Claude Code runs the hooks for one event in parallel and waits for all of them
+before the session terminates. So a developer's wait on `exit` is whichever of them is slowest,
+and none may be deferred or backgrounded to fix that: the whole point of collecting at SessionEnd
+is that it is the first moment nothing can rewrite a plan any more.
 
 Three things here are shaped by that, and each guards against the same mistake — answering a
 bounded question by traversing something unbounded. Together they are the difference between a
@@ -58,7 +58,7 @@ half-minute exit and a one-second one, at this fleet's sizes.
   one outright and returns nothing, and nothing here distinguishes "matched nothing" from "could
   not run" — so on a machine without `rg` a non-capturing group would silently skip every file it
   was asked about.
-- **`isPrivateTmpEntry` does not follow a symlink.** It asks whether a clone's `tmp/` entry is a
+- **`holdsOnlyPidFiles` (behind `isPrivateTmpEntry`) does not follow a symlink.** It asks whether a clone's `tmp/` entry is a
   directory of nothing but PID files, and nearly every entry there is a symlink into the store —
   so a `stat` walk descended each one through the whole shared cache, once per entry per clone.
   At a 59,000-file store that was 7.8s of the 15s `tmp merge` took. A symlink is never the clone's
@@ -105,6 +105,29 @@ points where it belongs is left alone rather than rebuilt. It shares everything 
 and dotfiles — a **blocklist**, so a file a skill starts caching tomorrow is shared without
 anyone editing a table. `-n` previews, and names any entry two clones both offer, since which of
 the two wins is decided from what is on disk and a dry run has moved nothing.
+
+**What is never shared is one name-only predicate, `isNeverSharedName`, asked on both sides** —
+when a clone's entry would be adopted and when a store entry would be linked out. Dotfiles, PID
+files, `_<clone>/` PID directories and Claude Code's own temp roots (`claude-<uid>/`,
+`cc-socks/`). One predicate because two disagree silently: a store side refusing only dotfiles
+and PID files links a `claude-501/` that reached the store — from a session whose
+`CLAUDE_CODE_TMPDIR` was the bare `tmp/` rather than the dot-named `tmp/.claude-tmp` — into every
+clone, the one shape that stops Claude Code from starting there ("may be an attacker-planted
+symlink"). A clone's link to a store entry the predicate refuses is removed by
+the clone pass, since pass 2b never makes it and nothing else would. `test/tmp-entries.test.ts`
+holds the two sides to the same answer.
+
+**`additionalDirectories` is what keeps the links from prompting.** Claude Code checks a write
+against the resolved path, so creating `tmp/<KEY>/notes.md` through the link is a write outside
+the project, asked about even in `acceptEdits`. Measured with `claude -p --permission-mode
+acceptEdits` against a project whose `tmp/x` linked outside it: refused ("`tmp/x` is a symlink
+to … outside the allowed working directories") without the key, written with it.
+`sharedTmpDirectory` is part of the derived settings half, held by `doctor`'s
+`settings.local.json` row.
+
+**`remove-clone --delete` refuses while a clone's `tmp/` holds real shareable entries**
+(`unsharedTmpEntries`). `tmp/` is ignored, so the git guards cannot see it, and a session that
+never reached its `SessionEnd` leaves its new entries there as the only copies.
 
 **One ticket is reached under several names, and every one of them points at one file.** The
 tracker skill gives a directory only to the ticket the user asked about, so a ticket reached as a

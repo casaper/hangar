@@ -58,8 +58,9 @@ export type HangarPaths = {
   readonly plans: string;
   readonly tmp: string;
   /**
-   * One record per tracker ticket. Deliberately NOT linked into the clones like the other store
-   * entries: no skill owns this path, and a symlink in a clone would invite writing into it.
+   * One record per tracker ticket, linked into every clone like the other store entries. The
+   * tracker skill writes each record through that link, so a record written in a clone already
+   * is the fleet's one copy.
    */
   readonly jiraTickets: string;
   /**

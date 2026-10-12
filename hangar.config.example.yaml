@@ -227,7 +227,7 @@ tracker:
 
   cache:
     # How long a fetched ticket is served from the store instead of being re-fetched.
-    # Default 60. `0` disables the freshness window without disabling the store.
+    # Default 60. `0` turns the cache hook off: every fetch goes to the tracker again.
     ttlMinutes: 60
     # Set this variable in front of a command to bypass the cache for that one run. An env var
     # and not a flag, because the repo's own sync script dies on an unknown flag.
@@ -237,8 +237,8 @@ tracker:
   # Repo-relative paths to the repo's OWN scripts, and deliberately so. The namer is the
   # tracked, branch-versioned authority on cache filenames, so Hangar ASKS it rather than
   # reimplementing the naming -- an untracked copy drifts the first time a branch changes a
-  # relation slug. Omit both for a repo with no such scripts; the cache then keys on the plain
-  # issue key.
+  # relation slug. The cache hook needs both; omit them for a repo with no such scripts, and it
+  # serves nothing and lets every fetch through.
   syncScript: .claude/skills/jira-ticket-sync/sync.mjs
   namerScript: .claude/skills/jira-scope/jira-cache.mjs
 

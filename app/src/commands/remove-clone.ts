@@ -10,6 +10,7 @@ import { tildify } from '../user-paths.ts';
 import { claudeSessionsIn, runningServersIn } from '../procs.ts';
 import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
 import { coloursSync } from './colours.ts';
+import { unsharedTmpEntries } from '../tmp.ts';
 import { tmuxServer, tmuxSocketName } from '../tmux.ts';
 import type { Hangar } from '../hangar.ts';
 
@@ -77,6 +78,15 @@ const dataGuards = (clone: Clone): Guard[] => {
   const stash = gitTry(clone.path, ['stash', 'list']);
   if (stash !== undefined && stash !== '') {
     found.push({ message: `${stash.split('\n').length} stash entr(ies)` });
+  }
+  // Ignored, so `syncState` cannot see it -- and the store is where the fleet expects to find it.
+  const unshared = unsharedTmpEntries(clone);
+  if (unshared.length > 0) {
+    const shown = unshared.slice(0, 5).join(', ');
+    const more = unshared.length > 5 ? `, … ${String(unshared.length - 5)} more` : '';
+    found.push({
+      message: `${String(unshared.length)} tmp/ entr(ies) not in the shared store yet (${shown}${more}) — run \`hangar tmp merge\` first`,
+    });
   }
   return found;
 };

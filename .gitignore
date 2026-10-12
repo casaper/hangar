@@ -27,8 +27,9 @@ hangar.config.yaml
 #   plans/ -- the plan archive. `plansDirectory` must resolve INSIDE the project root (Claude
 #             Code follows symlinks and rejects an escape), so each clone keeps its own real
 #             .claude/plans and `hangar plans collect` moves finished plans in here.
-#   tmp/   -- the shared per-ticket Jira cache and per-clone scratch. Each clone's `tmp` is a
-#             symlink to it. Holds Jira attachments and live PID files; never committable.
+#   tmp/   -- the shared store: the per-ticket Jira cache and whatever else the clones cache.
+#             Each clone keeps a real `tmp/` with one symlink per shared entry, and its PID
+#             files stay there. Holds Jira attachments; never committable.
 /plans/
 # `/tmp/*` rather than `/tmp/`: git will not descend into an excluded DIRECTORY, so a `!` line
 # for one file inside it matches nothing. The `*` form ignores every entry just as before and

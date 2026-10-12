@@ -21,8 +21,9 @@ import { linkTargetOf } from '../tmp.ts';
  *
  * `jira-ticket-sync` re-fetches a ticket and its whole neighbourhood on every run, and the
  * record store already holds all of it as one file per ticket. This reads the Bash command
- * Claude Code is about to run; when the store can satisfy it in full, it hard-links every file
- * that run would have produced and DENIES the command, telling the agent what it got instead.
+ * Claude Code is about to run; when the store can satisfy it in full, it links every file that
+ * run would have produced to its store record and DENIES the command, telling the agent what it
+ * got instead.
  *
  * It lives here rather than in a clone for the reason the fleet exists: a clone's `.claude/` is
  * shared with every other contributor and must work without this parent, so the hook is wired
@@ -261,7 +262,7 @@ type Plan = {
    *
    * This is the case immediately after any real fetch: `sync.mjs` replaces the inode, so the
    * clone holds the fresh copy and the store still holds the previous one until the next
-   * `tmp merge`. Linking then would hard-link the OLDER record over the newer file and report
+   * `tmp merge`. Linking then would point the newer file at the OLDER record and report
    * it as cached -- handing the agent a worse copy than it already had, which is the one
    * outcome this hook must never produce. The run is still satisfied: the file that run would
    * have written is present and fresh, just not by way of the store.

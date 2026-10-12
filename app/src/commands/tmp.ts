@@ -242,7 +242,16 @@ const adoptCloneEntries = (
       if (!dryRun) rmSync(path);
       continue;
     }
-    if (isPrivateTmpEntry(clone, entry)) continue;
+    if (isPrivateTmpEntry(clone, entry)) {
+      // Private by name, yet a link into the store -- a link pass 2b never makes, which the
+      // branch below never sees, so nothing else would remove it. For Claude Code's own temp
+      // roots a link is what stops a session starting here.
+      if (linkTargetOf(path) === join(hangar.paths.tmp, entry)) {
+        note(pc.dim(`${entry}: link to a store entry that is never shared, removing`));
+        if (!dryRun) rmSync(path);
+      }
+      continue;
+    }
 
     // Handled here rather than by `adoptInto`, whose symlink branch decides by RESOLVING the
     // target: a link into a store entry that pass 2a could not remove resolves to stale content
@@ -367,6 +376,12 @@ const runMerge = (hangar: Hangar, dryRun: boolean): void => {
   );
   note('PID files stay in the clone that wrote them — they are never moved, linked or read.');
   if (!dryRun) mkdirSync(hangar.paths.tmp, { recursive: true });
+  // The clone pass removes its own; the store's is nobody's, so nothing else ever would.
+  const storeJunk = join(hangar.paths.tmp, '.DS_Store');
+  if (existsSync(storeJunk)) {
+    note(pc.dim(`${tildify(storeJunk)}: junk, removing`));
+    if (!dryRun) rmSync(storeJunk);
+  }
 
   const counts: Counts = new Map();
   // What the store will hold: what it holds now, plus everything the passes below move into
@@ -681,10 +696,8 @@ const ticketRecordPaths = (hangar: Hangar): string[] => {
  *
  * That is a deliberate override of the `jira-scope` skill's "the duplication between the two is
  * intended … Never dedupe them", asked for explicitly: one file per ticket, the newest fetch.
- * What it costs is worth knowing — when the winner is a relation copy, the ticket's own file
- * inherits that copy's `relation:`/`relatedTo:` frontmatter, which then reads as though the
- * ticket's own record hangs off the other ticket. It is said out loud when it happens, and `-n`
- * shows every choice before any of it is done.
+ * Ticket records are excluded (see the filter below), so what this decides is the rest of the
+ * per-ticket cache, and `-n` shows every choice before any of it is done.
  *
  * Markdown only. A differing pair of ASSETS under one name is a re-download that went wrong,
  * not a fresher rendering, and picking a winner there could keep a truncated file.
