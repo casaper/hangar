@@ -51,7 +51,7 @@ const windowMinutes = (opts: CollectOptions): number => {
   return Number.isNaN(parsed) ? 30 : parsed;
 };
 
-/** A plan tracked in git is not ours to move -- `~/.claude` is a symlink into a dotfiles repo. */
+/** A plan tracked in git is not ours to move -- a plan directory can sit inside a dotfiles repo. */
 const isTracked = (path: string): boolean =>
   run('git', ['-C', dirname(path), 'ls-files', '--error-unmatch', basename(path)]).ok;
 

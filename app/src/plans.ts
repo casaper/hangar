@@ -217,5 +217,10 @@ export const archiveNames = (hangar: Hangar): Set<string> => {
   }
 };
 
+/**
+ * `<plan>.from-<source>.md`, flat. A source is a clone name, a nested plan directory or
+ * `~/.claude/plans`, and the last two are paths: written in verbatim, a `/` makes the name a path
+ * under a directory that does not exist, so the move fails on every run and the plan stays put.
+ */
 export const conflictName = (name: string, source: string): string =>
-  `${basename(name, '.md')}.from-${source}.md`;
+  `${basename(name, '.md')}.from-${source.replaceAll('/', '-')}.md`;
