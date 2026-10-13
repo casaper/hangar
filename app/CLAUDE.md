@@ -319,6 +319,8 @@ The layout under `src/` is what `ls` shows; only what a listing cannot say is ke
 
 - **`cli.ts`** — every command, option and alias is registered here, plus the `preAction` config
   gate and the `configureHelp` that prints all of a command's aliases.
+  A name that must stay out of `--help` is a second `program.command(name, { hidden: true })`
+  registration (`claude` beside `up`), never an `.alias()`.
 - **`commands/dev.ts` and `commands/release.ts`** — `hangar dev golden`, the capture behind
   `pnpm golden`, and `hangar dev release`, the gates and preflight in front of semantic-release
   (`release/commits.ts` reads the range). **Both are hidden in `cli.ts`, and that is their interface
@@ -425,6 +427,9 @@ every `<thing>_preview` against the command it previews.
 - **Adding a command means adding an exposure AND a rule in `ops.settings.json`** — `ask` for
   anything that acts unless it says `preapproved: true`. `test/mcp-tools.test.ts` holds the two
   together, and `hangar mcp` names any command it found no tool for on stderr.
+- **A command operator mode must not run needs a `Bash(hangar <name>)` + `Bash(hangar <name>:*)`
+  deny pair for EVERY name it answers to, hidden ones included** — a rule matches only the start
+  of the string, so renaming `up` without its pair reopens the escalation with every gate green.
 - **`exec` is never exposed, and no agent may run it at all.** `bin/hangar-exec-guard` refuses it
   from a `PreToolUse` hook however it is spelled; the `Bash(hangar exec)` deny entries are the
   weaker half, because a rule matches only the START of a command string.
