@@ -233,6 +233,13 @@ separate `<thing>_preview`.
   It **refuses** to close the clone whose own session you typed the command in — that kills the
   terminal mid-command — and `--force` is the way past. Everything else worth knowing (a live
   session, a dev server that dies with it) is named in one confirmation, which `-y` skips.
+- **`hangar down` takes the whole hangar down, and is the user's to type in the shell tab.**
+  Every clone is closed exactly as `close --all` closes it, then the hangar-root tmux server is
+  killed — operator, developer and shell tab, so the session you are reading this in ends with
+  it. That kill is the LAST thing it does, so typed in the shell tab it finishes everything else
+  first. One confirmation names every live session and dev server; `-n` shows the plan,
+  `--keep-clones` stops only the root window. It refuses from inside any Claude Code session and
+  from inside a clone's own tmux session — `hangar close` is the command there.
 - **`hangar reload <clone>` puts an open clone back on current config without closing it**, and
   it is the answer for the settings `colours sync` cannot reach: `source-file` re-executes the
   whole conf on the live server, SERVER options included. `extended-keys` and `focus-events` are

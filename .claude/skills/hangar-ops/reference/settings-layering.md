@@ -50,7 +50,7 @@ the writer.
 **The `mcp__hangar__*` tools are the exception, and only inside a mode session.** An MCP rule has
 no arguments to widen across, so `doctor` and `doctor_fix` are two names with two rules — which is
 why `.claude/modes/ops.settings.json` can pre-approve every report and every preview while every
-acting tool asks. That file, and `.claude/modes/mcp.json` which `hangar claude` passes as
+acting tool asks. That file, and `.claude/modes/mcp.json` which `hangar up` passes as
 `--mcp-config`, are the only place any of it lives; this file's three settings files carry none of
 it, and a session started as a bare `claude` gets neither. The shell rule above is unchanged for
 everyone.

@@ -410,7 +410,7 @@ layer, the colour hook, the bar, the contrast proof and the pull-request cache.
 
 ## What operator mode reaches instead of a shell
 
-`hangar mcp` serves one MCP tool per command over stdio, and `hangar claude` hands both modes
+`hangar mcp` serves one MCP tool per command over stdio, and `hangar up` hands both modes
 `.claude/modes/mcp.json` as `--mcp-config`. **It exists for a permission reason:** an MCP rule has
 no arguments to widen across, so `doctor` and `doctor_fix` are two names with two rules, and so is
 every `<thing>_preview` against the command it previews.
@@ -483,7 +483,7 @@ Not tracked, and what writes each:
   `hangar colours sync`
 - `.hangar/colour-assignments.json` — **INPUT** — `hangar colours change`, nothing else
 - `.hangar/port-pins.json` — **INPUT** — `hangar ports pin` / `unpin`, nothing else
-- `.hangar/claude-tmux.conf` — `hangar claude`, every run
+- `.hangar/claude-tmux.conf` — `hangar up`, every run
 
 Tracked: this file, the root `CLAUDE.md`, `bin/**`, `.local/bin/**`, `app/**`, `.envrc`,
 `.envrc.hangar`, `.nvmrc`,
@@ -498,7 +498,7 @@ Five of those entries are worth a sentence each:
 
 - **`.hangar/claude-tmux.conf` gets no `doctor` row and no `.gitignore` line of its own**, and
   the reason is which command owns it. `colours sync` writes `clone-tmux.conf` and `doctor`
-  byte-compares it, because nothing else would notice it going stale. `hangar claude` rewrites
+  byte-compares it, because nothing else would notice it going stale. `hangar up` rewrites
   this one immediately before it starts the server that reads it, so stale is not a state it can
   reach — and `.hangar/` is already gitignored. It is also why `.local/bin/claude` is TRACKED
   rather than generated: the shim holds no machine-specific value, so there is nothing to
@@ -577,7 +577,8 @@ More root files are hand-maintained and belong to this package rather than to th
   `resolveBrewPrefix`; `hangar-internals/reference/root-tools.md` has why.
 - **`.local/bin/claude`, `bin/hangar-statusline` and `bin/hangar-exec-guard`, plus the six files in `.claude/modes/`** —
   `ops.md`, `dev.md`, a `*.settings.json` beside each, the shared `mcp.json`, and `statusline.sh`.
-  **`hangar claude` is the one way into either mode** (`src/commands/claude.ts`), and `dev`'s
+  **`hangar up` is the one way into either mode** (`src/commands/up.ts`; `hangar claude` is
+  its hidden second spelling, and `hangar down` in `down.ts` the way out), and `dev`'s
   working directory is `app/` so that THIS file loads from its first turn — which is also why
   `app/.claude/settings.json` exists, for `plansDirectory`.
   - **The shim cannot move into `bin/`**: every clone puts `bin/` on PATH, so a `claude` there
@@ -590,7 +591,7 @@ More root files are hand-maintained and belong to this package rather than to th
     `test/mcp-tools.test.ts` rather than by a writer, so operator mode cannot rewrite its own
     permission list.
   - **Operator mode is denied writes to `app/**`, `.claude/skills/**` and `.claude/modes/**`, and
-    `hangar claude` itself**, so developer mode is the only one that can improve its instructions.
+    `hangar up`/`down` themselves**, so developer mode is the only one that can improve its instructions.
   - **The rest is in `hangar-internals/reference/modes.md`** — the shim's PATH rules, the badge,
     the socket and singleton rules, and the probes that answered wrongly; `doctor.md` has the
     `plansDirectory` measurement.

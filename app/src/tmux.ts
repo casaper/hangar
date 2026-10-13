@@ -58,7 +58,7 @@ export const tmuxSocketName = (hangarId: string): string => `hangar-${hangarId}`
 
 /**
  * The socket the two hangar-ROOT sessions live on -- a second server, not a session on the one
- * above, and `hangar claude` is its only writer.
+ * above, and `hangar up` is its only writer.
  *
  * The concrete reason it is separate: every session on the clone socket is expected to name a
  * clone. `staleSessions` walks that server for sessions whose `@hangar_clone` matches no live

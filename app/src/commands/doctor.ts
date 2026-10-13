@@ -913,7 +913,7 @@ const reportTmux = (hangar: Hangar): readonly string[] => {
    * every failure in it is `exit 0` with nothing printed. A bar that has simply stopped naming
    * the branch reads as tmux being tmux.
    *
-   * (`.hangar/claude-tmux.conf` deliberately has no row anywhere: `hangar claude` rewrites it
+   * (`.hangar/claude-tmux.conf` deliberately has no row anywhere: `hangar up` rewrites it
    * immediately before starting the server that reads it, so stale is not a state it reaches.)
    */
   const generated: readonly (readonly [Artifact, string])[] = [

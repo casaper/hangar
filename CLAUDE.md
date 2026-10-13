@@ -110,9 +110,9 @@ skills load only as far as the repository root, and each clone is its own repo.
 nothing". A clone session is welcome to all of them, and `plans collect` and `tmp merge --quiet`
 already run there from `SessionEnd` hooks. **Every other command acts, and is the user's, from
 the hangar root** — among them `sync` (under any of its three names), `checkout-default`, `open`,
-`jira-plan`, `edit`, `close`, `reload`, `add-clone`, `install`, `remove-clone`, `exec`,
-`servers start`, `servers kill`, `bookmarks sync`, `colours change`, `ports pin`, `ports unpin` and
-`doctor --fix`.
+`jira-plan`, `edit`, `close`, `reload`, `down`, `add-clone`, `install`, `remove-clone`, `exec`,
+`servers start`, `servers kill`, `bookmarks sync`, `colours change`, `ports pin`, `ports unpin`
+and `doctor --fix`.
 
 **A commit gate can arm itself in your clone without you running anything.** `hangar jira-plan`
 starts a ticket's agent on the default branch with the gate ARMED for that ticket, and the gate
@@ -130,7 +130,9 @@ them the user's rather than yours. `close` kills the clone's whole tmux session 
 it is the one the command is running inside; `reload` restarts each idle shell and brings Claude
 Code back under `--resume`, and skips the one pane the command is running in rather than killing
 itself. Neither touches git state, and neither is a reason to reach for `-n` and act on the
-result: naming your own index still ends the session next door to you.
+result: naming your own index still ends the session next door to you. **`hangar down` ends
+every one of them at once**, every clone and both hangar-root sessions, and refuses from inside
+any Claude Code session.
 
 **`hangar exec` runs an arbitrary shell snippet in every clone you name, in that clone's root.**
 It is the fastest way to break the rule below: one `--all` reaches every sibling's working tree at

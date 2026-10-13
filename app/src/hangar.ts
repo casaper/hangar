@@ -87,7 +87,7 @@ export type HangarPaths = {
    *
    * Under `.hangar/` and NOT at the root beside `clone-tmux.conf`, and the difference is which
    * command owns it. `colours sync` writes that one and `doctor` byte-compares it, because
-   * nothing else would notice it going stale. This one is rewritten by `hangar claude` -- the
+   * nothing else would notice it going stale. This one is rewritten by `hangar up` -- the
    * only command that reads it -- immediately before the server starts, so staleness is not a
    * state it can be in. Nothing to check, and nothing to gitignore: `.hangar/` already is.
    */

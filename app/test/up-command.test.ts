@@ -4,17 +4,17 @@ import { test } from 'node:test';
 
 import {
   claudeArgvFor,
-  claudeArgvFromProcess,
+  upArgvFromProcess,
   claudeHelpWith,
   isMode,
   resolveClaudeBinary,
   splitClaudeArgv,
   TAB_WINDOWS,
-} from '../src/commands/claude.ts';
+} from '../src/commands/up.ts';
 import { syntheticHangar } from './fixture.ts';
 
 /**
- * `hangar claude`'s four pure builders.
+ * `hangar up`'s four pure builders.
  *
  * **A golden capture cannot reach any of this**, which is the whole reason the file exists. The
  * command's output is a live tmux server and an attached terminal; what it gets RIGHT or wrong
@@ -109,18 +109,21 @@ test('hangar’s own flags are consumed and never forwarded', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// claudeArgvFromProcess
+// upArgvFromProcess
 // ---------------------------------------------------------------------------------------------
 
 test('the subcommand boundary survives a hangar directory named claude', () => {
   // `--hangar <path>` is the only global option taking a value, so its value is the one token
   // that could be mistaken for the subcommand. Skipping it is what makes this unambiguous.
-  assert.deepEqual(claudeArgvFromProcess(['--hangar', 'claude', 'claude', '-m', 'dev']), [
-    '-m',
-    'dev',
-  ]);
-  assert.deepEqual(claudeArgvFromProcess(['claude']), []);
-  assert.deepEqual(claudeArgvFromProcess(['list']), []);
+  assert.deepEqual(upArgvFromProcess(['--hangar', 'claude', 'claude', '-m', 'dev']), ['-m', 'dev']);
+  assert.deepEqual(upArgvFromProcess(['claude']), []);
+  assert.deepEqual(upArgvFromProcess(['list']), []);
+});
+
+test('up and its hidden second spelling claude are the same boundary, and the first one wins', () => {
+  assert.deepEqual(upArgvFromProcess(['up', '-m', 'dev']), ['-m', 'dev']);
+  assert.deepEqual(upArgvFromProcess(['--hangar', 'up', 'up', 'up']), ['up']);
+  assert.deepEqual(upArgvFromProcess(['claude', 'up']), ['up']);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -248,7 +251,7 @@ test('a help page with no --model row still documents the flag, rather than fail
 });
 
 test('an empty help page is survivable, because it means claude --help itself failed', () => {
-  // This is also the answer when claude is not installed at all: `hangar claude --help` reports
+  // This is also the answer when claude is not installed at all: `hangar up --help` reports
   // ahead of the missing-binary refusal, precisely because that is when it is most wanted.
   const out = claudeHelpWith('');
   assert.match(out, /-m, --mode <ops\|dev>/);

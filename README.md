@@ -495,7 +495,10 @@ it selects the operator tab and says so.
 
 `claude` reaches this through `.local/bin/claude`, a two-line shim direnv puts on your PATH in the
 hangar root and nowhere else — **inside a clone, `claude` is the ordinary Claude Code binary**. The
-long spelling is `hangar claude`, and it works from anywhere in the hangar except a clone.
+long spelling is `hangar up`, and it works from anywhere in the hangar except a clone.
+`hangar down` is the other end: it closes every clone the way `hangar close --all` does, then
+ends all three tabs, and leaves the terminal you typed `hangar up` in as it was before.
+`--keep-clones` stops only the three tabs.
 
 | | |
 | --- | --- |
@@ -518,7 +521,7 @@ flags up rather than recalling them.
 `.claude/modes/**` are denied by that session's permission rules — including the file holding its own
 instructions, so it cannot rewrite its own remit. Reading all of them is allowed and is usually the
 right answer. If a task genuinely needs the CLI changed, it will name the file and stop — it is
-also denied `hangar claude`, so it cannot open the developer tab for you. That tab is already the
+also denied `hangar up`, so it cannot open the developer tab for you. That tab is already the
 next window along.
 
 **Developer mode is for changing the `hangar` CLI itself** — the TypeScript in `app/src/**`, the

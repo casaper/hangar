@@ -83,8 +83,9 @@ writes a cache file, so it acts; but the clone bar spawns exactly this, detached
 record passes `forge.prCacheTtlSeconds`, and asking you to approve what happens unattended twenty
 times a minute would be theatre. The next redraw would rewrite what it wrote.
 
-**Four commands have no tool, and none of them is an oversight.** `claude` refuses whenever
+**Five commands have no tool, and none of them is an oversight.** `up` refuses whenever
 `$CLAUDECODE` is set, so the tool could only ever fail — and it is the escalation boundary.
+`down` refuses there too, and would end your own session with every other one.
 `dev release` pushes and cuts a version, and its confirmation fails closed, so the only form that
 would work as a tool call is the one with `-y`. `dev golden` writes a partial capture that would
 read as the gate without being it. `jira hook` reads a `PreToolUse` payload from stdin and has
@@ -127,17 +128,24 @@ rule that cannot tell it from the report.
 | `doctor` | `[clone]` (defaults to every clone) | `-a, --all` · `--fix` | report bare; **act [user]** with `--fix` |
 | `setup` | — | `-y, --yes` · `--origin <url>` · `--id <name>` · `--preset <name>` · `--force` · `-n, --dry-run` | act |
 | `teach-rg` | `<clone>` | `-n, --dry-run` · `-y, --yes` | act |
-| `claude` | `[claude-args...]` (passed through untouched) | `-m, --mode <ops\|dev>` (default `ops`) · `--replace` · `--yes` · `--dry-run` | **DENIED to you** — see below |
+| `up` (hidden alias `claude`) | `[claude-args...]` (passed through untouched) | `-m, --mode <ops\|dev>` (default `ops`) · `--replace` · `--yes` · `--dry-run` | **DENIED to you** — see below |
+| `down` | — | `--keep-clones` · `--no-editor` · `-y, --yes` · `-n, --dry-run` | **DENIED to you** — ends every clone, then this window |
 | `mcp` | — | — | serves the tools; the server itself touches nothing, each call spawns `bin/hangar` |
 
-**`claude` is the one command in this table you cannot run**, and the denial is deliberate rather
-than an oversight in the permission list. It opens the two hangar-root sessions as tabs of one
+**`up` and `down` are the two commands in this table you cannot run**, and the denial is
+deliberate rather than an oversight in the permission list. It opens the two hangar-root sessions as tabs of one
 tmux window — plus a third tab that is only a shell — and it passes every other argument straight
-through, so `hangar claude -m dev -p '…'`
+through, so `hangar up -m dev -p '…'`
 would start a session under developer mode's rules, with the writes to `app/**` that this mode is
-denied. `ops.settings.json` denies both `Bash(hangar claude)` and `Bash(hangar claude:*)`, and the
-command refuses a second time on its own when `$CLAUDECODE` is set, so it will not run from here
-even if a settings file says otherwise.
+denied. `ops.settings.json` denies `Bash(hangar up)` and `Bash(hangar up:*)`, the same pair for
+its hidden second spelling `claude`, and the same pair for `down`; and each command refuses a second
+time on its own when `$CLAUDECODE` is set, so neither will run from here even if a settings file
+says otherwise.
+
+`down` is the other end: every clone closed exactly as `close --all` closes it, then this tmux
+server killed, operator, developer and shell tab together — LAST, because the shell tab is where it
+is typed. One confirmation names every live session and dev server. Asked to take the hangar down,
+name `hangar down` (or `hangar down -n` to see what it would do) and let the user run it.
 
 What that means in practice: when a task needs the CLI changed, **name the file and stop** — do
 not try to open the developer tab. It is already the next window of the session you are in, and
@@ -148,7 +156,7 @@ and everything but hangar's four flags belongs to claude. This is the second exc
 `-n` in this CLI is a dry run", after `resume`'s `--limit`.
 
 **`mcp` is where the tools in the mapping above come from, and you will not normally type it.**
-`hangar claude` names `.claude/modes/mcp.json` as `--mcp-config`, so a mode session starts one of
+`hangar up` names `.claude/modes/mcp.json` as `--mcp-config`, so a mode session starts one of
 these for itself and speaks the protocol to it on stdin and stdout. Run by hand it looks hung: with
 no client it waits, which is correct rather than a fault.
 

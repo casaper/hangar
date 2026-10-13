@@ -408,7 +408,7 @@ export const EXPOSURES: readonly Exposure[] = [
   /*
    * `setup` is exposed rather than left out, and that CLOSES a gap rather than opening one.
    * `modes.md` records it as escalation-adjacent and unlisted: operator mode denies
-   * `Bash(hangar claude)` and `Bash(hangar dev)` but has never named `hangar setup`, so
+   * `Bash(hangar up)` and `Bash(hangar dev)` but has never named `hangar setup`, so
    * `setup --force` sits behind one generic prompt today. As a tool it has a rule of its own.
    */
   { name: 'setup', path: ['setup'], hides: [PREVIEW], acts: true },
@@ -597,11 +597,14 @@ export const argvFor = (
  * Leaf commands with no tool, and the reason each one earns its place here.
  *
  * The bar is high: everything else in this CLI is a tool, `setup` included -- exposed precisely
- * BECAUSE it was escalation-adjacent and unnamed. These six are not omissions.
+ * BECAUSE it was escalation-adjacent and unnamed. None of these is an omission.
  *
- * - **`claude`** refuses whenever `$CLAUDECODE` is set, which is every tool call there will ever
- *   be, so the tool could only ever fail -- and it is the escalation boundary the mode pair
- *   exists for. A tool that cannot work, on the one command that must not, is worse than none.
+ * - **`up`** (and `claude`, its hidden second spelling) refuses whenever `$CLAUDECODE` is set,
+ *   which is every tool call there will ever be, so the tool could only ever fail -- and it is
+ *   the escalation boundary the mode pair exists for. A tool that cannot work, on the one
+ *   command that must not, is worse than none.
+ * - **`down`** refuses under `$CLAUDECODE` for the same reason, and would end the session that
+ *   called it along with every other one in the hangar.
  * - **`dev release`** pushes to origin and cuts a version. Its confirmation reads `/dev/tty` and
  *   fails closed, so the ONLY way it completes as a tool call is with `-y`, which means exposing
  *   it is exposing the dangerous form of it. It stays a thing a person types.
@@ -612,14 +615,16 @@ export const argvFor = (
  * - **`jira hook`** reads a `PreToolUse` payload from stdin and fails open when there is none, so
  *   a tool call reaches it with nothing to do and it correctly says nothing.
  *
- * `exec` is the fifth, excluded for a permission reason rather than a mechanical one: everything
- * after its `--` is a shell snippet, so a schema could describe it and never constrain it, and one
- * `--all` reaches every clone's working tree at once. The Bash path is denied too, by a hook.
+ * `exec` is excluded for a permission reason rather than a mechanical one: everything after its
+ * `--` is a shell snippet, so a schema could describe it and never constrain it, and one `--all`
+ * reaches every clone's working tree at once. The Bash path is denied too, by a hook.
  *
- * `mcp` is the sixth and is this server, which has no business calling itself.
+ * `mcp` is this server, which has no business calling itself.
  */
 export const NOT_EXPOSED: readonly string[] = [
+  'up',
   'claude',
+  'down',
   'exec',
   'dev golden',
   'dev release',

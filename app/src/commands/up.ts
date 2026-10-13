@@ -16,7 +16,7 @@ import { claudeSocketName, tmuxBinary, tmuxSocketOf } from '../tmux.ts';
 import { confirm, note, ok, step, warn } from '../ui.ts';
 
 /**
- * `hangar claude` -- both hangar-root modes and a shell, in one tmux window, as three tabs.
+ * `hangar up` -- both hangar-root modes and a shell, in one tmux window, as three tabs.
  *
  * A hangar-root session is either driving the fleet or changing the CLI, and which one it is
  * decides its permissions and its remit. This command is the only way into either: it starts a
@@ -38,7 +38,7 @@ import { confirm, note, ok, step, warn } from '../ui.ts';
  * title and the `/resume` picker. Claude Code reads all three once, at startup.
  *
  * `--append-system-prompt-file` also turns the system-prompt SNAPSHOT off, which is what makes
- * `hangar claude --resume <id> -m ops` resume back INTO operator mode -- the remit is re-applied
+ * `hangar up --resume <id> -m ops` resume back INTO operator mode -- the remit is re-applied
  * on every launch rather than frozen into the conversation. A bare `claude --resume` of the same
  * session comes back with no mode at all, which is what the red `NO MODE` badge is for.
  *
@@ -137,7 +137,7 @@ const asMode = (value: string): Mode => {
 };
 
 /**
- * Split `hangar claude`'s own flags out of an argv that otherwise belongs to claude.
+ * Split `hangar up`'s own flags out of an argv that otherwise belongs to claude.
  *
  * Raw argv rather than commander, and that is not laziness. Commander with
  * `allowUnknownOption` cannot tell `--model sonnet` (an option and its value) from an option
@@ -203,22 +203,23 @@ export const splitClaudeArgv = (argv: readonly string[]): ClaudeInvocation => {
 };
 
 /**
- * The tokens that follow the `claude` subcommand, out of the raw process argv.
+ * The tokens that follow the `up` subcommand -- or its hidden alias `claude` -- out of the raw
+ * process argv.
  *
- * `process.argv` is `[node, cli.ts, ...global options..., 'claude', ...claude's own...]`. The
+ * `process.argv` is `[node, cli.ts, ...global options..., 'up', ...claude's own...]`. The
  * only global option taking a value is `--hangar <path>`, so a hangar directory actually NAMED
- * `claude` is the single thing that could be mistaken for the subcommand -- and skipping that
+ * `up` or `claude` is the single thing that could be mistaken for the subcommand -- and skipping that
  * option's value is what rules it out. `sync`'s `forcedStrategy` scans argv the same way and
  * stops at its own subcommand name for the same reason.
  */
-export const claudeArgvFromProcess = (argv: readonly string[]): string[] => {
+export const upArgvFromProcess = (argv: readonly string[]): string[] => {
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i] ?? '';
     if (token === '--hangar') {
       i += 1;
       continue;
     }
-    if (token === 'claude') return [...argv.slice(i + 1)];
+    if (token === 'up' || token === 'claude') return [...argv.slice(i + 1)];
   }
   return [];
 };
@@ -375,8 +376,8 @@ export const claudeHelpWith = (helpText: string): string => {
 // The half that touches a live server.
 // ---------------------------------------------------------------------------------------------
 
-const SESSION = 'claude';
-const TARGET = `=${SESSION}:`;
+export const SESSION = 'claude';
+export const TARGET = `=${SESSION}:`;
 /** U+001F, for the same reason `tmux.ts` uses it: no window name or mode can contain it. */
 const SEP = '\u001f';
 
@@ -386,14 +387,14 @@ const trimmed = (out: string): string[] =>
     .map((l) => l.trim())
     .filter((l) => l !== '');
 
-type WindowRow = {
+export type WindowRow = {
   readonly index: number;
   readonly mode: string | undefined;
   readonly shell: boolean;
   readonly pid: string;
 };
 
-type Server = {
+export type Server = {
   readonly socket: string;
   readonly tmux: (args: readonly string[], withConf?: boolean) => ReturnType<typeof run>;
   readonly running: () => boolean;
@@ -401,7 +402,7 @@ type Server = {
   readonly clientTtys: () => string[];
 };
 
-const server = (hangar: Hangar): Server => {
+export const server = (hangar: Hangar): Server => {
   const socket = claudeSocketName(hangar.id);
   const tmux = (args: readonly string[], withConf = false): ReturnType<typeof run> =>
     run(tmuxBinary(), [
@@ -455,7 +456,7 @@ const server = (hangar: Hangar): Server => {
 };
 
 /** How long a tab's claude has been up -- the fact `--replace` has to justify itself with. */
-const uptimeOf = (pid: string): string => {
+export const uptimeOf = (pid: string): string => {
   if (pid === '') return 'an unknown time';
   const res = run('ps', ['-p', pid, '-o', 'etime=']);
   const out = res.stdout.trim();
@@ -632,7 +633,7 @@ const reportPlan = (
  * A clone shell is not where this belongs, and the reason is not tidiness.
  *
  * `.local/bin` keeps a bare `claude` out of every clone, but `hangar` itself is on a clone's PATH
- * by design -- so `hangar claude` typed in a clone would still reach here and start a session
+ * by design -- so `hangar up` typed in a clone would still reach here and start a session
  * with fleet-wide reach from a directory that owns exactly one clone.
  */
 const refuseFromInsideAClone = (hangar: Hangar): void => {
@@ -641,7 +642,7 @@ const refuseFromInsideAClone = (hangar: Hangar): void => {
     const root = resolve(clone.path);
     if (cwd !== root && !cwd.startsWith(root + sep)) continue;
     throw new CliError(
-      `\`hangar claude\` belongs at the hangar root, and you are in ${clone.name}`,
+      `\`hangar up\` belongs at the hangar root, and you are in ${clone.name}`,
       `cd ${hangar.root} && claude`,
     );
   }
@@ -650,10 +651,10 @@ const refuseFromInsideAClone = (hangar: Hangar): void => {
 /**
  * The structural half of the escalation guard, which does not depend on a permission list.
  *
- * `.claude/modes/ops.settings.json` denies operator mode `Bash(hangar claude:*)`, because
- * `hangar claude -m dev -p '...'` would otherwise hand an operator session everything developer
+ * `.claude/modes/ops.settings.json` denies operator mode `Bash(hangar up:*)`, because
+ * `hangar up -m dev -p '...'` would otherwise hand an operator session everything developer
  * mode may do -- editing `app/**` included -- and the existing `Bash(hangar dev)` denial does
- * not match a `claude` subcommand. A deny list is a file somebody can edit; this is not.
+ * not match an `up` subcommand. A deny list is a file somebody can edit; this is not.
  *
  * `CLAUDECODE` is set in every tool subprocess, measured alongside `CLAUDE_CODE_ENTRYPOINT` and
  * `CLAUDE_CODE_SESSION_ID` -- and unlike `CLAUDE_PROJECT_DIR`, which is injected per hook. There
@@ -663,7 +664,7 @@ const refuseFromInsideASession = (): void => {
   if ((process.env['CLAUDECODE'] ?? '') === '') return;
   throw new CliError(
     'a hangar-root session cannot be started from inside a Claude Code session',
-    'run `hangar claude` from a terminal -- a session that could start one in another mode ' +
+    'run `hangar up` from a terminal -- a session that could start one in another mode ' +
       'would be a way around its own permissions.',
   );
 };
@@ -680,7 +681,7 @@ const refuseFromInsideASession = (): void => {
  * from inside its own pane.
  *
  * So this skips one call and refuses nothing. A refusal would have blocked
- * `hangar claude -m dev --replace` from the shell tab, which is where restarting a wedged tab is
+ * `hangar up -m dev --replace` from the shell tab, which is where restarting a wedged tab is
  * naturally typed, and would leave an exited tab unreachable without detaching first.
  *
  * The escalation guard is elsewhere and is unaffected: `refuseFromInsideASession` reads
@@ -692,9 +693,9 @@ const refuseFromInsideASession = (): void => {
 const alreadyInSession = (hangar: Hangar): boolean =>
   tmuxSocketOf(process.env['TMUX']) === claudeSocketName(hangar.id);
 
-export type ClaudeOptions = { readonly argv: readonly string[] };
+export type UpOptions = { readonly argv: readonly string[] };
 
-export const claude = (hangar: Hangar, opts: ClaudeOptions): void => {
+export const up = (hangar: Hangar, opts: UpOptions): void => {
   const inv = splitClaudeArgv(opts.argv);
   const binary = resolveClaudeBinary(process.env['PATH'], hangar.root);
 
@@ -737,7 +738,7 @@ export const claude = (hangar: Hangar, opts: ClaudeOptions): void => {
     throw new CliError(
       `the ${inv.mode} tab is already running claude, so it cannot take these arguments`,
       [
-        `${`hangar claude -m ${inv.mode}`.padEnd(22)}switch to that tab as it is`,
+        `${`hangar up -m ${inv.mode}`.padEnd(22)}switch to that tab as it is`,
         `${'--replace'.padEnd(22)}end that session and start this one in its place`,
         'or /exit in that tab and run this again, which keeps the arguments',
       ].join('\n'),

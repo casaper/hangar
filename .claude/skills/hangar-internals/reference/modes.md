@@ -1,7 +1,7 @@
-# Launch modes — `hangar claude`
+# Launch modes — `hangar up` and `hangar down`
 
 Two ways to start Claude Code in this hangar, differing in the instructions and the permission
-rules they load. **One command opens both**: `hangar claude` puts operator in tmux window 1 and
+rules they load. **One command opens both**: `hangar up` puts operator in tmux window 1 and
 developer in window 2 of one session, on a socket of its own, and attaches the terminal it was
 typed in. `-m dev` selects the other tab. From the hangar root a bare `claude` reaches it, through
 `.local/bin/claude`.
@@ -11,9 +11,10 @@ mode is a composed launch profile; a shell has none of its parts, so `Mode` stay
 shell` is an error, and `C-b 3` is how the tab is reached. The section below on the shell tab has
 the three reasons it is not in `MODE_COLOURS` and the one thing that would have bitten.
 
-`src/commands/claude.ts` is the command and `.claude/modes/` holds the five files it names — a
+`src/commands/up.ts` is the command and `.claude/modes/` holds the five files it names — a
 `.md` and a `.settings.json` per mode, plus the shared `mcp.json` — and `statusline.sh` beside
-them.
+them. `hangar claude` is the same command under a hidden second registration: hidden rather than
+an alias because `configureHelp` prints every alias. `src/commands/down.ts` is the other end, and has a section of its own below.
 
 ## What they are for
 
@@ -36,7 +37,7 @@ There is no mode feature. Each mode is `--settings <file>` plus `--append-system
 that `app/CLAUDE.md` is loaded from the first turn instead of lazily on first read beneath it.
 
 **`claudeArgvFor` puts those four AHEAD of anything passed through, and that ordering is the whole
-of what resuming into a mode is.** `hangar claude --resume <id> -m ops` reaches claude as
+of what resuming into a mode is.** `hangar up --resume <id> -m ops` reaches claude as
 `--settings … --append-system-prompt-file … --mcp-config … -n … --resume <id>`; reversed, the
 session resumes with the badge of a mode whose rules and tools it does not have. It was a comment
 for as long as the launchers existed and is now a pure builder with a test on it, because it is the
@@ -92,7 +93,7 @@ keep in step with a `$PWD` check.
 **The proxy still tests where it was typed, and that is not redundant.** A tmux SERVER inherits
 the environment of whatever started it, and `hangar open` is normally typed at the hangar root —
 so, measured, a clone window's `command: 'claude'` resolved to the shim from a `$PWD` inside the
-clone, and reached a `hangar claude` that refuses from inside a clone. The clone's session would
+clone, and reached a `hangar up` that refuses from inside a clone. The clone's session would
 not have started. Nothing in the clone put the directory on PATH; an ancestor process did, which
 is exactly what the directory split cannot see. So the shim runs the pair only when it was typed
 AT the hangar root, and hands to the real binary everywhere else.
@@ -103,7 +104,7 @@ answer for a directory the caller was not standing in. `pwd` asks the OS, and `-
 symlinks on both sides so a hangar reached through a link still compares equal.
 
 **The recursion is cut on both sides.** The shim skips its own directory when it resolves the real
-binary, and `resolveClaudeBinary` skips the same directory when `hangar claude` looks for one —
+binary, and `resolveClaudeBinary` skips the same directory when `hangar up` looks for one —
 verified with `.local/bin` FIRST on PATH, where it answers the real binary and not the shim. The
 tmux window command names claude by absolute path for the same reason, which is the rule
 `attachCommand` already follows for tmux itself.
@@ -122,7 +123,7 @@ stale for ever, which is the check nobody reads. It also keeps `tmux -L hangar-<
 precisely "the clones". The names are distinct by exact equality, which is all the comparison in
 `currentSession` does.
 
-`.hangar/claude-tmux.conf` is the config, rewritten by `hangar claude` every run immediately
+`.hangar/claude-tmux.conf` is the config, rewritten by `hangar up` every run immediately
 before the server starts. That is why it gets no `doctor` row and no `.gitignore` line, unlike
 `clone-tmux.conf`: `colours sync` writes that one and nothing else would notice it going stale,
 whereas this one cannot be stale. Its bar options are a table with two consumers — rendered into
@@ -182,7 +183,7 @@ which IS "switch to that tab". Only `attach` breaks — it unsets `TMUX` so tmux
 nesting, and `-d` then detaches this terminal from inside its own pane. So one call is skipped and
 a `note` says which tab was selected.
 
-**Do not turn that into a fourth refusal.** It would block `hangar claude -m dev --replace` typed
+**Do not turn that into a fourth refusal.** It would block `hangar up -m dev --replace` typed
 in the shell tab, which is where restarting a wedged developer tab is naturally typed, and would
 leave an exited tab unreachable without `C-b d` out to the outer terminal first. The escalation
 guard is elsewhere and is untouched by this: `$CLAUDECODE` is independent of `$TMUX` and still
@@ -225,13 +226,15 @@ is broken. Change one, change both.
 
 ## Two guards on the escalation, and only one is a permission list
 
-`hangar claude` passes its arguments through, so an operator session could otherwise run
-`hangar claude -m dev -p '…'` — or `--dangerously-skip-permissions` — and get a session running
+`hangar up` passes its arguments through, so an operator session could otherwise run
+`hangar up -m dev -p '…'` — or `--dangerously-skip-permissions` — and get a session running
 under `dev.settings.json`, with everything developer mode may do including writes to `app/**`.
-The pre-existing `Bash(hangar dev)` denial does not match a `claude` subcommand.
+The pre-existing `Bash(hangar dev)` denial does not match an `up` subcommand.
 
-- **`ops.settings.json` denies `Bash(hangar claude)` and `Bash(hangar claude:*)`**, and the MCP
-  tool surface simply has no `claude` in it — an absence rather than a rule, because a tool that
+- **`ops.settings.json` denies `Bash(hangar up)` and `Bash(hangar up:*)`, and the same pair for
+  the hidden `claude` spelling** — a rule matches the start of a command string, so each name
+  needs its own, and `test/mcp-tools.test.ts` holds all of them to the file. The MCP tool surface
+  simply has no `up` in it — an absence rather than a rule, because a tool that
   does not exist cannot be reached by one. It would also be a tool that could never work: the
   `$CLAUDECODE` refusal below fires on every tool call there will ever be.
 - **The command refuses when `$CLAUDECODE` is set**, which no editable file can turn off. That
@@ -239,7 +242,7 @@ The pre-existing `Bash(hangar dev)` denial does not match a `claude` subcommand.
   `CLAUDE_CODE_SESSION_ID`, and unlike `$CLAUDE_PROJECT_DIR`, which is injected per hook. There is
   no legitimate call from inside a session anyway: attaching a tmux client needs a terminal.
 
-A third refusal is about intent rather than privilege: `hangar claude` stops when the working
+A third refusal is about intent rather than privilege: `hangar up` stops when the working
 directory is inside a clone, because `hangar` itself is on a clone's PATH by design. A dry run
 runs ahead of all three, because it creates nothing and attaches nothing, so none of them has
 anything to protect.
@@ -247,6 +250,35 @@ anything to protect.
 **There is deliberately no fourth**, and the shell tab is where somebody will be tempted to add
 one — see the section on it. Being inside this hangar's own tmux is not a privilege question:
 `$CLAUDECODE` catches the case that is, whether or not `$TMUX` is set.
+
+## `hangar down`, and why the root server goes last
+
+`down` takes the hangar down: every clone exactly as `close --all` closes it, then the root
+socket's `kill-server`. It is deliberately not symmetric with `up`, which opens no clone — which
+clones to open is a decision per clone that `open` already makes, while "take it down" has no such
+decision in it. `--keep-clones` is the root window alone.
+
+- **The clone half IS `close`**: `planCloses` / `executeCloses` in `close.ts`, split out of
+  `closeClones` so the dev servers are stopped before their pane goes, the editor windows close,
+  and the `plans collect` / `tmp merge` a killed session's `SessionEnd` hook never runs still
+  happens. A second opinion about any of that here would drift from the first.
+- **One confirmation for everything.** `close --all` asks on its own; two questions for one
+  decision would let a decline on the second leave half a hangar. So every plan is made and
+  printed first, one `confirm` covers the clones' warnings and every live mode tab with its
+  uptime, and the clones then execute with no further question.
+- **The root server is killed LAST**, because the shell tab — where this is naturally typed — is a
+  window on it, and `kill-server` ends the process running the command. `kill-server` rather than
+  `kill-session` because the socket holds that one session and nothing else, so the two are the
+  same act. The root sessions need no plans collect: the root settings write into the archive.
+- **Two refusals.** `$CLAUDECODE`, as for `up`, and the same deny pair in `ops.settings.json` —
+  a session ending every session, its own included, is not a tool call. And a terminal inside a
+  CLONE's tmux session: the clone pass would kill it before the root window was reached, which is
+  `close`'s own refuse-from-inside with nothing after it to finish. A dry run runs ahead of both.
+
+The terminal `up` was typed in survives: its tmux client exits with the server and drops back to
+the shell it was started from. The clone tabs `open` created are iTerm2 tabs whose COMMAND is the
+attach, so they end with it unless the profile is set to keep a finished session open — expected
+rather than measured, so check it before promising it.
 
 ## The tool server, and the one thing a Bash rule cannot say
 
@@ -421,16 +453,16 @@ file is what probing that class of question produced — all three are wired at 
 | Channel | Set by | Covers |
 | --- | --- | --- |
 | `$1` | the mode's own `statusLine` argv, via `--settings` | authoritative whenever it arrives |
-| `$HANGAR_MODE` | `new-window -e` per window, from `hangar claude` | the argv-less entry in the root `.claude/settings.json` winning instead |
+| `$HANGAR_MODE` | `new-window -e` per window, from `hangar up` | the argv-less entry in the root `.claude/settings.json` winning instead |
 | neither | — | a red `NO MODE` badge |
 
 Any one channel working shows the right badge; all three failing shows a **red warning rather than
 a confident wrong answer**. That makes the confirming observation a cheap one: a freshly launched
-`hangar claude` window reading `OPS` validates the entire chain, whichever channel carried it.
+`hangar up` window reading `OPS` validates the entire chain, whichever channel carried it.
 
 Three implementation rules, each the opposite of the obvious version:
 
-- **`$HANGAR_MODE` is set by `hangar claude` and nowhere else, one window at a time.** Exported
+- **`$HANGAR_MODE` is set by `hangar up` and nowhere else, one window at a time.** Exported
   from `.envrc` or `.envrc.hangar` it would reach every shell in the hangar, and a bare `claude`
   would then wear a badge whose rules it does not have — at which point `NO MODE` stops meaning
   anything. Per WINDOW rather than per session for a second measured reason: on tmux 3.7c a window
@@ -626,7 +658,7 @@ looks like. It still offers no `--fix`, for the escalation reason above.
 **One probe that supports it, stopping short of proof.** A Bash tool subprocess of a session in
 the developer tab has `bin/` on its PATH — `command -v hangar-statusline` answers, the script
 runs, and the DEV badge renders — and it also carries `HANGAR_MODE=dev`, which only
-`hangar claude` sets. So the launching shell's environment does reach children of the Claude Code
+`hangar up` sets. So the launching shell's environment does reach children of the Claude Code
 process, which is the assumption the PATH lookup rests on. It reaches them through the tmux
 server, which inherits the environment of the shell that started it, so `PATH_add bin` is in
 force there for the same reason it is at the prompt. What it does not prove is that the

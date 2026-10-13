@@ -57,7 +57,7 @@ export type ExecResult = {
  * commander SWALLOWS the `--` and merges everything into one variadic list -- measured:
  * `exec 1 3 -- git status -sb` arrives as `["1","3","git","status","-sb"]`, in which a clone ref
  * and a snippet word are indistinguishable. Reading `process.argv` is the house route for this
- * exact class of problem; `claude.ts`, `sync`'s `forcedStrategy` and `merge-default` all do it.
+ * exact class of problem; `up.ts`, `sync`'s `forcedStrategy` and `merge-default` all do it.
  *
  * The refs are only what precedes `--`, which is what keeps a snippet starting with a flag of
  * OURS (`-- --all`, `-- --help`) from being read as one.

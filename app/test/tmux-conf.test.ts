@@ -243,7 +243,7 @@ test('both sockets bind the tab click, and each one reaches a LIVE server too', 
    * The property that broke: `-f` is read once when a server starts, so a binding that lives only
    * in a conf works for whoever last restarted and for nobody else. Each server has a list, its
    * conf renders that list, and its live-apply pass issues it -- `TmuxServer.restyle` for the
-   * clones, `applyBar` in `commands/claude.ts` for the two root modes.
+   * clones, `applyBar` in `commands/up.ts` for the two root modes.
    */
   const hangar = syntheticHangar();
   const cloneConf = tmuxConfArtifact(hangar).content;

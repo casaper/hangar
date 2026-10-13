@@ -203,7 +203,7 @@ export const inkFor = (main: string): string =>
  * A clone hue says which of several near-identical checkouts you are in. These say something
  * else entirely -- whether this session may change the CLI or only run it -- so they are a
  * separate two-entry table rather than two more palette entries, and nothing derives them from
- * an index. `hangar claude` paints one tmux tab per mode with them, ink from `inkFor`: white on
+ * an index. `hangar up` paints one tmux tab per mode with them, ink from `inkFor`: white on
  * both, at 4.63:1 for ops and 5.02:1 for dev.
  *
  * Cool blue for the mode that reads and runs, warm amber for the one that changes things.

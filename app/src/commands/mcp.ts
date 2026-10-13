@@ -7,7 +7,7 @@ import type { CommandUnknownOpts } from '@commander-js/extra-typings';
  *
  * ## Who runs this
  *
- * Nobody, by hand. `.claude/modes/mcp.json` names it, `hangar claude` passes that file as
+ * Nobody, by hand. `.claude/modes/mcp.json` names it, `hangar up` passes that file as
  * `--mcp-config`, and Claude Code starts one instance per mode session and speaks JSON-RPC to it
  * over stdin and stdout. Typing it at a prompt gets a process that waits for a protocol nobody is
  * speaking -- which is the right thing for it to do, and is also how the server is probed:

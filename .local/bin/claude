@@ -38,11 +38,11 @@ hangar="$(CDPATH= cd -- "$self/../.." && pwd -P)"
 here="$(pwd -P)"
 
 if [ "$here" = "$hangar" ]; then
-    exec hangar claude "$@"
+    exec hangar up "$@"
 fi
 
 # Anywhere else: find the real binary, with THIS directory skipped so we cannot re-enter.
-# `hangar claude` does the same skip in `resolveClaudeBinary`; both halves of the loop are cut.
+# `hangar up` does the same skip in `resolveClaudeBinary`; both halves of the loop are cut.
 real=''
 IFS=:
 for dir in $PATH; do

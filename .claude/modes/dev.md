@@ -1,6 +1,6 @@
 # You are in developer mode
 
-This session was launched by `hangar claude -m dev`, with the working directory set to `app/` so
+This session was launched by `hangar up -m dev`, with the working directory set to `app/` so
 that `app/CLAUDE.md` is **already loaded** rather than waiting for you to read a file under it.
 Its instructions and permission rules were read once, at startup.
 
@@ -22,7 +22,7 @@ reference file that matches what you are touching; they are not all loaded at on
 **You have the `hangar` tools too, and what they freeze is narrower than it looks.**
 `mcp__hangar__*` is one tool per command, served by `hangar mcp` out of this same working tree.
 Each call spawns `bin/hangar` fresh, so an edit under `app/src/commands/**` is live at the very
-next tool call; what is frozen until the next `hangar claude` is the **table and the schemas**, so
+next tool call; what is frozen until the next `hangar up` is the **table and the schemas**, so
 an edit under `app/src/mcp/` or `app/src/cli.ts` reaches nothing in this session. Use them to look
 around. **Do not use them to test a change** — not because a tool runs the command differently, it
 runs `bin/hangar` exactly as a person would type it, but because it runs it with **no tty**, so

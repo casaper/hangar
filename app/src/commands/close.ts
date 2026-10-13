@@ -252,24 +252,46 @@ const closeEditorWindow = (driver: EditorDriver, clone: Clone): void => {
   }
 };
 
-export const closeClones = (hangar: Hangar, refs: readonly string[], opts: CloseOptions): void => {
+/** Every clone's facts and actions, decided before anything is printed or killed. */
+export type ClonePlans = readonly { readonly facts: CloseFacts; readonly actions: CloseAction[] }[];
+
+/**
+ * Read and decide, touching nothing -- split from the execution so `hangar down` can put every
+ * clone's warnings into ONE confirmation alongside its own, instead of asking twice.
+ */
+export const planCloses = (
+  hangar: Hangar,
+  refs: readonly string[],
+  opts: CloseOptions,
+): ClonePlans => {
   const clones = resolveClones(hangar, refs, opts);
   const server = tmuxServer(hangar);
   const drivers = opts.editor === false ? [] : editors(hangar).drivers;
-  const dryRun = opts.dryRun === true;
-
-  const plans = clones.map((clone) => {
+  return clones.map((clone) => {
     const facts = factsFor(clone, hangar.root, server, drivers);
     return { facts, actions: closePlan(facts, opts) };
   });
+};
 
+export const reportCloses = (plans: ClonePlans): void => {
   for (const { facts, actions } of plans) {
     step(`close ${facts.clone.name}`);
     for (const action of actions) note(describeCloseAction(action));
     for (const line of closeWarnings(facts)) warn(line);
   }
+};
 
-  if (dryRun) {
+/** The clones a run would actually take something down in -- what a confirmation names. */
+export const clonesBeingKilled = (plans: ClonePlans): ClonePlans =>
+  plans.filter(({ actions }) =>
+    actions.some((a) => a.kind === 'kill-session' || a.kind === 'stop-servers'),
+  );
+
+export const closeClones = (hangar: Hangar, refs: readonly string[], opts: CloseOptions): void => {
+  const plans = planCloses(hangar, refs, opts);
+  reportCloses(plans);
+
+  if (opts.dryRun === true) {
     note('(dry run — nothing was closed)');
     return;
   }
@@ -279,9 +301,7 @@ export const closeClones = (hangar: Hangar, refs: readonly string[], opts: Close
    * session to kill and can still be holding its ports, so without this a `close` that signals
    * somebody's dev server would ask nothing at all.
    */
-  const killing = plans.filter(({ actions }) =>
-    actions.some((a) => a.kind === 'kill-session' || a.kind === 'stop-servers'),
-  );
+  const killing = clonesBeingKilled(plans);
   const warned = killing.some(({ facts }) => closeWarnings(facts).length > 0);
   if (killing.length > 0 && warned && opts.yes !== true) {
     if (!confirm(`Close ${killing.map(({ facts }) => facts.clone.name).join(', ')}?`)) {
@@ -290,6 +310,12 @@ export const closeClones = (hangar: Hangar, refs: readonly string[], opts: Close
     }
   }
 
+  executeCloses(hangar, plans);
+};
+
+/** Carry out decided plans. Asks nothing: the caller has already confirmed, or had no need to. */
+export const executeCloses = (hangar: Hangar, plans: ClonePlans): void => {
+  const server = tmuxServer(hangar);
   let killed = 0;
   for (const { facts, actions } of plans) {
     for (const action of actions) {

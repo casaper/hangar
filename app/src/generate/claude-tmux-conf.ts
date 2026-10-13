@@ -7,7 +7,7 @@ import { type BarOption, claudeCodeSettingLines, quoteTmuxValue } from './tmux-c
 /**
  * `.hangar/claude-tmux.conf` -- the config the hangar-ROOT session server starts under.
  *
- * `hangar claude` puts both root modes in one tmux session, with a plain shell beside them:
+ * `hangar up` puts both root modes in one tmux session, with a plain shell beside them:
  * operator in window 1, developer in window 2, the shell in window 3. That is a second server on
  * its own socket (`claudeSocketName`), and `src/tmux.ts` says why -- every session on the clone
  * socket is expected to name a clone.
@@ -15,8 +15,8 @@ import { type BarOption, claudeCodeSettingLines, quoteTmuxValue } from './tmux-c
  * ## Why this one is not written by `colours sync`
  *
  * `clone-tmux.conf` is, and `doctor` byte-compares it, because nothing else would notice it
- * going stale. This file is rewritten by `hangar claude` immediately before it starts the
- * server, and `hangar claude` is the only thing that reads it -- so stale is not a state it can
+ * going stale. This file is rewritten by `hangar up` immediately before it starts the
+ * server, and `hangar up` is the only thing that reads it -- so stale is not a state it can
  * reach, there is nothing for `doctor` to check, and it needs no `.gitignore` entry because
  * `.hangar/` already has one.
  *
@@ -55,7 +55,7 @@ import { type BarOption, claudeCodeSettingLines, quoteTmuxValue } from './tmux-c
  * The status bar, as data.
  *
  * Every entry is a global SESSION option -- checked deliberately, because that is what makes the
- * live-apply pass possible. A server option in here would be a setting `hangar claude` could
+ * live-apply pass possible. A server option in here would be a setting `hangar up` could
  * write into the conf and never onto a running server, with nothing to say which had happened.
  */
 export const BAR_OPTIONS: readonly BarOption[] = [
@@ -97,7 +97,7 @@ export const BAR_OPTIONS: readonly BarOption[] = [
  * A bare binding rather than `clone-tmux.conf`'s `if-shell`: that one falls through to this same
  * command because it has `range=user` regions of its own to test for first, and this bar has none.
  *
- * A LIST of one, and the shape is the point rather than the count: `hangar claude` writes
+ * A LIST of one, and the shape is the point rather than the count: `hangar up` writes
  * `BAR_OPTIONS` onto a server that is already running, and a binding is a command rather than an
  * option, so there is nothing for `set` to carry it. One source read by the conf and by that pass,
  * exactly as `keyBindings` and `TmuxServer.restyle` are on the other socket -- a key that reaches
@@ -126,7 +126,7 @@ export const claudeTmuxConfArtifact = (hangar: Hangar): Artifact => {
           'Rewritten every run, immediately before the server starts -- so editing it by',
           'hand lasts exactly until the next one.',
         ],
-        'hangar claude',
+        'hangar up',
       ),
       '',
       '# ---- Claude Code inside tmux ------------------------------------------------------',
@@ -149,7 +149,7 @@ export const claudeTmuxConfArtifact = (hangar: Hangar): Artifact => {
       'set -g  renumber-windows off',
       '',
       '# ---- the status line --------------------------------------------------------------',
-      '# One line, and the whole width goes to the tabs. `hangar claude` writes this same list',
+      '# One line, and the whole width goes to the tabs. `hangar up` writes this same list',
       '# onto a server that is already running, since every one of them is a session option.',
       ...BAR_OPTIONS.map((o) => `set -g ${o.name} ${quoteTmuxValue(o.value)}`),
       '',

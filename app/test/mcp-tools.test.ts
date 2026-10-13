@@ -105,6 +105,21 @@ test('the table is internally consistent', () => {
   }
 });
 
+test('operator mode denies every spelling of the commands that start or end the mode pair', () => {
+  /*
+   * They have no tool, so the table test above never looks at them -- and the Bash path is the
+   * one that remains. `up` passes its argv to claude, so an operator session reaching it could
+   * start itself a developer session; `claude` is the same command under its hidden earlier
+   * name; `down` ends every session in the hangar. A rename that forgot the deny list would
+   * leave every other check here green.
+   */
+  for (const name of ['up', 'claude', 'down']) {
+    assert.ok(NOT_EXPOSED.includes(name), `${name} has no tool`);
+    for (const rule of [`Bash(hangar ${name})`, `Bash(hangar ${name}:*)`])
+      assert.ok(lists.deny.includes(rule), `ops.settings.json denies ${rule}`);
+  }
+});
+
 test('a preview and the command it previews are two tools, never one flag', () => {
   /*
    * The property the whole design rests on. MCP cannot match on arguments, so `dry-run` as a
