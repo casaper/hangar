@@ -67,10 +67,10 @@ has the canary). Both also run in `app/.husky/pre-commit` and inside `hangar dev
 
 `pnpm` is not assumed to be on PATH: it lives inside an fnm multishell and so moves when the Node
 version moves. The hangar root's `.envrc` activates it through `hangar_use_pnpm` (defined in
-`.envrc.hangar`), alongside `hangar_use_node .nvmrc`, `hangar_use_gnu`, `PATH_add bin` and
-`PATH_add app/node_modules/.bin` — which is how `tsc`, `eslint` and `prettier` are reached. If any
-of those commands is not found, the answer is almost always that direnv has not loaded: run
-`direnv allow` at the hangar root.
+`.envrc.hangar`), alongside `hangar_use_node .nvmrc`, `hangar_use_gnu`, `PATH_add bin`,
+`PATH_add .local/bin` (the `claude` shim) and `PATH_add app/node_modules/.bin` — which is how
+`tsc`, `eslint` and `prettier` are reached. If any of those commands is not found, the answer is
+almost always that direnv has not loaded: run `direnv allow` at the hangar root.
 
 **Prefer bullet lists to wide tables in any CLAUDE.md under `app/`.** `format:check` pads every row
 to the widest cell, so one long cell inflates the whole table, and a wide
@@ -187,7 +187,7 @@ The rule, and the two halves it splits into:
   one theme file per clone, and the `hangar_dvb_gn_colour` shell function two hangars can both
   source. Renaming it is a three-phase operation, not a find-and-replace.
 
-Two consequences worth knowing before editing the files they touch:
+Three consequences worth knowing before editing the files they touch:
 
 - **`hangar.config.example.yaml` is a superset of the live config EXCEPT for five keys.**
   `displayName`, `profile`, `forge.originUrl`, `forge.webBaseUrl` and `tracker.baseUrl` are
@@ -341,7 +341,9 @@ The layout under `src/` is what `ls` shows; only what a listing cannot say is ke
   registry) and `server.ts` (the stdio JSON-RPC loop). **Nothing here may import `ui.ts`**: stdout
   is the protocol.
 - **`terminal/`** — one window-opener per emulator. Everything a window CONTAINS is `tmux.ts`.
-- **`test/`** — run by `pnpm test`; `test/fixture.ts` builds the synthetic hangar they all use.
+
+`app/test/` (beside `src/`, not in it) is run by `pnpm test`; `test/fixture.ts` builds the
+synthetic hangar they all use.
 
 **Five seams**, each a capability record plus a driver interface rather than a pretence that the
 implementations are equivalent. Adding a kind means implementing the interface and registering it;
@@ -469,18 +471,19 @@ why the status script is shell rather than the CLI.
 for that file and none can act on this; a session editing `app/src/**` is the only one that needs
 it — the same reason the rest of this file is here.
 
-One rule decides every row: _a tracked file that a `hangar` command rewrites is a merge conflict
+One rule decides every entry: _a tracked file that a `hangar` command rewrites is a merge conflict
 on every `git pull` from a published upstream._
 
-| Not tracked                                                                        | Written by                                  |
-| ---------------------------------------------------------------------------------- | ------------------------------------------- |
-| `hangar.config.yaml` — **the marker file**                                         | `hangar setup`                              |
-| `CLAUDE.local.md` — this hangar's identity                                         | `setup`, `doctor --fix`                     |
-| `.claude/settings.json`                                                            | `setup`, `doctor --fix`                     |
-| `clone-colours.sh`, `clone-terminal.sh`, `clone-tmux.conf`, `clone-tmux-status.sh` | `hangar colours sync`                       |
-| `.hangar/colour-assignments.json` — **INPUT**                                      | `hangar colours change` — nothing else      |
-| `.hangar/port-pins.json` — **INPUT**                                               | `hangar ports pin` / `unpin` — nothing else |
-| `.hangar/claude-tmux.conf`                                                         | `hangar claude`, every run                  |
+Not tracked, and what writes each:
+
+- `hangar.config.yaml` — **the marker file** — `hangar setup`
+- `CLAUDE.local.md` — this hangar's identity — `setup`, `doctor --fix`
+- `.claude/settings.json` — `setup`, `doctor --fix`
+- `clone-colours.sh`, `clone-terminal.sh`, `clone-tmux.conf`, `clone-tmux-status.sh` —
+  `hangar colours sync`
+- `.hangar/colour-assignments.json` — **INPUT** — `hangar colours change`, nothing else
+- `.hangar/port-pins.json` — **INPUT** — `hangar ports pin` / `unpin`, nothing else
+- `.hangar/claude-tmux.conf` — `hangar claude`, every run
 
 Tracked: this file, the root `CLAUDE.md`, `bin/**`, `.local/bin/**`, `app/**`, `.envrc`,
 `.envrc.hangar`, `.nvmrc`,
@@ -491,7 +494,7 @@ a shadow that goes stale is a diff rather than a silence), `.claude/**` except t
 generated `settings.json`, and the two `.gitkeep` files under `plans/` and `tmp/`. Never the
 application.
 
-Five of those rows are worth a sentence each:
+Five of those entries are worth a sentence each:
 
 - **`.hangar/claude-tmux.conf` gets no `doctor` row and no `.gitignore` line of its own**, and
   the reason is which command owns it. `colours sync` writes `clone-tmux.conf` and `doctor`
@@ -526,11 +529,13 @@ The code is in `app/`, but files one level up are generated out of it — so cha
 and not regenerating them leaves a hangar that contradicts itself. Nothing catches that: there is
 no hook in `.git/hooks`.
 
-| Change this in `app/src/**`                                                                                              | Regenerate with        | Which rewrites                                                                                         |
-| ------------------------------------------------------------------------------------------------------------------------ | ---------------------- | ------------------------------------------------------------------------------------------------------ |
-| `config/schema.ts`                                                                                                       | `hangar config schema` | `hangar.schema.json` — **tracked**                                                                     |
-| `palette.ts`, `generate/colours-sh.ts`, `generate/terminal-sh.ts`, `generate/tmux-conf.ts`, `generate/tmux-status-sh.ts` | `hangar colours sync`  | `clone-colours.sh`, `clone-terminal.sh`, `clone-tmux.conf` **and** `clone-tmux-status.sh` — gitignored |
-| any new config key                                                                                                       | by hand                | `hangar.config.example.yaml` — **tracked**                                                             |
+Each entry is the source in `app/src/**`, the command that regenerates, and what it rewrites:
+
+- `config/schema.ts` → `hangar config schema` → `hangar.schema.json` (**tracked**)
+- `palette.ts` and `generate/{colours-sh,terminal-sh,tmux-conf,tmux-status-sh}.ts` →
+  `hangar colours sync` → `clone-colours.sh`, `clone-terminal.sh`, `clone-tmux.conf` **and**
+  `clone-tmux-status.sh` (gitignored)
+- any new config key → by hand → `hangar.config.example.yaml` (**tracked**)
 
 **Only one generated root file is tracked, and the rule that decides it is publication:** a
 tracked file that a `hangar` command rewrites is a merge conflict on every `git pull` from
