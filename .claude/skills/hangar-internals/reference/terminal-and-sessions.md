@@ -332,7 +332,7 @@ variable, and every clone's fallback when that variable is missing is the same b
 whose direnv did not load serves on clone 1's port, which is the `crossed` state above, reached by
 accident rather than by choice. A shell assignment prefix wins over an exported value, so
 `<envKey>=<this clone's port> <command>` is right whether or not direnv ran. The line is typed
-into the window with `send-keys`, into the developer's own shell, which is what makes `npm run …`
+into the window with `send-keys`, into the developer's own shell, which is what makes `pnpm run …`
 resolve the way it does by hand.
 
 **It requires a session rather than creating one.** `hangar open` builds a clone's session with

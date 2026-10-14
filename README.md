@@ -346,9 +346,10 @@ directions, and the local git config the sibling remotes make necessary — the 
 purpose, because every item on it lives outside git and nothing else would recreate it.
 
 Then it runs `repo.install[]`. Those steps are the only thing Hangar runs inside a clone that can
-destroy work — `npm ci` deletes `node_modules` before refetching it — so `hangar doctor` never runs
-one. It checks the declaration instead (does the directory exist, is the manager's marker there)
-and names `hangar install` when something is missing. A manager that installs into a cache outside
+destroy work — `npm ci` deletes `node_modules` before refetching it, `pnpm install` rewrites it
+under a running dev server — so `hangar doctor` never runs one. It checks the declaration instead
+(does the directory exist, is the manager's lockfile there rather than another manager's, is the
+marker its install writes there) and names `hangar install` when something is missing. A manager that installs into a cache outside
 the clone — maven, go, cargo, pip, poetry — gets a dim *cannot verify* row rather than a red one,
 because there is genuinely nothing per-clone to look at.
 

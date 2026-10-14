@@ -142,8 +142,8 @@ this is not a judgement call you have to make. If you want the same answer for e
 them to run it; `-n` prints the plan without running anything.
 
 **`hangar install <clone>` runs the repo's declared install steps, and a step can delete work** —
-`npm ci` removes the installed dependencies before refetching them, so a clone with a dev server
-running loses it mid-request. That makes it the user's command even though it touches no git state.
+`npm ci` removes the installed dependencies before refetching them and `pnpm install` rewrites them
+in place, so a clone with a dev server running loses them mid-request. That makes it the user's command even though it touches no git state.
 `doctor` reports a missing install and names it; it never runs one itself.
 
 **`hangar sync <clone>` starts with a `git stash push --include-untracked`**, and the

@@ -307,11 +307,11 @@ repo:
   # node_modules, uv writes .venv, composer writes vendor. Maven, Go, cargo, pip and poetry put
   # it in a shared cache outside every clone, so `doctor` reports "cannot verify" for those
   # rather than a red row nobody can clear. Nothing here is ever run by `doctor`: an install is
-  # `hangar install <clone>`, because `npm ci` deletes node_modules under a live dev server.
+  # `hangar install <clone>`, because an install rewrites node_modules under a live dev server.
   install:
     - # Clone-relative; defaults to `repo.appDir`.
       dir: angular
-      manager: npm
+      manager: pnpm
       # Run the step under the Node version this file names (fnm, else nvm). Omit it and the
       # step is not treated as a Node step at all.
       nodeVersionFile: .nvmrc
@@ -381,13 +381,13 @@ ports:
       # What `hangar servers start` runs to bring this one up, in a window of the clone's own
       # tmux session. Omit it and the role is reported and stopped but never started.
       #
-      # A shell LINE, typed into the window's own shell, so direnv has loaded and `npm run ...`
+      # A shell LINE, typed into the window's own shell, so direnv has loaded and `pnpm run ...`
       # resolves as it would by hand. `hangar` puts `envKey=<this clone's port>` in front of it,
       # which is what keeps a clone whose environment did not load from serving on clone 1's
       # port. Point it at whatever wrapper the repo uses to record a pid, if it has one -- that
       # is what lets `hangar servers kill` stop the server by name afterwards.
       start:
-        command: npm run start
+        command: pnpm run start
         dir: angular          # clone-relative; default '' -- the clone root
     - id: storybook
       envKey: STORYBOOK_DEV_SERVER_PORT
@@ -404,7 +404,7 @@ ports:
         timeoutSeconds: 3     # 1-60, default 3
         # path: /health       # default '' -- appended to the URL
       start:
-        command: npm run storybook
+        command: pnpm run storybook
         dir: angular
     - id: playwrightReport
       envKey: PLAYWRIGHT_REPORT_PORT
@@ -494,7 +494,7 @@ terminal:
     - { role: claude, dir: '.', command: claude }
     - { role: shell, dir: '.' } # omit `command` for a plain shell
     - { role: app, dir: angular }
-    # - { role: logs, dir: '.', command: 'npm run logs' }
+    # - { role: logs, dir: '.', command: 'pnpm run logs' }
 
 # --------------------------------------------------------------------------------------------
 # Editors -- which ones `open` opens, and whose project files `<kind> sync` keeps in step
