@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
-import { clonesSchema } from './schema.ts';
+import { clonesSchema, MANAGER_LOCKFILES } from './schema.ts';
 import { run } from '../exec.ts';
 import { defaultBranchFromGit } from '../git.ts';
 
@@ -71,17 +71,10 @@ export const detectAppDir = (clonePath: string): string => {
 
 /** Which package manager a checkout's lockfile implies. */
 export const detectManager = (dir: string): string | undefined => {
+  // `pom.xml` is not a lockfile, so it is not in MANAGER_LOCKFILES -- but it is the one file
+  // that says "maven", and it is asked last.
   const lockfiles: readonly (readonly [string, string])[] = [
-    ['pnpm-lock.yaml', 'pnpm'],
-    ['package-lock.json', 'npm'],
-    ['yarn.lock', 'yarn'],
-    ['bun.lockb', 'bun'],
-    ['poetry.lock', 'poetry'],
-    ['uv.lock', 'uv'],
-    ['Gemfile.lock', 'bundler'],
-    ['Cargo.lock', 'cargo'],
-    ['go.sum', 'go'],
-    ['composer.lock', 'composer'],
+    ...Object.entries(MANAGER_LOCKFILES).map(([manager, file]) => [file, manager] as const),
     ['pom.xml', 'maven'],
   ];
   for (const [file, manager] of lockfiles) {

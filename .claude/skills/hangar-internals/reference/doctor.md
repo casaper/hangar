@@ -450,8 +450,9 @@ permanent modification in `git status` and a conflict on every pull that touches
 
 ## The install checks report a declaration and never execute it
 
-`repo.install[]` is the one thing Hangar runs INSIDE a clone that can destroy work: this repo's
-step is `npm ci`, which deletes `node_modules` before refetching it. So "doctor replays the same
+`repo.install[]` is the one thing Hangar runs INSIDE a clone that can destroy work: `npm ci`
+deletes `node_modules` before refetching it, and this repo's `pnpm install` rewrites it in place
+under whatever dev server is reading it. So "doctor replays the same
 step list as checks" — a sentence a plan could easily leave in — would have `hangar doctor` wipe
 four clones' installs while their dev servers were serving, every time somebody asked whether the
 fleet was healthy.
@@ -470,6 +471,28 @@ shared between them, so no per-clone path could answer for those. A step with no
 row that reads like a verified pass while verifying nothing is worse than one that says it cannot
 tell, and inventing a marker for maven would make `doctor` permanently red on a correctly
 installed clone.
+
+**A marker is a file the manager writes, never the directory, for npm and pnpm.** When this repo
+switched `angular/` from npm to pnpm, every clone kept a `node_modules` — npm's — and a bare
+`node_modules` marker reported each of them installed. So pnpm's marker is
+`node_modules/.modules.yaml` and npm's is `node_modules/.package-lock.json`, both written by the
+manager itself. yarn stays coarse: classic and berry leave different files.
+
+**Two more rows came out of that switch, and both are measured states rather than guesses:**
+
+- **A lockfile mismatch.** A branch cut before the switch carries `package-lock.json` and no
+  `pnpm-lock.yaml`, and `pnpm install --frozen-lockfile` there fails with pnpm's own error, which
+  names neither the branch nor the fix. `plannedSteps` sets `lockfileMismatch` when the declared
+  manager's lockfile (`MANAGER_LOCKFILES`, beside the markers) is ABSENT and another's is present.
+  A tree carrying both is left alone. `doctor` makes that a red row, and `hangar install` refuses
+  it, before its dry-run branch so `-n` shows the refusal too. Which side is stale cannot be told
+  from inside a clone (an old branch, or a config nobody updated), so the line names both.
+- **A mixed install** (`FOREIGN_MARKERS`). pnpm installing over npm's tree did NOT purge it: on
+  the first clone migrated, npm's `.package-lock.json` survived beside `.modules.yaml`, along
+  with ~1000 flat package directories next to pnpm's symlinks, against none in a clean install.
+  That tree resolves phantom dependencies a fresh clone refuses, so it passes locally and fails
+  elsewhere, and pnpm's own marker is present, so only the foreign one can show it. The fix is to
+  remove `node_modules` and install again, never an overlay.
 
 Executing a step is `hangar install <clone>`, which a human types, and deliberately NOT a
 `doctor --fix` repair: one entry point to a package manager in a live clone is safer than two, and

@@ -1,7 +1,14 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { INSTALL_MARKERS, installCommandFor, type InstallStep } from './config/schema.ts';
+import { detectManager } from './config/derive.ts';
+import {
+  FOREIGN_MARKERS,
+  INSTALL_MARKERS,
+  installCommandFor,
+  MANAGER_LOCKFILES,
+  type InstallStep,
+} from './config/schema.ts';
 import { run } from './exec.ts';
 import type { Clone } from './fleet.ts';
 import { home, tildify } from './user-paths.ts';
@@ -39,7 +46,50 @@ export type PlannedStep = {
   readonly nodeVersion: string | undefined;
   /** Set when `dir` names a directory this checkout does not have. */
   readonly missingDir: boolean;
+  /**
+   * Set when the declared manager's lockfile is absent and ANOTHER manager's is present: a
+   * branch cut before the repo switched managers. Running the step there fails with nothing
+   * but the manager's own error, so it is refused with this instead.
+   */
+  readonly lockfileMismatch: LockfileMismatch | undefined;
 };
+
+export type LockfileMismatch = {
+  readonly declared: string;
+  readonly found: string;
+  readonly foundLockfile: string;
+};
+
+/**
+ * Only an absent declared lockfile counts, so a tree carrying both (the switch commit itself,
+ * or a branch mid-migration) is left alone -- and a manager with no lockfile has no opinion.
+ */
+const lockfileMismatchIn = (cwd: string, step: InstallStep): LockfileMismatch | undefined => {
+  const declared = step.manager;
+  if (declared === undefined) return undefined;
+  const lockfile = MANAGER_LOCKFILES[declared];
+  if (lockfile === undefined || existsSync(join(cwd, lockfile))) return undefined;
+  const found = detectManager(cwd);
+  const foundLockfile = found === undefined ? undefined : MANAGER_LOCKFILES[found];
+  if (found === undefined || found === declared || foundLockfile === undefined) return undefined;
+  return { declared, found, foundLockfile };
+};
+
+/**
+ * The refusal, as text. A PURE builder: `install` warns with it and `doctor` prints it as a row.
+ *
+ * Nothing about the install is wrong, and which side is stale cannot be told from here: a
+ * branch older than the switch, or a config nobody updated after it. So it names both.
+ */
+export const lockfileMismatchLine = (
+  relDir: string,
+  mismatch: LockfileMismatch,
+  cloneName: string,
+): string =>
+  `${relDir}/ has ${mismatch.foundLockfile} (${mismatch.found}) but no ` +
+  `${MANAGER_LOCKFILES[mismatch.declared] ?? 'lockfile'}, and repo.install declares ` +
+  `${mismatch.declared} — either this branch predates the switch (integrate the default ` +
+  `branch, then \`hangar install ${cloneName}\`) or repo.install does`;
 
 /** `dir`, defaulting to `repo.appDir`, defaulting to the clone root. */
 const dirOf = (clone: Clone, step: InstallStep): string =>
@@ -71,6 +121,7 @@ export const plannedSteps = (clone: Clone): PlannedStep[] =>
       command: installCommandFor(step),
       nodeVersion: nodeVersionOf(cwd, step),
       missingDir: !existsSync(cwd),
+      lockfileMismatch: existsSync(cwd) ? lockfileMismatchIn(cwd, step) : undefined,
     };
   });
 
@@ -122,6 +173,17 @@ export const runInstall = (clone: Clone, opts: InstallOptions = {}): void => {
     if (item.missingDir) {
       warn(`${item.relDir}/ does not exist in this checkout — step skipped`);
       continue;
+    }
+
+    // Before the dry-run branch, so `install -n` shows the refusal the real run would hit.
+    if (item.lockfileMismatch !== undefined) {
+      const refusal = lockfileMismatchLine(item.relDir, item.lockfileMismatch, clone.name);
+      if (item.step.optional) {
+        warn(`${refusal} — declared optional, continuing`);
+        continue;
+      }
+      warn(refusal);
+      return;
     }
 
     const [cmd, ...args] = item.command;
@@ -241,8 +303,9 @@ export type InstallCheck = {
 /**
  * Declaration-only checks, one per step. NOTHING here spawns a package manager.
  *
- * Each step is asked three questions the filesystem can answer: does its directory exist, and
- * if the manager leaves a marker inside the clone, is that marker there. A manager whose
+ * Each step is asked what the filesystem can answer: does its directory exist, does its
+ * manager's lockfile exist rather than another manager's, and if the manager leaves a marker
+ * inside the clone, is that marker there -- without another manager's left beside it. A manager whose
  * result lives outside the checkout (maven, go, cargo, pip, poetry, gradle, deno, bundler)
  * has no answer available, so it says so -- see `INSTALL_MARKERS`.
  */
@@ -257,7 +320,16 @@ export const installChecks = (clone: Clone): InstallCheck[] =>
         detail: `${item.relDir}/ does not exist in this checkout`,
       };
     }
-    const marker = item.step.manager === undefined ? undefined : INSTALL_MARKERS[item.step.manager];
+    if (item.lockfileMismatch !== undefined) {
+      return {
+        name,
+        ok: false,
+        unverifiable: false,
+        detail: lockfileMismatchLine(item.relDir, item.lockfileMismatch, clone.name),
+      };
+    }
+    const manager = item.step.manager;
+    const marker = manager === undefined ? undefined : INSTALL_MARKERS[manager];
     if (marker === undefined) {
       return {
         name,
@@ -267,6 +339,18 @@ export const installChecks = (clone: Clone): InstallCheck[] =>
       };
     }
     const present = existsSync(join(item.cwd, marker));
+    const foreign = manager === undefined ? undefined : FOREIGN_MARKERS[manager];
+    if (present && foreign !== undefined && existsSync(join(item.cwd, foreign))) {
+      return {
+        name,
+        ok: false,
+        unverifiable: false,
+        detail:
+          `${item.relDir}/${foreign} survives beside ${item.relDir}/${marker} — a mixed ` +
+          `install another manager's packages leak into; remove ${item.relDir}/${dirname(foreign)}, ` +
+          `then \`hangar install ${clone.name}\``,
+      };
+    }
     return {
       name,
       ok: present,

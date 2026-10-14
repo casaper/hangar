@@ -238,14 +238,54 @@ export const MANAGER_COMMANDS: Readonly<Record<string, readonly string[]>> = Obj
  * red row nobody can clear is a row nobody reads, and inventing a marker for maven would make
  * `doctor` red on a correctly installed clone forever. It lives here so the fourteen managers
  * and their markers cannot drift into two files.
+ *
+ * npm and pnpm name a file their own install writes INSIDE `node_modules`, not the directory:
+ * after a repo switches between the two, every clone still has a `node_modules` -- the OTHER
+ * manager's -- and a bare directory marker reported that as installed. yarn stays coarse
+ * because classic and berry leave different files.
  */
 export const INSTALL_MARKERS: Readonly<Record<string, string>> = Object.freeze({
-  npm: 'node_modules',
-  pnpm: 'node_modules',
+  npm: 'node_modules/.package-lock.json',
+  pnpm: 'node_modules/.modules.yaml',
   yarn: 'node_modules',
   bun: 'node_modules',
   uv: '.venv',
   composer: 'vendor',
+});
+
+/**
+ * The lockfile each manager commits, in the order `detectManager` asks for them.
+ *
+ * Two readers: `setup` derives a manager from whichever is present, and `install` refuses a
+ * step whose manager's lockfile is absent while ANOTHER manager's is there -- a branch cut
+ * before the repo switched managers, which the declared command would fail on with nothing
+ * but the manager's own error. Managers that commit no lockfile have no entry.
+ */
+export const MANAGER_LOCKFILES: Readonly<Record<string, string>> = Object.freeze({
+  pnpm: 'pnpm-lock.yaml',
+  npm: 'package-lock.json',
+  yarn: 'yarn.lock',
+  bun: 'bun.lockb',
+  poetry: 'poetry.lock',
+  uv: 'uv.lock',
+  bundler: 'Gemfile.lock',
+  cargo: 'Cargo.lock',
+  go: 'go.sum',
+  composer: 'composer.lock',
+});
+
+/**
+ * A file inside the clone that ANOTHER manager's install leaves behind, and which a correct
+ * install by this one does not remove.
+ *
+ * Measured, not assumed: pnpm installing over an npm-built `node_modules` keeps npm's
+ * `.package-lock.json` and every flat package directory npm wrote beside its own symlinks.
+ * That mixed tree resolves imports a clean pnpm install would refuse (phantom dependencies),
+ * so it passes locally and fails in a fresh clone. The marker alone cannot see it -- pnpm's own
+ * is present too.
+ */
+export const FOREIGN_MARKERS: Readonly<Record<string, string>> = Object.freeze({
+  pnpm: 'node_modules/.package-lock.json',
 });
 
 const symlinkSchema = z.strictObject({
