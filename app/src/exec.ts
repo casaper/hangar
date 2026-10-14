@@ -20,6 +20,8 @@ export type RunResult = {
   readonly code: number;
   readonly stdout: string;
   readonly stderr: string;
+  /** The errno code when the spawn itself failed (`ENOENT`, `ENOEXEC`), which `code` hides as -1. */
+  readonly spawnError?: string | undefined;
 };
 
 export type RunOptions = {
@@ -49,6 +51,7 @@ export const run = (cmd: string, args: readonly string[], opts: RunOptions = {})
     code: res.status ?? -1,
     stdout: typeof res.stdout === 'string' ? res.stdout : '',
     stderr: typeof res.stderr === 'string' ? res.stderr : '',
+    spawnError: (res.error as NodeJS.ErrnoException | undefined)?.code,
   };
 };
 

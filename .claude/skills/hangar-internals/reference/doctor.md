@@ -517,6 +517,15 @@ whatever Node is there, because a missing version manager is a worse reason to r
 than a version mismatch is. It now warns first, which is the whole change: the fallback was
 always defensible, and being silent about it was not.
 
+**A step whose command is a shebang-less script is retried through `sh`, and only that.** pnpm
+12 ships `pnpm` as a shebang-less `sh` placeholder that its install script swaps for the native
+binary, so a global pnpm installed under `ignore-scripts` keeps the placeholder. Typed at a prompt
+it works, because a shell retries ENOEXEC as a script. Measured here: macOS's libc does not, so
+`hangar install` failed with nothing but `exit -1`, on every clone, while the same line worked by
+hand. `spawnStep` retries exactly that errno as `sh -c '"$@"' sh <cmd> <args…>`, which keeps the
+declared argv, and every other step spawns as before. `run` now carries the spawn's errno
+(`spawnError`), so a spawn that fails outright says `ENOENT` or `ENOEXEC` instead of `-1`.
+
 **The nvm branch is written from nvm's documented interface and has not been run against a live
 nvm** -- the same caveat the Konsole and GNOME Terminal drivers carry, and for the same reason:
 this machine has fnm, so that branch is only ever reached on a machine that does not. What is

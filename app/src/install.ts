@@ -9,7 +9,7 @@ import {
   MANAGER_LOCKFILES,
   type InstallStep,
 } from './config/schema.ts';
-import { run } from './exec.ts';
+import { run, type RunResult } from './exec.ts';
 import type { Clone } from './fleet.ts';
 import { home, tildify } from './user-paths.ts';
 import { note, ok, step as printStep, warn } from './ui.ts';
@@ -200,7 +200,8 @@ export const runInstall = (clone: Clone, opts: InstallOptions = {}): void => {
       ok(`${item.command.join(' ')} in ${tildify(item.cwd)}`);
       continue;
     }
-    const failure = `${item.command.join(' ')} failed (exit ${String(res.code)}) in ${tildify(item.cwd)}`;
+    const why = res.spawnError ?? `exit ${String(res.code)}`;
+    const failure = `${item.command.join(' ')} failed (${why}) in ${tildify(item.cwd)}`;
     if (item.step.optional) {
       warn(`${failure} — declared optional, continuing`);
       continue;
@@ -265,31 +266,45 @@ const nodeBinDirFor = (version: string): string | undefined => {
  * on PATH, which at a hangar root is the HANGAR's Node and not the app's. Nothing said a word,
  * and the two versions agreeing was luck rather than design.
  */
-const runStep = (
-  item: PlannedStep,
-  cmd: string,
-  args: readonly string[],
-): { ok: boolean; code: number } => {
+const runStep = (item: PlannedStep, cmd: string, args: readonly string[]): StepResult => {
   const version = item.nodeVersion;
-  if (version === undefined) {
-    const plain = run(cmd, args, { cwd: item.cwd, inherit: true });
-    return { ok: plain.ok, code: plain.code };
-  }
+  if (version === undefined) return spawnStep(item.cwd, cmd, args, undefined);
 
   const binDir = nodeBinDirFor(version);
   if (binDir === undefined) {
     warn(`no fnm or nvm could resolve Node ${version} — running on whatever \`node\` is on PATH`);
     note("Install fnm or nvm, or `hangar install` cannot honour this step's nodeVersionFile.");
-    const plain = run(cmd, args, { cwd: item.cwd, inherit: true });
-    return { ok: plain.ok, code: plain.code };
+    return spawnStep(item.cwd, cmd, args, undefined);
   }
 
-  const res = run(cmd, args, {
-    cwd: item.cwd,
-    inherit: true,
-    env: { ...process.env, PATH: `${binDir}:${process.env['PATH'] ?? ''}` },
+  return spawnStep(item.cwd, cmd, args, {
+    ...process.env,
+    PATH: `${binDir}:${process.env['PATH'] ?? ''}`,
   });
-  return { ok: res.ok, code: res.code };
+};
+
+type StepResult = Pick<RunResult, 'ok' | 'code' | 'spawnError'>;
+
+/**
+ * One spawn, retried through `sh` when the kernel answers ENOEXEC -- what a shell does itself.
+ *
+ * Measured with pnpm 12 installed globally under `ignore-scripts`: its install script never
+ * swaps in the native binary, so `pnpm` stays a shebang-less `sh` script. Typed at a prompt it
+ * works, because a shell retries ENOEXEC as a script; macOS's libc does not, so a direct spawn
+ * failed with nothing but `exit -1`. `"$@"` keeps the argv exactly as declared, and only that
+ * one errno takes the hop, so every other step spawns as it always did.
+ */
+const spawnStep = (
+  cwd: string,
+  cmd: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv | undefined,
+): StepResult => {
+  const opts = env === undefined ? { cwd, inherit: true } : { cwd, inherit: true, env };
+  const res = run(cmd, args, opts);
+  if (res.spawnError !== 'ENOEXEC') return res;
+  note(`${cmd} is not directly executable (ENOEXEC) — running it through sh, as a shell would`);
+  return run('/bin/sh', ['-c', '"$@"', 'sh', cmd, ...args], opts);
 };
 
 export type InstallCheck = {
