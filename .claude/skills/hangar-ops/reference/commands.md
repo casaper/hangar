@@ -128,19 +128,19 @@ rule that cannot tell it from the report.
 | `doctor` | `[clone]` (defaults to every clone) | `-a, --all` · `--fix` | report bare; **act [user]** with `--fix` |
 | `setup` | — | `-y, --yes` · `--origin <url>` · `--id <name>` · `--preset <name>` · `--force` · `-n, --dry-run` | act |
 | `teach-rg` | `<clone>` | `-n, --dry-run` · `-y, --yes` | act |
-| `up` (hidden alias `claude`) | `[claude-args...]` (passed through untouched) | `-m, --mode <ops\|dev>` (default `ops`) · `--replace` · `--yes` · `--dry-run` | **DENIED to you** — see below |
+| `up` | — | `-s, --select <ops\|dev\|shell>` (default `shell`) · `-r, --resume-last` · `--restart <ops\|dev\|all>` · `-y, --yes` · `-n, --dry-run` | **DENIED to you** — see below |
 | `down` | — | `--keep-clones` · `--no-editor` · `-y, --yes` · `-n, --dry-run` | **DENIED to you** — ends every clone, then this window |
 | `mcp` | — | — | serves the tools; the server itself touches nothing, each call spawns `bin/hangar` |
 
 **`up` and `down` are the two commands in this table you cannot run**, and the denial is
-deliberate rather than an oversight in the permission list. It opens the two hangar-root sessions as tabs of one
-tmux window — plus a third tab that is only a shell — and it passes every other argument straight
-through, so `hangar up -m dev -p '…'`
-would start a session under developer mode's rules, with the writes to `app/**` that this mode is
-denied. `ops.settings.json` denies `Bash(hangar up)` and `Bash(hangar up:*)`, the same pair for
-its hidden second spelling `claude`, and the same pair for `down`; and each command refuses a second
-time on its own when `$CLAUDECODE` is set, so neither will run from here even if a settings file
-says otherwise.
+deliberate rather than an oversight in the permission list. It opens the two hangar-root sessions
+as tabs of one tmux window — plus a third tab that is only a shell, which it lands on — so
+`hangar up --restart dev` would start a session under developer mode's rules, with the writes to
+`app/**` that this mode is denied. `ops.settings.json` denies `Bash(hangar up)` and
+`Bash(hangar up:*)`, and the same pair for `down`; and each command refuses a second time on its
+own when `$CLAUDECODE` is set, so neither will run from here even if a settings file says
+otherwise. A bare `claude` is no way round it either: the shim that gives one a mode hands the
+real binary over untouched whenever `$CLAUDECODE` is set.
 
 `down` is the other end: every clone closed exactly as `close --all` closes it, then this tmux
 server killed, operator, developer and shell tab together — LAST, because the shell tab is where it

@@ -8,8 +8,6 @@
       "Bash(hangar dev:*)",
       "Bash(hangar up)",
       "Bash(hangar up:*)",
-      "Bash(hangar claude)",
-      "Bash(hangar claude:*)",
       "Bash(hangar down)",
       "Bash(hangar down:*)",
       "Bash(hangar exec)",

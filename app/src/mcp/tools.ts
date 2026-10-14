@@ -599,7 +599,7 @@ export const argvFor = (
  * The bar is high: everything else in this CLI is a tool, `setup` included -- exposed precisely
  * BECAUSE it was escalation-adjacent and unnamed. None of these is an omission.
  *
- * - **`up`** (and `claude`, its hidden second spelling) refuses whenever `$CLAUDECODE` is set,
+ * - **`up`** refuses whenever `$CLAUDECODE` is set,
  *   which is every tool call there will ever be, so the tool could only ever fail -- and it is
  *   the escalation boundary the mode pair exists for. A tool that cannot work, on the one
  *   command that must not, is worse than none.
@@ -623,7 +623,6 @@ export const argvFor = (
  */
 export const NOT_EXPOSED: readonly string[] = [
   'up',
-  'claude',
   'down',
   'exec',
   'dev golden',

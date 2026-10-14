@@ -304,8 +304,22 @@ const liveWindows = (): Map<string, number> => {
 };
 
 /** This clone's resumable sessions, most recently active first. */
-export const claudeTranscripts = (clone: Clone): ClaudeTranscript[] => {
-  const files = transcriptDirsForClone(clone).flatMap(transcriptFilesIn);
+export const claudeTranscripts = (clone: Clone): ClaudeTranscript[] =>
+  transcriptsFrom(transcriptDirsForClone(clone).flatMap(transcriptFilesIn));
+
+/**
+ * The sessions started in exactly `dir`, most recently active first -- for a directory that is
+ * not a clone, which is the hangar root and `app/`.
+ *
+ * Exact, unlike `transcriptDirsForClone`'s prefix match, and that is the point: every clone's
+ * slug begins with the hangar root's, so the prefix rule at the root would hand back the whole
+ * fleet's sessions. The slug is lossy too (`_` and `/` both become `-`), so each transcript's own
+ * `cwd` is checked against `dir` as well.
+ */
+export const claudeTranscriptsIn = (dir: string): ClaudeTranscript[] =>
+  transcriptsFrom(transcriptFilesIn(transcriptDirFor(dir))).filter((t) => t.cwd === dir);
+
+const transcriptsFrom = (files: readonly string[]): ClaudeTranscript[] => {
   const live = liveWindows();
   const found: ClaudeTranscript[] = [];
   for (const file of files) {

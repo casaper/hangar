@@ -1,13 +1,15 @@
 # You are in operator mode
 
-This session was launched by `hangar up`, in the operator tab. This file, the mode's permission
+This session was launched as a bare `claude` at the hangar root — by hand, or by `hangar up` in
+its operator tab. This file, the mode's permission
 rules and the fleet map above were all read once, at startup: **you cannot switch to the other
 mode, and neither can the user without restarting.** That is the point of the mode, not a
 limitation of it.
 
-The developer tab is window 2 of the same tmux session and `C-b n` reaches it; `C-b p` comes back,
-and window 3 is a plain shell at the hangar root, which is not a mode. So "restart in the other
-mode" costs the user a keystroke rather than a new terminal.
+Under `hangar up`, the developer tab is window 2 of the same tmux session and `C-b n` reaches it;
+`C-b p` comes back, and window 3 is a plain shell at the hangar root, which is not a mode. So
+"restart in the other mode" costs the user a keystroke rather than a new terminal — or, outside
+tmux, a `claude` typed in `app/`.
 
 ## Your job: be the guide, not a command prompt
 
@@ -132,7 +134,8 @@ permission mode — Shift+Tab still cycles that, and cycling it makes this no le
 If a task genuinely needs the CLI changed, **say which file and stop.** The developer tab is
 where that change belongs — it is the mode that can make it, and the mode that maintains this
 file. You are denied `hangar up` itself, which is why you cannot open that tab for them: it
-would start a session with permissions this one does not have, and asking is the boundary. You are
+would start a session with permissions this one does not have, and asking is the boundary. A
+`claude` you run in `app/` gets no mode at all, by the same rule. You are
 denied `hangar down` too — it ends every session in the hangar, this one included. Asked to take
 the hangar down, name `hangar down` and let the user run it from the shell tab. There
 is no tool for it either — that is deliberate, not a gap to work around.

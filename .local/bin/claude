@@ -1,31 +1,46 @@
 #!/bin/sh
-# A bare `claude` in the hangar root: both hangar-root sessions and a shell, in one tmux window.
+# A bare `claude` in the hangar: operator mode at the root, developer mode in `app/`.
 #
-# EVERY `claude` typed at the root lands here, subcommands included: `claude --version` answers
-# hangar's version, and `claude plugin ...` / `claude mcp ...` / `claude update` never reach Claude
-# Code. Run those from any other directory, or by the real binary's absolute path.
+# A mode is not a feature of Claude Code; it is four flags -- `--settings <mode>.settings.json`,
+# `--append-system-prompt-file <mode>.md`, `--mcp-config mcp.json` and `-n "hangar <mode>"` --
+# plus the directory the session starts in. This file is the ONE place those four are written:
+# `hangar up`'s two mode tabs run it by absolute path from the right directory, so a tab and a
+# `claude` typed by hand are the same launch. The mode is a function of the directory and of
+# nothing else.
 #
-# This directory exists for one reason -- it is on PATH in the hangar shell and in no other.
-# `.envrc` adds `bin` and this one; every clone's own `.envrc.private` repeats only
-# `PATH_add <hangar>/bin`, because that is how `hangar` is reached from inside a clone. So a
-# `claude` in `bin/` would have been on PATH in every clone shell too, where
-# `terminal.tabs[]`'s default `command: 'claude'` is the line that starts each clone's own
-# session -- and a clone session would have launched the hangar-root pair instead of itself.
+# The four come FIRST and the caller's arguments after them, and that ordering is the whole of
+# what resuming into a mode is: `claude --resume <id>` typed at the root comes back under
+# operator's permissions, remit and tools. Reversed, it would come back wearing the badge of a
+# mode whose rules it does not have -- the failure that looks exactly like success.
 #
-# Not a direnv alias, because there is no such thing: direnv exports the ENVIRONMENT DIFF that
-# evaluating a `.envrc` produces, and a shell function is not an environment variable. PATH is,
-# which is why `PATH_add` is the only mechanism here that reaches an interactive shell at all.
+# ## When it hands to the real binary untouched
 #
-# ## The $PWD test is NOT redundant with the directory split, and this is why
+# - **Anywhere but exactly the root or exactly `app/`.** Exact equality, because every clone is
+#   inside the hangar, and `app/src` is not where developer mode loads `app/CLAUDE.md` from.
+# - **Inside a Claude Code session (`$CLAUDECODE`).** Otherwise an operator session's Bash call
+#   `cd app && claude -p ...` would start itself a session under developer mode's rules -- an
+#   escalation no editable permission list can close. This test cannot be edited away by one.
+# - **For a subcommand, `--version` or `--help`**, decided on the FIRST word only. So a prompt
+#   that happens to start with a subcommand's name -- `claude update the README` -- reaches
+#   `claude update`. That is accepted, not an oversight: anything smarter is a parser of
+#   claude's command line, which is claude's to change. Start the prompt with another word.
 #
-# A tmux SERVER inherits the environment of whatever started it. `hangar open` is normally typed
-# at the hangar root, so the clone server it starts inherits a PATH with this directory on it --
-# and measured, a clone window's `command: 'claude'` then resolves to this file, from a $PWD
-# inside the clone. The split alone does not cover that, because nothing in the clone put the
-# directory on the path; an ancestor process did.
+# Every one of those UNSETS `HANGAR_MODE`. A mode session exports it, its Bash children inherit
+# it, and the status line reads it -- so a bare `claude` started from inside a mode session
+# would otherwise wear that mode's badge with none of its rules.
 #
-# So: the pair only when this was typed AT the hangar root, and the real binary everywhere else.
-# Exact equality rather than "inside the hangar", because every clone is inside the hangar too.
+# ## Why a file on PATH, and why in this directory
+#
+# There is no direnv alias: direnv exports the ENVIRONMENT DIFF a `.envrc` produces, and a shell
+# function is not an environment variable. PATH is. `.envrc` adds `bin` and this directory;
+# every clone's own `.envrc.private` repeats only `PATH_add <hangar>/bin`, because that is how
+# `hangar` is reached from inside a clone. So a `claude` in `bin/` would have been on PATH in
+# every clone shell too, where `terminal.tabs[]`'s default `command: 'claude'` starts each
+# clone's own session. `app/` has no `.envrc` of its own, so the root's reaches it.
+#
+# The directory test is still not redundant with that split: a tmux SERVER inherits the
+# environment of whatever started it, so -- measured -- a clone window's `command: 'claude'`
+# resolved to this file from a $PWD inside the clone when `hangar open` was typed at the root.
 #
 # `pwd -P` and never `$PWD`. `$PWD` is a shell VARIABLE and is inherited, so a non-interactive
 # shell that never cd'd carries whatever its parent had -- measured, that made this file answer
@@ -37,12 +52,7 @@ self="$(CDPATH= cd -- "${0%/*}" && pwd -P)"
 hangar="$(CDPATH= cd -- "$self/../.." && pwd -P)"
 here="$(pwd -P)"
 
-if [ "$here" = "$hangar" ]; then
-    exec hangar up "$@"
-fi
-
-# Anywhere else: find the real binary, with THIS directory skipped so we cannot re-enter.
-# `hangar up` does the same skip in `resolveClaudeBinary`; both halves of the loop are cut.
+# The real binary, with THIS directory skipped so it can never resolve to itself.
 real=''
 IFS=:
 for dir in $PATH; do
@@ -57,4 +67,49 @@ if [ -z "$real" ]; then
     printf 'claude: not found on PATH outside %s\n' "$self" >&2
     exit 127
 fi
-exec "$real" "$@"
+
+mode=''
+if [ "$here" = "$hangar" ]; then
+    mode=ops
+elif [ "$here" = "$hangar/app" ]; then
+    mode=dev
+fi
+
+if [ -n "${CLAUDECODE:-}" ]; then
+    mode=''
+fi
+
+# Read off the Commands section of `claude --help`, aliases included.
+case "${1:-}" in
+    agents | attach | auth | auto-mode | doctor | gateway | import | install | logs | mcp | \
+        plugin | plugins | purge | respawn | rm | setup-token | stop | kill | ultrareview | \
+        update | upgrade | -v | --version | -h | --help)
+        mode=''
+        ;;
+esac
+
+if [ -z "$mode" ]; then
+    unset HANGAR_MODE
+    exec "$real" "$@"
+fi
+
+# The caller's own name wins: `-n` is claude's `--name`.
+named=''
+for arg in "$@"; do
+    case "$arg" in
+        -n | --name | --name=*) named=yes ;;
+    esac
+done
+
+modes="$hangar/.claude/modes"
+HANGAR_MODE="$mode"
+export HANGAR_MODE
+
+if [ -n "$named" ]; then
+    exec "$real" --settings "$modes/$mode.settings.json" \
+        --append-system-prompt-file "$modes/$mode.md" \
+        --mcp-config "$modes/mcp.json" "$@"
+fi
+exec "$real" --settings "$modes/$mode.settings.json" \
+    --append-system-prompt-file "$modes/$mode.md" \
+    --mcp-config "$modes/mcp.json" -n "hangar $mode" "$@"

@@ -68,8 +68,8 @@ has the canary). Both also run in `app/.husky/pre-commit` and inside `hangar dev
 `pnpm` is not assumed to be on PATH: it lives inside an fnm multishell and so moves when the Node
 version moves. The hangar root's `.envrc` activates it through `hangar_use_pnpm` (defined in
 `.envrc.hangar`), alongside `hangar_use_node .nvmrc`, `hangar_use_gnu`, `PATH_add bin`,
-`PATH_add .local/bin` (the `claude` shim) and `PATH_add app/node_modules/.bin` — which is how
-`tsc`, `eslint` and `prettier` are reached. If any of those commands is not found, the answer is
+`PATH_add .local/bin` (the `claude` shim that picks a mode) and `PATH_add app/node_modules/.bin`
+— which is how `tsc`, `eslint` and `prettier` are reached. If any of those commands is not found, the answer is
 almost always that direnv has not loaded: run `direnv allow` at the hangar root.
 
 **Prefer bullet lists to wide tables in any CLAUDE.md under `app/`.** `format:check` pads every row
@@ -320,7 +320,7 @@ The layout under `src/` is what `ls` shows; only what a listing cannot say is ke
 - **`cli.ts`** — every command, option and alias is registered here, plus the `preAction` config
   gate and the `configureHelp` that prints all of a command's aliases.
   A name that must stay out of `--help` is a second `program.command(name, { hidden: true })`
-  registration (`claude` beside `up`), never an `.alias()`.
+  registration, never an `.alias()`.
 - **`commands/dev.ts` and `commands/release.ts`** — `hangar dev golden`, the capture behind
   `pnpm golden`, and `hangar dev release`, the gates and preflight in front of semantic-release
   (`release/commits.ts` reads the range). **Both are hidden in `cli.ts`, and that is their interface
@@ -582,9 +582,11 @@ More root files are hand-maintained and belong to this package rather than to th
   `resolveBrewPrefix`; `hangar-internals/reference/root-tools.md` has why.
 - **`.local/bin/claude`, `bin/hangar-statusline` and `bin/hangar-exec-guard`, plus the six files in `.claude/modes/`** —
   `ops.md`, `dev.md`, a `*.settings.json` beside each, the shared `mcp.json`, and `statusline.sh`.
-  **`hangar up` is the one way into either mode** (`src/commands/up.ts`; `hangar claude` is
-  its hidden second spelling, and `hangar down` in `down.ts` the way out), and `dev`'s
-  working directory is `app/` so that THIS file loads from its first turn — which is also why
+  **The shim is the one way into either mode**: a bare `claude` at the hangar root is operator
+  mode and one in `app/` is developer mode, exactly those two directories, and it writes each
+  mode's four flags in the one place they exist. `hangar up` (`src/commands/up.ts`) runs it in
+  two tmux tabs beside a shell, and `hangar down` (`down.ts`) is the way out. `dev`'s working
+  directory is `app/` so that THIS file loads from its first turn — which is also why
   `app/.claude/settings.json` exists, for `plansDirectory`.
   - **The shim cannot move into `bin/`**: every clone puts `bin/` on PATH, so a `claude` there
     would replace each clone's own session command.

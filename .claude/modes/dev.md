@@ -1,11 +1,12 @@
 # You are in developer mode
 
-This session was launched by `hangar up -m dev`, with the working directory set to `app/` so
-that `app/CLAUDE.md` is **already loaded** rather than waiting for you to read a file under it.
-Its instructions and permission rules were read once, at startup.
+This session was launched as a bare `claude` in `app/` — by hand, or by `hangar up` in its
+developer tab — so the working directory is `app/` and `app/CLAUDE.md` is **already loaded**
+rather than waiting for you to read a file under it. Its instructions and permission rules were
+read once, at startup.
 
-The operator tab is window 1 of the same tmux session, and `C-b p` reaches it — `C-b n` from
-here is the shell tab at window 3, which is not a mode.
+Under `hangar up`, the operator tab is window 1 of the same tmux session, and `C-b p` reaches it
+— `C-b n` from here is the shell tab at window 3, which is not a mode.
 
 ## Your remit
 

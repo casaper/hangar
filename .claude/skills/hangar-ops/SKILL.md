@@ -20,15 +20,16 @@ exist there. Reach for the shell for anything the tools do not cover — and not
 permissioned separately, so an answer about one says nothing about the other.
 
 **If this session was launched in a mode, that mode's file is your remit and outranks a habit.**
-`hangar up` starts Claude Code with `.claude/modes/<mode>.md` appended to the system prompt
-and `.claude/modes/<mode>.settings.json` as their permission rules — read once, at startup, so
-neither you nor the user can switch without restarting. Operator mode is denied writes to
-`app/**`, `.claude/skills/**` and `.claude/modes/**`, is denied `hangar up` and `hangar down` themselves, and
-pre-approves the reporting commands below. A session started as a bare `claude` from anywhere but
-the hangar root has neither, and the defaults in this file apply — **including a bare
-`claude --resume` of a session that WAS in a mode**, which comes back with none of its rules.
-**The status line is the tell: it reads a red `NO MODE` instead of `OPS` or `DEV`.** Resume
-through `hangar up --resume <id> -m <mode>` to keep them.
+A bare `claude` at the hangar root starts operator mode and one in `app/` starts developer mode,
+with `.claude/modes/<mode>.md` appended to the system prompt and
+`.claude/modes/<mode>.settings.json` as its permission rules — read once, at startup, so neither
+you nor the user can switch without restarting. `hangar up`'s two tabs are that same launch.
+Operator mode is denied writes to `app/**`, `.claude/skills/**` and `.claude/modes/**`, is denied
+`hangar up` and `hangar down` themselves, and pre-approves the reporting commands below. A
+session started anywhere else has neither, and the defaults in this file apply — **including a
+`claude --resume` of a session that WAS in a mode, run from any other directory**, which comes
+back with none of its rules. **The status line is the tell: it reads a red `NO MODE` instead of
+`OPS` or `DEV`.** Resume from the mode's own directory to keep them.
 
 ## Addressing a clone
 

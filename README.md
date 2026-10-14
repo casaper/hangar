@@ -474,14 +474,24 @@ assignments.
 
 ```bash
 cd ~/code/<your hangar>
-claude                          # both modes and a shell, operator in front
+claude                          # operator mode, in this terminal
+cd app && claude                # developer mode, in this terminal
+hangar up                       # both modes and a shell, as three tabs of one tmux window
 ```
 
-That is the whole of it. `claude` at the hangar root opens **one tmux window with three tabs** —
-operator in the first, developer in the second, and a plain shell at the hangar root in the third —
-and attaches your terminal to it. `C-b n` moves between them, `C-b 3` goes straight to the shell,
-`C-b d` detaches and leaves all of them running, and typing `claude` again reattaches. Each mode
-tab's header says what that session is for, and only the tab you are in carries the words:
+**A bare `claude` picks its mode from where you typed it**: operator at the hangar root, developer
+in `app/`, exactly those two directories. It reaches that through `.local/bin/claude`, a shim
+direnv puts on your PATH in the hangar and nowhere else — **inside a clone, and anywhere else,
+`claude` is the ordinary Claude Code binary**, and so is every subcommand (`claude mcp`,
+`claude update`, …) even at the root. Everything you pass goes through to Claude Code, so
+`claude --resume <id>` at the root resumes that session back into operator mode.
+
+**`hangar up` puts both modes and a shell in one tmux window.** Operator is the first tab,
+developer the second, and a plain shell at the hangar root the third — and `hangar up` lands you
+on the shell. `C-b n` moves between them, `C-b 1`/`2`/`3` go straight to one, `C-b d` detaches
+and leaves all of them running, and `hangar up` again reattaches. Each mode tab runs exactly the
+`claude` above, from its own directory, and its header says what that session is for — only the
+tab you are in carries the words:
 
 ```
  ops · run the fleet   dev   shell
@@ -489,28 +499,21 @@ tab's header says what that session is for, and only the tab you are in carries 
 ```
 
 The shell tab is the odd one out on purpose: it is a window, not a mode. It has no permission
-rules, no badge and no `-m` of its own — it is somewhere to type `hangar list` or `git log` without
-spending a Claude Code turn on it. Typing `claude` **in** that tab does not nest a second client;
-it selects the operator tab and says so.
-
-`claude` reaches this through `.local/bin/claude`, a two-line shim direnv puts on your PATH in the
-hangar root and nowhere else — **inside a clone, `claude` is the ordinary Claude Code binary**. The
-long spelling is `hangar up`, and it works from anywhere in the hangar except a clone.
+rules and no badge — it is somewhere to type `hangar list` or `git log` without spending a Claude
+Code turn on it. `hangar up` typed **in** that tab does not nest a second client; it does its
+work and selects the tab you asked for. It works from anywhere in the hangar except a clone.
 `hangar down` is the other end: it closes every clone the way `hangar close --all` does, then
 ends all three tabs, and leaves the terminal you typed `hangar up` in as it was before.
 `--keep-clones` stops only the three tabs.
 
 | | |
 | --- | --- |
-| `claude` | both tabs, operator selected |
-| `claude -m dev` | both tabs, developer selected |
-| `claude --resume <id>` | resume that session in the operator tab, keeping the mode |
-| `claude --resume <id> -m dev` | the same, in the developer tab |
-| `claude --help` | claude's own help, with `-m, --mode` folded into it |
-| `claude --dry-run` | report what would be created, change nothing |
-
-Every argument other than those four is passed straight through to `claude`, so anything you know
-how to do with Claude Code works here too.
+| `hangar up` | all three tabs, the shell selected |
+| `hangar up -s dev` | the same, developer selected (`ops`, `dev` or `shell`) |
+| `hangar up -r` | each mode tab it creates resumes that mode's last session |
+| `hangar up --restart dev` | end the developer tab's claude and start a new one; asks first |
+| `hangar up --restart all -r` | restart both, each back in the conversation it held |
+| `hangar up -n` | report what would be created, restarted and resumed; change nothing |
 
 **Operator mode is for driving the fleet.** The session runs `hangar` on your behalf and reads its
 output: what the clones are doing, why `doctor` is red, syncing a clone, opening a window,
@@ -521,8 +524,8 @@ flags up rather than recalling them.
 `.claude/modes/**` are denied by that session's permission rules — including the file holding its own
 instructions, so it cannot rewrite its own remit. Reading all of them is allowed and is usually the
 right answer. If a task genuinely needs the CLI changed, it will name the file and stop — it is
-also denied `hangar up`, so it cannot open the developer tab for you. That tab is already the
-next window along.
+also denied `hangar up`, and a `claude` it runs in `app/` gets no mode, so it cannot start a
+developer session for you. Under `hangar up` that tab is already the next window along.
 
 **Developer mode is for changing the `hangar` CLI itself** — the TypeScript in `app/src/**`, the
 config schema, the generated artifacts, the skills, and operator mode's own instructions. Its
@@ -537,21 +540,18 @@ denied writes to them. That asymmetry is why there are two modes rather than one
 
 Four things about how a mode works, because they are not obvious:
 
-- **A mode is three launch flags** — `--settings`, `--append-system-prompt-file` and a session name
-  — and Claude Code reads all three **once, at startup**. So neither you nor the session can switch
+- **A mode is four launch flags** — `--settings`, `--append-system-prompt-file`, `--mcp-config`
+  and a session name — and Claude Code reads them **once, at startup**. So neither you nor the session can switch
   modes without restarting. That is the point of it, not a limitation.
-- **`claude --resume <id>` resumes *into* a mode**, because those three flags are placed ahead of
-  your `--resume`. A bare `claude --resume` of the same session, from outside the hangar root,
-  comes back with none of its rules.
+- **`claude --resume <id>` resumes *into* a mode**, because the shim puts those flags ahead of
+  your `--resume`. The same command from any other directory comes back with none of its rules.
 - **The window is badged.** The status line is built to show a blue `OPS`, an amber `DEV`, or a red
-  `NO MODE` for a session launched as a plain `claude` — which is the tell that a resumed session
-  lost its rules. This part is newly added and not yet confirmed by eye; see **Troubleshooting**.
-- **The pair is a singleton.** Never a second operator tab or a second developer one. A tab whose
-  session you `/exit` simply closes, and the next `claude` recreates it — which is also when
-  arguments can be applied to it. Aimed at a tab that is still running, arguments are refused
-  rather than silently dropped; `--replace` ends that tab's session and asks before it does. The
-  shell tab is recreated the same way after an `exit`, and while it is alive the tmux session
-  outlives both mode tabs.
+  `NO MODE` for a session started in no mode — which is the tell that a resumed session lost its
+  rules. This part is newly added and not yet confirmed by eye; see **Troubleshooting**.
+- **`hangar up`'s tabs are a singleton.** Never a second operator tab or a second developer one.
+  A tab whose session you `/exit` simply closes, and the next `hangar up` recreates it; `--restart`
+  ends one that is still running, and asks before it does. The shell tab is recreated the same
+  way after an `exit`, and while it is alive the tmux session outlives both mode tabs.
 
 The two sessions live on a tmux socket of their own, `tmux -L hangar-<id>-claude`, so they are
 invisible to a bare `tmux ls` and separate from the clone sessions `hangar open` creates.
@@ -837,7 +837,7 @@ echo 'source ~/code/my_fleet/clone-terminal.sh' >> ~/.zshrc
 | `hangar: command not found`                                    | direnv has not loaded. `direnv allow` at the hangar root. Same answer for a missing `tsc`, `eslint`, `prettier` or `pnpm`. |
 | `no hangar.config.yaml … so this is not a hangar`              | `hangar setup`, or `cp hangar.config.example.yaml hangar.config.yaml`                                                |
 | Every clone reports ports 4200 / 6006 / 9323                   | You ran the repo's own port script from the hangar root, where the clone's env file is never loaded. It does not error, it answers wrong — the tell is a `(default)` marker. Use `hangar ports`. |
-| A red `NO MODE` badge in a tab `claude` opened | Either the session was resumed with a bare `claude --resume` from outside the hangar root (which drops the mode), or the badge wiring is at fault — see below. |
+| A red `NO MODE` badge on a session you expected in a mode | Either it was started or resumed from a directory other than exactly the hangar root or `app/` (which drops the mode), or the badge wiring is at fault — see below. |
 | `git checkout <branch>` refuses, "matched multiple remote tracking branches" | The sibling remotes all have that branch. `hangar doctor --fix` restores the `checkout.defaultRemote=origin` that resolves it. |
 | `hangar sync` refuses to start                                 | The clone is mid-rebase or mid-merge. Finish or abort that first — step one is a stash, and it would bury the half-applied state. |
 | An editor never opens                                          | `hangar doctor` prints a row per configured editor with whether it can actually be launched. A `code` command that was never installed into PATH means `hangar open` silently opens no editor. |
@@ -845,7 +845,7 @@ echo 'source ~/code/my_fleet/clone-terminal.sh' >> ~/.zshrc
 | `hangar open` opened a window but it is not in front | GNOME Terminal cannot raise a window it opened. The window is there — `tmux -L hangar-<id> attach -t '=<clone>:'` from any shell, or `tmux -L hangar-<id> ls` to see the fleet's sessions. |
 
 **Known gap, stated plainly:** the mode badge is new. It takes the mode from three independent
-channels — the status line's own arguments, an environment variable set only by the launcher, and
+channels — the status line's own arguments, an environment variable set only by the shim, and
 otherwise the red fallback — precisely because none of them could be verified from outside a live
 session, and **it has not yet been confirmed by eye in a freshly launched window.** Any one channel
 working shows the right badge; all three failing shows the red warning rather than a confident wrong

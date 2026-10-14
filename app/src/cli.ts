@@ -9,7 +9,7 @@ import { exec, splitExecArgv } from './commands/exec.ts';
 import { install } from './commands/install.ts';
 import { browse } from './commands/browse.ts';
 import { checkoutDefault } from './commands/checkout-default.ts';
-import { up, upArgvFromProcess } from './commands/up.ts';
+import { up, type UpOptions } from './commands/up.ts';
 import { down, type DownOptions } from './commands/down.ts';
 import { coloursChange, coloursList, coloursSync } from './commands/colours.ts';
 import { configSchema, configShow, configValidate } from './commands/config.ts';
@@ -181,7 +181,6 @@ const TOLERATES_INVALID_CONFIG: readonly string[] = [
   // and nothing else -- and a config too broken to parse is exactly the moment somebody needs
   // developer mode to fix it. Requiring a valid one would make a typo a lockout.
   'up',
-  'claude',
 ];
 
 /**
@@ -592,54 +591,28 @@ program
     reloadClones(requireHangar(), clones, options);
   });
 
-/*
- * `hangar up` -- both hangar-root modes and a shell, three tabs of one tmux window.
- *
- * Registered unlike every other command here, and each departure is forced by what the command
- * IS: a wrapper whose arguments belong to another program.
- *
- * - `.allowUnknownOption()` and `.allowExcessArguments()`, because claude's whole flag surface
- *   arrives here and commander must not refuse a flag it has never heard of.
- * - `.helpOption(false)`, because `--help` has to reach the action -- it prints CLAUDE's help
- *   with hangar's one added row folded in, which commander's own help page cannot do.
- * - the action reads `process.argv` rather than its parameters. Commander cannot keep
- *   `--model sonnet` together without also breaking `--resume <id> -m dev`; `upArgvFromProcess`
- *   says why, and `sync`'s `forcedStrategy` is the existing precedent for the route.
- *
- * The options below are therefore DOCUMENTATION, not parsing -- `splitClaudeArgv` is what reads
- * them. Declared anyway so `hangar --help` lists them, and `-n` is deliberately absent: it is
- * claude's own `--name`, so the dry run is spelled out in full here.
- *
- * Registered twice: `claude` is a second spelling of the same command, HIDDEN rather than an
- * alias because `configureHelp` prints every alias. `ops.settings.json` denies both spellings.
- */
-const registerUp = (name: string, hidden: boolean): void => {
-  program
-    .command(name, { hidden })
-    .summary('Open the hangar-root window: both Claude sessions and a shell, in one tmux window')
-    .description(
-      [
-        'Start the two sessions a hangar root has — operator, which drives the fleet, and developer, which changes the CLI — as two tabs of one tmux window, with a third tab holding a plain shell at the hangar root, and attach this terminal to them. The operator tab is selected; `-m dev` selects the other, and `C-b 3` reaches the shell. Each mode tab says in the header what it is for.',
-        'Every other argument is passed straight through to `claude`, so `hangar up --resume <id> -m ops` resumes that session back into operator mode, with its permissions and its remit in force. A bare `claude --resume` of the same session comes back in no mode at all.',
-        'The pair is a singleton: one operator tab and one developer tab, on a tmux socket of their own so a bare `tmux -L hangar-<id> ls` still lists exactly the clones. A tab whose claude has exited is simply gone and is recreated by the next run — which is when passed-through arguments can be honoured. `--replace` is for when it cannot: it ends the claude in that tab, and asks first. The shell tab is not a mode: it takes no `-m`, carries no permission rules, and is recreated the same way after an `exit`.',
-        'From the hangar root, a bare `claude` reaches this command. Inside a clone it does not, and neither does this: a clone shell gets the real binary. Run from the shell tab, where `claude` is also on PATH, it does everything but re-attach — the client is already here, so it selects the tab and says so.',
-        'It opens no clone — `hangar open` does that, one decision per clone. `hangar down` is the other end, and takes the clones down too.',
-      ].join('\n\n'),
-    )
-    .allowUnknownOption()
-    .allowExcessArguments()
-    .helpOption(false)
-    .argument('[claude-args...]', 'anything claude takes — passed through untouched')
-    .option('-m, --mode <ops|dev>', 'which tab this session runs in', 'ops')
-    .option('--replace', 'end the claude already in that tab and start this one in its place')
-    .option('--yes', 'do not ask before --replace ends a session')
-    .option('--dry-run', 'report what would be created and change nothing')
-    .action(() => {
-      up(requireHangar(), { argv: upArgvFromProcess(process.argv.slice(2)) });
-    });
-};
-registerUp('up', false);
-registerUp('claude', true);
+program
+  .command('up')
+  .summary('Open the hangar-root window: both Claude sessions and a shell, in one tmux window')
+  .description(
+    [
+      'Start the two sessions a hangar root has — operator, which drives the fleet, and developer, which changes the CLI — as two tabs of one tmux window, with a third tab holding a plain shell at the hangar root, and attach this terminal to them. The shell tab is selected; `--select ops` or `--select dev` lands on a mode tab instead. Each mode tab says in the header what it is for.',
+      'Each mode tab runs the same `claude` you would type yourself: a bare `claude` at the hangar root starts operator mode and one in `app/` starts developer mode, so a tab is nothing more than that launch in a known place. `-r` starts each tab this run creates as its directory’s last session, resumed into its mode; a session that may still be running elsewhere, or none at all, gets a fresh one with a warning.',
+      'The window is a singleton: one operator tab and one developer tab, on a tmux socket of their own so a bare `tmux -L hangar-<id> ls` still lists exactly the clones. A tab whose claude has exited is simply gone and is recreated by the next run. `--restart` ends the claude in a tab that is still running, asks first, and starts a new one — with `-r`, resuming the conversation that tab held. The shell tab is not a mode, carries no permission rules, and is recreated the same way after an `exit`.',
+      'Run from the shell tab it does everything but re-attach — the client is already here, so it selects the tab and says so. It opens no clone — `hangar open` does that, one decision per clone. `hangar down` is the other end, and takes the clones down too.',
+    ].join('\n\n'),
+  )
+  .option('-s, --select <tab>', 'the tab to land on: ops, dev or shell', 'shell')
+  .option('-r, --resume-last', 'start each mode tab this run creates as its last session, resumed')
+  .option('--restart <tab>', 'end the claude in a running tab and start a new one: ops, dev or all')
+  .option('-y, --yes', 'do not ask before --restart ends a session')
+  .option(
+    '-n, --dry-run',
+    'report what would be created, restarted and resumed, and change nothing',
+  )
+  .action((options: UpOptions) => {
+    up(requireHangar(), options);
+  });
 
 program
   .command('down')

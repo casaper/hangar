@@ -2,94 +2,53 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import type { ClaudeTranscript } from '../src/claude-sessions.ts';
 import {
-  claudeArgvFor,
-  upArgvFromProcess,
-  claudeHelpWith,
-  isMode,
+  asTab,
+  DEFAULT_TAB,
+  describeTabResume,
+  modeTabCommand,
+  MODES,
   resolveClaudeBinary,
-  splitClaudeArgv,
+  restartChoice,
+  restartTargets,
+  shimPath,
   TAB_WINDOWS,
 } from '../src/commands/up.ts';
 import { syntheticHangar } from './fixture.ts';
 
 /**
- * `hangar up`'s four pure builders.
+ * `hangar up`'s pure half.
  *
- * **A golden capture cannot reach any of this**, which is the whole reason the file exists. The
- * command's output is a live tmux server and an attached terminal; what it gets RIGHT or wrong
- * is an argv it hands to another program, and the failures are all of the shape "typechecks,
- * runs, and does the wrong thing quietly":
+ * **A golden capture cannot reach any of this**: the command's output is a live tmux server and
+ * an attached terminal. What it gets right or wrong is which command a tab runs and which session
+ * it resumes, and the failures are all "runs, and does the wrong thing quietly":
  *
- * - `--model sonnet` arriving as `--model` with its value lifted out of sequence;
- * - hangar's own `-n` silently overriding a caller's;
- * - `--resume` reaching claude BEFORE `--settings`, so a resumed session comes back with the
- *   right badge and none of the mode's permissions -- the failure that looks like success;
- * - `resolveClaudeBinary` returning the proxy that called it, which recurses until the process
- *   table gives up.
+ * - a tab running a bare `claude`, which a tmux server's inherited PATH can resolve to the real
+ *   binary -- a session in no mode at all, under the tab's badge;
+ * - a restarted tab resuming nothing, because the session it held was still live when asked;
+ * - `resolveClaudeBinary` finding the shim and reporting Claude Code installed when it is not.
  *
- * Properties rather than snapshots, per this package's convention: the assertions say what must
- * be true of the argv, not what its bytes are.
+ * The mode's own flags, and their order ahead of `--resume`, are the shim's and are held by
+ * `claude-shim.test.ts`. Properties rather than snapshots, per this package's convention.
  */
 
 const hangar = syntheticHangar();
 
-// ---------------------------------------------------------------------------------------------
-// splitClaudeArgv
-// ---------------------------------------------------------------------------------------------
-
-test('the mode defaults to ops, and nothing is consumed that hangar does not own', () => {
-  const inv = splitClaudeArgv([]);
-  assert.equal(inv.mode, 'ops');
-  assert.equal(inv.replace, false);
-  assert.equal(inv.help, false);
-  assert.deepEqual(inv.passthrough, []);
-});
-
-test('-m is found at every position, which is the whole reason commander does not parse this', () => {
-  // Trailing is how a person actually types it, and it is the case `passThroughOptions` breaks.
-  for (const argv of [
-    ['-m', 'dev', '--resume', 'abc'],
-    ['--resume', 'abc', '-m', 'dev'],
-    ['--resume', 'abc', '--mode', 'dev'],
-    ['--mode=dev', '--resume', 'abc'],
-    ['--resume', 'abc', '--mode=dev'],
-  ]) {
-    const inv = splitClaudeArgv(argv);
-    assert.equal(inv.mode, 'dev', `-m was not found in ${argv.join(' ')}`);
-    assert.deepEqual(
-      inv.passthrough,
-      ['--resume', 'abc'],
-      `passthrough was disturbed by ${argv.join(' ')}`,
-    );
-  }
-});
-
-test('an option and its value stay adjacent and in order', () => {
-  // THE bug commander's `allowUnknownOption` would introduce: `sonnet` is `--model`'s value, not
-  // a positional, and nothing in hangar knows that -- so nothing may reorder around it.
-  const inv = splitClaudeArgv(['--model', 'sonnet', '-p', 'hi', '--add-dir', '/x']);
-  assert.deepEqual(inv.passthrough, ['--model', 'sonnet', '-p', 'hi', '--add-dir', '/x']);
-  assert.equal(inv.mode, 'ops');
-});
-
-test('-- hands everything after it to claude verbatim, a literal -m included', () => {
-  const inv = splitClaudeArgv(['--', '-m', 'literal', '--replace']);
-  assert.equal(inv.mode, 'ops', 'a mode after -- is claude’s, not hangar’s');
-  assert.equal(inv.replace, false, '--replace after -- is claude’s too');
-  assert.deepEqual(inv.passthrough, ['-m', 'literal', '--replace']);
-});
-
-test('an unknown mode is refused rather than defaulted', () => {
-  assert.throws(() => splitClaudeArgv(['-m', 'prod']), /unknown mode "prod"/);
-  assert.throws(() => splitClaudeArgv(['-m']), /needs a mode/);
-});
-
-test('the shell tab is a window and not a mode, so -m cannot name it', () => {
-  // The shell tab has no settings file and no remit, so a `-m shell` that parsed would launch a
-  // session with neither -- which looks exactly like a mode until you read its permissions.
-  assert.equal(isMode('shell'), false);
-  assert.throws(() => splitClaudeArgv(['-m', 'shell']), /unknown mode "shell"/);
+const transcript = (over: Partial<ClaudeTranscript>): ClaudeTranscript => ({
+  id: 'id',
+  file: '/x.jsonl',
+  cwd: hangar.root,
+  branch: undefined,
+  title: undefined,
+  firstPrompt: undefined,
+  lastPrompt: undefined,
+  startedAt: undefined,
+  modifiedAtMs: 0,
+  lastActiveAtMs: 0,
+  bytes: 0,
+  live: false,
+  ...over,
 });
 
 test('no two tabs claim the same window index', () => {
@@ -100,99 +59,60 @@ test('no two tabs claim the same window index', () => {
   assert.ok(indexes.length >= 3, 'the shell tab is missing from the table');
 });
 
-test('hangar’s own flags are consumed and never forwarded', () => {
-  const inv = splitClaudeArgv(['--replace', '--yes', '--dry-run', '-m', 'dev', '-p', 'x']);
-  assert.equal(inv.replace, true);
-  assert.equal(inv.yes, true);
-  assert.equal(inv.dryRun, true);
-  assert.deepEqual(inv.passthrough, ['-p', 'x'], 'a hangar flag reached claude');
+test('a fresh window lands on the shell tab, and --select names any of the three', () => {
+  assert.equal(DEFAULT_TAB, 'shell');
+  for (const tab of Object.keys(TAB_WINDOWS)) assert.equal(asTab(tab), tab);
+  assert.throws(() => asTab('operator'), /unknown tab/);
+  assert.throws(() => asTab(''), /unknown tab/);
 });
 
-// ---------------------------------------------------------------------------------------------
-// upArgvFromProcess
-// ---------------------------------------------------------------------------------------------
-
-test('the subcommand boundary survives a hangar directory named claude', () => {
-  // `--hangar <path>` is the only global option taking a value, so its value is the one token
-  // that could be mistaken for the subcommand. Skipping it is what makes this unambiguous.
-  assert.deepEqual(upArgvFromProcess(['--hangar', 'claude', 'claude', '-m', 'dev']), ['-m', 'dev']);
-  assert.deepEqual(upArgvFromProcess(['claude']), []);
-  assert.deepEqual(upArgvFromProcess(['list']), []);
+test('--restart names modes, never the shell tab', () => {
+  assert.deepEqual(restartTargets('all'), MODES);
+  for (const mode of MODES) assert.deepEqual(restartTargets(mode), [mode]);
+  // The shell tab runs no claude; restarting it would be killing somebody's shell.
+  assert.throws(() => restartTargets('shell'), /cannot restart/);
+  assert.throws(() => restartTargets('ops,dev'), /cannot restart/);
 });
 
-test('up and its hidden second spelling claude are the same boundary, and the first one wins', () => {
-  assert.deepEqual(upArgvFromProcess(['up', '-m', 'dev']), ['-m', 'dev']);
-  assert.deepEqual(upArgvFromProcess(['--hangar', 'up', 'up', 'up']), ['up']);
-  assert.deepEqual(upArgvFromProcess(['claude', 'up']), ['up']);
+test('a mode tab runs the shim by absolute path, and --resume comes after it', () => {
+  const fresh = modeTabCommand(hangar, undefined);
+  assert.equal(fresh, shimPath(hangar));
+  assert.ok(fresh.startsWith(`${hangar.root}/`), 'a tab must never run a bare claude');
+  assert.equal(shimPath(hangar), join(hangar.root, '.local', 'bin', 'claude'));
+
+  const resumed = modeTabCommand(hangar, 'abc-123');
+  assert.equal(resumed, `${shimPath(hangar)} --resume abc-123`);
 });
 
-// ---------------------------------------------------------------------------------------------
-// claudeArgvFor -- the ordering that makes resuming into a mode work
-// ---------------------------------------------------------------------------------------------
+test('a restarted tab resumes the newest LIVE session, which a plain resume would refuse', () => {
+  const idle = transcript({ id: 'idle', lastActiveAtMs: 300 });
+  const held = transcript({ id: 'held', lastActiveAtMs: 200, live: true });
+  const older = transcript({ id: 'older', lastActiveAtMs: 100, live: true });
 
-test('the mode’s settings, remit and tools precede anything passed through', () => {
-  const argv = claudeArgvFor(hangar, 'ops', ['--resume', 'abc']);
-  const resume = argv.indexOf('--resume');
-  assert.ok(resume !== -1);
-  // Reversed, `--resume` would be honoured with no permissions, no remit and no tools, and the
-  // session would come back wearing the badge of a mode it is not in.
-  for (const flag of ['--settings', '--append-system-prompt-file', '--mcp-config']) {
-    const at = argv.indexOf(flag);
-    assert.ok(at !== -1, `${flag} is missing`);
-    assert.ok(at < resume, `${flag} must precede --resume`);
+  assert.deepEqual(restartChoice([idle, older, held]), { kind: 'resume', session: held });
+
+  // Nothing live means the tab held no conversation worth naming: a fresh one, not the idle one.
+  assert.deepEqual(restartChoice([idle]), { kind: 'none' });
+  assert.deepEqual(restartChoice([]), { kind: 'none' });
+});
+
+test('every fallback to a fresh session is a warning, and a resume is not', () => {
+  const session = transcript({ id: 'abcdef1234', title: 'fix the bar' });
+  const resume = describeTabResume('ops', { kind: 'resume', session }, false);
+  assert.equal(resume.warn, false);
+  assert.ok(resume.text.includes('fix the bar') && resume.text.includes('abcdef12'));
+
+  for (const choice of [
+    { kind: 'live', session },
+    { kind: 'gone', session },
+    { kind: 'none' },
+  ] as const) {
+    const line = describeTabResume('dev', choice, true);
+    assert.equal(line.warn, true, choice.kind);
+    assert.ok(line.text.startsWith('dev: '), line.text);
   }
+  assert.equal(describeTabResume('ops', { kind: 'window-exists' }, false).warn, false);
 });
-
-test('both modes are handed the one MCP config, and it is an absolute path', () => {
-  /*
-   * Absolute rather than discovered, because developer mode's working directory is `app/` and a
-   * `.mcp.json` at the hangar root may not be found from there. The two modes differ in what
-   * their permission rules let the tools do, never in whether the tools are present.
-   */
-  const expected = join(hangar.root, '.claude', 'modes', 'mcp.json');
-  for (const mode of ['ops', 'dev'] as const) {
-    const argv = claudeArgvFor(hangar, mode, []);
-    assert.equal(argv[argv.indexOf('--mcp-config') + 1], expected);
-  }
-  // It would confine the session to this file and drop the developer's own servers with it.
-  assert.ok(!claudeArgvFor(hangar, 'ops', []).includes('--strict-mcp-config'));
-});
-
-test('each mode names its own settings file and its own remit', () => {
-  for (const mode of ['ops', 'dev'] as const) {
-    const argv = claudeArgvFor(hangar, mode, []);
-    assert.equal(
-      argv[argv.indexOf('--settings') + 1],
-      join(hangar.root, '.claude', 'modes', `${mode}.settings.json`),
-    );
-    assert.equal(
-      argv[argv.indexOf('--append-system-prompt-file') + 1],
-      join(hangar.root, '.claude', 'modes', `${mode}.md`),
-    );
-  }
-  // Two modes, two different files -- the assertion that would catch a copy-paste.
-  assert.notDeepEqual(claudeArgvFor(hangar, 'ops', []), claudeArgvFor(hangar, 'dev', []));
-});
-
-test('a caller who names the session keeps their name', () => {
-  // `-n` is claude's `--name`, not a dry run, and hangar uses it for the mode badge. A caller
-  // passing their own must win, or `-n` would be a flag that silently does nothing.
-  for (const named of [['-n', 'mine'], ['--name', 'mine'], ['--name=mine']]) {
-    const argv = claudeArgvFor(hangar, 'ops', named);
-    assert.equal(
-      argv.filter((t) => t === '-n' || t === '--name' || t.startsWith('--name=')).length,
-      1,
-      `hangar added a second name alongside ${named.join(' ')}`,
-    );
-    assert.ok(!argv.includes('hangar ops'), 'hangar overrode the caller’s session name');
-  }
-  // And with nothing passed, hangar does supply one -- that is what the mode badge reads.
-  assert.ok(claudeArgvFor(hangar, 'ops', []).includes('hangar ops'));
-});
-
-// ---------------------------------------------------------------------------------------------
-// resolveClaudeBinary -- the recursion guard
-// ---------------------------------------------------------------------------------------------
 
 test('the proxy directory is skipped, so the shim can never resolve to itself', () => {
   const shim = join(hangar.root, '.local', 'bin');
@@ -210,55 +130,4 @@ test('a real binary on PATH is found, and the shim ahead of it does not shadow i
   const shim = join(hangar.root, '.local', 'bin');
   assert.equal(resolveClaudeBinary('/usr/bin', hangar.root, 'env'), '/usr/bin/env');
   assert.equal(resolveClaudeBinary(`${shim}:/usr/bin`, hangar.root, 'env'), '/usr/bin/env');
-});
-
-// ---------------------------------------------------------------------------------------------
-// claudeHelpWith
-// ---------------------------------------------------------------------------------------------
-
-const CLAUDE_HELP = [
-  'Usage: claude [options]',
-  '',
-  'Options:',
-  '  --mcp-config <configs...>             Load MCP servers from JSON files',
-  '  --model <model>                       Model for the current session',
-  '  -p, --print                           Print response and exit',
-  '',
-].join('\n');
-
-test('the mode row is inserted where a reader scans for it, in claude’s own column', () => {
-  const out = claudeHelpWith(CLAUDE_HELP).split('\n');
-  const at = out.findIndex((l) => l.includes('-m, --mode'));
-  const model = out.findIndex((l) => /^\s+--model /.test(l));
-  assert.ok(at !== -1, 'the flag was not documented at all');
-  assert.ok(at < model, '-m, --mode should sort before --model');
-  // Same description column as the rows around it: a row that does not line up reads as a bug.
-  // Measured as "where the text after the last run of two-or-more spaces begins", which is the
-  // only definition that holds for both `-m, --mode <ops|dev>` and `--model <model>`.
-  const column = (line: string): number => /^ +\S(?:.*?\S)? {2,}/.exec(line)?.[0].length ?? -1;
-  assert.equal(column(out[at] ?? ''), column(out[model] ?? ''));
-  // Nothing of claude's own was dropped on the way through.
-  for (const line of CLAUDE_HELP.split('\n')) assert.ok(out.includes(line), `lost: ${line}`);
-});
-
-test('a help page with no --model row still documents the flag, rather than failing', () => {
-  // claude's help layout is not a contract. Losing the anchor must cost a scroll, not the flag.
-  const out = claudeHelpWith('Usage: claude\n\nOptions:\n  -p, --print   Print and exit\n');
-  assert.match(out, /-m, --mode <ops\|dev>/);
-  assert.match(out, /--replace/);
-  assert.match(out, /Added by hangar/);
-  assert.match(out, /-p, --print/, 'claude’s own help was dropped');
-});
-
-test('an empty help page is survivable, because it means claude --help itself failed', () => {
-  // This is also the answer when claude is not installed at all: `hangar up --help` reports
-  // ahead of the missing-binary refusal, precisely because that is when it is most wanted.
-  const out = claudeHelpWith('');
-  assert.match(out, /-m, --mode <ops\|dev>/);
-  assert.match(out, /--replace/);
-  assert.match(out, /--dry-run/);
-  // The heading may not claim a page that is not there.
-  assert.doesNotMatch(out, /everything else above/);
-  assert.match(out, /every other flag reaches it unchanged/);
-  assert.ok(!out.startsWith('\n'), 'no leading blank where the page would have been');
 });

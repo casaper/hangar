@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { delimiter, dirname, join, resolve, sep } from 'node:path';
 
+import { claudeTranscriptsIn, headline, type ClaudeTranscript } from '../claude-sessions.ts';
 import { CliError, run } from '../exec.ts';
 import { discoverClones } from '../fleet.ts';
 import {
@@ -12,35 +13,33 @@ import {
 import { applyArtifact } from '../generate/index.ts';
 import type { Hangar } from '../hangar.ts';
 import { MODE_COLOURS } from '../palette.ts';
+import { tildify } from '../user-paths.ts';
 import { claudeSocketName, tmuxBinary, tmuxSocketOf } from '../tmux.ts';
 import { confirm, note, ok, step, warn } from '../ui.ts';
+import { resumeChoice, type ResumeChoice } from './open.ts';
 
 /**
  * `hangar up` -- both hangar-root modes and a shell, in one tmux window, as three tabs.
  *
  * A hangar-root session is either driving the fleet or changing the CLI, and which one it is
- * decides its permissions and its remit. This command is the only way into either: it starts a
- * tmux session on its own socket with operator in window 1, developer in window 2 and a plain
- * shell at the hangar root in window 3, and attaches the terminal you typed in to it.
+ * decides its permissions and its remit. This command starts a tmux session on its own socket
+ * with operator in window 1, developer in window 2 and a plain shell at the hangar root in window
+ * 3, and attaches the terminal you typed in to it, on the shell tab unless `--select` says
+ * otherwise.
+ *
+ * ## The mode is the shim's, and this command only places it
+ *
+ * A mode is four flags plus a working directory, and `.local/bin/claude` is the one place the
+ * four are written: a bare `claude` at the hangar root is operator mode and one in `app/` is
+ * developer mode. Each mode tab runs that shim by absolute path from its own directory, so a tab
+ * and a `claude` typed by hand are the same launch and cannot drift apart. This command takes
+ * none of claude's arguments; it has options of its own.
  *
  * ## The shell tab is a third WINDOW and not a third MODE
  *
- * A mode is the three flags below plus a working directory, and a shell has none of them. So
- * `Mode` stays a pair, `-m shell` is an error, and `C-b 3` is how that tab is reached. Its
- * `HANGAR_MODE` is explicitly EMPTY, which is the one that would bite: a window created without
- * that flag inherits the SESSION's value, and the shell tab is exactly where someone types
- * `claude` -- so leaving it off would badge a session `OPS` with none of operator's rules.
- *
- * ## A mode is three flags and a working directory, and nothing in a session can change them
- *
- * `--settings <mode>.settings.json` carries the permission rules, `--append-system-prompt-file
- * <mode>.md` the remit, and `-n "hangar <mode>"` puts the mode in the prompt box, the terminal
- * title and the `/resume` picker. Claude Code reads all three once, at startup.
- *
- * `--append-system-prompt-file` also turns the system-prompt SNAPSHOT off, which is what makes
- * `hangar up --resume <id> -m ops` resume back INTO operator mode -- the remit is re-applied
- * on every launch rather than frozen into the conversation. A bare `claude --resume` of the same
- * session comes back with no mode at all, which is what the red `NO MODE` badge is for.
+ * `Mode` stays a pair and `--select shell` is a TAB rather than a mode. Its `HANGAR_MODE` is
+ * explicitly EMPTY, which is the one that would bite: a window created without that flag inherits
+ * the SESSION's value, so leaving it off would badge the shell tab `OPS`.
  *
  * ## The root `CLAUDE.md` loads in both modes and cannot be suppressed
  *
@@ -51,16 +50,6 @@ import { confirm, note, ok, step, warn } from '../ui.ts';
  * to use. So each mode file CORRECTS the fleet map rather than replacing it, starting with "you
  * are not in a clone", which that file does not say and a hangar-root session has no other way
  * to learn.
- *
- * ## Everything else is passed straight through
- *
- * Hangar adds `-m|--mode` and `--replace` and takes nothing else. `-m` and `--mode` are both
- * free in claude's flag space; `-n, --name` is NOT -- it is claude's own, and it is what the
- * mode badge is written with -- so hangar supplies its own only when the caller named neither.
- *
- * **`-n` is therefore not a dry run here**, the one place in this CLI besides `hangar resume`
- * where it is not. `--dry-run` is spelled out in full, because the alternative is shadowing a
- * flag of claude's that a caller has every reason to pass.
  */
 
 export type Mode = 'ops' | 'dev';
@@ -69,14 +58,14 @@ export const MODES: readonly Mode[] = ['ops', 'dev'];
 
 /** Everything about a mode that is not its colour. The hue and the purpose are in `palette.ts`. */
 type ModeSpec = {
-  /** Where the session's working directory is -- which decides which `CLAUDE.md` loads. */
+  /** Where the session's working directory is -- which decides which mode the shim starts. */
   readonly dir: (hangar: Hangar) => string;
   readonly window: number;
 };
 
 /**
  * Developer mode runs in `app/` so that `app/CLAUDE.md` is loaded on turn one rather than
- * lazily, and operator mode at the root so it is not.
+ * lazily, and operator mode at the root so it is not. The shim reads the same two directories.
  */
 const SPECS: Readonly<Record<Mode, ModeSpec>> = {
   ops: { dir: (h) => h.root, window: 1 },
@@ -91,7 +80,7 @@ export const isMode = (value: string): value is Mode => MODES.includes(value as 
  * Deliberately NOT an entry in `SPECS`, because it is not a mode -- no settings file, no remit,
  * no `-n`, and no `HANGAR_MODE` (see the header). It is there so the hand-run half of fleet work
  * -- `hangar list`, `git log`, `pnpm golden` -- has somewhere to live that is not a tool call
- * inside one of the two sessions.
+ * inside one of the two sessions, and it is the tab a fresh `hangar up` lands on.
  */
 const SHELL_WINDOW = 3;
 const SHELL_NAME = 'shell';
@@ -101,6 +90,11 @@ const SHELL_PURPOSE = 'a shell at the root';
 /** The column every tab name is reported in. `shell` is the longest of the three. */
 const TAB_COLUMN = 5;
 
+export type Tab = Mode | typeof SHELL_NAME;
+
+/** The tab selected when `--select` is absent: the one a person types into first. */
+export const DEFAULT_TAB: Tab = SHELL_NAME;
+
 /**
  * Every tab's window index, DERIVED rather than retyped.
  *
@@ -109,267 +103,103 @@ const TAB_COLUMN = 5;
  * rebuild its own workspace. A hand-written copy of this table would pin itself and prove
  * nothing.
  */
-export const TAB_WINDOWS: Readonly<Record<string, number>> = {
-  ...Object.fromEntries(MODES.map((mode) => [mode, SPECS[mode].window])),
+export const TAB_WINDOWS: Readonly<Record<Tab, number>> = {
+  ops: SPECS.ops.window,
+  dev: SPECS.dev.window,
   [SHELL_NAME]: SHELL_WINDOW,
 };
 
 // ---------------------------------------------------------------------------------------------
-// The pure half: four builders, each callable without a tmux server or a filesystem.
+// The pure half: each callable without a tmux server or a filesystem.
 // ---------------------------------------------------------------------------------------------
 
-export type ClaudeInvocation = {
-  readonly mode: Mode;
-  readonly replace: boolean;
-  readonly yes: boolean;
-  readonly help: boolean;
-  readonly dryRun: boolean;
-  /** Everything hangar did not consume, in the order it was given. */
-  readonly passthrough: readonly string[];
+/** `--select`'s value, refused rather than defaulted when it names no tab. */
+export const asTab = (value: string): Tab => {
+  if (isMode(value) || value === SHELL_NAME) return value;
+  throw new CliError(`unknown tab "${value}" (expected ops, dev or shell)`);
 };
 
-/** The default when `-m` is absent: driving the fleet is the common case. */
-const DEFAULT_MODE: Mode = 'ops';
-
-const asMode = (value: string): Mode => {
-  if (!isMode(value)) throw new CliError(`unknown mode "${value}" (expected ops or dev)`);
-  return value;
+/** `--restart`'s value, as the modes it names. The shell tab is not restartable: `exit` it. */
+export const restartTargets = (value: string): readonly Mode[] => {
+  if (value === 'all') return MODES;
+  if (isMode(value)) return [value];
+  throw new CliError(
+    `cannot restart "${value}" (expected ops, dev or all)`,
+    value === SHELL_NAME
+      ? 'the shell tab has no claude to restart -- `exit` it and run this again'
+      : undefined,
+  );
 };
+
+/** The shim a mode tab runs, by absolute path. */
+export const shimPath = (hangar: Hangar): string => join(hangar.root, '.local', 'bin', 'claude');
+
+const shellQuote = (value: string): string =>
+  /^[A-Za-z0-9_./:=-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`;
 
 /**
- * Split `hangar up`'s own flags out of an argv that otherwise belongs to claude.
+ * The command a mode tab runs: the shim, by ABSOLUTE path, never a bare `claude`.
  *
- * Raw argv rather than commander, and that is not laziness. Commander with
- * `allowUnknownOption` cannot tell `--model sonnet` (an option and its value) from an option
- * followed by a positional, so `sonnet` would be lifted out of sequence and claude would be
- * handed `--model` with nothing after it. `passThroughOptions` fixes the parsing and breaks the
- * ergonomics instead: it stops at the first unknown token, so `--resume <id> -m dev` -- with the
- * mode flag LAST, which is how a person actually types it -- would pass `-m dev` to claude.
- *
- * `sync`'s `forcedStrategy` and `merge-default` read `process.argv` for the same class of
- * reason, so this is the house route rather than an exception to it.
- *
- * Unknown-to-hangar tokens are never inspected, only forwarded, which is what keeps this correct
- * against a claude that grows a flag tomorrow.
+ * Absolute because the tmux server inherits whatever PATH started it, and a bare name could reach
+ * the real binary -- a session in no mode at all, wearing the tab's badge. The shim reads the mode
+ * off the tab's working directory and puts its four flags ahead of `--resume`, which is what
+ * makes a resumed tab come back INTO its mode.
  */
-export const splitClaudeArgv = (argv: readonly string[]): ClaudeInvocation => {
-  let mode: Mode | undefined;
-  let replace = false;
-  let yes = false;
-  let help = false;
-  let dryRun = false;
-  const passthrough: string[] = [];
+export const modeTabCommand = (hangar: Hangar, resumeId: string | undefined): string =>
+  [shimPath(hangar), ...(resumeId === undefined ? [] : ['--resume', resumeId])]
+    .map(shellQuote)
+    .join(' ');
 
-  for (let i = 0; i < argv.length; i += 1) {
-    const token = argv[i] ?? '';
-    // `--` ends hangar's interest entirely: everything after it is claude's, verbatim, even a
-    // literal `-m`. That is the escape hatch for a future claude flag that collides with ours.
-    if (token === '--') {
-      passthrough.push(...argv.slice(i + 1));
-      break;
-    }
-    const eq = /^--mode=(.*)$/.exec(token);
-    if (eq !== null) {
-      mode = asMode(eq[1] ?? '');
-      continue;
-    }
-    if (token === '-m' || token === '--mode') {
-      const value = argv[i + 1];
-      if (value === undefined) throw new CliError('-m needs a mode: ops or dev');
-      mode = asMode(value);
-      i += 1;
-      continue;
-    }
-    if (token === '--replace') {
-      replace = true;
-      continue;
-    }
-    if (token === '--yes') {
-      yes = true;
-      continue;
-    }
-    if (token === '--dry-run') {
-      dryRun = true;
-      continue;
-    }
-    if (token === '-h' || token === '--help') {
-      help = true;
-      continue;
-    }
-    passthrough.push(token);
+/**
+ * The session a RESTARTED tab resumes: the conversation it holds right now.
+ *
+ * Not `resumeChoice`, whose rule is right for an absent tab and wrong here -- the session wanted
+ * is live until the kill lands, so "newest, unless live" would answer `live` every time and start
+ * a fresh one. This is `reload`'s rule instead: the newest LIVE transcript in the directory,
+ * named before anything is killed. It over-counts as `reload`'s does -- a `claude` typed in the
+ * shell tab is live at the root too -- which is why the id is printed first.
+ */
+export const restartChoice = (transcripts: readonly ClaudeTranscript[]): ResumeChoice => {
+  let newest: ClaudeTranscript | undefined;
+  for (const t of transcripts) {
+    if (!t.live) continue;
+    if (newest === undefined || t.lastActiveAtMs > newest.lastActiveAtMs) newest = t;
   }
-
-  return { mode: mode ?? DEFAULT_MODE, replace, yes, help, dryRun, passthrough };
+  return newest === undefined ? { kind: 'none' } : { kind: 'resume', session: newest };
 };
 
-/**
- * The tokens that follow the `up` subcommand -- or its hidden alias `claude` -- out of the raw
- * process argv.
- *
- * `process.argv` is `[node, cli.ts, ...global options..., 'up', ...claude's own...]`. The
- * only global option taking a value is `--hangar <path>`, so a hangar directory actually NAMED
- * `up` or `claude` is the single thing that could be mistaken for the subcommand -- and skipping that
- * option's value is what rules it out. `sync`'s `forcedStrategy` scans argv the same way and
- * stops at its own subcommand name for the same reason.
- */
-export const upArgvFromProcess = (argv: readonly string[]): string[] => {
-  for (let i = 0; i < argv.length; i += 1) {
-    const token = argv[i] ?? '';
-    if (token === '--hangar') {
-      i += 1;
-      continue;
-    }
-    if (token === 'up' || token === 'claude') return [...argv.slice(i + 1)];
-  }
-  return [];
-};
-
-/** True when the caller already named the session, so hangar must not override them. */
-const namesSession = (passthrough: readonly string[]): boolean =>
-  passthrough.some((t) => t === '-n' || t === '--name' || t.startsWith('--name='));
-
-/**
- * The argv claude is launched with.
- *
- * **The ordering is what makes resuming into a mode work**, and it is the reason this is a pure
- * builder with a test rather than a template string: `--settings`,
- * `--append-system-prompt-file` and `--mcp-config` come FIRST, so a passed-through
- * `--resume <id>` is resumed with the mode's permissions, remit and tools already in force.
- * Reversed, a resumed session would come back as a mode-less one wearing the right badge, which
- * is the failure that looks like success.
- *
- * **`--mcp-config` rather than a `.mcp.json` for Claude Code to discover**, and the reason is
- * developer mode: its working directory is `app/`, so a file at the hangar root may or may not
- * be found from there, and "may or may not" is not a thing to build a tool surface on. An
- * absolute path built from `hangar.root` reaches both modes for the same reason `--settings`
- * already does. Keeping it out of a discovered path also means it is loaded once, by the
- * sessions that ask for it, and never approved twice.
- *
- * **`--strict-mcp-config` is deliberately not passed.** It would confine the session to this one
- * file and so silently drop whatever MCP servers the developer configured for themselves, which
- * is a removal nobody asked for.
- */
-export const claudeArgvFor = (
-  hangar: Hangar,
+/** One line for what `--resume-last` does in one tab. Pure; `warn` picks the channel. */
+export const describeTabResume = (
   mode: Mode,
-  passthrough: readonly string[],
-): string[] => [
-  '--settings',
-  join(hangar.root, '.claude', 'modes', `${mode}.settings.json`),
-  '--append-system-prompt-file',
-  join(hangar.root, '.claude', 'modes', `${mode}.md`),
-  '--mcp-config',
-  join(hangar.root, '.claude', 'modes', 'mcp.json'),
-  ...(namesSession(passthrough) ? [] : ['-n', `hangar ${mode}`]),
-  ...passthrough,
-];
-
-/**
- * The real `claude`, found on PATH with this hangar's own shim directory skipped.
- *
- * `.local/bin/claude` is what a bare `claude` in the hangar root reaches, and all it does is call
- * this command -- so resolving the first `claude` on PATH from here would find the proxy that
- * invoked us and recurse until the process table gave up. Skipping one directory is the whole
- * guard, and it is exact rather than a substring test.
- *
- * `.local/bin` and not `bin`: the hangar's `.envrc` adds both, but every CLONE's own
- * `.envrc.private` repeats `PATH_add <hangar>/bin` -- it has to, that is how `hangar` is reached
- * from a clone. A shim in `bin/` would therefore have been on PATH inside every clone, where
- * `terminal.tabs[]`'s default `command: 'claude'` starts every clone session. The split is what
- * makes the proxy reachable in exactly one directory and invisible everywhere else.
- */
-export const resolveClaudeBinary = (
-  pathEnv: string | undefined,
-  hangarRoot: string,
-  // The name is a parameter so the positive case can be asserted against a binary that exists
-  // on every machine this suite runs on. Nothing but a test passes it.
-  name = 'claude',
-): string | undefined => {
-  const shim = join(hangarRoot, '.local', 'bin');
-  for (const dir of (pathEnv ?? '').split(delimiter)) {
-    if (dir === '') continue;
-    if (resolve(dir) === resolve(shim)) continue;
-    const candidate = join(dir, name);
-    if (existsSync(candidate)) return candidate;
+  choice: ResumeChoice,
+  done: boolean,
+): { readonly text: string; readonly warn: boolean } => {
+  const fresh = done ? 'started a fresh session' : 'would start a fresh session';
+  switch (choice.kind) {
+    case 'resume':
+      return {
+        text: `${mode}: ${done ? 'resuming' : 'would resume'} ${headline(choice.session)} (${choice.session.id.slice(0, 8)})`,
+        warn: false,
+      };
+    case 'live':
+      return {
+        text: `${mode}: a claude is running in ${tildify(choice.session.cwd)} and may be its last session — ${fresh} instead`,
+        warn: true,
+      };
+    case 'gone':
+      return {
+        text: `${mode}: its last session was in ${tildify(choice.session.cwd)}, which no longer exists — ${fresh} instead`,
+        warn: true,
+      };
+    case 'none':
+      return { text: `${mode}: no resumable session — ${fresh}`, warn: true };
+    case 'window-exists':
+    case 'no-window':
+      return {
+        text: `${mode}: the tab is running, so nothing is resumed — \`--restart ${mode} -r\` resumes it`,
+        warn: false,
+      };
   }
-  return undefined;
-};
-
-/** The row `--help` gains, in claude's own two-column shape. */
-const MODE_HELP_TERM = '  -m, --mode <ops|dev>';
-const MODE_HELP_TEXT = 'Which hangar-root mode this session runs in (default: ops)';
-
-/** How far into a help line the description column starts. */
-const indentOf = (line: string): number => {
-  const term = /^(\s+\S+(?:, \S+)?(?: <[^>]+>)?\s+)/.exec(line);
-  return term?.[1]?.length ?? 40;
-};
-
-/**
- * The right margin claude's help actually wraps at.
- *
- * The plain maximum is wrong, and measurably: claude's help wraps at 80 but carries one row of
- * 117 characters, so `Math.max` reads the outlier as the margin and nothing ever wraps. Lines
- * over 100 are therefore ignored -- that keeps this derived from the page rather than hardcoded
- * to 80, so a claude that rewraps at a different width still gets a matching row.
- */
-const marginOf = (rows: readonly string[]): number => {
-  const widths = rows.map((r) => r.length).filter((n) => n <= 100);
-  return widths.length === 0 ? 80 : Math.max(...widths);
-};
-
-/** Greedy wrap, so an inserted help row obeys the same right margin as the page around it. */
-const wrap = (text: string, width: number): string[] => {
-  const out: string[] = [];
-  let line = '';
-  for (const word of text.split(' ')) {
-    if (line === '') line = word;
-    else if (`${line} ${word}`.length <= width) line = `${line} ${word}`;
-    else {
-      out.push(line);
-      line = word;
-    }
-  }
-  if (line !== '') out.push(line);
-  return out;
-};
-
-/**
- * claude's own help, with hangar's one added flag put where a reader would scan for it.
- *
- * Insert before claude's `--model` row, which is where `-m, --mode` sorts. claude's help layout
- * is not a contract, so a missing anchor is expected rather than exceptional: the flag is then
- * appended in a block of its own, which documents it either way and cannot fail. Losing the
- * anchor costs the reader a scroll; treating it as an error would cost them `--help` entirely.
- */
-export const claudeHelpWith = (helpText: string): string => {
-  const rows = helpText.split('\n');
-  const at = rows.findIndex((line) => /^\s+--model /.test(line));
-  if (at !== -1) {
-    // Match claude's own column AND its wrap, so the row is indistinguishable from the rest.
-    // Lining the term up and letting the text run past the right margin looks more wrong than
-    // not inserting it at all -- the reader sees one row that does not obey the page.
-    const column = indentOf(rows[at] ?? '');
-    const width = marginOf(rows);
-    const wrapped = wrap(MODE_HELP_TEXT, Math.max(20, width - column));
-    const inserted = wrapped.map((line, i) =>
-      i === 0 ? `${MODE_HELP_TERM.padEnd(column)}${line}` : `${' '.repeat(column)}${line}`,
-    );
-    return [...rows.slice(0, at), ...inserted, ...rows.slice(at)].join('\n');
-  }
-  // Two headings, because this block also answers when there is no page at all: `claude` not
-  // installed yet. "Everything else above" then names nothing, so it says what is true instead.
-  const page = helpText.replace(/\n+$/, '');
-  return [
-    ...(page === '' ? [] : [page, '']),
-    page === ''
-      ? "Added by hangar (claude's own help is unavailable; every other flag reaches it unchanged):"
-      : 'Added by hangar (everything else above is passed straight through to claude):',
-    `${MODE_HELP_TERM}  ${MODE_HELP_TEXT}`,
-    '  --replace             end the claude already in that tab and start this one there',
-    '  --dry-run             report what would be created, change nothing',
-    '',
-  ].join('\n');
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -455,7 +285,7 @@ export const server = (hangar: Hangar): Server => {
   };
 };
 
-/** How long a tab's claude has been up -- the fact `--replace` has to justify itself with. */
+/** How long a tab's claude has been up -- the fact `--restart` has to justify itself with. */
 export const uptimeOf = (pid: string): string => {
   if (pid === '') return 'an unknown time';
   const res = run('ps', ['-p', pid, '-o', 'etime=']);
@@ -463,12 +293,31 @@ export const uptimeOf = (pid: string): string => {
   return res.ok && out !== '' ? out : 'an unknown time';
 };
 
-const shellQuote = (value: string): string =>
-  /^[A-Za-z0-9_./:=-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`;
-
-/** The command a mode's window runs. Absolute claude, so the shim on PATH is never re-entered. */
-const windowCommand = (binary: string, argv: readonly string[]): string =>
-  [binary, ...argv].map(shellQuote).join(' ');
+/**
+ * The real `claude`, found on PATH with this hangar's own shim directory skipped.
+ *
+ * Nothing here runs it: every mode tab runs the shim. It is looked for so that a machine with no
+ * Claude Code is told so up front -- the shim would exit 127 inside a tab, and tmux closes a
+ * window whose command exits, so the tab would simply never appear. Skipping the shim's own
+ * directory is what keeps that check honest: the shim is always on the hangar's PATH, and finding
+ * it would answer "installed" on a machine where it is not.
+ */
+export const resolveClaudeBinary = (
+  pathEnv: string | undefined,
+  hangarRoot: string,
+  // The name is a parameter so the positive case can be asserted against a binary that exists
+  // on every machine this suite runs on. Nothing but a test passes it.
+  name = 'claude',
+): string | undefined => {
+  const shim = join(hangarRoot, '.local', 'bin');
+  for (const dir of (pathEnv ?? '').split(delimiter)) {
+    if (dir === '') continue;
+    if (resolve(dir) === resolve(shim)) continue;
+    const candidate = join(dir, name);
+    if (existsSync(candidate)) return candidate;
+  }
+  return undefined;
+};
 
 /** Identity and presentation, both at window scope, both read back by the bar. */
 const tagWindow = (srv: Server, mode: Mode): void => {
@@ -479,31 +328,25 @@ const tagWindow = (srv: Server, mode: Mode): void => {
 };
 
 /**
- * All three windows present, each tagged, and only the mode being launched gets the caller's
- * arguments.
+ * All three windows present and each tagged. A tab that is already there is left alone; one that
+ * is missing is created, with `resumes` naming the session a mode tab comes back as.
  *
- * The other windows are created bare when they are missing, because the three of them ARE the
- * workspace. Each lands at its own fixed index, which is what `renumber-windows off` in the conf
- * protects.
+ * Each lands at its own fixed index, which is what `renumber-windows off` in the conf protects.
  *
  * `-e HANGAR_MODE` on every MODE creation and never by inheritance: measured on tmux 3.7c, a
- * window created without it silently picks up the SESSION's value, so the developer tab would
- * carry an `OPS` badge and the status line would be confidently wrong. The shell window is the
- * one that gets none, for the same reason read the other way -- it has no mode to declare, and a
- * value there would be inherited by a `claude` typed in it.
+ * window created without it silently picks up the SESSION's value. The shim exports the same
+ * value itself, so this is belt and braces for a mode tab -- but not for the shell tab, which
+ * runs no shim and is where the inheritance would actually land.
  */
 const ensureSession = (
   hangar: Hangar,
   srv: Server,
-  wanted: Mode,
-  binary: string,
-  wantedArgv: readonly string[],
+  resumes: Readonly<Partial<Record<Mode, string>>>,
 ): void => {
   for (const mode of MODES) {
     const spec = SPECS[mode];
     if (srv.running() && srv.windows().some((w) => w.mode === mode)) continue;
 
-    const argv = mode === wanted ? wantedArgv : claudeArgvFor(hangar, mode, []);
     const shared = [
       '-n',
       mode,
@@ -511,7 +354,7 @@ const ensureSession = (
       spec.dir(hangar),
       '-e',
       `HANGAR_MODE=${mode}`,
-      windowCommand(binary, argv),
+      modeTabCommand(hangar, resumes[mode]),
     ];
     const res = srv.running()
       ? srv.tmux(['new-window', '-d', '-t', `${TARGET}${String(spec.window)}`, ...shared])
@@ -526,19 +369,18 @@ const ensureSession = (
     ok(`${mode.padEnd(TAB_COLUMN)} tab   ${MODE_COLOURS[mode].purpose}`);
   }
 
-  // Last, and after the loop for a reason: operator's is the creation that makes the session, so
-  // the shell is always a `new-window` and never has to know how to be the first one.
+  // Last, and after the loop for a reason: a mode tab's is the creation that makes the session,
+  // so the shell is always a `new-window` and never has to know how to be the first one.
   //
   // No command, so tmux starts `default-shell` as a login shell -- the developer's own, rather
   // than one this CLI picked for them. No per-window format either: with no hue to bake in, the
   // tab falls back to the conf's neutral entry, which says what it is.
   //
   // `-e HANGAR_MODE=` is EMPTY and not omitted, and that is measured rather than tidy. Omitting
-  // it inherits the session's value -- the same tmux 3.7c behaviour that makes the mode windows
-  // pass their own, verified here by reading `printenv HANGAR_MODE` out of the pane: a window
-  // created with no `-e` answered `ops`. So the shell tab would have carried operator's badge,
-  // and a `claude` started in it would have worn a mode it does not have. Empty reaches
-  // `statusline.sh`'s `${HANGAR_MODE:-}` as unset does, which is the honest red `NO MODE`.
+  // it inherits the session's value -- verified by reading `printenv HANGAR_MODE` out of the
+  // pane: a window created with no `-e` answered `ops`. Empty reaches `statusline.sh`'s
+  // `${HANGAR_MODE:-}` as unset does. A `claude` typed here goes through the shim, which sets
+  // its own.
   if (!srv.windows().some((w) => w.shell)) {
     const target = `${TARGET}${String(SHELL_WINDOW)}`;
     const res = srv.tmux([
@@ -586,7 +428,7 @@ const applyBar = (srv: Server): void => {
  * `-d` is what makes the pair a singleton in practice: two clients on one session mirror each
  * other's window selection, so switching tabs in one moves the other and the bar appears to
  * change on its own. Detaching is recoverable in a keystroke and both sessions keep running, so
- * this needs no confirmation the way `--replace` does.
+ * this needs no confirmation the way `--restart` does.
  *
  * `TMUX`/`TMUX_PANE` are unset so this works from inside another tmux, and stdio is inherited
  * because from here on the client IS this terminal.
@@ -602,39 +444,11 @@ const attach = (srv: Server): void => {
   if (!res.ok) note(`reattach with: ${tmuxBinary()} -L ${srv.socket} attach -t '${TARGET}'`);
 };
 
-const reportPlan = (
-  hangar: Hangar,
-  srv: Server,
-  inv: ClaudeInvocation,
-  existing: readonly WindowRow[],
-  live: WindowRow | undefined,
-): void => {
-  step(`socket       ${srv.socket}`);
-  step(`conf         ${hangar.paths.claudeTmuxConf}`);
-  for (const mode of MODES) {
-    const has = existing.some((w) => w.mode === mode);
-    step(`${mode.padEnd(TAB_COLUMN)} tab      ${has ? 'already running' : 'would be created'}`);
-  }
-  const hasShell = existing.some((w) => w.shell);
-  step(
-    `${SHELL_NAME.padEnd(TAB_COLUMN)} tab      ${hasShell ? 'already running' : 'would be created'}`,
-  );
-  step(`select       ${inv.mode}`);
-  if (inv.passthrough.length > 0) {
-    step(
-      `claude args  ${inv.passthrough.join(' ')}` +
-        (live === undefined ? '' : '   (that tab is live -- this would refuse)'),
-    );
-  }
-  note('nothing was created, and no client was attached');
-};
-
 /**
  * A clone shell is not where this belongs, and the reason is not tidiness.
  *
- * `.local/bin` keeps a bare `claude` out of every clone, but `hangar` itself is on a clone's PATH
- * by design -- so `hangar up` typed in a clone would still reach here and start a session
- * with fleet-wide reach from a directory that owns exactly one clone.
+ * `hangar` itself is on a clone's PATH by design -- so `hangar up` typed in a clone would reach
+ * here and start sessions with fleet-wide reach from a directory that owns exactly one clone.
  */
 const refuseFromInsideAClone = (hangar: Hangar): void => {
   const cwd = resolve(process.cwd());
@@ -643,7 +457,7 @@ const refuseFromInsideAClone = (hangar: Hangar): void => {
     if (cwd !== root && !cwd.startsWith(root + sep)) continue;
     throw new CliError(
       `\`hangar up\` belongs at the hangar root, and you are in ${clone.name}`,
-      `cd ${hangar.root} && claude`,
+      `cd ${hangar.root} && hangar up`,
     );
   }
 };
@@ -652,9 +466,9 @@ const refuseFromInsideAClone = (hangar: Hangar): void => {
  * The structural half of the escalation guard, which does not depend on a permission list.
  *
  * `.claude/modes/ops.settings.json` denies operator mode `Bash(hangar up:*)`, because
- * `hangar up -m dev -p '...'` would otherwise hand an operator session everything developer
- * mode may do -- editing `app/**` included -- and the existing `Bash(hangar dev)` denial does
- * not match an `up` subcommand. A deny list is a file somebody can edit; this is not.
+ * `hangar up --restart dev` would otherwise let an operator session start a developer session --
+ * and the existing `Bash(hangar dev)` denial does not match an `up` subcommand. A deny list is a
+ * file somebody can edit; this is not. The shim carries the same test for a bare `claude`.
  *
  * `CLAUDECODE` is set in every tool subprocess, measured alongside `CLAUDE_CODE_ENTRYPOINT` and
  * `CLAUDE_CODE_SESSION_ID` -- and unlike `CLAUDE_PROJECT_DIR`, which is injected per hook. There
@@ -663,7 +477,7 @@ const refuseFromInsideAClone = (hangar: Hangar): void => {
 const refuseFromInsideASession = (): void => {
   if ((process.env['CLAUDECODE'] ?? '') === '') return;
   throw new CliError(
-    'a hangar-root session cannot be started from inside a Claude Code session',
+    'the hangar-root window cannot be opened from inside a Claude Code session',
     'run `hangar up` from a terminal -- a session that could start one in another mode ' +
       'would be a way around its own permissions.',
   );
@@ -672,44 +486,54 @@ const refuseFromInsideASession = (): void => {
 /**
  * Already inside this session? Then all the work still applies and only the attach must not.
  *
- * The shell tab stands at the hangar root with direnv loaded, so `.local/bin/claude` and `hangar`
- * are both on its PATH -- which makes a run from inside the session the normal case rather than a
- * mistake. Everything up to `select-window` works from there and is WANTED: a tab that has been
- * exited is recreated, the bar is re-applied, and selecting a window moves the client that is
- * already here, which is precisely "switch to that tab". Only `attach` breaks, and it breaks
- * badly -- it unsets `TMUX` so tmux cannot see the nesting, and `-d` then detaches this terminal
- * from inside its own pane.
+ * The shell tab stands at the hangar root with direnv loaded, so `hangar` is on its PATH --
+ * which makes a run from inside the session the normal case rather than a mistake. Everything up
+ * to `select-window` works from there and is WANTED: a tab that has been exited is recreated, a
+ * `--restart` lands, the bar is re-applied, and selecting a window moves the client that is
+ * already here. Only `attach` breaks, and it breaks badly -- it unsets `TMUX` so tmux cannot see
+ * the nesting, and `-d` then detaches this terminal from inside its own pane.
  *
  * So this skips one call and refuses nothing. A refusal would have blocked
- * `hangar up -m dev --replace` from the shell tab, which is where restarting a wedged tab is
- * naturally typed, and would leave an exited tab unreachable without detaching first.
+ * `hangar up --restart dev` from the shell tab, which is where restarting a wedged tab is
+ * naturally typed.
  *
  * The escalation guard is elsewhere and is unaffected: `refuseFromInsideASession` reads
  * `CLAUDECODE`, which is independent of `TMUX` and still fires for a Bash tool call from either
- * mode tab. This branch only ever admits a human at a shell prompt, where there is nothing to
- * escalate. Exact equality on the socket name, the comparison `currentSession` in `tmux.ts`
+ * mode tab. Exact equality on the socket name, the comparison `currentSession` in `tmux.ts`
  * already uses, so it never prefix-matches the clone socket.
  */
 const alreadyInSession = (hangar: Hangar): boolean =>
   tmuxSocketOf(process.env['TMUX']) === claudeSocketName(hangar.id);
 
-export type UpOptions = { readonly argv: readonly string[] };
+export type UpOptions = {
+  readonly select?: string | undefined;
+  readonly resumeLast?: boolean | undefined;
+  readonly restart?: string | undefined;
+  readonly yes?: boolean | undefined;
+  readonly dryRun?: boolean | undefined;
+};
+
+/** What `-r` does per mode tab, decided before anything is killed. */
+const resumePlan = (
+  hangar: Hangar,
+  existing: readonly WindowRow[],
+  restarting: readonly Mode[],
+): Record<Mode, ResumeChoice> => {
+  const choiceFor = (mode: Mode): ResumeChoice => {
+    const dir = SPECS[mode].dir(hangar);
+    if (restarting.includes(mode)) return restartChoice(claudeTranscriptsIn(dir));
+    if (existing.some((w) => w.mode === mode)) return { kind: 'window-exists' };
+    return resumeChoice(claudeTranscriptsIn(dir), existsSync);
+  };
+  return { ops: choiceFor('ops'), dev: choiceFor('dev') };
+};
 
 export const up = (hangar: Hangar, opts: UpOptions): void => {
-  const inv = splitClaudeArgv(opts.argv);
-  const binary = resolveClaudeBinary(process.env['PATH'], hangar.root);
+  const select = asTab(opts.select ?? DEFAULT_TAB);
+  const restart = opts.restart === undefined ? [] : restartTargets(opts.restart);
+  const dryRun = opts.dryRun === true;
 
-  // Ahead of every guard, and ahead of the missing-binary refusal below: `--help` is a question
-  // about this command, not a request to start one. With no claude installed there is no page to
-  // fold `-m, --mode` into -- and `claudeHelpWith` then answers with hangar's own rows alone,
-  // which is the most useful thing this command can say on a machine that cannot yet run it.
-  if (inv.help) {
-    const res = binary === undefined ? undefined : run(binary, ['--help']);
-    process.stdout.write(claudeHelpWith(res?.ok === true ? res.stdout : ''));
-    return;
-  }
-
-  if (binary === undefined) {
+  if (resolveClaudeBinary(process.env['PATH'], hangar.root) === undefined) {
     throw new CliError(
       'claude is not on PATH',
       'install Claude Code, or check that `command -v claude` answers outside this hangar.',
@@ -718,50 +542,81 @@ export const up = (hangar: Hangar, opts: UpOptions): void => {
 
   const srv = server(hangar);
   const existing = srv.running() ? srv.windows() : [];
-  const live = existing.find((w) => w.mode === inv.mode);
+  const liveOf = (mode: Mode): WindowRow | undefined => existing.find((w) => w.mode === mode);
+  const restarting = restart.filter((mode) => liveOf(mode) !== undefined);
+  const resumes = opts.resumeLast === true ? resumePlan(hangar, existing, restarting) : undefined;
 
   // A dry run reports and returns, ahead of both refusals below, because it creates nothing and
   // attaches nothing -- so neither refusal has anything to protect, and answering "what would
   // this do" is useful from exactly the places that may not do it.
-  if (inv.dryRun) {
-    reportPlan(hangar, srv, inv, existing, live);
+  if (dryRun) {
+    step(`socket       ${srv.socket}`);
+    step(`conf         ${hangar.paths.claudeTmuxConf}`);
+    for (const mode of MODES) {
+      const state = restarting.includes(mode)
+        ? `would be restarted (up ${uptimeOf(liveOf(mode)?.pid ?? '')})`
+        : liveOf(mode) === undefined
+          ? 'would be created'
+          : 'already running';
+      step(`${mode.padEnd(TAB_COLUMN)} tab      ${state}`);
+    }
+    const hasShell = existing.some((w) => w.shell);
+    step(
+      `${SHELL_NAME.padEnd(TAB_COLUMN)} tab      ${hasShell ? 'already running' : 'would be created'}`,
+    );
+    for (const mode of restart.filter((m) => !restarting.includes(m))) {
+      note(`${mode}: not running, so there is nothing to restart -- it would be created`);
+    }
+    if (resumes !== undefined) {
+      for (const mode of MODES) {
+        const line = describeTabResume(mode, resumes[mode], false);
+        (line.warn ? warn : step)(line.text);
+      }
+    }
+    step(`select       ${select}`);
+    note('nothing was created, and no client was attached');
     return;
   }
 
   refuseFromInsideAClone(hangar);
   refuseFromInsideASession();
 
-  // Args plus a live tab is the one cell that cannot be honoured: a running claude takes no new
-  // arguments. Attaching anyway would land the caller in a session they did not name, which is
-  // the failure worth a hard stop rather than a warning they have already scrolled past.
-  if (live !== undefined && inv.passthrough.length > 0 && !inv.replace) {
-    throw new CliError(
-      `the ${inv.mode} tab is already running claude, so it cannot take these arguments`,
-      [
-        `${`hangar up -m ${inv.mode}`.padEnd(22)}switch to that tab as it is`,
-        `${'--replace'.padEnd(22)}end that session and start this one in its place`,
-        'or /exit in that tab and run this again, which keeps the arguments',
-      ].join('\n'),
-    );
+  // Every resume line BEFORE anything is killed: a restarted tab's id is the one fact that cannot
+  // be read back afterwards, and the over-count means it is worth a look.
+  const resumeIds: Partial<Record<Mode, string>> = {};
+  if (resumes !== undefined) {
+    for (const mode of MODES) {
+      const choice = resumes[mode];
+      const line = describeTabResume(mode, choice, true);
+      (line.warn ? warn : step)(line.text);
+      if (choice.kind === 'resume') resumeIds[mode] = choice.session.id;
+    }
   }
 
-  if (live !== undefined && inv.replace) {
-    const up = uptimeOf(live.pid);
-    const question = `End the claude in the ${inv.mode} tab (up ${up}) and start a new one?`;
-    if (!inv.yes && !confirm(question)) throw new CliError('nothing was replaced');
-    warn(`ending the claude in the ${inv.mode} tab, up ${up}`);
-    srv.tmux(['kill-window', '-t', `${TARGET}${String(live.index)}`]);
+  for (const mode of restart.filter((m) => !restarting.includes(m))) {
+    note(`${mode}: not running, so there is nothing to restart -- creating it`);
+  }
+  if (restarting.length > 0) {
+    const uptimes = restarting.map((mode) => `${mode} (up ${uptimeOf(liveOf(mode)?.pid ?? '')})`);
+    const question = `End the claude in ${uptimes.join(' and ')} and start ${restarting.length === 1 ? 'a new one' : 'new ones'}?`;
+    if (opts.yes !== true && !confirm(question)) throw new CliError('nothing was restarted');
+    for (const mode of restarting) {
+      const row = liveOf(mode);
+      if (row === undefined) continue;
+      warn(`ending the claude in the ${mode} tab`);
+      srv.tmux(['kill-window', '-t', `${TARGET}${String(row.index)}`]);
+    }
   }
 
   mkdirSync(dirname(hangar.paths.claudeTmuxConf), { recursive: true });
   applyArtifact(claudeTmuxConfArtifact(hangar), false);
 
-  ensureSession(hangar, srv, inv.mode, binary, claudeArgvFor(hangar, inv.mode, inv.passthrough));
+  ensureSession(hangar, srv, resumeIds);
   applyBar(srv);
-  srv.tmux(['select-window', '-t', `${TARGET}${String(SPECS[inv.mode].window)}`]);
+  srv.tmux(['select-window', '-t', `${TARGET}${String(TAB_WINDOWS[select])}`]);
 
   if (alreadyInSession(hangar)) {
-    note(`the ${inv.mode} tab is selected -- this client is already attached, C-b d to leave`);
+    note(`the ${select} tab is selected -- this client is already attached, C-b d to leave`);
     return;
   }
   attach(srv);

@@ -40,7 +40,7 @@ take the one that matches what you are touching:
 | changing `palette.ts`, anything under `generate/`, or what `colours sync` writes | `reference/colours.md` |
 | changing the zod schema, the loader, discovery, the no-config gate, or `forge.defaultBranch` | `reference/config.md` |
 | changing `doctor`, any generated per-clone artifact, or the plan archive | `reference/doctor.md` |
-| changing `hangar up` or `hangar down`, the two hangar-root modes, their permission rules, or what a hangar-root session is told it is | `reference/modes.md` |
+| changing `hangar up` or `hangar down`, the `claude` mode shim, the two hangar-root modes, their permission rules, or what a hangar-root session is told it is | `reference/modes.md` |
 | changing `bin/hangar-waypoint`, `hangar-commit-gate`, `hangar-rewrite` or `hangar-exec-guard`, or `personal-skills/` | `reference/root-tools.md` |
 | cutting a release, changing what a commit type is worth, or the CHANGELOG's sections | `reference/release.md` |
 

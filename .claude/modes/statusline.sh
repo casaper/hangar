@@ -11,17 +11,19 @@
 # outside an interactive session:
 #   1. $1                 -- passed by .claude/modes/<mode>.settings.json, which reaches the
 #                            session as `claude --settings`. Authoritative when it arrives.
-#   2. $HANGAR_MODE       -- set by `hangar claude` on the tmux window it creates for each
-#                            mode, one `-e HANGAR_MODE=<mode>` per window. Covers the case
-#                            where the root .claude/settings.json's argv-less entry won.
+#   2. $HANGAR_MODE       -- exported by `.local/bin/claude` when it starts a mode, and set by
+#                            `hangar up` on each mode tab, one `-e HANGAR_MODE=<mode>` per
+#                            window. Covers the case where the root .claude/settings.json's
+#                            argv-less entry won.
 #   3. neither            -- a red NO MODE badge.
 # So the three open questions -- whether --settings carries non-permission keys, whether it
 # outranks project settings, and whether this subprocess inherits the environment -- do not need
 # answering: any one channel working shows the right badge, and all three failing shows a red
 # warning rather than a confident wrong one. Do not "simplify" this to one channel.
 #
-# $HANGAR_MODE is set ONLY by `hangar claude`, on one tmux window at a time. It must never be
-# set from .envrc or .envrc.hangar: the moment direnv exports it, every shell in the hangar
+# $HANGAR_MODE is set ONLY by the shim and by `hangar up`'s tabs, and the shim UNSETS it whenever
+# it starts claude in no mode. It must never be set from .envrc or .envrc.hangar: the moment
+# direnv exports it, every shell in the hangar
 # carries it and the NO MODE badge stops meaning anything. Per WINDOW and never per session for
 # the same reason -- measured on tmux 3.7c, a window created without its own `-e` inherits the
 # session's value, which would badge the developer tab OPS.
