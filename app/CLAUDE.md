@@ -42,6 +42,8 @@ hangar root for the reason below.
 > `pnpm install` does not), and npm skipped it too. So a stray `pnpm install` here still leaves an
 > empty `node_modules`, which resolves nothing and harms nothing. What must never happen is this
 > file growing something to put in it, and that is the line the gate holds.
+> The same stray install writes an empty `pnpm-lock.yaml` beside it, which is why that path is
+> gitignored at the root: `app/pnpm-lock.yaml` is the only lockfile.
 
 **There is no build step.** Node strips the types and runs `src/cli.ts` directly, so an edit is
 live the moment it is saved and there is nothing to rebuild before trying it.
@@ -490,9 +492,9 @@ Not tracked, and what writes each:
 - `.hangar/port-pins.json` — **INPUT** — `hangar ports pin` / `unpin`, nothing else
 - `.hangar/claude-tmux.conf` — `hangar up`, every run
 
-Tracked: this file, the root `CLAUDE.md`, `bin/**`, `.local/bin/**`, `app/**`, `.envrc`,
-`.envrc.hangar`, `.nvmrc`,
-`.editorconfig`, `hangar.config.example.yaml`, `hangar.schema.json`, `.gitignore`, `CHANGELOG.md`,
+Tracked: this file, the root `CLAUDE.md`, `README.md`, `bin/**`, `.local/bin/**`, `app/**`,
+`.envrc`, `.envrc.hangar`, `.nvmrc`, `.editorconfig`, `.gitleaks.toml`,
+`hangar.config.example.yaml`, `hangar.schema.json`, `.gitignore`, `CHANGELOG.md`,
 `package.json` (scripts and nothing else — see the top of this file), `.releaserc.json`,
 `personal-skills/**` (the overrides `hangar skills sync` links into `~/.claude/skills`, tracked so
 a shadow that goes stale is a diff rather than a silence), `.claude/**` except the
@@ -590,6 +592,10 @@ More root files are hand-maintained and belong to this package rather than to th
   `app/.claude/settings.json` exists, for `plansDirectory`.
   - **The shim cannot move into `bin/`**: every clone puts `bin/` on PATH, so a `claude` there
     would replace each clone's own session command.
+  - **The shim is live the moment it is saved**: every `claude` typed at the root or in `app/`,
+    and both `hangar up` tabs, run it. Edit a scratch copy, run `test/claude-shim.test.ts`
+    against it (the test copies the file into a temp hangar with a fake `claude`), then `mv` it
+    into place.
   - **The mode settings name `hangar-statusline` and `hangar-exec-guard` by bare name**, because
     a tracked file cannot name one machine's home; a clone's untracked settings name the guard
     absolutely.
@@ -633,9 +639,10 @@ root script is `pnpm --dir app`, so the pin governs every real invocation. `.env
 ## The root `.gitignore`
 
 `.gitignore` here is load-bearing, not leftover: `clone_*/`, `.env.shared`, `node_modules/`,
-`plans/`, `app/.claude/plans/`, `tmp/` and `hangar.config.yaml` are the only reason the clones,
-the secrets, the CLI's dependencies, the plan archive, developer mode's own plans, the shared
-scratch directory and this machine's own config stay out of the hangar repo. Do not remove any of those lines. (`clone_*/`, not `clone_0*/`: the old
+`/pnpm-lock.yaml`, `plans/`, `app/.claude/plans/`, `tmp/` and `hangar.config.yaml` are the only
+reason the clones, the secrets, the CLI's dependencies and a stray root install's lockfile, the
+plan archive, developer mode's own plans, the shared scratch directory and this machine's own
+config stay out of the hangar repo. Do not remove any of those lines. (`clone_*/`, not `clone_0*/`: the old
 glob stopped matching at `clone_10`. And `hangar.schema.json` stays TRACKED — it is generated
 from the zod schema, and both YAML files point at it for editor validation.)
 

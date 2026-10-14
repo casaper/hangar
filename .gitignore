@@ -17,6 +17,9 @@
 .remember/
 /clone_*/
 node_modules/
+# A stray `pnpm install` at the root writes an empty lockfile beside its empty node_modules.
+# `app/pnpm-lock.yaml` is the only lockfile; this one is anchored, so that one stays tracked.
+/pnpm-lock.yaml
 
 # This machine's own hangar config: local paths, ports and token variable names. The committed
 # record of it is hangar.config.example.yaml, which is kept a faithful superset. `hangar.schema.json`
