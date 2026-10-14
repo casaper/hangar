@@ -89,11 +89,25 @@ test('a restarted tab resumes the newest LIVE session, which a plain resume woul
   const held = transcript({ id: 'held', lastActiveAtMs: 200, live: true });
   const older = transcript({ id: 'older', lastActiveAtMs: 100, live: true });
 
-  assert.deepEqual(restartChoice([idle, older, held]), { kind: 'resume', session: held });
+  // With no record of what the tab holds, `reload`'s guess: the newest live one.
+  assert.deepEqual(restartChoice([idle, older, held], undefined), {
+    kind: 'resume',
+    session: held,
+  });
 
   // Nothing live means the tab held no conversation worth naming: a fresh one, not the idle one.
-  assert.deepEqual(restartChoice([idle]), { kind: 'none' });
-  assert.deepEqual(restartChoice([]), { kind: 'none' });
+  assert.deepEqual(restartChoice([idle], undefined), { kind: 'none' });
+  assert.deepEqual(restartChoice([], undefined), { kind: 'none' });
+});
+
+test('the session recorded for the tab beats the guess, even when another is newer and live', () => {
+  // A bare `claude` in the same directory, in another terminal, is the newer live one here.
+  // Resuming it would put two sessions on one conversation; the tab's own record avoids that.
+  const elsewhere = transcript({ id: 'elsewhere', lastActiveAtMs: 300, live: true });
+  const tabs = transcript({ id: 'tabs', lastActiveAtMs: 100, live: true });
+  assert.deepEqual(restartChoice([elsewhere, tabs], 'tabs'), { kind: 'resume', session: tabs });
+  // A tab nobody has talked in has a session id and no transcript: fresh, never the other one.
+  assert.deepEqual(restartChoice([elsewhere], 'silent'), { kind: 'none' });
 });
 
 test('every fallback to a fresh session is a warning, and a resume is not', () => {

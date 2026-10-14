@@ -160,9 +160,16 @@ then recreates it like any absent tab.
 **`--restart <tab> -r` resumes what the tab HELD, and that needs a different rule from `-r`
 alone.** An absent tab takes `open --resume-last`'s `resumeChoice`: the newest session in the
 directory, unless it may be live. A restarted tab's session IS live until the kill lands, so that
-rule would answer "live, start fresh" every time. `restartChoice` is `reload`'s rule instead — the
-newest LIVE transcript in the directory, printed before anything is killed — with the same
-accepted over-count, since a `claude` typed in the shell tab is live at the root too. Both read
+rule would answer "live, start fresh" every time. `restartChoice` takes the EXACT answer first:
+Claude Code records each running session in `~/.claude/sessions/<pid>.json`, and a tab's
+`pane_pid` is claude's own pid (tmux's shell, the shim and claude each `exec` the next) — measured
+on both live tabs, each naming its own session id. That matters more than it did, because a bare
+`claude` at the root or in `app/`, in any terminal, is now a live session of the same mode, and
+guessing between them could resume a conversation still open elsewhere — two sessions on one
+conversation, the fleet's worst failure. A recorded id with no transcript is a tab nobody has
+talked in, and gets a fresh session. Only when there is no readable record does it fall back to
+`reload`'s guess — the newest LIVE transcript in the directory — and the id is printed before
+anything is killed either way. Both read
 `claudeTranscriptsIn(dir)`, which is EXACT: `transcriptDirsForClone`'s prefix match at the hangar
 root would sweep in every clone's transcripts, because every clone's slug starts with the root's.
 

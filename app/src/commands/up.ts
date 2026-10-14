@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { delimiter, dirname, join, resolve, sep } from 'node:path';
 
 import { claudeTranscriptsIn, headline, type ClaudeTranscript } from '../claude-sessions.ts';
@@ -13,7 +13,7 @@ import {
 import { applyArtifact } from '../generate/index.ts';
 import type { Hangar } from '../hangar.ts';
 import { MODE_COLOURS } from '../palette.ts';
-import { tildify } from '../user-paths.ts';
+import { claudeDir, tildify } from '../user-paths.ts';
 import { claudeSocketName, tmuxBinary, tmuxSocketOf } from '../tmux.ts';
 import { confirm, note, ok, step, warn } from '../ui.ts';
 import { resumeChoice, type ResumeChoice } from './open.ts';
@@ -155,11 +155,25 @@ export const modeTabCommand = (hangar: Hangar, resumeId: string | undefined): st
  *
  * Not `resumeChoice`, whose rule is right for an absent tab and wrong here -- the session wanted
  * is live until the kill lands, so "newest, unless live" would answer `live` every time and start
- * a fresh one. This is `reload`'s rule instead: the newest LIVE transcript in the directory,
- * named before anything is killed. It over-counts as `reload`'s does -- a `claude` typed in the
- * shell tab is live at the root too -- which is why the id is printed first.
+ * a fresh one.
+ *
+ * `heldId` is the EXACT answer when there is one: the session Claude Code itself records for the
+ * tab's own pid (`tabSessionId`). It matters because a bare `claude` in the same directory, in any
+ * terminal, is a live session of the same mode -- guessing between them could resume a
+ * conversation still open elsewhere, two sessions on one conversation. A held id with no
+ * transcript is a tab nobody has talked in yet, and gets a fresh session.
+ *
+ * Only with no record at all does it fall back to `reload`'s rule, the newest LIVE transcript in
+ * the directory, which over-counts in exactly that way -- so the id is printed before the kill.
  */
-export const restartChoice = (transcripts: readonly ClaudeTranscript[]): ResumeChoice => {
+export const restartChoice = (
+  transcripts: readonly ClaudeTranscript[],
+  heldId: string | undefined,
+): ResumeChoice => {
+  if (heldId !== undefined) {
+    const held = transcripts.find((t) => t.id === heldId);
+    return held === undefined ? { kind: 'none' } : { kind: 'resume', session: held };
+  }
   let newest: ClaudeTranscript | undefined;
   for (const t of transcripts) {
     if (!t.live) continue;
@@ -283,6 +297,28 @@ export const server = (hangar: Hangar): Server => {
       return res.ok ? trimmed(res.stdout) : [];
     },
   };
+};
+
+/**
+ * The session id Claude Code records for a running claude, from `~/.claude/sessions/<pid>.json`.
+ *
+ * A tab's `pane_pid` IS claude's pid -- tmux's shell, the shim and claude each `exec` the next,
+ * the chain `uptimeOf` already relies on -- so this names the tab's own conversation exactly.
+ * Measured on 2.1.x; the file is Claude Code's, not a contract, so anything unreadable is
+ * `undefined` and the caller falls back to guessing.
+ */
+const tabSessionId = (pid: string): string | undefined => {
+  if (pid === '') return undefined;
+  try {
+    const record = JSON.parse(
+      readFileSync(join(claudeDir, 'sessions', `${pid}.json`), 'utf8'),
+    ) as unknown;
+    if (typeof record !== 'object' || record === null) return undefined;
+    const id = (record as { sessionId?: unknown }).sessionId;
+    return typeof id === 'string' && id !== '' ? id : undefined;
+  } catch {
+    return undefined;
+  }
 };
 
 /** How long a tab's claude has been up -- the fact `--restart` has to justify itself with. */
@@ -521,7 +557,10 @@ const resumePlan = (
 ): Record<Mode, ResumeChoice> => {
   const choiceFor = (mode: Mode): ResumeChoice => {
     const dir = SPECS[mode].dir(hangar);
-    if (restarting.includes(mode)) return restartChoice(claudeTranscriptsIn(dir));
+    if (restarting.includes(mode)) {
+      const pid = existing.find((w) => w.mode === mode)?.pid ?? '';
+      return restartChoice(claudeTranscriptsIn(dir), tabSessionId(pid));
+    }
     if (existing.some((w) => w.mode === mode)) return { kind: 'window-exists' };
     return resumeChoice(claudeTranscriptsIn(dir), existsSync);
   };

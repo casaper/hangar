@@ -178,8 +178,8 @@ const TOLERATES_INVALID_CONFIG: readonly string[] = [
   'config validate',
   'config schema',
   // Not a reporting command, and the one entry here that is not. It needs the root and the id
-  // and nothing else -- and a config too broken to parse is exactly the moment somebody needs
-  // developer mode to fix it. Requiring a valid one would make a typo a lockout.
+  // and nothing else, so a config too broken to parse should not also cost the window that
+  // holds both modes; developer mode itself is a bare `claude` in `app/` and reads no config.
   'up',
 ];
 
