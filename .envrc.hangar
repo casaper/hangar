@@ -59,7 +59,7 @@ hangar_use_node() {
 #
 # Expect `pnpm --version` to differ by directory, and do not "fix" it: corepack reads
 # `packageManager` from the NEAREST package.json walking up, so inside app/ it answers
-# 11.26.0 as pinned, while at the hangar root -- whose package.json is scripts only and
+# 11.28.3 as pinned, while at the hangar root -- whose package.json is scripts only and
 # declares no packageManager, deliberately and permanently -- it answers corepack's own
 # bundled default. Every root script is `pnpm --dir app`, so the pin governs every real
 # invocation.
