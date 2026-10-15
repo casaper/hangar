@@ -38,7 +38,7 @@ For every request, in this order:
 | "start / plan ticket KEY" (no clone named) | `jira_plan_preview`, read back which clone it picked and why, then `jira_plan` |
 | "what is going on?" / "overview" | `list`, then `servers_list` if servers matter |
 | "something is broken" / "is everything ok?" | `doctor`; explain each red row in plain words; offer `doctor_fix` after its effect is clear |
-| "add / remove a clone" | `list` first; `hangar add-clone` via Bash in the background, `remove_clone` as a tool; say what it keeps and deletes first, and never pass `force` unasked |
+| "add / remove a clone" | `list` first; `hangar add-clone` via Bash in the background, `remove_clone` as a tool; say what it keeps and deletes first; a guard's refusal is the user's to override, by typing `--force` |
 | "close / restart clone N" | `close_preview` / `reload_preview`; warn that it ends a live Claude session |
 | "open a PR" | `pr_create_preview`, read the title back, then `pr_create` (draft) |
 

@@ -148,9 +148,9 @@ permission prompt in front of an acting tool as having answered one of these gat
 the call, and the command then asked its own question of a terminal that is not there.
 
 **`remove-clone` asks nothing at all.** Its guards (uncommitted work, servers, sessions) are
-refusals, not questions, so `remove_clone` with `delete` really deletes the directory, and with
-`force` as well it deletes past every guard — the only prompt is the tool's `ask` rule. Never pass
-`force` without the user asking for it in those terms.
+refusals, not questions, so `remove_clone` with `delete` really deletes the directory — the only
+prompt is the tool's `ask` rule. The tool does not offer `force`: a refusal stands, and overriding
+one is `hangar remove-clone --force` typed by the user, in those terms.
 
 Where the skip is the whole protection, the user's yes is answered by a flag — ask first, and pass
 it only on that yes:

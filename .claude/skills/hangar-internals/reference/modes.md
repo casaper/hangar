@@ -546,8 +546,8 @@ The CLI's own nested launches are unaffected — `resolve-conflicts.ts` is headl
 
 Every other refusal in the two modes is a guardrail: Bash is open, so a deny on writing is not a
 deny on `sed -i`, and the rules say what a mode is FOR. `hangar exec` is the exception, and the
-reason is generality rather than blast radius. `remove-clone --force --delete` destroys more and
-is merely `ask`. What `exec` does that nothing else does is take an **arbitrary shell snippet**
+reason is generality rather than blast radius. `remove-clone --delete` destroys more and
+is merely `ask` (its `--force` is offered by no tool, but stays reachable at a shell). What `exec` does that nothing else does is take an **arbitrary shell snippet**
 and run it in **every clone named, in one call** — so it is at once a spelling for every command
 denied elsewhere and a way into working trees other agents are live in, which is the one rule the
 fleet's own `CLAUDE.md` is built around.

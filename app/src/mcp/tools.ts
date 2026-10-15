@@ -352,7 +352,14 @@ export const EXPOSURES: readonly Exposure[] = [
    */
   { name: 'allow', path: ['allow'], hides: [PREVIEW], acts: true },
   { name: 'add_clone', path: ['add-clone'], shows: ['--remote'], acts: true },
-  { name: 'remove_clone', path: ['remove-clone'], acts: true },
+  /*
+   * `--force` is the one flag in this CLI whose own help says the loss is NOT recoverable, and
+   * `remove-clone` asks no question a tool's missing tty could decline -- its guards are
+   * refusals, so with `--delete` this flag is all that stands between a call and `rmSync` past
+   * uncommitted work. The `ask` rule approves the call, not the flag; overriding a guard stays a
+   * thing a person types.
+   */
+  { name: 'remove_clone', path: ['remove-clone'], hides: ['--force'], acts: true },
   { name: 'colours_change', path: ['colours', 'change'], acts: true },
   { name: 'colours_sync', path: ['colours', 'sync'], hides: [PREVIEW, '--check'], acts: true },
   {

@@ -59,7 +59,7 @@ another name.
 | `setup` | `setup_preview` | `setup` |
 | `exec` | — | **none — and the Bash path is denied too** |
 | `add-clone` | — | `add_clone` (offers the undocumented `remote`) |
-| `remove-clone` | — | `remove_clone` |
+| `remove-clone` | — | `remove_clone` (no `force`: overriding a guard is typed by the user) |
 | `config show` | `config_show` | — |
 | `config validate` | `config_validate` | — |
 | `config schema` | `config_schema_check` | `config_schema_write` |
