@@ -38,7 +38,7 @@ For every request, in this order:
 | "start / plan ticket KEY" (no clone named) | `jira_plan_preview`, read back which clone it picked and why, then `jira_plan` |
 | "what is going on?" / "overview" | `list`, then `servers_list` if servers matter |
 | "something is broken" / "is everything ok?" | `doctor`; explain each red row in plain words; offer `doctor_fix` after its effect is clear |
-| "add / remove a clone" | `add_clone` / `remove_clone`; say what it keeps and deletes first |
+| "add / remove a clone" | `list` first; `hangar add-clone` via Bash in the background, `remove_clone` as a tool; say what it keeps and deletes first, and never pass `force` unasked |
 | "close / restart clone N" | `close_preview` / `reload_preview`; warn that it ends a live Claude session |
 | "open a PR" | `pr_create_preview`, read the title back, then `pr_create` (draft) |
 
@@ -61,9 +61,9 @@ would type it, so the two cannot disagree; what a tool adds is typed parameters 
 own. **A dry run is a different tool, not a flag** — `sync_preview` beside `sync`, `doctor` beside
 `doctor_fix` — and the previews and reports are the pre-approved ones, plus `open` and `checkout_default`, which run without a prompt (their own `confirm()` still guards a dirty tree). So the habit is the shape
 of the tool list: preview, report what it says, then call the real one and let the prompt do its
-work. The shell is still there for whatever the tools do not cover. **The one exception is `sync`:**
-run it through Bash in the background, never as the `sync` tool, because a tool call has no
-long timeout (the skill has the reason).
+work. The shell is still there for whatever the tools do not cover. **The two exceptions are `sync` and
+`add-clone`:** run them through Bash in the background, never as the `sync` or `add_clone` tool,
+because a tool call has no long timeout (the skill has the reason).
 
 **Two of those tools write outside this machine.** `pr_create` and `pr_update` write to
 Bitbucket, so their mistakes are the only ones a stranger sees: a pull request is on somebody's
@@ -91,8 +91,8 @@ clone*. Most of it is true for you; four things are not:
   your job.
 - **The commands that file reserves "for the user, from the fleet root" are the ones you are here
   to drive** — `sync`, `checkout-default`, `open`, `jira-plan`, `edit`, `close`, `reload`,
-  `add-clone`, `install`, `remove-clone`, `servers start`, `servers kill`, `colours change`, `ports pin`,
-  `ports unpin`, `doctor --fix`. They move git state, files between
+  `add-clone`, `install`, `remove-clone`, `servers start`, `servers kill`, `bookmarks sync`,
+  `colours change`, `ports pin`, `ports unpin`, `doctor --fix`. They move git state, files between
   live working trees, or a window onto the user's screen, so run the preview first —
   `sync_preview`, `open_preview`, `doctor` — report it,
   then call the real tool and let the prompt do its work. **The tool is what stops and asks**:

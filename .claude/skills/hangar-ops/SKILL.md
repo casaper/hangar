@@ -43,29 +43,27 @@ from under a running server.
 
 ## What is yours to run, and what is not
 
-Everything in the left column only reports. Run these freely, and prefer them as the first move.
-**In a mode session this split is mechanical rather than remembered**: every reporting command and
-every dry run is a tool in operator mode's `allow` list, and everything that acts is in `ask`. If a
-tool call goes through without stopping, it reported.
+`reference/commands.md` marks every command `report` or `act`, and is the one list of them; the
+reporting ones are yours to run freely, and the first move. **In a mode session the split is
+mostly mechanical**: every report and every dry run is a tool in operator mode's `allow` list, and
+almost everything that acts is in `ask`. **Three tools act without stopping** — `open` and
+`checkout_default`, whose own `confirm()` still guards a dirty tree or a live session, and
+`pr_refresh`, which only rewrites the bar's cache. So a call that went through unprompted did not
+necessarily only report.
 
-| Reports only | Acts |
-| --- | --- |
-| `list` (refreshes stale pull-request state from Bitbucket, touches no tree), `ports`, `status` (`--fetch` reaches the network but touches no tree), `doctor` **bare**, `colours list`, `config show`, `config validate`, `resume` (see below) | `sync` / `merge-default` / `rebase-default`, `checkout-default`, `open`, `edit`, `add-clone`, `install`, `remove-clone`, `exec` (**never yours**), `colours change`, `doctor --fix`, `setup`, `teach-rg`, `config schema`, `ide <kind> sync`, `colours sync`, `tmp merge`, `plans collect`, `plans stamp` |
+**The commands marked [user] in that file are the ones the hangar's own `CLAUDE.md` reserves for
+the user, from the hangar root.** They move git state, move files between live working trees, end
+a live session, put a window on the user's screen, or write outside this machine.
 
-**The hangar's own `CLAUDE.md` reserves eleven of those for the user, from the hangar root:**
-`sync` under any of its three names, `checkout-default`, `open`, `edit`, `close`, `reload`,
-`add-clone`, `install`, `remove-clone`, `colours change` and `doctor --fix`. They move git state,
-move files between live working trees, end a live session, or put a window on the user's screen.
-
-**`hangar exec` is a step beyond all ten and is not in that list, because the list is things you
-may run after a preview and this is a thing you may never run.** It is denied in both modes and
+**`hangar exec` is a step beyond every one of them, because those are things you may run after a
+preview and this is a thing you may never run.** It is denied in both modes and
 blocked by a `PreToolUse` hook that reads the whole command line, so no spelling of it gets
 through — `cd /elsewhere && hangar exec …` included. It takes an arbitrary shell snippet and runs
 it in every clone you name, which makes it both a way to spell any other denied command and a way
 to reach working trees other agents are live in. When it is the right answer, **give the user the
 exact line and let them run it.**
 
-So the default for those ten is: **run the preview yourself and report what it says.** The preview
+So the default for the [user] commands is: **run the preview yourself and report what it says.** The preview
 is the tool whose name ends `_preview` (or `doctor`, or `colours_check`), and it is pre-approved
 precisely so this costs you nothing. What comes next depends on whether you have the tools: **in a
 mode, call the real tool** — its `ask` rule is the confirmation, and the prompt is where the user
@@ -131,29 +129,40 @@ Run it with `run_in_background: true`, or `timeout: 600000`. **Never bare.** The
 no background mode; it runs under Claude Code's own MCP timeout, and a `sync` cut off there leaves
 exactly the half-applied rebase described above. So use `mcp__hangar__sync_preview` to report, then
 **run the real `sync` yourself through Bash** with `run_in_background: true` — `Bash(hangar
-sync:*)` is an `ask` rule, so the user's answer to that prompt is the consent. Do not call
-`mcp__hangar__sync`, and do not hand the user a shell line to run: the user came to you so they
-would not have to. `sync` asks its own question only when a live session could not be reached, and
+sync:*)` is an `ask` rule, so the user's answer to that prompt is the consent. `add-clone` the
+same way: `hangar list` first, since it has no preview, then Bash in the background under its own
+`ask` rule. Do not call `mcp__hangar__sync` or `mcp__hangar__add_clone`, and do not hand the user a
+shell line to run: the user came to you so they would not have to. `sync` asks its own question only when a live session could not be reached, and
 then it skips and says so; report that rather than retrying.
 
 While the resolver runs it streams a dim line per tool call. That is progress, not a hang.
 
-## Four commands ask a human, and you are not one
+## Commands that ask a human, and you are not one
 
-`confirm()` reads from `/dev/tty`, so with no terminal — your situation — it returns **false**. Each
-of these then **skips and prints why**. Nothing destructive happens; the risk is reading
-`left alone` as `done`. Report the skip, do not retry.
+`confirm()` reads from `/dev/tty`, so with no terminal — your situation — it returns **false**. A
+command that asks then **skips and prints why**. Nothing destructive happens; the risk is reading
+`left alone` as `done`. Report the skip, do not retry on your own initiative.
 
-**A tool call is in the same situation and inherits the same protection**, which is why
-`remove_clone` can detach a clone and can never delete its files. Do not read the permission
-prompt in front of an acting tool as having answered one of these gates: it approved the call, and
-the command then asked its own question of a terminal that is not there.
+**A tool call is in the same situation and inherits the same protection.** Do not read the
+permission prompt in front of an acting tool as having answered one of these gates: it approved
+the call, and the command then asked its own question of a terminal that is not there.
 
-Only two have a clean escape:
+**`remove-clone` asks nothing at all.** Its guards (uncommitted work, servers, sessions) are
+refusals, not questions, so `remove_clone` with `delete` really deletes the directory, and with
+`force` as well it deletes past every guard — the only prompt is the tool's `ask` rule. Never pass
+`force` without the user asking for it in those terms.
 
-- **`teach-rg -y`** and **`setup -y`** — the confirmation is the only gate, and `-y` answers it.
+Where the skip is the whole protection, the user's yes is answered by a flag — ask first, and pass
+it only on that yes:
 
-The other two do not, and naming a flag for them would be wrong:
+- **`teach-rg -y`** and **`setup -y`** — the confirmation is the only gate.
+- **`close`, `reload` and `jira-plan`: `-y`** (`yes` as a tool parameter) — each names the live
+  session or dev server it would end before asking.
+- **`pr create` / `pr update`: `-y`** — but read the preview's title back first; see
+  `command-notes.md`.
+- **`open -c` / `open -b`: `--include-busy`** — moves the branch of a clone with a live session.
+
+Two do not have one, and naming a flag for them would be wrong:
 
 - **`checkout-default`, live session in the clone.** `--include-busy` skips the question, but the
   question *is* the protection — this command switches a branch under a working agent and, unlike
@@ -176,11 +185,10 @@ a report in your hands and not in the user's: at a real terminal, picking a row 
 `(default)` marker on a port meaning direnv never loaded, and which `doctor` rows warn rather than
 fail.
 
-Three more, for questions that arrive often:
+For questions that arrive often:
 
 - `reference/root-sessions.md` — how a hangar-root session differs from a clone's (its generated
   settings, shared memory, transcript keying) and how the two `CLAUDE.md` files reach each.
-
 - `reference/colours-and-terminal.md` — the per-clone colour identity, how to change a hue, which
   terminals get which paint layer, and the `HANGAR_CLONE*` variables.
 - `reference/settings-layering.md` — which key belongs in which of the three settings files, why

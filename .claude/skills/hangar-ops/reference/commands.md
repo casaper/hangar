@@ -10,8 +10,8 @@ differs is only the spelling. **[user]** is unchanged by any of it — that is g
 `ask` rule does not encode "preview and report before you call this". It is a stronger mark than
 `ask`: every **[user]** command's tool asks, but so do plenty that carry no mark.
 
-Global: `--hangar <path>` (the hangar root to operate on; **only `config show` and
-`config validate` honour it today** — everything else uses the upward walk from the cwd).
+Global: `--hangar <path>` (the hangar root to operate on; every command honours it, ahead of the
+upward walk from the cwd and then `HANGAR_ROOT` — `setup` reads it as the directory to set up).
 
 `<clone>` accepts an index (`2`), a padded name (`clone_02`), or `02`.
 
@@ -110,7 +110,7 @@ rule that cannot tell it from the report.
 | `sync` | `[clone]` | `-a, --all` · `-n, --dry-run` · `--no-session-notify` · `--include-busy` · `--onto <ref>` · `--strategy <rebase\|merge>` | **act [user]** |
 | `merge-default`, `rebase-default` | — | aliases of `sync`, identical options | **act [user]** |
 | `checkout-default` (alias `checkout`) | `[clone]` | `-a, --all` · `-n, --dry-run` · `--include-busy` | **act [user]** |
-| `open` | `[clones...]` | `--all` · `--no-claude` · `-r, --resume-last` (not with `--no-claude`) · `-e, --editor` · `-c, --checkout` · `-b, --branch <name>` · `--include-busy` (only with `-c` or `-b`) · `-n, --dry-run` | **act [user]** |
+| `open` | `[clones...]` | `--all` · `--no-claude` · `-r, --resume-last` (not with `--no-claude`) · `-e, --editor` · `--tab` (default) \| `--window` · `-c, --checkout` · `-b, --branch <name>` · `--include-busy` (only with `-c` or `-b`) · `-n, --dry-run` | **act [user]** |
 | `edit` | `[clones...]` | `--all` · `-n, --dry-run` | **act [user]** |
 | `close` | `[clones...]` | `--all` · `--no-editor` · `-y, --yes` · `--force` · `-n, --dry-run` | **act [user]** |
 | `reload` | `[clones...]` | `--all` · `--no-shells` · `--no-claude` · `--close-claude` · `--no-editor` · `-y, --yes` · `-n, --dry-run` | **act [user]** |
@@ -150,10 +150,6 @@ name `hangar down` (or `hangar down -n` to see what it would do) and let the use
 What that means in practice: when a task needs the CLI changed, **name the file and stop** — do
 not try to open the developer tab. It is already the next window of the session you are in, and
 `C-b n` is how the user reaches it.
-
-**`--dry-run` is spelled out and `-n` is not available**, because `-n` is claude's own `--name`
-and everything but hangar's four flags belongs to claude. This is the second exception to "every
-`-n` in this CLI is a dry run", after `resume`'s `--limit`.
 
 **`mcp` is where the tools in the mapping above come from, and you will not normally type it.**
 `hangar up` names `.claude/modes/mcp.json` as `--mcp-config`, so a mode session starts one of

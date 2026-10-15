@@ -231,8 +231,9 @@ separate `<thing>_preview`.
   that was detached or re-parented outlives it and goes on holding the clone's port. They are
   stopped first, so a tracked server can remove its own pid file, and through the same guards
   `hangar servers kill` uses: a stray is left running and named, so the editor's own language
-  server is never caught up in it. A clone with no session but a live dev server is therefore no
-  longer "nothing to close" — and because that is a signal, it asks before sending one.
+  server is never caught up in it. A clone with no session but a live dev server is therefore
+  something to close, not "nothing to close" — and because that is a signal, it asks before
+  sending one.
   It **refuses** to close the clone whose own session you typed the command in — that kills the
   terminal mid-command — and `--force` is the way past. Everything else worth knowing (a live
   session, a dev server that dies with it) is named in one confirmation, which `-y` skips.
@@ -284,7 +285,7 @@ separate `<thing>_preview`.
   repaints each session, with nothing restarted. `doctor` reports both generated files —
   `clone-tmux.conf` and `clone-tmux-status.sh` — against their builders, and never offers
   `kill-server` as the fix.
-- **`status`'s `servers` row now finds a server two ways** — a `*.pid` file, or something
+- **`status`'s `servers` row finds a server two ways** — a `*.pid` file, or something
   listening on one of the clone's ports. A port-found server is shown as
   `<role> (pid N, listening on P)`. `no pid file — ports not checked (no lsof)` is **not** "nothing
   is running": it means `lsof` is missing, so nobody could ask. Install it.

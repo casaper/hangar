@@ -3,13 +3,12 @@
 Which value belongs in which of the three settings files, and the one timing rule that catches
 everyone. The hangar's `CLAUDE.md` carries the short version; this is the enumeration.
 
-Only two things differ per clone: **`theme`** and the **Storybook health-check port** in
-`permissions.allow`. Everything else in `.claude/settings.local.json` is byte-identical across
+Only two things differ per clone: **`theme`** and the **health-check port(s)** in
+`permissions.allow`, one per port role that declares a health check. Everything else in `.claude/settings.local.json` is byte-identical across
 every clone (verify with `jq -S 'del(.theme)|del(.permissions.allow)' … | shasum`).
 
-- `~/.claude/settings.json` (user) holds the genuinely global preferences —
-  `skillListingBudgetFraction`, `prefersReducedMotion`, the `Explore` and `mcp__dash-api__*`
-  allows, the `Read(~/.ssh/**)` deny. Do **not** move fleet-scoped keys up here: this machine has
+- `~/.claude/settings.json` (user) holds the genuinely global preferences and
+  permissions, the ones true of every project on the machine. Do **not** move fleet-scoped keys up here: this machine has
   other projects, and `autoMemoryDirectory`, `plansDirectory`, `statusLine` and
   `enabledMcpjsonServers` would leak the fleet onto them.
 - `<clone>/.claude/settings.local.json` (untracked) holds the fleet-scoped keys, identical in
@@ -18,9 +17,8 @@ every clone (verify with `jq -S 'del(.theme)|del(.permissions.allow)' … | shas
   `SessionEnd` hooks (`plans collect`; `tmp merge --quiet`, so this clone's new `tmp/` entries reach
   the store — every entry, not only tickets; and `scrub --quiet --recent`), the `PreToolUse` hook that serves a cached Jira ticket from the record
   store (additive — Claude Code merges it with the repo's own tracked `PreToolUse` guard rather
-  than replacing it), the shared statusline, the six MCP servers
-  (`playwright`, `jira`, `yfiles-api`, `angular-cli`, `primeng`, `ag-mcp`), the `frontend-design`
-  plugin off, the `.env.shared` deny, and the two iTerm2 keys (`terminal.explorerKind`,
+  than replacing it), the shared statusline, the application's own MCP servers and plugin switches, the
+  deny on the shared secrets file, and the two iTerm2 keys (`terminal.explorerKind`,
   `terminal.external.osxExec`).
 - `.claude/settings.json` is **tracked and shared** — never put a per-clone or personal value there.
 
@@ -41,8 +39,9 @@ tracked `app/.claude/settings.json`, carrying `plansDirectory: ".claude/plans"` 
 else. Its plans stay in `app/.claude/plans/`, which is gitignored; they cannot be pointed at the
 shared archive, because `plansDirectory` is rejected when it resolves outside the project root.
 
-**It carries no `permissions` block, deliberately.** Every `hangar` command typed at a shell
-prompts, including `hangar list`. That is the fleet's choice, and the reason is a limit of the
+**It carries no `permissions` block, deliberately.** It pre-approves no `hangar` command typed at
+a shell, not even `hangar list` — whatever runs unprompted does so because the user's own
+`~/.claude/settings.json` allows it. That is the fleet's choice, and the reason is a limit of the
 mechanism: `hangar doctor` and `hangar doctor --fix` differ by one flag, and Claude Code's Bash
 patterns match by prefix, so there is no way to pre-approve the report without also pre-approving
 the writer.
