@@ -28,6 +28,8 @@ import {
   type BookmarkAction,
   type BookmarkCopy,
   type BookmarkPlan,
+  type BookmarkWritable,
+  touchedClones,
 } from './vscode-bookmarks.ts';
 
 /**
@@ -152,6 +154,7 @@ const ACTION_LABEL: Readonly<Record<BookmarkAction, readonly [string, string]>> 
   write: [pc.green('rewritten'), pc.yellow('would rewrite')],
   create: [pc.green('created'), pc.yellow('would create')],
   delete: [pc.green('deleted'), pc.yellow('would delete')],
+  deferred: [pc.dim('behind, window may be open'), pc.dim('behind, window may be open')],
 };
 
 const printTable = (plan: BookmarkPlan, clones: readonly Clone[], dryRun: boolean): void => {
@@ -175,39 +178,71 @@ export type BookmarksSyncOptions = {
   readonly dryRun?: boolean | undefined;
   /** `ide vscode sync`'s own section, with a row per clone; every other caller prints a summary. */
   readonly verbose?: boolean | undefined;
+  /**
+   * Which clones may be WRITTEN. Absent means none: every clone is read and its change merged,
+   * and nothing is written into a clone whose window may be open (`planBookmarkSync` says why).
+   */
+  readonly write?: BookmarkWritable | undefined;
+};
+
+const NONE: ReadonlySet<string> = new Set();
+
+/** Write or delete one clone's copy; `false` when it could not be, which makes it deferred. */
+const writeCopy = (clone: Clone, text: string | undefined): boolean => {
+  const path = bookmarksPath(clone);
+  try {
+    if (text === undefined) unlinkSync(path);
+    else {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, text, 'utf8');
+    }
+    return true;
+  } catch (error) {
+    warn(`${tildify(path)}: ${(error as Error).message}`);
+    return false;
+  }
 };
 
 /**
- * Bring every clone's `.vscode/bookmarks.json` into step. Returns how many clones it wrote (or
- * would write), and never throws.
+ * Merge every clone's `.vscode/bookmarks.json` and write the result into the clones `write`
+ * names. Returns how many clones it wrote (or would write), and never throws.
  */
 export const syncVscodeBookmarks = (hangar: Hangar, opts: BookmarksSyncOptions = {}): number => {
   const dryRun = opts.dryRun === true;
+  const writable = opts.write ?? NONE;
   try {
     if (!wantsWorkspaceFiles(hangar)) return 0;
     let written = 0;
     const run = (): void => {
       const clones = discoverClones(hangar);
-      const plan = planBookmarkSync(parseSyncState(readState(hangar)), clones.map(readCopy));
+      const state = parseSyncState(readState(hangar));
+      const copies = clones.map(readCopy);
+      let plan = planBookmarkSync(state, copies, writable);
       if (opts.verbose === true) {
         heading('.vscode/bookmarks.json');
         printTable(plan, clones, dryRun);
       }
       if (!dryRun) {
-        for (const { clone: name, action } of plan.clones) {
+        const failed = new Set<string>();
+        for (const name of touchedClones(plan)) {
           const clone = clones.find((c) => c.name === name);
-          if (clone === undefined || action === 'in-sync') continue;
-          const path = bookmarksPath(clone);
-          if (plan.text === undefined) unlinkSync(path);
-          else {
-            mkdirSync(dirname(path), { recursive: true });
-            writeFileSync(path, plan.text, 'utf8');
-          }
+          if (clone !== undefined && !writeCopy(clone, plan.text)) failed.add(name);
+        }
+        // A clone whose write failed still holds what it held, so it is planned again as one
+        // that was never written -- otherwise its base would claim a merge it does not have.
+        if (failed.size > 0) {
+          const kept =
+            writable === 'all'
+              ? new Set(clones.map((c) => c.name).filter((n) => !failed.has(n)))
+              : new Set([...writable].filter((n) => !failed.has(n)));
+          plan = planBookmarkSync(state, copies, kept);
         }
         writeState(hangar, renderSyncState(plan.next));
       }
-      written = plan.clones.filter((c) => c.action !== 'in-sync').length;
-      for (const line of bookmarkSyncSummary(plan, dryRun)) note(line);
+      written = touchedClones(plan).length;
+      for (const line of bookmarkSyncSummary(plan, { dryRun, openWindows: writable === 'all' })) {
+        note(line);
+      }
     };
     if (dryRun) run();
     else if (!withLock(hangar, run)) {

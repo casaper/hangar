@@ -43,12 +43,14 @@ separate `<thing>_preview`.
   is aliased `checkout`.
 - **VS Code bookmarks are kept in step across the clones by a three-way merge**, so a bookmark
   created, relabelled or deleted in one clone is created, relabelled or deleted in every other.
-  `ide vscode sync` and `doctor --fix` run it on purpose; `open`, `edit`, `close`, `reload`, `up`
-  and `down` each run it once as a side effect (and only preview it under `-n`). The setting the
-  Bookmarks extension needs is generated into every `*.code-workspace`, so nobody turns it on by
-  hand. One thing to tell the user whenever a run prints it: **reload each rewritten clone's VS
-  Code window before touching a bookmark there**. The extension reads the file only at startup, and
-  a window left on the old set has its next change withheld as "stale" rather than applied.
+  The setting the Bookmarks extension needs is generated into every `*.code-workspace`, so nobody
+  turns it on by hand. Every run READS every clone, but a clone's file is only WRITTEN where its
+  window cannot be open: `open`, `edit`, `reload` and `up` merge and write no clone; `close` and
+  `down` write the clones whose VS Code window they just closed; `ide vscode sync` and
+  `doctor --fix` write every clone. After those last two, tell the user to **reload each rewritten
+  clone's VS Code window before changing a bookmark or editing there** — the extension writes its
+  in-memory set back on any edit that moves a bookmarked line, and a window left on the old set
+  has its next change withheld as "stale".
 - **`hangar exec` is the user's, and you cannot run it at all.** It is not `ask` — it is denied
   in both modes AND blocked by a `PreToolUse` hook that reads the whole command line, so
   `cd /somewhere && hangar exec ...` is refused too. Do not go looking for a spelling that gets

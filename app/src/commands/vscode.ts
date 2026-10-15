@@ -275,7 +275,7 @@ export const editorSync = (hangar: Hangar, driver: EditorDriver, opts: EditorSyn
   if (isVscodeFork(driver.kind)) {
     if (opts.from !== undefined)
       note('bookmarks are merged from every clone — --from does not apply');
-    changed += syncVscodeBookmarks(hangar, { dryRun: opts.dryRun, verbose: true });
+    changed += syncVscodeBookmarks(hangar, { dryRun: opts.dryRun, verbose: true, write: 'all' });
     if (clones.some((clone) => existsSync(bookmarksPath(clone)))) present += 1;
   }
 

@@ -223,33 +223,33 @@ const resolveClones = (hangar: Hangar, refs: readonly string[], opts: CloseOptio
  * permission a person grants in ten seconds once they are told which box to tick, and a run that
  * flattened it to "could not close the window" would send them looking for a bug instead.
  */
-const closeEditorWindow = (driver: EditorDriver, clone: Clone): void => {
+const closeEditorWindow = (driver: EditorDriver, clone: Clone): boolean => {
   const close = driver.closeWindow;
-  if (close === undefined) return;
+  if (close === undefined) return false;
   const outcome = close(clone);
   switch (outcome.kind) {
     case 'closed':
       ok(`closed the ${driver.label} window`);
-      return;
+      return true;
     case 'no-window':
       note(
         `${driver.label} has no window whose title names ${clone.name} — it may predate the generated window title, which \`hangar doctor --fix\` writes`,
       );
-      return;
+      return true;
     case 'not-running':
       note(`${driver.label} is not running`);
-      return;
+      return true;
     case 'denied':
       warn(`${driver.label}'s window is still open: ${outcome.hint}`);
-      return;
+      return false;
     case 'unsupported':
       note(
         `closing an editor window is macOS-only, so the ${driver.label} window stays open — close it with Cmd+Shift+W, or its own equivalent`,
       );
-      return;
+      return false;
     case 'failed':
       warn(`could not close the ${driver.label} window: ${outcome.why}`);
-      return;
+      return false;
   }
 };
 
@@ -291,9 +291,9 @@ export const clonesBeingKilled = (plans: ClonePlans): ClonePlans =>
 export const closeClones = (hangar: Hangar, refs: readonly string[], opts: CloseOptions): void => {
   const plans = planCloses(hangar, refs, opts);
   reportCloses(plans);
-  syncVscodeBookmarks(hangar, { dryRun: opts.dryRun });
 
   if (opts.dryRun === true) {
+    syncVscodeBookmarks(hangar, { dryRun: true, write: editorClosingClones(plans) });
     note('(dry run — nothing was closed)');
     return;
   }
@@ -312,14 +312,17 @@ export const closeClones = (hangar: Hangar, refs: readonly string[], opts: Close
     }
   }
 
-  executeCloses(hangar, plans);
+  // After the windows are gone: only a clone whose editor window this run saw close is written.
+  syncVscodeBookmarks(hangar, { write: executeCloses(hangar, plans) });
 };
 
 /** Carry out decided plans. Asks nothing: the caller has already confirmed, or had no need to. */
-export const executeCloses = (hangar: Hangar, plans: ClonePlans): void => {
+export const executeCloses = (hangar: Hangar, plans: ClonePlans): ReadonlySet<string> => {
   const server = tmuxServer(hangar);
   let killed = 0;
+  const windowsGone = new Set<string>();
   for (const { facts, actions } of plans) {
+    let gone = actions.some((a) => a.kind === 'close-editor');
     for (const action of actions) {
       switch (action.kind) {
         case 'refuse-from-inside':
@@ -332,7 +335,7 @@ export const executeCloses = (hangar: Hangar, plans: ClonePlans): void => {
           break;
         case 'close-editor': {
           const driver = facts.closers.find((d) => d.kind === action.editor);
-          if (driver !== undefined) closeEditorWindow(driver, facts.clone);
+          gone = driver !== undefined && closeEditorWindow(driver, facts.clone) && gone;
           break;
         }
         case 'stop-servers':
@@ -360,6 +363,7 @@ export const executeCloses = (hangar: Hangar, plans: ClonePlans): void => {
           break;
       }
     }
+    if (gone) windowsGone.add(facts.clone.name);
   }
 
   /*
@@ -375,4 +379,16 @@ export const executeCloses = (hangar: Hangar, plans: ClonePlans): void => {
     note(
       'the tmux server exited with its last session — the next `hangar open` reads a fresh conf',
     );
+  return windowsGone;
 };
+
+/**
+ * The clones a run will close an editor window in -- what a dry run previews writing bookmarks
+ * into, since it cannot know whether the close would succeed.
+ */
+export const editorClosingClones = (plans: ClonePlans): ReadonlySet<string> =>
+  new Set(
+    plans
+      .filter(({ actions }) => actions.some((a) => a.kind === 'close-editor'))
+      .map(({ facts }) => facts.clone.name),
+  );

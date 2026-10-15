@@ -73,6 +73,9 @@ const inStep = (start: Marks): { state: BookmarkSyncState; plan: BookmarkPlan } 
   return { state: plan.next, plan };
 };
 
+const WRITE_ALL = { dryRun: false, openWindows: true };
+const NONE: ReadonlySet<string> = new Set();
+
 const START: Marks = { 'src/x.ts': [[3], [10, 'entry']], 'src/y.ts': [[1]] };
 
 test('a first sync is a union of every copy', () => {
@@ -171,6 +174,85 @@ test('a clone with nothing to gain is left byte-identical', () => {
   assert.equal(plan.clones[0]?.action, 'in-sync');
 });
 
+/*
+ * The case a merge cannot detect, only avoid. The extension writes its in-memory set back on every
+ * toggle AND on every edit that moves a bookmarked line, so a file rewritten under an open window
+ * comes back as the old set -- and against a base of the merge, that deletes what the merge
+ * brought in. So a run that may not write a clone reads it, merges its change, and makes its own
+ * copy its next base.
+ */
+test('a clone whose window may be open is read, not written, and cannot undo the others', () => {
+  const { state } = inStep(START);
+  // a creates z:5; an unrelated `hangar open` runs: fold only.
+  const fold = planBookmarkSync(
+    state,
+    [file('a', { ...START, 'src/z.ts': [[5]] }), file('b', START), file('c', START)],
+    NONE,
+  );
+  assert.ok(keys(fold.merged).has('src/z.ts:5'), 'the change is merged');
+  assert.deepEqual(
+    fold.clones.map((c) => c.action),
+    ['in-sync', 'deferred', 'deferred'],
+  );
+  // b's window still holds START and the developer types: it writes START plus a new w:2.
+  const typed = planBookmarkSync(
+    fold.next,
+    [
+      file('a', { ...START, 'src/z.ts': [[5]] }),
+      file('b', { ...START, 'src/w.ts': [[2]] }),
+      file('c', START),
+    ],
+    NONE,
+  );
+  assert.ok(keys(typed.merged).has('src/z.ts:5'), "b's old set did not delete a's bookmark");
+  assert.ok(keys(typed.merged).has('src/w.ts:2'), "b's own change is merged");
+  assert.deepEqual(typed.stale, []);
+  // `hangar close 2` closes b's window and writes it; then b, reopened, deletes z:5 on purpose.
+  const closed = planBookmarkSync(
+    typed.next,
+    [
+      file('a', { ...START, 'src/z.ts': [[5]] }),
+      file('b', { ...START, 'src/w.ts': [[2]] }),
+      file('c', START),
+    ],
+    new Set(['b']),
+  );
+  assert.deepEqual(
+    closed.clones.map((c) => c.action),
+    ['deferred', 'write', 'deferred'],
+  );
+  const deleted = planBookmarkSync(closed.next, [
+    file('a', { ...START, 'src/z.ts': [[5]] }),
+    file('b', { ...START, 'src/w.ts': [[2]] }),
+    file('c', START),
+  ]);
+  assert.ok(!keys(deleted.merged).has('src/z.ts:5'), 'a deliberate delete in b spreads');
+  assert.ok(keys(deleted.merged).has('src/w.ts:2'));
+});
+
+test('bookmarks are written sorted by line, as the extension sorts them after a toggle', () => {
+  const plan = planBookmarkSync(EMPTY_SYNC_STATE, [
+    file('a', { 'src/x.ts': [[40]] }),
+    file('b', { 'src/x.ts': [[3]] }),
+  ]);
+  assert.deepEqual(
+    plan.merged.files[0]?.bookmarks.map((m) => m.line),
+    [3, 40],
+  );
+});
+
+test('a run that writes nothing names the clones left behind only when it merged something', () => {
+  const { state } = inStep(START);
+  const quiet = planBookmarkSync(state, [file('a', START), file('b', START)], NONE);
+  assert.deepEqual(bookmarkSyncSummary(quiet, { dryRun: false, openWindows: false }), []);
+  const news = planBookmarkSync(state, [file('a', { 'src/x.ts': [[3]] }), file('b', START)], NONE);
+  assert.ok(
+    bookmarkSyncSummary(news, { dryRun: false, openWindows: false }).some((l) =>
+      l.includes('hangar close'),
+    ),
+  );
+});
+
 test('a window older than the last sync cannot bring back what that sync deleted', () => {
   const { state } = inStep(START);
   // b deletes x:3; a and c are rewritten without it.
@@ -209,7 +291,7 @@ test('a skipped copy is neither read nor written, and keeps its base', () => {
   ]);
   assert.ok(!plan.clones.some((c) => c.clone === 'b'));
   assert.deepEqual(plan.next.clones['b'], state.clones['b']);
-  assert.ok(bookmarkSyncSummary(plan, false).some((line) => line.includes('not JSON')));
+  assert.ok(bookmarkSyncSummary(plan, WRITE_ALL).some((line) => line.includes('not JSON')));
 });
 
 test('keys the extension may add are carried, not dropped', () => {
@@ -230,7 +312,7 @@ test('the state file round-trips, and an unreadable one degrades to a union', ()
 
 test('nothing to report means nothing printed', () => {
   const { plan } = inStep(START);
-  assert.deepEqual(bookmarkSyncSummary(plan, false), []);
+  assert.deepEqual(bookmarkSyncSummary(plan, WRITE_ALL), []);
 });
 
 test('a copy that is not a bookmarks file is refused, with a reason', () => {

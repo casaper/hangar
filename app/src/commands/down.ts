@@ -7,6 +7,7 @@ import {
   closeWarnings,
   executeCloses,
   planCloses,
+  editorClosingClones,
   reportCloses,
 } from './close.ts';
 import { server, uptimeOf, type WindowRow } from './up.ts';
@@ -98,7 +99,6 @@ const refuse = (hangar: Hangar): void => {
 export const down = (hangar: Hangar, opts: DownOptions): void => {
   const dryRun = opts.dryRun === true;
   if (!dryRun) refuse(hangar);
-  syncVscodeBookmarks(hangar, { dryRun });
 
   const root = server(hangar);
   const running = root.running();
@@ -113,6 +113,7 @@ export const down = (hangar: Hangar, opts: DownOptions): void => {
   for (const line of downRootLines(running, tabs)) note(line);
 
   if (dryRun) {
+    syncVscodeBookmarks(hangar, { dryRun: true, write: editorClosingClones(plans) });
     note('(dry run — nothing was stopped)');
     return;
   }
@@ -138,7 +139,7 @@ export const down = (hangar: Hangar, opts: DownOptions): void => {
     }
   }
 
-  executeCloses(hangar, plans);
+  syncVscodeBookmarks(hangar, { write: executeCloses(hangar, plans) });
 
   if (!running) return;
   ok('stopping the hangar-root window — `hangar up` brings it back');

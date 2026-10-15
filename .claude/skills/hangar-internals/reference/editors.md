@@ -113,19 +113,33 @@ What the extension does, read from its 14.1.1 bundle, and what follows from each
   `remove-clone` drop a clone's base: a new clone reusing the index with no file would read as
   having deleted every bookmark, and the sync would empty the fleet. `doctor` reports a base whose
   clone is gone, and `--fix` drops it.
-- **It reads the file only when the window starts.** There is no file watcher; its Refresh command
-  only redraws the tree. A window open across a sync still holds the old set and writes it back at
-  its next toggle, which against its base reads as undoing everything the sync did. Hence:
-  - Every write prints "reload those clones' VS Code windows". There is no way to reload one from
-    outside (`editor/types.ts`, `closeWindow`, has the measurement).
-  - The state also records, per clone, what the sync took OUT of it. A copy bringing one of those
-    back is reported **stale** and its change withheld rather than applied; the clone is still
-    rewritten. Only that half is a signature: a copy MISSING what the sync brought in is exactly
-    what deliberately deleting a just-arrived bookmark writes. A withheld clone starts clean, so a
-    bookmark deliberately re-added on that line after a reload is a real create the next time.
-  - The merge runs where windows open and close: `open` (with or without `-e`), `edit`, `close`,
-    `reload`, `up` and `down` each run it once, quietly, before doing their own work. It never
-    throws to them: a bookmarks failure is a warning, never a window that did not open.
+- **It reads the file only when the window starts, and writes its in-memory set back on every
+  toggle AND on every edit that moves a bookmarked line** (its sticky-bookmarks handler saves).
+  There is no file watcher; its Refresh command only redraws the tree. So a file rewritten under
+  an open window comes back as the old set at the next keystroke, and against a base of the merge
+  that reads as deleting everything the merge brought in — indistinguishable from deleting them
+  on purpose. No signature can catch that, so the design avoids it: **every run reads every clone,
+  but writes only a clone whose window it knows to be closed.**
+  - `open` (with or without `-e`), `edit`, `reload` and `up` merge and write NOTHING into a
+    clone. A clone that is not written gets its OWN copy as its next base, so its change is
+    applied exactly once and its window's later writes are diffed against what that window holds.
+    They write only `.hangar/vscode-bookmarks.json`, and print a line only when they merged
+    something new.
+  - `close` and `down` run it AFTER closing, and write exactly the clones whose VS Code window
+    closed (or that had none, or whose VS Code was not running). `--no-editor`, a denied
+    Accessibility permission or a failed close leaves that clone unwritten. A clone open in BOTH
+    workspace twins is a gap: `closeAppWindow` closes the first window with the title, and the
+    other stays open while the clone is written.
+  - `ide vscode sync` and `doctor --fix` write every clone and print which windows to reload,
+    because a person asked for it. That is the one place a window can be left stale, so the
+    state records, per clone, what such a write took OUT of it: a copy bringing one of those back
+    is reported **stale** and its change withheld rather than applied. Only that half is a
+    signature: a copy MISSING what the merge brought in is exactly what deliberately deleting a
+    just-arrived bookmark writes. A withheld clone starts clean, so a bookmark deliberately
+    re-added on that line after a reload is a real create the next time.
+  - None of the side-effect callers can fail because of it: a bookmarks failure is a warning, and a
+    clone whose write fails is planned again as unwritten, so its base never claims a merge it does
+    not hold.
 - **Paths are relative to the workspace folder**, which is the clone root, so the file needs no
   `rootKeys` treatment. A bookmark is a line number, though, so on two clones with different
   branches the same bookmark can point at different text. Nothing here can fix that.
@@ -140,9 +154,15 @@ The rest:
 - **A copy is skipped** — neither read nor written, keeping its base — when it does not parse,
   when git tracks it (the floor every editor artifact has), or when git does not ignore it (a
   repo without `.vscode/*` in its `.gitignore` would get an untracked file).
-- **The merge keeps the last merge's order and appends what is new**, so a clone with nothing to
-  gain compares byte-equal, is not written, and is not told to reload for nothing. An empty merge
-  deletes every copy, as the extension would.
+- **The merge keeps the last merge's file order and appends what is new, and sorts each file's
+  bookmarks by line**, because the extension sorts them so after every toggle. So a clone with
+  nothing to gain compares byte-equal, is not written, and is not told to reload for nothing. An
+  empty merge deletes every copy, as the extension would.
+- **A missing file with a base means "deleted everything"**, so a `git clean -fdx` or a re-clone
+  in place of one clone deletes every bookmark from the merge at the next run. Until a clone is
+  next written it still holds its own copy, and `ide vscode sync -n` previews the loss. Remove such a
+  clone's entry from the state file by hand first, or re-clone through `remove-clone` and
+  `add-clone`, which drop it.
 - **Losing the state file degrades the next sync to a union**: without a base, a missing bookmark
   is not evidence of a deletion, so a deletion pending at that moment comes back once.
 - **A lock**, `.hangar/vscode-bookmarks.lock`, because `open` and `close` can run side by side; a

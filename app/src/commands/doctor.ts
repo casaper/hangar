@@ -128,7 +128,7 @@ import {
   previewVscodeBookmarks,
   syncVscodeBookmarks,
 } from '../editor/vscode-bookmarks-sync.ts';
-import { bookmarkSyncSummary, touchedClones } from '../editor/vscode-bookmarks.ts';
+import { bookmarkSyncSummary, hasNewChanges, touchedClones } from '../editor/vscode-bookmarks.ts';
 
 /**
  * `hangar doctor` -- the regression net for everything `add-clone` sets up.
@@ -1664,14 +1664,20 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
         );
       }
     }
-    const behind = touchedClones(bookmarkPlan);
-    if (behind.length > 0) {
-      if (opts.fix === true) syncVscodeBookmarks(hangar);
+    // A change no run has merged yet is the problem. A clone BEHIND the merge is not: that is
+    // every clone whose window is open, all day, and a row red in normal operation is unread.
+    if (hasNewChanges(bookmarkPlan)) {
+      if (opts.fix === true) syncVscodeBookmarks(hangar, { write: 'all' });
       else {
-        problem(`VS Code bookmarks are not in step in ${behind.join(', ')}`);
-        for (const line of bookmarkSyncSummary(bookmarkPlan, true)) note(line);
-        note('`hangar doctor --fix` or `hangar ide vscode sync` merges them.');
+        problem('VS Code bookmarks have changes no hangar command has merged yet');
+        for (const line of bookmarkSyncSummary(bookmarkPlan, { dryRun: true, openWindows: true }))
+          note(line);
+        note('`hangar doctor --fix` or `hangar ide vscode sync` merges them into every clone.');
       }
+    } else if (touchedClones(bookmarkPlan).length > 0) {
+      note(
+        `VS Code bookmarks: ${touchedClones(bookmarkPlan).join(', ')} behind the merge — they get it when \`hangar close\` closes their window, or at \`hangar ide vscode sync\``,
+      );
     }
   }
 

@@ -375,10 +375,10 @@ emitting editor settings a hangar invented is a config that looks configured and
 Two hangar-level rows, only when a VS Code-family editor is configured, both from the merge
 `editors.md` describes:
 
-- **Clones not in step** is a preview of the merge: a clone it would write is a problem, and
-  `--fix` runs the merge. Behind is normal for the minutes between a toggle and the next `open`
-  or `close`, which run it too, so this row is for a fleet nobody has opened or closed anything
-  in since.
+- **A change no run has merged yet** is a problem, and `--fix` runs the merge, writing every
+  clone like `ide vscode sync`. A clone merely BEHIND the merge is a note and never a problem:
+  that is every clone whose VS Code window is open, all day, because only `close`, `down` and the
+  two explicit syncs write a clone — counting it would make the row red in normal operation.
 - **A base for a clone that no longer exists** is the dangerous one. `add-clone` reuses free
   indices, and a new clone at that index with no file of its own would read as having deleted
   every bookmark, emptying the fleet at the next sync. `add-clone` and `remove-clone` both drop

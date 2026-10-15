@@ -163,7 +163,14 @@ export type BookmarkCopy =
   /** Neither read nor written: unparseable, tracked by git, or not ignored by it. */
   | { readonly clone: string; readonly kind: 'skip'; readonly why: string };
 
-export type BookmarkAction = 'in-sync' | 'write' | 'create' | 'delete';
+/**
+ * `deferred` is a clone that is behind the merge and was not written, because its window may be
+ * open: see `planBookmarkSync`.
+ */
+export type BookmarkAction = 'in-sync' | 'write' | 'create' | 'delete' | 'deferred';
+
+/** Which clones a run may write: every one, or only those whose window it knows to be closed. */
+export type BookmarkWritable = 'all' | ReadonlySet<string>;
 
 export type BookmarkPlan = {
   readonly merged: BookmarksDoc;
@@ -215,14 +222,25 @@ const staleness = (copy: BookmarkCopy, known: CloneBookmarkState): string | unde
  * state file that was lost) can only contribute creates and updates: without a base, a missing
  * bookmark is not evidence of a deletion. That is also what a first sync is: a union.
  *
- * The merge keeps the last merge's order and appends what is new, so a clone Hangar has nothing
- * to add to compares byte-equal, is not written, and its window is not told to reload for
- * nothing.
+ * **Only `writable` clones are written; every clone is READ.** A window holds its set in memory
+ * and writes it back on every toggle and on every edit that moves a bookmarked line, so a file
+ * rewritten under an open window comes back as the old set -- and against a base of the merge,
+ * that is a deletion of everything the merge brought in, which no signature can tell from a
+ * deliberate one. So a clone that is not written gets its OWN copy as its next base: its change is
+ * applied exactly once, and its window's later writes are diffed against what that window holds.
+ * It receives the merge when a run knows its window is closed (`close`, `down`) or when somebody
+ * asks for every clone (`ide vscode sync`, `doctor --fix`) and is told which windows to reload.
+ *
+ * The merge keeps the last merge's file order and appends what is new; within a file, bookmarks
+ * are sorted by line, because the extension sorts them so after every toggle. So a clone Hangar
+ * has nothing to add to compares byte-equal and is not written.
  */
 export const planBookmarkSync = (
   state: BookmarkSyncState,
   copies: readonly BookmarkCopy[],
+  writable: BookmarkWritable = 'all',
 ): BookmarkPlan => {
+  const mayWrite = (clone: string): boolean => writable === 'all' || writable.has(clone);
   const skipped = copies.flatMap((c) =>
     c.kind === 'skip' ? [{ clone: c.clone, why: c.why }] : [],
   );
@@ -261,13 +279,14 @@ export const planBookmarkSync = (
     }
   }
 
-  // Grouped by file, files and bookmarks both in first-seen order.
+  // Grouped by file in first-seen order, and by line within one, as the extension writes them.
   const byPath = new Map<string, Bookmark[]>();
   for (const { path, mark } of result.values()) {
     const marks = byPath.get(path) ?? [];
     marks.push(mark);
     byPath.set(path, marks);
   }
+  for (const marks of byPath.values()) marks.sort((a, b) => a.line - b.line);
   const merged: BookmarksDoc = {
     ...top,
     files: [...byPath].map(([path, bookmarks]) => ({ ...fileProps.get(path), path, bookmarks })),
@@ -279,7 +298,7 @@ export const planBookmarkSync = (
   const clones: { clone: string; action: BookmarkAction }[] = [];
   const nextClones: Record<string, CloneBookmarkState> = {};
   for (const copy of live) {
-    const action: BookmarkAction =
+    const behind: BookmarkAction =
       copy.kind === 'file'
         ? text === undefined
           ? 'delete'
@@ -289,6 +308,7 @@ export const planBookmarkSync = (
         : text === undefined
           ? 'in-sync'
           : 'create';
+    const action = behind === 'in-sync' || mayWrite(copy.clone) ? behind : 'deferred';
     clones.push({ clone: copy.clone, action });
 
     /*
@@ -302,6 +322,11 @@ export const planBookmarkSync = (
     const known = state.clones[copy.clone];
     const untouched = known !== undefined && same(docOf(copy), known.base);
     const removed = new Set(untouched ? known.removed : []);
+    if (action === 'deferred') {
+      // Not written, so nothing was taken out of it: its base is what its window holds.
+      nextClones[copy.clone] = { base: docOf(copy), removed: [...removed] };
+      continue;
+    }
     if (!staleNames.has(copy.clone)) {
       for (const key of current.keys()) if (!mergedKeys.has(key)) removed.add(key);
     }
@@ -329,32 +354,52 @@ export const planBookmarkSync = (
 
 /** Clones that will be written (or would be, under `-n`). */
 export const touchedClones = (plan: BookmarkPlan): string[] =>
-  plan.clones.filter((c) => c.action !== 'in-sync').map((c) => c.clone);
+  plan.clones.filter((c) => c.action !== 'in-sync' && c.action !== 'deferred').map((c) => c.clone);
+
+/** Clones behind the merge that this run left alone. */
+export const deferredClones = (plan: BookmarkPlan): string[] =>
+  plan.clones.filter((c) => c.action === 'deferred').map((c) => c.clone);
+
+/** Whether this run found any change in any clone that the last one had not merged. */
+export const hasNewChanges = (plan: BookmarkPlan): boolean =>
+  plan.changes.created.length + plan.changes.updated.length + plan.changes.deleted.length > 0;
+
+export type SummaryContext = {
+  readonly dryRun: boolean;
+  /** Whether the clones written may have a window open, and so must be told to reload. */
+  readonly openWindows: boolean;
+};
 
 /**
- * The one-paragraph report every trigger prints -- empty when there is nothing to say, so
- * `hangar open` stays quiet on the common run.
+ * The paragraph every caller prints -- empty when there is nothing to say, so `hangar open`
+ * stays quiet on the common run. Clones left behind are named only when THIS run merged
+ * something new, because being behind is the normal state of a clone whose window is open.
  */
-export const bookmarkSyncSummary = (plan: BookmarkPlan, dryRun: boolean): string[] => {
+export const bookmarkSyncSummary = (plan: BookmarkPlan, context: SummaryContext): string[] => {
   const lines: string[] = [];
+  const { created, updated, deleted } = plan.changes;
+  const what = [
+    created.length > 0 ? `${String(created.length)} created` : '',
+    updated.length > 0 ? `${String(updated.length)} updated` : '',
+    deleted.length > 0 ? `${String(deleted.length)} deleted` : '',
+  ]
+    .filter((part) => part !== '')
+    .join(', ');
+  const head = `VS Code bookmarks${what === '' ? '' : `: ${what}`}`;
   const touched = touchedClones(plan);
   if (touched.length > 0) {
-    const { created, updated, deleted } = plan.changes;
-    const what = [
-      created.length > 0 ? `${String(created.length)} created` : '',
-      updated.length > 0 ? `${String(updated.length)} updated` : '',
-      deleted.length > 0 ? `${String(deleted.length)} deleted` : '',
-    ]
-      .filter((part) => part !== '')
-      .join(', ');
-    lines.push(
-      `VS Code bookmarks${what === '' ? '' : `: ${what}`} — ${dryRun ? 'would write' : 'wrote'} ${touched.join(', ')}`,
-    );
-    if (!dryRun) {
+    lines.push(`${head} — ${context.dryRun ? 'would write' : 'wrote'} ${touched.join(', ')}`);
+    if (context.openWindows) {
       lines.push(
-        "reload those clones' VS Code windows (Developer: Reload Window) before touching a bookmark there",
+        `reload ${touched.length === 1 ? 'its' : "each one's"} VS Code window (Developer: Reload Window) before it changes a bookmark or an edit moves one`,
       );
     }
+  }
+  const deferred = deferredClones(plan);
+  if (deferred.length > 0 && hasNewChanges(plan)) {
+    lines.push(
+      `${touched.length > 0 ? 'VS Code bookmarks' : head} — ${deferred.join(', ')} ${deferred.length === 1 ? 'gets' : 'get'} them when \`hangar close\` closes ${deferred.length === 1 ? 'its window' : 'their windows'}, or at \`hangar ide vscode sync\``,
+    );
   }
   for (const { clone, why } of plan.stale) {
     lines.push(`${clone}: change withheld — its window ${why}; reload it, then redo the change`);
