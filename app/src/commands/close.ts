@@ -8,6 +8,7 @@ import { killPlan, scanFleet, stopServer, type ServerRecord } from './servers.ts
 import { tmuxServer, tmuxSessionName, type TmuxServer } from '../tmux.ts';
 import { tmpMerge } from './tmp.ts';
 import { confirm, note, ok, step, warn } from '../ui.ts';
+import { syncVscodeBookmarks } from '../editor/vscode-bookmarks-sync.ts';
 
 /**
  * `hangar close <clone>…` -- take a clone's working set down. The other end of `hangar open`.
@@ -290,6 +291,7 @@ export const clonesBeingKilled = (plans: ClonePlans): ClonePlans =>
 export const closeClones = (hangar: Hangar, refs: readonly string[], opts: CloseOptions): void => {
   const plans = planCloses(hangar, refs, opts);
   reportCloses(plans);
+  syncVscodeBookmarks(hangar, { dryRun: opts.dryRun });
 
   if (opts.dryRun === true) {
     note('(dry run — nothing was closed)');

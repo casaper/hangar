@@ -27,6 +27,7 @@ import { terminal, type EmulatorCapabilities, type Placement } from '../terminal
 import { note, ok, step, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
 import { portSummary } from '../ports.ts';
+import { syncVscodeBookmarks } from '../editor/vscode-bookmarks-sync.ts';
 
 /**
  * `hangar open <clone>…` -- a clone's whole working set in one command.
@@ -719,6 +720,7 @@ export const prepareOpen = (hangar: Hangar, opts: OpenOptions): OpenContext => {
 export const open = (hangar: Hangar, refs: readonly string[], opts: OpenOptions): void => {
   const clones = resolveClones(hangar, refs, opts);
   const context = prepareOpen(hangar, opts);
+  syncVscodeBookmarks(hangar, { dryRun: opts.dryRun });
 
   for (const clone of clones) {
     if (opensOnNewBranch(opts)) land(clone, opts, clones.length > 1);

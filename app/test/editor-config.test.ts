@@ -120,6 +120,24 @@ test('a synced workspace file arrives carrying the RECEIVING clone name and hue'
   assert.ok(!arrived.includes(one.colour.main), "it is wearing clone 1's hue");
 });
 
+/**
+ * The Bookmarks extension writes the file Hangar merges only with this setting on, and a
+ * workspace setting is the one place Hangar owns that every clone's window reads. Generated, so
+ * nobody has to switch it on in one clone and wait for a sync to spread it.
+ */
+test('every generated workspace file keeps bookmarks in the project, and a sync keeps it there', () => {
+  const hangar = syntheticHangar({ configText: fixtureVscodeConfigText() });
+  const [one, two] = [cloneAt(hangar, 1), cloneAt(hangar, 3)];
+  const setting = '"bookmarks.saveBookmarksInProject": true';
+  assert.ok(workspaceContent(one).includes(setting));
+  const artifact = first(
+    vscodeArtifacts(hangar.config.editor.rootPathKeys).filter((a) => a.id === '*.code-workspace'),
+    'the workspace artifact',
+  );
+  const arrived = render(templatize(artifact, workspaceContent(one), one).template, two);
+  assert.ok(arrived.includes(setting));
+});
+
 test('round-tripping a clone through itself changes nothing', () => {
   const hangar = syntheticHangar({ configText: fixtureVscodeConfigText() });
   const clone = cloneAt(hangar, 2);

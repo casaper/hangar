@@ -13,6 +13,7 @@ import { tmpMerge } from './tmp.ts';
 import { tmuxServer, tmuxSessionName, type TmuxPane, type TmuxServer } from '../tmux.ts';
 import { tildify } from '../user-paths.ts';
 import { confirm, note, ok, step, warn } from '../ui.ts';
+import { syncVscodeBookmarks } from '../editor/vscode-bookmarks-sync.ts';
 
 /**
  * `hangar reload <clone>…` -- put a clone back on current config without closing it.
@@ -308,6 +309,7 @@ export const reloadClones = (
   const server = tmuxServer(hangar);
   const drivers = opts.editor === false ? [] : editors(hangar).drivers;
   const dryRun = opts.dryRun === true;
+  syncVscodeBookmarks(hangar, { dryRun });
 
   const plans = clones.map((clone) => {
     const facts = factsFor(hangar, clone, server, drivers);

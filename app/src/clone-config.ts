@@ -498,6 +498,11 @@ export const workspaceSettings = (clone: Clone): Record<string, unknown> => {
     'yaml.maxItemsComputed': 25000,
     'window.title': values['window.title'],
     'workbench.colorCustomizations': colourKeysOf(values),
+    // The Bookmarks extension writes `.vscode/bookmarks.json` only with this on; without it they
+    // live in VS Code's own per-workspace storage, out of Hangar's reach, and no clone shares
+    // them. `editor/vscode-bookmarks.ts` is what keeps the file in step. Inert without the
+    // extension installed.
+    'bookmarks.saveBookmarksInProject': true,
   };
 };
 

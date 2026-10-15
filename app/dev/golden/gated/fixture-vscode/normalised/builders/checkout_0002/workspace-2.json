@@ -11,7 +11,8 @@
       "activityBar.foreground": "#000000",
       "activityBar.inactiveForeground": "#000000",
       "activityBar.activeBorder": "#000000"
-    }
+    },
+    "bookmarks.saveBookmarksInProject": true
   },
   "folders": [
     {

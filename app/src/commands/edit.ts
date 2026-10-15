@@ -3,6 +3,7 @@ import { CliError } from '../exec.ts';
 import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import { cloneLabel, heading, note } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
+import { syncVscodeBookmarks } from '../editor/vscode-bookmarks-sync.ts';
 
 /**
  * `hangar edit <clone>…` -- open a clone in its editors, and do nothing else at all.
@@ -62,6 +63,7 @@ export const edit = (hangar: Hangar, refs: readonly string[], opts: EditOptions)
     );
   }
 
+  syncVscodeBookmarks(hangar, { dryRun: opts.dryRun });
   let opened = 0;
   for (const clone of clones) {
     heading(`Editors for ${cloneLabel(clone)}`);

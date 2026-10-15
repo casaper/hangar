@@ -17,6 +17,7 @@ import { claudeDir, tildify } from '../user-paths.ts';
 import { claudeSocketName, tmuxBinary, tmuxSocketOf } from '../tmux.ts';
 import { confirm, note, ok, step, warn } from '../ui.ts';
 import { resumeChoice, type ResumeChoice } from './open.ts';
+import { syncVscodeBookmarks } from '../editor/vscode-bookmarks-sync.ts';
 
 /**
  * `hangar up` -- both hangar-root modes and a shell, in one tmux window, as three tabs.
@@ -578,6 +579,8 @@ export const up = (hangar: Hangar, opts: UpOptions): void => {
       'install Claude Code, or check that `command -v claude` answers outside this hangar.',
     );
   }
+
+  syncVscodeBookmarks(hangar, { dryRun });
 
   const srv = server(hangar);
   const existing = srv.running() ? srv.windows() : [];

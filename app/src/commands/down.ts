@@ -10,6 +10,7 @@ import {
   reportCloses,
 } from './close.ts';
 import { server, uptimeOf, type WindowRow } from './up.ts';
+import { syncVscodeBookmarks } from '../editor/vscode-bookmarks-sync.ts';
 
 /**
  * `hangar down` -- the other end of `hangar up`: every clone closed, then the root window.
@@ -97,6 +98,7 @@ const refuse = (hangar: Hangar): void => {
 export const down = (hangar: Hangar, opts: DownOptions): void => {
   const dryRun = opts.dryRun === true;
   if (!dryRun) refuse(hangar);
+  syncVscodeBookmarks(hangar, { dryRun });
 
   const root = server(hangar);
   const running = root.running();
