@@ -31,6 +31,13 @@ session started anywhere else has neither, and the defaults in this file apply �
 back with none of its rules. **The status line is the tell: it reads a red `NO MODE` instead of
 `OPS` or `DEV`.** Resume from the mode's own directory to keep them.
 
+**Every "in a mode" rule below — the `allow`/`ask` split, the three tools that act without
+stopping, `Bash(hangar sync:*)` being an `ask` rule — is `ops.settings.json`'s.** Developer mode's
+`dev.settings.json` carries no `mcp__hangar__*` and no `hangar sync` rule at all, so in a DEV
+session none of those answers holds: whatever the user's own `~/.claude/settings.json` says
+decides, and anything it does not name goes to the session's permission mode. Its remit says to
+use the tools for looking around only.
+
 ## Addressing a clone
 
 By **index**: `hangar status 2`, `sync 3`, `open 1`. `clone_02` and `02` are accepted too. Output

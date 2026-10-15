@@ -1,13 +1,13 @@
 ---
 name: hangar-internals
-description: Design rationale for the hangar fleet CLI — why sync asks Bitbucket for a branch's pull-request target instead of guessing the default branch, why merge-default reads its own name out of process.argv, how tmp merge points a ticket's many cached names at one record, what ide vscode sync rewrites per clone and what it refuses to write, what doctor checks and the two rules for anything generated into a clone, the Jira hook's fail-open contract, and why forge.defaultBranch is stored rather than re-derived. Load before editing app/src/** or debugging a sync, rebase-default, checkout-default, open, resume, tmp merge, plans collect, jira hook, ide sync, colours or doctor run. This is the why; app/CLAUDE.md is the how, and hangar-ops is the command surface.
+description: Load before editing app/src/**, bin/hangar-*, the claude mode shim, .claude/modes/**, the release config or the commitlint/husky setup, and before debugging a sync, rebase-default, checkout-default, open, resume, tmp merge, plans collect, jira hook, ide sync, colours, doctor or release run. Design rationale for the hangar fleet CLI, one subsystem per reference file — why sync asks the forge for a branch's pull-request target instead of guessing, how tmp merge points a ticket's many cached names at one record, what ide vscode sync refuses to write, what doctor checks, the Jira hook's fail-open contract, why forge.defaultBranch is stored rather than re-derived. This is the why; app/CLAUDE.md is the how, and hangar-ops is the command surface.
 ---
 
 # `hangar` internals
 
 Why each command is built the way it is. This is the half of the hangar's `CLAUDE.md` that only
 matters when you are **changing or debugging the CLI**, kept out of that file because it sits above
-every clone and so was loaded into four sessions that can act on almost none of it.
+every clone, so every clone session loads it and can act on almost none of this.
 
 **Every "this exists because it caught something" note is load-bearing.** The test suite is a
 seed over the pure core, so for everything else these paragraphs are the regression record — the only surviving account of a bug that was
@@ -38,11 +38,11 @@ take the one that matches what you are touching:
 | changing `ide <kind> sync`, any `editor/*.ts` driver, or the per-clone absolute-path rewriting | `reference/editors.md` |
 | changing `open`'s window handling, an emulator driver, the tmux layer or the clone bar, `resume`'s session discovery, or `bookmarks sync` | `reference/terminal-and-sessions.md` |
 | changing `palette.ts`, anything under `generate/`, or what `colours sync` writes | `reference/colours.md` |
-| changing the zod schema, the loader, discovery, the no-config gate, or `forge.defaultBranch` | `reference/config.md` |
+| changing the zod schema, the loader, discovery, the no-config gate, `forge.defaultBranch`, or `hangar.schema.json` and why `zod` moving can stale it | `reference/config.md` |
 | changing `doctor`, any generated per-clone artifact, or the plan archive | `reference/doctor.md` |
 | changing `hangar up` or `hangar down`, the `claude` mode shim, the two hangar-root modes, their permission rules, or what a hangar-root session is told it is | `reference/modes.md` |
 | changing `bin/hangar-waypoint`, `hangar-commit-gate`, `hangar-rewrite` or `hangar-exec-guard`, or `personal-skills/` | `reference/root-tools.md` |
-| cutting a release, changing what a commit type is worth, or the CHANGELOG's sections | `reference/release.md` |
+| cutting a release, changing what a commit type is worth, the CHANGELOG's sections, the commitlint rules or the husky hooks; rewriting this repo's history | `reference/release.md` |
 
 Two things are deliberately elsewhere:
 
@@ -74,7 +74,7 @@ Stated here because they cut across every reference file:
 
 ## Changing this skill
 
-The reference files are relocations, not rewrites: their text is the same text that was in
-`CLAUDE.md` and in this file's previous single-body version. Add to them; do not summarise them. If
+The reference files hold relocated text verbatim: a paragraph moved here from a `CLAUDE.md` keeps
+its wording, and the `CLAUDE.md` keeps the rule and a pointer. Add to them; do not summarise them. If
 a new subsystem needs its own file, add a row to the table above — the table is the only index, and
 a reference file nothing points at is a file nobody loads.
