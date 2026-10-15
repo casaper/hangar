@@ -118,6 +118,15 @@ export type HangarPaths = {
    */
   readonly portPinsFile: string;
   /**
+   * The base of the VS Code bookmarks three-way merge: what the last sync left in each clone.
+   *
+   * Generated state, not INPUT -- losing it costs one sync that cannot spread a deletion, after
+   * which every clone has a base again (`editor/vscode-bookmarks.ts`).
+   */
+  readonly vscodeBookmarksState: string;
+  /** Held for the length of one bookmarks sync: `open`, `close` and `down` can all start one. */
+  readonly vscodeBookmarksLock: string;
+  /**
    * One statusline script for every clone; it derives the hue from its stdin payload.
    *
    * Named with the hangar id, because it lives in `~/.claude` -- outside the hangar root, where
@@ -205,6 +214,8 @@ export const pathsFor = (
     colourAssignmentsFile: join(root, '.hangar', 'colour-assignments.json'),
     legacyColourAssignmentsFile: join(root, 'colour-assignments.json'),
     portPinsFile: join(root, '.hangar', 'port-pins.json'),
+    vscodeBookmarksState: join(root, '.hangar', 'vscode-bookmarks.json'),
+    vscodeBookmarksLock: join(root, '.hangar', 'vscode-bookmarks.lock'),
     statuslineScript: join(claudeDir, `${id}-clone-statusline.sh`),
     memory: join(claudeDir, `${id}-memory`),
   });

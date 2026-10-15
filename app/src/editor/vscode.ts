@@ -14,8 +14,7 @@ import { git } from '../git.ts';
 import { render as renderTemplate } from '../template.ts';
 import { platform } from '../platform/index.ts';
 import { VSCODE_FAMILY, type VscodeFork } from './kinds.ts';
-import { mergeBookmarkTexts, parseBookmarks } from './vscode-bookmarks.ts';
-import type { EditorArtifact, EditorDriver, LaunchResult, MergedArtifact } from './types.ts';
+import type { EditorArtifact, EditorDriver, LaunchResult } from './types.ts';
 import type { Hangar } from '../hangar.ts';
 
 /**
@@ -124,34 +123,6 @@ export const vscodeArtifacts = (
     rootKeys: WORKSPACE_ROOT_KEYS,
     indexLabel: true,
     cloneValues: true,
-  },
-];
-
-/*
- * The Bookmarks extension's file, merged rather than copied: `vscode-bookmarks.ts` says why.
- *
- * Two facts about the extension (alefragnani.Bookmarks 14.x, read from its bundle) shape the
- * hints. It reads the file ONCE, when the window starts -- there is no file watcher, and its
- * Refresh command only redraws the tree -- and every change rewrites the whole file from the
- * window's in-memory set. So a window open across a sync writes its old set back over the merge
- * at the next toggle unless it is reloaded first.
- */
-const VSCODE_MERGED: readonly MergedArtifact[] = [
-  {
-    id: '.vscode/bookmarks.json',
-    copies: (clone) => [vscodeFile(clone, 'bookmarks.json')],
-    refuse: (text) => {
-      const doc = parseBookmarks(text);
-      return typeof doc === 'string' ? doc : undefined;
-    },
-    merge: mergeBookmarkTexts,
-    absentHint:
-      "the Bookmarks extension keeps them in VS Code's own storage until a clone sets " +
-      '`"bookmarks.saveBookmarksInProject": true` in `.vscode/settings.json` — set it in one, ' +
-      'and this command spreads the setting too',
-    writtenHint:
-      "reload each rewritten clone's VS Code window (Developer: Reload Window) before touching a " +
-      'bookmark there: the extension reads the file only at startup, and writes its whole set back',
   },
 ];
 
@@ -525,7 +496,6 @@ export const vscodeDriver = (
      */
     closeWindow: (clone) => platform().closeAppWindow(app, clone.name),
     artifacts: vscodeArtifacts(rootPathKeys),
-    merged: VSCODE_MERGED,
   };
 };
 

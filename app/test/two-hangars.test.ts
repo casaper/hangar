@@ -9,6 +9,7 @@ import {
   excludeBlock,
   settingsPath,
 } from '../src/clone-config.ts';
+import { bookmarksPath } from '../src/editor/vscode-bookmarks-sync.ts';
 import { cloneAt } from '../src/fleet.ts';
 import { themePath } from '../src/generate/theme-json.ts';
 import { hangarClaudeLocalMdContent } from '../src/hangar-files.ts';
@@ -91,6 +92,7 @@ test('every path either hangar produces belongs to that hangar alone', () => {
     claudeLocalMdPath(clone),
     settingsPath(clone),
     themePath(clone),
+    bookmarksPath(clone),
   ];
 
   const aPaths = pathsOf(a, a1);

@@ -13,6 +13,7 @@ import { coloursSync } from './colours.ts';
 import { unsharedTmpEntries } from '../tmp.ts';
 import { tmuxServer, tmuxSocketName } from '../tmux.ts';
 import type { Hangar } from '../hangar.ts';
+import { forgetCloneBookmarks } from '../editor/vscode-bookmarks-sync.ts';
 
 /**
  * `hangar remove-clone` -- take a clone out of the fleet, and optionally delete it.
@@ -165,6 +166,12 @@ export const removeClone = (hangar: Hangar, ref: string, opts: RemoveCloneOption
   // 5b. its port pin, for the same reason: the next clone at this index starts on the formula.
   if (clearPortPin(hangar, clone.index)) {
     ok(`dropped its port pin from ${tildify(hangar.paths.portPinsFile)}`);
+  }
+
+  // 5c. its VS Code bookmarks base: a clone reusing the index with no file of its own would read
+  //     as having deleted every bookmark, and the next sync would empty the fleet.
+  if (forgetCloneBookmarks(hangar, clone.name)) {
+    ok(`dropped its VS Code bookmarks base from ${tildify(hangar.paths.vscodeBookmarksState)}`);
   }
 
   // 6. the generated artifacts no longer mention it

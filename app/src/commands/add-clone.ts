@@ -36,6 +36,7 @@ import { coloursSync } from './colours.ts';
 import { statusOf } from './status.ts';
 import type { Hangar } from '../hangar.ts';
 import { portSummary } from '../ports.ts';
+import { forgetCloneBookmarks } from '../editor/vscode-bookmarks-sync.ts';
 
 /**
  * `hangar add-clone` -- a new clone, wired into the fleet completely.
@@ -93,6 +94,11 @@ export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
     warn(`dropped a leftover port pin for index ${String(index)}`);
   }
   const clone = cloneAt(hangar, index);
+  // And its VS Code bookmarks base, for a worse reason: a base with no file reads as "this clone
+  // deleted every bookmark", and the next sync would empty every clone in the fleet.
+  if (forgetCloneBookmarks(hangar, clone.name)) {
+    warn(`dropped a leftover VS Code bookmarks base for ${clone.name}`);
+  }
   /*
    * `forge.originUrl`, with NO literal fallback.
    *

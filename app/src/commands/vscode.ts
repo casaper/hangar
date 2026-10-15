@@ -15,8 +15,9 @@ import {
   type EditorArtifact,
   type EditorDriver,
   type EditorKind,
-  type MergedArtifact,
+  isVscodeFork,
 } from '../editor/index.ts';
+import { bookmarksPath, syncVscodeBookmarks } from '../editor/vscode-bookmarks-sync.ts';
 import {
   changedKeys,
   foreignClonePaths,
@@ -239,73 +240,6 @@ const syncUntracked = (
 };
 
 /**
- * A merged artifact: every clone's copy folded into one union, written back into every clone.
- *
- * There is no source and so no `--from`: a union has nothing to choose between. A copy that will
- * not parse takes no part and is not written -- overwriting it would throw away whatever it held,
- * and dropping it from the merge silently would make its bookmarks look deleted.
- */
-const syncMerged = (
-  artifact: MergedArtifact,
-  clones: readonly Clone[],
-  opts: EditorSyncOptions,
-): Result => {
-  heading(artifact.id);
-  if (opts.from !== undefined) note('merged from every clone — --from does not apply');
-
-  const copies = clones.flatMap((clone) =>
-    artifact.copies(clone).map((path) => readCopy(clone, path)),
-  );
-  const present = copies.filter((c) => c.text !== undefined);
-  if (present.length === 0) {
-    note(`no clone has this file — ${artifact.absentHint}`);
-    return nothing();
-  }
-
-  const refused = new Map<string, string>();
-  for (const copy of present) {
-    const why = artifact.refuse(copy.text ?? '');
-    if (why !== undefined) refused.set(copy.path, why);
-  }
-  const usable = present.filter((c) => !refused.has(c.path)).sort((a, b) => a.mtimeMs - b.mtimeMs);
-  if (usable.length === 0) {
-    for (const [path, why] of refused) warn(`${tildify(path)}: ${why}`);
-    return nothing();
-  }
-  const wanted = artifact.merge(usable.map((c) => c.text ?? ''));
-
-  const rows: string[][] = [];
-  let changed = 0;
-  for (const copy of copies) {
-    const why = refused.get(copy.path);
-    if (why !== undefined) {
-      rows.push([cloneLabel(copy.clone), pc.red('skipped'), why]);
-      continue;
-    }
-    if (copy.text === wanted) {
-      rows.push([cloneLabel(copy.clone), OUTCOME_LABEL['in-sync'], '']);
-      continue;
-    }
-    const creating = copy.text === undefined;
-    const outcome: Outcome =
-      opts.dryRun === true
-        ? creating
-          ? 'would-create'
-          : 'would-rewrite'
-        : creating
-          ? 'created'
-          : 'rewritten';
-    if (opts.dryRun !== true) writeCopy(copy.path, wanted);
-    changed += 1;
-    rows.push([cloneLabel(copy.clone), OUTCOME_LABEL[outcome], '']);
-  }
-
-  table(rows);
-  if (changed > 0) note(artifact.writtenHint);
-  return { changed, blocked: false, drifted: [] };
-};
-
-/**
  * The engine, for whichever editor was asked for.
  *
  * One implementation serves both editors with no branch in it, and that falls out of the config
@@ -333,12 +267,16 @@ export const editorSync = (hangar: Hangar, driver: EditorDriver, opts: EditorSyn
     blocked = blocked || result.blocked;
     drifted.push(...result.drifted);
   }
-  for (const artifact of driver.merged ?? []) {
-    const result = syncMerged(artifact, clones, opts);
-    if (clones.some((clone) => artifact.copies(clone).some((path) => existsSync(path)))) {
-      present += 1;
-    }
-    changed += result.changed;
+  /*
+   * The Bookmarks extension's file is no artifact: it is each clone's own working state, brought
+   * into step by a three-way merge rather than a copy, and so it has no source and no `--from`.
+   * `editor/vscode-bookmarks.ts` says why.
+   */
+  if (isVscodeFork(driver.kind)) {
+    if (opts.from !== undefined)
+      note('bookmarks are merged from every clone — --from does not apply');
+    changed += syncVscodeBookmarks(hangar, { dryRun: opts.dryRun, verbose: true });
+    if (clones.some((clone) => existsSync(bookmarksPath(clone)))) present += 1;
   }
 
   console.log();

@@ -370,6 +370,24 @@ declared, and silent the moment one clone has the file. **There is deliberately 
 generated default.** That is the same line `defaultSettings` draws between derived and personal:
 emitting editor settings a hangar invented is a config that looks configured and is not.
 
+## The VS Code bookmarks rows
+
+Two hangar-level rows, only when a VS Code-family editor is configured, both from the merge
+`editors.md` describes:
+
+- **Clones not in step** is a preview of the merge: a clone it would write is a problem, and
+  `--fix` runs the merge. Behind is normal for the minutes between a toggle and the next `open`
+  or `close`, which run it too, so this row is for a fleet nobody has opened or closed anything
+  in since.
+- **A base for a clone that no longer exists** is the dangerous one. `add-clone` reuses free
+  indices, and a new clone at that index with no file of its own would read as having deleted
+  every bookmark, emptying the fleet at the next sync. `add-clone` and `remove-clone` both drop
+  it, and any sync drops the bases of clones it did not find; this catches a directory removed by
+  hand with no sync since. `--fix` drops it.
+
+A skipped copy (unparseable, tracked, or not ignored by git) is deliberately not a problem: in a
+repo that does not ignore `.vscode/*` it would be red forever.
+
 ## The tally, and the line between a problem and a fact
 
 `problems` counted only the per-clone checks, so a hangar with no clones yet printed five

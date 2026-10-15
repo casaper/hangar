@@ -122,6 +122,13 @@ import { installChecks } from '../install.ts';
 import { secretsFileContent } from './setup.ts';
 import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
+import {
+  forgetCloneBookmarks,
+  orphanedBookmarkStates,
+  previewVscodeBookmarks,
+  syncVscodeBookmarks,
+} from '../editor/vscode-bookmarks-sync.ts';
+import { bookmarkSyncSummary, touchedClones } from '../editor/vscode-bookmarks.ts';
 
 /**
  * `hangar doctor` -- the regression net for everything `add-clone` sets up.
@@ -1631,6 +1638,40 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
           : `${tildify(settingsFile)} differs from what the generator produces`,
       );
       note('`hangar doctor --fix` writes it. Claude Code fails silently on all three values.');
+    }
+  }
+
+  /*
+   * The VS Code bookmarks merge, previewed. A clone behind on bookmarks is normal for the minutes
+   * between a toggle and the next `open`/`close`, which is why every one of those runs the merge
+   * too -- this row is for the fleet nobody has opened or closed anything in since.
+   *
+   * A base for a clone that no longer exists is the dangerous half: `add-clone` reuses the index,
+   * and a base with no file reads as "every bookmark deleted". Both remove it; this catches a
+   * directory removed by hand.
+   */
+  const bookmarkPlan = previewVscodeBookmarks(hangar);
+  if (bookmarkPlan !== undefined) {
+    for (const name of orphanedBookmarkStates(hangar)) {
+      if (opts.fix === true) {
+        if (forgetCloneBookmarks(hangar, name)) ok(`dropped the VS Code bookmarks base of ${name}`);
+      } else {
+        problem(
+          `${tildify(hangar.paths.vscodeBookmarksState)} keeps a base for ${name}, which no clone has`,
+        );
+        note(
+          'A clone added at that index would read as having deleted every bookmark. `--fix` drops it.',
+        );
+      }
+    }
+    const behind = touchedClones(bookmarkPlan);
+    if (behind.length > 0) {
+      if (opts.fix === true) syncVscodeBookmarks(hangar);
+      else {
+        problem(`VS Code bookmarks are not in step in ${behind.join(', ')}`);
+        for (const line of bookmarkSyncSummary(bookmarkPlan, true)) note(line);
+        note('`hangar doctor --fix` or `hangar ide vscode sync` merges them.');
+      }
     }
   }
 
