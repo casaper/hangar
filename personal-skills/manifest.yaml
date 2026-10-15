@@ -31,7 +31,7 @@ skills:
   - name: shorten-comment
     divergence: intentional
     mirrors: .claude/skills/shorten-comment/SKILL.md
-    basedOn: 3df1c0c526807af2fa701eecdcbe5d65627d376a
+    basedOn: 79b66d9256c26e89d7993a3f4edb1d1e1499dc3a
     reason: >-
       Adds the "Reporting -- the edit is the verdict" contract (one line per changed block, no
       narrated justification) and judges every block in a file from a single read instead of one

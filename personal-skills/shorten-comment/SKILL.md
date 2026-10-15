@@ -288,6 +288,10 @@ When the `old_string` was grown, the extra lines are context: reproduce them unc
 `new_string` and change only the comment. Removing a block means `new_string` is those context lines
 alone.
 
+After the edit, check the placement: the comment must sit directly on the declaration, rule or
+element it describes, with no other comment stacked on the same target. An orphaned comment left
+behind by an earlier insertion is a defect to fix, not to leave.
+
 Then report per **Reporting** below — for a single comment that is the rewritten line and the
 level, and nothing else.
 
