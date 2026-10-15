@@ -68,10 +68,9 @@ pnpm golden && git diff --exit-code dev/golden/gated   # the net for the builder
 pnpm scan                                              # gitleaks over the history, literals over the tree
 ```
 
-`.husky/pre-commit` runs the `scan` pair on what is STAGED, and `hangar dev release` runs every
-one of them plus `commitlint`, where nothing can be skipped — so these are fast feedback rather
-than the enforcement. Run them anyway: `scan:literals` is what keeps this repo from naming one
-organisation, and a worked example added to a doc is the commonest way to trip it.
+They are fast feedback rather than the enforcement — `app/CLAUDE.md`'s **Commit messages**
+section says where that is. Run them anyway: `scan:literals` is what keeps this repo from naming
+one organisation, and a worked example added to a doc is the commonest way to trip it.
 
 And, if you touched `config/schema.ts`, one more that nothing runs for you:
 
@@ -92,36 +91,20 @@ Two lines out — `0` for the handshake, then the tool count — and nothing on 
 is `EXPOSURES.length` in `src/mcp/tools.ts` and nothing holds the two together, so read it off the
 table rather than off a number written here.
 
-`pnpm test` is a **seed** suite over the pure core, not a safety net — it holds what a golden
-capture structurally cannot (two hangars in one process, input that is wrong rather than right,
-`pathsFor`'s purity) and asserts properties rather than expected text. A green run says nothing
-about the two-thirds of this CLI that touches a live working tree. `pnpm golden` is still the net
-for the builders, and `app/CLAUDE.md` draws the boundary.
+A green `pnpm test` says nothing about the two-thirds of this CLI that touches a live working
+tree; `app/CLAUDE.md` draws the boundary between it and `pnpm golden`.
 
 `app/**` is prettier-governed while the root `CLAUDE.md` and `.claude/**` are not, so a doc edit
 inside `app/` has to pass `format:check` and the same edit outside it does not.
 
 ## Commit messages are gated too
 
-**This repo is Conventional Commits, enforced by a `commit-msg` hook.** `type(scope): subject` —
-`fix(editor): Let a hangar whose editor is not VS Code actually be one` — with the subject in the
-house prose style and the body doing the work it always did. `app/CLAUDE.md`'s **Commit messages**
-section is the authority: the type and scope vocabularies, the three commitlint rules that differ
-from the defaults and why each one had to, and the standing rule that **nothing is marked breaking
-while the CLI is 0.x**, because that would make semantic-release cut a 1.0.0 nobody decided on.
-
-The hooks are a **one-time manual install**, and it cannot be otherwise: `pnpm-workspace.yaml`
-sets `ignoreScripts: true`, so husky's `prepare` never runs.
-
-```
-pnpm hooks   # once per clone of this repo -- installs commit-msg AND pre-commit
-```
-
-`commit-msg` is `commitlint`; `pre-commit` is the `scan` pair above, on what is staged. Until you
-have run it, nothing checks your commit message until release time: `hangar dev release` runs
-`commitlint` over the whole range being released, and that is where none of it can be skipped. A
-commit that lands on `main` is what semantic-release reads to pick the next version and write
-`CHANGELOG.md`, so a wrong type is a wrong release, not just an untidy log.
+**This repo is Conventional Commits, enforced by a `commit-msg` hook** that is a one-time manual
+install (`pnpm hooks`). `app/CLAUDE.md`'s **Commit messages** section is the authority: the type
+and scope vocabularies, the two commitlint rules that differ from the defaults, and the standing
+rule that **nothing is marked breaking while the CLI is 0.x**. A commit that lands on `main` is
+what semantic-release reads to pick the next version and write `CHANGELOG.md`, so a wrong type is
+a wrong release, not just an untidy log.
 
 ## Commit to `main`
 

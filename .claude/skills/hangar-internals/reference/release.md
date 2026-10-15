@@ -3,7 +3,7 @@
 `pnpm release` is `hangar dev release`. It runs every gate this repo has, then hands over to
 **semantic-release**, which does the release itself from `.releaserc.json`: the version from the
 commit types, the CHANGELOG, the bump, the release commit, the tag, the push and the GitHub
-release. `app/CLAUDE.md`'s **Releasing** section is the how. This is the why.
+release. `app/CLAUDE.md`'s **Commit messages** section is the how. This is the why.
 
 ## Why a terminal: semantic-release versions from the tags it can see
 
@@ -145,6 +145,13 @@ absence is a note and a skip, not a failure; semantic-release still does its own
 
 ## What a release leaves behind
 
+**`CHANGELOG.md` is generated AND tracked, and that is not an exception to the root's rule** that
+a tracked file a `hangar` command rewrites is a merge conflict on every pull. That rule is about
+files whose content differs PER HANGAR — a config, an identity file, a palette rendered for this
+hangar's clones. The CLI's own release history is the same in every hangar, so a pull brings the
+upstream copy and there is nothing local for it to conflict with. Only semantic-release writes it,
+and only on `main`.
+
 **The tag is lightweight.** Confirmed at v0.14.0: `git cat-file -t v0.14.0` answers `commit`.
 `@semantic-release/git` tags with `git tag <name> <sha>` — no `-a`, no message — while the fourteen
 historical tags are annotated and carry hand-written milestone prose (`v0.13.0` is "the IntelliJ
@@ -194,6 +201,47 @@ and the release preflight is the place nothing can be skipped. Two details of it
   skips deliberately — a per-machine developer tool must not block a commit — so the release is
   the one place the scan cannot be skipped. A release cut without a history scan is a release
   nobody scanned.
+
+## The commitlint rules, and the commit-msg hook
+
+Three commitlint rules are worth knowing. The two in `.commitlintrc.json` differ from the defaults
+because the defaults reject this repo's own history; the third is the default, kept:
+
+- **`header-max-length` is 120, not 100.** A Sentence-case subject that says what changed routinely
+  runs past 100 once `type(scope): ` is in front of it, and cutting hand-written subjects down to
+  fit a round number is the wrong side of that trade.
+- **`subject-case` is off.** `config-conventional` forbids Sentence case, which is the case every
+  subject in this repo is written in.
+- **`body-max-line-length` is left at 100** and needs no exception: no hand-written body exceeds
+  it. The long lines in `chore(release)` bodies are semantic-release's changelog links.
+
+`footer-leading-blank` warns on a good share of the history and is left warning. The parser reads
+any `word: value` line in a prose body as a footer token, and these bodies are full of them
+(`kind: none`, `type: module`). Reflowing bodies to satisfy a heuristic would damage the record to
+silence a warning that blocks nothing.
+
+**No `!` and no `BREAKING CHANGE:` footer while the CLI is 0.x.** Several changes here are
+breaking by content — the `orch-util` → `hangar` rename, untracking files a command rewrites — and
+marking them would cut a 1.0.0. Versions move by patch and minor only until somebody decides
+otherwise, and that is a decision, not a commit message. The release refuses rather than
+escalating: `preMajor` would turn a stray `!` into a version silently and differently depending on
+what else was in the range.
+
+**`app/.husky/commit-msg` reaches `commitlint` by path rather than through `pnpm`** (pnpm lives
+inside an fnm multishell and moves with the Node version, so a hook needing it fails in any shell
+direnv has not touched), and names `direnv allow` when it cannot find `node` — the same failure
+and the same fix `bin/hangar` already reports. **`app/.husky/pre-commit`** calls `gitleaks` by
+NAME and skips with a message when it is absent: gitleaks is a per-machine developer tool
+(`brew install gitleaks`), not a dependency of this package. `scrub-check.sh` has no such
+dependency and always runs.
+
+## Rewriting history
+
+**A root rebase cannot run in a live hangar.** `.claude/settings.json`, `clone-colours.sh`,
+`clone-terminal.sh` and `hangar.config.yaml` are generated and untracked, but are tracked in the
+early commits of this history — so replaying the root commit tries to overwrite the live files and
+git refuses. Do it in a throwaway clone and fetch the result back. `git filter-repo` cannot
+re-sign; `git rebase --root --exec` re-signs from `commit.gpgsign`.
 
 ## Why `dev`, and what does not change
 

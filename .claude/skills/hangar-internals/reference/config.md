@@ -64,6 +64,19 @@ a future change to a default must not move either. A value that only configures 
 hangar does not use goes — `editor.jetbrains` in a hangar listing only `vscode` configures
 nothing.
 
+## `hangar.schema.json` is generated, tracked, and stale without a sound
+
+**`hangar config schema --check` fails instead of writing**, which makes it the thing to run after
+touching `config/schema.ts`. Both YAML files open with
+`# yaml-language-server: $schema=./hangar.schema.json`, so a stale committed schema silently
+validates every editor against last week's shape — invisible until someone opens the file.
+**Run it when `zod` moves, too.** The generator's other input is the library, so a `toJSONSchema`
+change across a version leaves exactly the same stale schema with `config/schema.ts` untouched
+and a rule read by the letter — "after touching `config/schema.ts`" — never firing.
+
+It is the one generated hangar-root file that is tracked, because nothing but
+`hangar config schema` writes it and its content is the same in every hangar.
+
 ## Absence is a gate; invalidity is a report
 
 A `preAction` hook in `cli.ts` refuses **every** command when `hangar.config.yaml` is missing:

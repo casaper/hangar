@@ -97,9 +97,10 @@ a `mktemp -d` project with its own `.claude/settings.local.json` — `default` m
 write, inside the project too, so it cannot tell a rule from no rule. One measured answer: a
 file-write deny is an `Edit(...)` rule, and `Write(...)` deny rules are never matched.
 
-## Two conventions for changing it
+## Two conventions for changing it, and the two nets behind them
 
-Both exist because they caught something, and both apply to every edit under `app/src/**`.
+Both conventions exist because they caught something, and both apply to every edit under
+`app/src/**`.
 
 - **Anything that produces text for a human or an agent gets a PURE builder, given its facts and
   exported.** Every variant can then be printed side by side without constructing the state that
@@ -107,39 +108,26 @@ Both exist because they caught something, and both apply to every edit under `ap
   reading the code had not: one froze an agent after a SUCCESSFUL sync, the other told it a
   branch had moved when nothing was integrated. This convention predates the test suite and is
   what made one possible at all: every assertion in `test/` is a call to a pure builder.
+- **Derive state at the moment you report it; carry a flag only for what git cannot know.** A
+  `restored` boolean set beside a `git stash pop` lies whenever the pop fails, which it can — it
+  only warns. Ask `inProgressOperation`, `conflictedFiles`, `syncStashes` instead. Whether an
+  integration got committed is the one thing git cannot answer, so that one is carried, and a
+  carried flag needs guarding for the paths that do nothing (`up-to-date` integrates nothing).
+
+The two nets:
+
 - **`pnpm golden` is the first convention, mechanised.** It captures every artifact this hangar
   would write — through the same pure builders `doctor` compares against and `add-clone` writes —
   and records each one's **destination** alongside its content, because every path in this CLI is
   a bare `string` and a builder rendering perfect text into the wrong file passes a content-only
-  diff. `dev/golden/README.md` has the detail; three things about it are worth knowing before
-  relying on it:
-  - **`gated/` is a gate, portable, and expected to diff for NOBODY.** Everything in it renders
-    from a checked-in fixture config in a temp directory with `%HANGAR%`/`%HOME%` normalised
-    away, so `pnpm golden` in a fresh clone of this repo on another machine produces no diff and
-    any diff is a finding. A capture of this hangar is never gated: it would open a colleague's
-    first gate run with a 120-file diff that looks like a broken tool. **The one legitimate exception is the platform** — each fixture's `manifest.txt` carries
-    the platform driver's own answers, including the capability record, and a Linux run diffs
-    those rows. They are captured rather
-    than normalised because a capture that hid them would hide the seam that only exists at all
-    because three `darwin`-only assumptions survived unnoticed until this was published.
-  - **`advisory/` is not a gate, for either of two reasons.** It MOVES — `doctor --all`,
-    `status --all`, `list` and the `tmp`/`plans` dry runs read live state, so a green command
-    diff proves less than it looks like it does. Or it is stable but NOT PORTABLE:
-    `advisory/hangar/` is this hangar's own artifact tree, and `advisory/commands/` holds the
-    four command captures that read this config and these clones. `config validate` is the one
-    that could not simply be re-aimed at a fixture — the example-vs-live comparison is its whole
-    value and a temp directory has no committed example — so it moved rather than being weakened
-    in place.
-  - **Two fixtures, and the second one is not a variant.** Each disagrees with the schema
-    defaults AND with the other, so no single swallowed error can make both look read.
-    **Adding a kind or a key means asking which of the two should carry it** — each header lists
-    what it is the only capture of, and the README has why.
-  - **An expected diff is fine; an unenumerated one is the finding.** Making a config key live for
-    the first time is _supposed_ to change the fixture half, and that change is the proof. Write
-    the expected delta down before making the change.
+  diff. `gated/` renders from the two checked-in fixtures and is expected to diff for NOBODY, on
+  any machine — the platform rows of each `manifest.txt` are the one legitimate exception.
+  `advisory/` is never a gate. **Adding a kind or a key means asking which of the two fixtures
+  should carry it**, and **an unenumerated diff is the finding**: write the expected delta down
+  before making the change. `dev/golden/README.md` has why each of those holds.
 - **`pnpm test` covers what a capture structurally cannot, and nothing else.** `app/test/`, run by
   `node --test` with no flags — Node 24 strips the types, and `test/**/*.ts` is in the tsconfig
-  include so the suite is checked under the same strict flags as `src/`. Three things live there
+  include so the suite is checked under the same strict flags as `src/`. Four things live there
   and the boundary matters:
   - **Two hangars in ONE process.** `dev/golden.sh` runs the binary once per hangar, so a module-level
     singleton or a cache keyed on nothing passes it every time and still hands the second hangar
@@ -163,12 +151,6 @@ Both exist because they caught something, and both apply to every edit under `ap
   `makeClone` reads `.hangar/colour-assignments.json` under the hangar root and caches it per
   root, so a test aimed at this hangar would read one developer's own `colours change` history.
   `namesNoMachinePath` in `test/fixture.ts` is the standing guard.
-
-- **Derive state at the moment you report it; carry a flag only for what git cannot know.** A
-  `restored` boolean set beside a `git stash pop` lies whenever the pop fails, which it can — it
-  only warns. Ask `inProgressOperation`, `conflictedFiles`, `syncStashes` instead. Whether an
-  integration got committed is the one thing git cannot answer, so that one is carried, and a
-  carried flag needs guarding for the paths that do nothing (`up-to-date` integrates nothing).
 
 ## Nothing in here names one organisation
 
@@ -237,78 +219,25 @@ semantic-release gives its own `chore(release)` commits. That list is documented
 **not** enforced — a `scope-enum` rule goes red the first time somebody adds a subsystem, and this
 repo already knows what a check that is red in normal operation is worth.
 
-Three commitlint rules are worth knowing. The two in `.commitlintrc.json` differ from the defaults
-because the defaults reject this repo's own history; the third is the default, kept:
-
-- **`header-max-length` is 120, not 100.** A Sentence-case subject that says what changed routinely
-  runs past 100 once `type(scope): ` is in front of it, and cutting hand-written subjects down to
-  fit a round number is the wrong side of that trade.
-- **`subject-case` is off.** `config-conventional` forbids Sentence case, which is the case every
-  subject in this repo is written in.
-- **`body-max-line-length` is left at 100** and needs no exception: no hand-written body exceeds
-  it. The long lines in `chore(release)` bodies are semantic-release's changelog links.
-
-`footer-leading-blank` warns on a good share of the history and is left warning. The parser reads
-any `word: value` line in a prose body as a footer token, and these bodies are full of them
-(`kind: none`, `type: module`). Reflowing bodies to satisfy a heuristic would damage the record to
-silence a warning that blocks nothing.
+**commitlint differs from `config-conventional` twice**: `header-max-length` is 120 and
+`subject-case` is off, because the defaults reject this repo's own Sentence-case history.
+`body-max-line-length` stays at the default 100 and `footer-leading-blank` is left warning.
+`hangar-internals/reference/release.md` has why each is set the way it is.
 
 **No `!` and no `BREAKING CHANGE:` footer while the CLI is 0.x.** Several changes here are
-breaking by content — the `orch-util` → `hangar` rename, untracking files a command rewrites — and
-marking them would cut a 1.0.0. Versions move by patch and minor only until somebody decides
-otherwise, and that is a decision, not a commit message. **`hangar dev release` refuses rather
-than escalating**: `conventional-changelog`'s own `preMajor` option bumps one level instead, which
-would turn a stray `!` into a version silently and differently depending on what else was in the
-range. The release stops and names the commit.
+breaking by content, and marking them would cut a 1.0.0 nobody decided on. `hangar dev release`
+refuses such a commit rather than escalating, and names it.
 
-### The hooks, and where this is actually enforced
+**The hooks are `pnpm hooks`, once per clone of this repo, by hand** — `pnpm-workspace.yaml` sets
+`ignoreScripts: true`, so husky's `prepare` never runs. `commit-msg` is commitlint; `pre-commit`
+is `pnpm scan` on what is STAGED, and skips gitleaks with a message when it is not installed. They
+are fast feedback only: **`hangar dev release` is where none of it can be skipped** — every gate,
+`commitlint` over the whole range, and a missing gitleaks is an error there. There is no CI.
 
-`pnpm hooks` installs **both**, once per clone of this repo, **by hand**. It cannot be automatic:
-`pnpm-workspace.yaml` sets `ignoreScripts: true`, so husky's `prepare` never runs on install.
-
-- **`app/.husky/commit-msg`** reaches `commitlint` by path rather than through `pnpm` (pnpm lives
-  inside an fnm multishell and moves with the Node version, so a hook needing it fails in any
-  shell direnv has not touched), and names `direnv allow` when it cannot find `node` — the same
-  failure and the same fix `bin/hangar` already reports.
-- **`app/.husky/pre-commit`** runs the two hygiene gates on what is STAGED. It calls `gitleaks` by
-  NAME, and **skips with a message rather than failing when it is absent**: gitleaks is a per-
-  machine developer tool (`brew install gitleaks`), not a dependency of this package, and a
-  missing scanner must not block a commit. `scrub-check.sh` has no such dependency and always
-  runs.
-
-So the hooks are fast feedback for whoever installed them, and **`hangar dev release` is where
-none of it can be skipped**: it runs typecheck, lint, format, the suite, both scans, the golden
-gate and `commitlint` over the whole range being released, before it hands over to
-semantic-release. There is no CI workflow: the release these gates protect cannot run from CI, and
-`hangar-internals/reference/release.md` says why.
-
-**A missing gitleaks is an error there, not a skip.** The hook's leniency is deliberate and stays
-— a per-machine developer tool must not block a commit — but a release cut without a history scan
-is a release nobody scanned, so `dev/scan-secrets.sh` exits 1 with `brew install gitleaks` and the
-preflight stops.
-
-**`hangar doctor` deliberately gets no row for `core.hooksPath`.** Every hangar root is a clone of
-this repo, but only a CLI developer ever commits in one — an operator's hangar would carry that
-row red forever, which is the check nobody reads.
-
-### Releasing
-
-**`pnpm release` cuts one, from a terminal and never from CI** — it is `hangar dev release`: a
-preflight, every gate, a refusal on any breaking marker while the CLI is 0.x, and a confirmation
-that fails closed without a tty, then semantic-release. **`-n` changes nothing and is the first
-thing to run**; `-y` releases without asking.
-
-**`.releaserc.json`, `app/changelog.preset.ts` and `dev/changelog.sh` are load-bearing**, and
-`pnpm changelog` producing no diff at a released state is the check that they hold. Read
-`hangar-internals/reference/release.md` before editing any of them, or the release command.
-
-### Rewriting history
-
-**A root rebase cannot run in a live hangar.** `.claude/settings.json`, `clone-colours.sh`,
-`clone-terminal.sh` and `hangar.config.yaml` are generated and untracked, but were tracked earlier
-in this history — so replaying the root commit tries to overwrite the live files and git refuses.
-Do it in a throwaway clone and fetch the result back. `git filter-repo` cannot re-sign;
-`git rebase --root --exec` re-signs from `commit.gpgsign`.
+**`pnpm release` cuts one, from a terminal and never from CI.** `-n` changes nothing and is the
+first thing to run. **Read `hangar-internals/reference/release.md` before editing
+`.releaserc.json`, `app/changelog.preset.ts`, `dev/changelog.sh` or the release command**, and
+before rewriting history: a root rebase cannot run in a live hangar.
 
 ## The code, by role
 
@@ -441,12 +370,9 @@ measured separation, why a call is a subprocess, and why the Bash path stays ope
 
 ## What `colours sync` generates
 
-**The rule that settles every naming question here: what a hangar writes OUTSIDE its own root
-carries its id; what it writes inside does not.** `~/.claude` is the same directory for every
-hangar on the machine, so the statusline script and the theme files are `<id>-clone-…`; the
-shell helpers at the hangar root are inside it, and their FUNCTION names still carry the id
-because two hangars can be sourced into one shell. Renaming any of them is a three-phase
-operation rather than an edit -- see `hangar-internals/reference/doctor.md`.
+**What a hangar writes OUTSIDE its own root carries its id; what it writes inside does not** —
+except shell FUNCTION names, because two hangars can be sourced into one shell. Renaming any of
+them is a three-phase operation rather than an edit (`hangar-internals/reference/doctor.md`).
 
 The hues are data in **`src/palette.ts`** and everything else is derived from them. These files
 are **generated by `hangar colours sync` — never hand-edit them**:
@@ -468,9 +394,7 @@ Two things about them break silently, with every gate green:
   option onto a running server itself; `doctor --fix` deliberately never runs `kill-server`,
   because that would end every live agent in the fleet.
 
-`hangar-internals/reference/colours.md` has what each file carries and why — the derivations, the
-statusline's three measured blind spots, the prompt layer's socket gate, `hangar_<id>_allow`, and
-why the status script is shell rather than the CLI.
+`hangar-internals/reference/colours.md` has what each file carries and why.
 
 ## What is tracked at the hangar root, and what is generated
 
@@ -501,34 +425,22 @@ a shadow that goes stale is a diff rather than a silence), `.claude/**` except t
 generated `settings.json`, and the two `.gitkeep` files under `plans/` and `tmp/`. Never the
 application.
 
-Five of those entries are worth a sentence each:
+Five of those look like exceptions and are not:
 
-- **`.hangar/claude-tmux.conf` gets no `doctor` row and no `.gitignore` line of its own**, and
-  the reason is which command owns it. `colours sync` writes `clone-tmux.conf` and `doctor`
-  byte-compares it, because nothing else would notice it going stale. `hangar up` rewrites
-  this one immediately before it starts the server that reads it, so stale is not a state it can
-  reach — and `.hangar/` is already gitignored. It is also why `.local/bin/claude` is TRACKED
-  rather than generated: the shim holds no machine-specific value, so there is nothing to
-  generate and nothing to drift.
-- **`.hangar/colour-assignments.json` is the only file here that is both untracked and
-  irreplaceable** — operator input that nothing regenerates. It has its own gitignore entry rather
-  than sitting under the `.hangar/` line, because that line is documented as safe-to-delete
-  generated state and clearing a corepack cache must not take the colours with it. The old
-  root-level path is read as a permanent fallback, and `doctor --fix` migrates it byte for byte.
-- **`.claude/modes/{ops,dev}.settings.json` stay tracked despite naming an absolute path**, and
-  that is a security property: their permission arrays are operator mode's boundary, and operator
-  mode may run `hangar doctor`. `hangar-internals/reference/modes.md` has the reasoning and the
-  three alternatives that were rejected.
-- **`CHANGELOG.md` is generated AND tracked, and that is not an exception to the rule above.**
-  That rule is about files whose content differs PER HANGAR — a config, an identity file, a
-  palette rendered for this hangar's clones. The CLI's own release history is the same in every
-  hangar, so a pull brings the upstream copy and there is nothing local for it to conflict with.
-  Only semantic-release writes it, and only on `main`.
-- **The gated golden baseline is entirely portable and entirely tracked**, which is what makes
-  `git diff --exit-code dev/golden/gated` mean the same thing in every clone of this repo. The
-  capture of THIS hangar is still taken and is worth reading, but it lands under the gitignored
-  `dev/golden/advisory/` — a gitignored path INSIDE `gated/` would have made the gate cover less
-  than its own name says. See `dev/golden/README.md`.
+- **`.hangar/claude-tmux.conf`** gets no `doctor` row: `hangar up` rewrites it immediately before
+  starting the server that reads it, so stale is not a state it can reach
+  (`hangar-internals/reference/modes.md`).
+- **The two `.hangar/` INPUT files** are the only untracked files here that nothing regenerates,
+  which is why each has its own `.gitignore` line, with its reason, rather than riding on the
+  safe-to-delete `.hangar/` one. `colour-assignments.json` is also read from its old root-level
+  path, permanently.
+- **`.claude/modes/{ops,dev}.settings.json`** stay tracked despite naming an absolute path: a
+  generated copy would let operator mode rewrite its own permission list through `doctor --fix`.
+  `hangar-internals/reference/modes.md` has the three alternatives that were rejected.
+- **`CHANGELOG.md`** is generated AND tracked because its content is the same in every hangar
+  (`hangar-internals/reference/release.md`).
+- **`dev/golden/gated/`** is tracked and portable; the capture of THIS hangar lands in the
+  gitignored `advisory/`, never in a gitignored path inside `gated/` (`dev/golden/README.md`).
 
 ## The hangar root files this package owns
 
@@ -544,33 +456,15 @@ Each entry is the source in `app/src/**`, the command that regenerates, and what
   `clone-tmux-status.sh` (gitignored)
 - any new config key → by hand → `hangar.config.example.yaml` (**tracked**)
 
-**Only one generated root file is tracked, and the rule that decides it is publication:** a
-tracked file that a `hangar` command rewrites is a merge conflict on every `git pull` from
-upstream. `hangar.schema.json` is tracked because nothing but `hangar config schema` writes it and
-its content is the same in every hangar; the two shell helpers are not, because `colours sync`
-rewrites them from the palette, the hangar id and the clone list.
-
-- **`hangar config validate` also compares `hangar.config.example.yaml` with the live file**
-  whenever the two declare the same `id` — the `id` gate keeps it quiet in a hangar the example is
-  only a template for. `hangar-internals/reference/config.md` has the drift that made it a check.
-- **`hangar config schema --check` fails instead of writing**, which makes it the fourth thing to
-  run after touching `config/schema.ts`. Both YAML files open with
-  `# yaml-language-server: $schema=./hangar.schema.json`, so a stale committed schema silently
-  validates every editor against last week's shape — invisible until someone opens the file.
-  **Run it when `zod` moves, too.** The generator's other input is the library, so a
-  `toJSONSchema` change across a version leaves exactly the same stale schema with
-  `config/schema.ts` untouched and this rule, read by the letter, never firing.
-- **`clone-colours.sh` and `clone-terminal.sh` are gitignored**, like the artifacts under
-  `~/.claude/` (one statusline plus one theme per clone) — so a `palette.ts` edit puts no
-  hangar-root file into your commit, and **nothing in git records that they are stale.** Both
-  are headed `GENERATED by hangar colours sync -- do not edit by hand`, and
-  `hangar colours sync -n` reports whether they are current: that dry run is the only check there
-  is, so run it after a palette change rather than looking at `git status`.
-- **`hangar.config.example.yaml` is the committed record and a faithful SUPERSET of the
-  gitignored live `hangar.config.yaml`.** A new schema key belongs there too — with its default,
-  and any alternative as a **comment** beside the one live choice, because `superRefine` rejects
-  two uncommented alternatives. `hangar config show` on each must differ only in the free-text
-  `_` note; `hangar-internals/reference/config.md` has why the pair is shaped this way.
+- **`hangar config schema --check` after touching `config/schema.ts` — and when `zod` moves.**
+  A stale committed schema silently validates every editor against last week's shape;
+  `hangar-internals/reference/config.md` has why the library is the second input.
+- **`hangar colours sync -n` after a palette change.** The shell helpers are gitignored, so
+  nothing in git records that they are stale and that dry run is the only check there is.
+- **A new schema key goes into `hangar.config.example.yaml` too** — with its default, and any
+  alternative as a **comment** beside the one live choice, because `superRefine` rejects two
+  uncommented alternatives. `config validate` compares the example with the live file whenever
+  the two share an `id`, and `config show` on each must differ only in the free-text `_` note.
 
 More root files are hand-maintained and belong to this package rather than to the fleet:
 
@@ -582,7 +476,7 @@ More root files are hand-maintained and belong to this package rather than to th
 - **`.envrc.hangar`** — `hangar_use_node`, `hangar_use_pnpm`, `hangar_use_gnu`. **Functions only,
   no side effects**, and its Homebrew lookup moves in step with `environment.ts`'s
   `resolveBrewPrefix`; `hangar-internals/reference/root-tools.md` has why.
-- **`.local/bin/claude`, `bin/hangar-statusline` and `bin/hangar-exec-guard`, plus the six files in `.claude/modes/`** —
+- **`.local/bin/claude` and `bin/hangar-statusline`, plus the six files in `.claude/modes/`** —
   `ops.md`, `dev.md`, a `*.settings.json` beside each, the shared `mcp.json`, and `statusline.sh`.
   **The shim is the one way into either mode**: a bare `claude` at the hangar root is operator
   mode and one in `app/` is developer mode, exactly those two directories, and it writes each
@@ -599,7 +493,7 @@ More root files are hand-maintained and belong to this package rather than to th
   - **The mode settings name `hangar-statusline` and `hangar-exec-guard` by bare name**, because
     a tracked file cannot name one machine's home; a clone's untracked settings name the guard
     absolutely.
-  - **All nine are hand-maintained** — no derivation-table row, no `--check`. Only the
+  - **All eight are hand-maintained** — no derivation-table row, no `--check`. Only the
     `mcp__hangar__*` half of `ops.settings.json` is derived, held to `src/mcp/tools.ts` by
     `test/mcp-tools.test.ts` rather than by a writer, so operator mode cannot rewrite its own
     permission list.
@@ -638,24 +532,22 @@ root script is `pnpm --dir app`, so the pin governs every real invocation. `.env
 
 ## The root `.gitignore`
 
-`.gitignore` here is load-bearing, not leftover: `clone_*/`, `.env.shared`, `node_modules/`,
-`/pnpm-lock.yaml`, `plans/`, `app/.claude/plans/`, `tmp/` and `hangar.config.yaml` are the only
-reason the clones, the secrets, the CLI's dependencies and a stray root install's lockfile, the
-plan archive, developer mode's own plans, the shared scratch directory and this machine's own
-config stay out of the hangar repo. Do not remove any of those lines. (`clone_*/`, not `clone_0*/`: the old
-glob stopped matching at `clone_10`. And `hangar.schema.json` stays TRACKED — it is generated
-from the zod schema, and both YAML files point at it for editor validation.)
+`.gitignore` here is load-bearing, not leftover, and its comments carry the reasons — read them
+before touching a line. Three things about it are easy to break:
+
+- **The clones, the secrets file, the two shared directories and the stray lockfile are ANCHORED**
+  (`/clone_*/`, `/.env.shared`, `/plans/`, `/tmp/*`, `/pnpm-lock.yaml`). An unanchored `clone_*/`
+  matched a directory of that name anywhere in the tree and silently dropped 15 of golden's 136
+  files. `node_modules/` stays unanchored on purpose.
+- **`/tmp/*`, never `/tmp/`**: git does not descend into an excluded directory, so the one `!`
+  exception at the bottom of the file only works under the `*` form.
+- **The secrets entries are `/.env.shared`, `.env.local` and `/.env`** — the last has no file and
+  is listed because `.envrc` would load one. `hangar.schema.json` stays TRACKED.
 
 ## Where the rationale is
 
 Everything about _why_ each command is built the way it is lives in the **`hangar-internals`**
-skill: why `sync` asks Bitbucket for a branch's pull-request target instead of guessing, why
-`merge-default` reads the invocation out of `process.argv`, how `tmp merge` points a ticket's
-many cached names at one record, what `ide vscode sync` rewrites per clone and what it refuses to
-write, what `doctor` checks and the two rules for anything generated into a clone, the Jira hook's
-fail-open design, and why `forge.defaultBranch` is stored rather than derived.
-
-Load it before editing anything here. Its `SKILL.md` is a short index; the depth is in
+skill. Load it before editing anything here. Its `SKILL.md` is a short index; the depth is in
 `reference/*.md`, one subsystem each, which are not loaded until they are read — so take the one
 that matches the subsystem you are touching rather than all of them.
 
