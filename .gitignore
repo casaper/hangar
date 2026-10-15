@@ -1,10 +1,9 @@
-# The fleet root IS a git repository (branch `main`, no remote) tracking the fleet map, the
-# orchestration CLI and the generated shell helpers. These entries are what keep the clones,
-# the secrets and the CLI's dependencies out of it, so they are load-bearing, not insurance.
-# Do not remove them.
+# The fleet root IS a git repository (branch `main`) tracking the fleet map and the
+# orchestration CLI. These entries are what keep the clones, the secrets and the CLI's
+# dependencies out of it, so they are load-bearing, not insurance. Do not remove them.
 #
-# `clone_*/` rather than `clone_0*/`: the fleet is no longer fixed at three clones, and the
-# old glob would have stopped matching at clone_10.
+# `clone_*/` rather than `clone_0*/`: the fleet has no fixed size, and a `clone_0*/` glob stops
+# matching at clone_10.
 #
 # LEADING SLASHES matter on the root-only entries, and their absence was a real bug: an
 # unanchored `clone_*/` matches a directory of that name ANYWHERE in the tree, which silently
@@ -39,11 +38,12 @@ hangar.config.yaml
 # is the only form a negation can override -- see the one exception at the bottom of this file.
 /tmp/*
 
-# Developer mode's own plan directory. `hangar claude -m dev` runs in `app/`, and Claude Code
-# reads project settings from the session's own directory rather than walking up -- so the
-# hangar root's `.claude/settings.json` reaches OPERATOR mode and not this one, and developer
-# mode's plans were falling back to `~/.claude/plans`, mixed in with every other project on this
-# machine. `app/.claude/settings.json` is what points them back in here, and that file is
+# Developer mode's own plan directory. Developer mode runs in `app/` (a bare `claude` there, or
+# `hangar up`'s dev tab), and Claude Code reads project settings from the session's own directory
+# rather than walking up -- so the hangar root's `.claude/settings.json` reaches OPERATOR mode and
+# not this one, and without a setting of its own developer mode's plans fall back to
+# `~/.claude/plans`, mixed in with every other project on this machine.
+# `app/.claude/settings.json` is what points them back in here, and that file is
 # TRACKED because its one value is relative and names no machine path. The plans written there
 # are one developer's and are not, and nothing moves them anywhere else: `plansDirectory` must
 # resolve INSIDE the project root, which for this mode is `app/` and not the hangar root, so
