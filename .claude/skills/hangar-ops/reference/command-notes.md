@@ -41,6 +41,12 @@ separate `<thing>_preview`.
 - **The editor commands live under `ide`, aliased `editor`, so the top level carries one entry for
   the editors rather than one per editor.** `colours` is aliased `colors`, and `checkout-default`
   is aliased `checkout`.
+- **`ide vscode sync` merges `.vscode/bookmarks.json` instead of copying it**, so a bookmark made
+  in any clone reaches all of them. It only exists once a clone sets
+  `"bookmarks.saveBookmarksInProject": true` in `.vscode/settings.json`, and the same sync spreads
+  that setting. Two things to tell the user: **reload each rewritten clone's VS Code window
+  before touching a bookmark there** (the extension reads the file only at startup and writes its
+  whole set back), and **a deleted bookmark comes back** from any clone that still has it.
 - **`hangar exec` is the user's, and you cannot run it at all.** It is not `ask` — it is denied
   in both modes AND blocked by a `PreToolUse` hook that reads the whole command line, so
   `cd /somewhere && hangar exec ...` is refused too. Do not go looking for a spelling that gets

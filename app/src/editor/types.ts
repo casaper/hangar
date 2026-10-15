@@ -112,6 +112,28 @@ export type EditorArtifact = {
   readonly cloneValues: boolean;
 };
 
+/**
+ * A file every clone keeps its OWN copy of, brought into step by a union rather than a copy.
+ *
+ * Distinct from `EditorArtifact` because that record means "one file, identical everywhere" and
+ * its sync is newest-wins -- which, for per-clone working state like the Bookmarks extension's
+ * file, would replace every other clone's set with one clone's. Never tracked by git: a merge
+ * written into a tracked file would dirty the branch exactly as a copy would.
+ */
+export type MergedArtifact = {
+  readonly id: string;
+  /** Every copy of this file in a clone. */
+  readonly copies: (clone: Clone) => readonly string[];
+  /** Why a copy cannot take part, or `undefined` when it can. A refused copy is never written. */
+  readonly refuse: (text: string) => string | undefined;
+  /** The merged text, given every copy that was not refused, OLDEST first. Pure. */
+  readonly merge: (texts: readonly string[]) => string;
+  /** What to tell the developer when no clone has the file, since nothing here creates one. */
+  readonly absentHint: string;
+  /** What to tell the developer once a copy has been written. */
+  readonly writtenHint: string;
+};
+
 export type EditorDriver = {
   readonly kind: EditorKind;
   /** How to name it to the user: `VS Code`, `IntelliJ IDEA`, … */
@@ -137,6 +159,8 @@ export type EditorDriver = {
   readonly closeWindow?: ((clone: Clone) => AppWindowOutcome) | undefined;
   /** What `<kind> sync` keeps in step. Empty when `syncArtifacts` is false. */
   readonly artifacts: readonly EditorArtifact[];
+  /** What `<kind> sync` merges rather than copies. Absent for every editor but the VS Code family. */
+  readonly merged?: readonly MergedArtifact[] | undefined;
   /** The command a terminal-resident editor runs in its tab. Only read when `inTerminalTab`. */
   readonly terminalCommand?: string | undefined;
 };

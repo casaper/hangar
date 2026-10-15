@@ -49,7 +49,7 @@ project files in step.
 
 | kind                                                                      | launch                                                 | Hangar syncs                       |
 | ------------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------- |
-| `vscode` `cursor` `windsurf` `vscodium` `code-insiders` `positron` `trae` | the workspace copy it already has open                 | `.vscode/*` + the workspace pair   |
+| `vscode` `cursor` `windsurf` `vscodium` `code-insiders` `positron` `trae` | the workspace copy it already has open                 | `.vscode/*` + the workspace pair, `bookmarks.json` merged |
 | `jetbrains` (`product:` idea, webstorm, pycharm, …)                       | the clone directory                                    | the shareable half of `.idea/`     |
 | `zed`                                                                     | the clone directory                                    | `.zed/settings.json`, `tasks.json` |
 | `emacs`                                                                   | `emacsclient -n`, else fresh `emacs`                   | `.dir-locals.el`                   |
@@ -87,6 +87,41 @@ Of these, **only the VS Code path is exercised**: nothing else is installed on t
 driver header says so, and `hangar doctor` prints a row per configured editor with whether it can
 actually be launched — a `code` command never installed into PATH and a Toolbox that generated no
 shell scripts both mean `hangar open` silently opens no editor at all.
+
+## The Bookmarks extension's file is merged, never copied
+
+`.vscode/bookmarks.json` is the one VS Code file `ide vscode sync` does not copy. It is a
+`MergedArtifact` (`editor/types.ts`) rather than a row in `vscodeArtifacts`, and the builder is
+`mergeBookmarks` in `editor/vscode-bookmarks.ts`. alefragnani.Bookmarks writes it only when a
+clone sets `"bookmarks.saveBookmarksInProject": true`; without that, bookmarks live in VS Code's
+own workspace storage, which Hangar cannot reach, and the sync says so. Turning the setting on
+keeps a window's existing bookmarks and moves them into the file at its next save.
+
+What the extension does, read from its 14.x bundle, and what follows from each:
+
+- **Every change rewrites the whole file from the window's in-memory set.** So the file is each
+  clone's own working state, and newest-wins would replace every other clone's set with one
+  clone's. The merge is a union keyed on file and line, with the newest copy winning a label.
+- **It keeps no history.** A bookmark missing from one copy cannot be told from one that copy
+  never had, so additions spread and **deletions do not**: a bookmark removed in one clone comes
+  back from the others at the next sync. Remove it everywhere, or accept it.
+- **It reads the file only when the window starts.** There is no file watcher, and its Refresh
+  command only redraws the tree. A window open across a sync shows the old set and writes it back
+  over the merge at its next toggle unless it is reloaded first, which is what the sync prints
+  after any write.
+- **It deletes the file when the set goes empty.** That rules out the obvious alternative, one
+  shared file with a symlink per clone: the first clone to clear its bookmarks deletes its link,
+  and its next bookmark creates a plain file that is silently unshared. With a symlink every
+  window would also overwrite every other window's additions.
+- **Paths are relative to the workspace folder**, which is the clone root, so the file needs no
+  `rootKeys` treatment. A bookmark is a line number, though, so on two clones with different
+  branches the same bookmark can point at different text. Nothing here can fix that.
+
+A copy that does not parse is reported and skipped: it is neither merged nor written, because
+writing would destroy what it holds and leaving it out quietly would look like a deletion. The
+merge keeps first-seen order rather than sorting, so a clone with nothing to gain compares
+byte-equal and reads as in sync, and its window is not told to reload for nothing.
+`test/vscode-bookmarks.test.ts` holds those properties.
 
 ## The workspace file carries the clone's own name and hue, and a sync rebuilds them
 
