@@ -86,6 +86,10 @@ BSD spelling fails partway through a multi-file edit, and a half-edited `src/**`
 `/opt/homebrew/bin/tmux -L hangar-<id> …` directly, `type -P` does not exist (use `command -v`),
 and an unquoted glob that matches nothing is an error (`--include=*.ts`, `echo ===`), so quote it.
 
+**The exec guard matches `hangar exec` anywhere in a Bash command, heredoc text included** — an
+edit script that quotes it as an anchor is refused. Put such a script in a scratchpad file and run
+`python3 -I <file>`.
+
 **Search a clone with `git -C <clone> grep`, never `grep -r`**: a clone carries `node_modules`
 and a multi-GB `tmp/`, and `grep -r` over one runs past the Bash timeout.
 
@@ -96,6 +100,16 @@ and a multi-GB `tmp/`, and `grep -r` over one runs past the Bash timeout.
 a `mktemp -d` project with its own `.claude/settings.local.json` — `default` mode refuses every
 write, inside the project too, so it cannot tell a rule from no rule. One measured answer: a
 file-write deny is an `Edit(...)` rule, and `Write(...)` deny rules are never matched.
+
+**Probe a command's file I/O in a throwaway hangar, never the live fleet**: a scratchpad `.ts` that
+imports `test/fixture.ts`'s `syntheticHangar({ root: mkdtempSync(…), configText })` and `src/**` by
+absolute path, `git init`s each `cloneAt(hangar, i).path`, and runs with `node probe.ts` from `app/`.
+
+**Measure a VS Code extension from its bundle**,
+`~/.vscode/extensions/<publisher.name>-<ver>/dist/*.js`: slice around a match with `python3 -I`
+(`s.find(…)`), because `grep -oE` refuses a `{0,300}` context. Its workspace-scoped state is SQLite
+at `~/Library/Application Support/Code/User/workspaceStorage/<hash>/state.vscdb`
+(`workspace.json` beside it names the workspace); open it with `sqlite3 'file:…?mode=ro'`.
 
 ## Two conventions for changing it, and the two nets behind them
 
@@ -222,6 +236,8 @@ repo already knows what a check that is red in normal operation is worth.
 **commitlint differs from `config-conventional` twice**: `header-max-length` is 120 and
 `subject-case` is off, because the defaults reject this repo's own Sentence-case history.
 `body-max-line-length` stays at the default 100 and `footer-leading-blank` is left warning.
+A body line that starts with `word:` is parsed as a footer and trips that warning — rewrap so no
+line begins with a lone word and a colon.
 `hangar-internals/reference/release.md` has why each is set the way it is.
 
 **No `!` and no `BREAKING CHANGE:` footer while the CLI is 0.x.** Several changes here are
