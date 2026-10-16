@@ -12,7 +12,7 @@ import { cloneColoursArtifact } from '../src/generate/colours-sh.ts';
 import { tmuxConfArtifact } from '../src/generate/tmux-conf.ts';
 import { tmuxStatusArtifact } from '../src/generate/tmux-status-sh.ts';
 import { cloneAt } from '../src/fleet.ts';
-import { syntheticHangar } from './fixture.ts';
+import { syntheticHangar, THIS_REPOS_TICKET_PREFIX } from './fixture.ts';
 
 /**
  * Nothing generated into a clone names the repo Hangar was BUILT in.
@@ -28,17 +28,13 @@ import { syntheticHangar } from './fixture.ts';
  * would need updating to stay true; these six strings are facts about one repo and will never
  * legitimately appear in text rendered for another.
  *
- * `DN-` is the live config's `keyPrefixes`, and the ONLY place in this repo allowed to name it.
- * It is the bare prefix rather than a whole key on purpose, twice over: it forbids every ticket
- * rather than one, and a whole key is exactly what a bulk find-and-replace over the tree would
- * rewrite -- silently turning the guard into one that guards nothing while this suite still
- * passes. `dev/scrub-check.sh` writes its own patterns the same way, for the same reason.
+ * The ticket prefix is `THIS_REPOS_TICKET_PREFIX`, whose header says why it is never written out.
  */
 const THIS_REPOS_OWN = [
   'dev/ports.mjs',
   'clone_NN',
   'clone_0',
-  'DN-',
+  THIS_REPOS_TICKET_PREFIX,
   '.env.local',
   'angular/',
 ] as const;

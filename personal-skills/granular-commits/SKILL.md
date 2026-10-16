@@ -90,7 +90,7 @@ skill's own, because a wrong one here is invisible in review:
    work, its key. If it is genuinely another ticket's, **that** ticket's key. A pull request that
    honestly shows unrelated work is far better than one whose commits claim a ticket they do not
    implement.
-2. **No fitting ticket means no key at all.** An invented or placeholder key (`DN-XXXX`) is never an
+2. **No fitting ticket means no key at all.** An invented or placeholder key (`ABC-XXXX`) is never an
    option — it is worse than having none.
 3. **The body explains why, and the context the diff cannot show.** Not what the diff already says.
    No code examples, no narration of the changes.

@@ -203,15 +203,15 @@ Three consequences worth knowing before editing the files they touch:
   placeholders, and `configDrift` in `config/drift.ts` excludes exactly those from the
   example-vs-live comparison. Everything else is still held equal — `forge.defaultBranch`
   included, which is the line that comparison was written for after the pair silently drifted.
-- **The live config's `keyPrefixes` value is named only by the guards that forbid it** —
-  `THIS_REPOS_OWN` in `test/generic-text.test.ts` and `test/personal-tools.test.ts`, the literal
-  list in `test/allow.test.ts`, and `dev/scrub-check.sh`. A guard has to name what it forbids;
-  nothing else may, prose included. They name the **bare prefix** rather than a whole key, twice
-  over: it forbids every ticket rather than one, and a whole key is exactly what a bulk
+- **The live config's `keyPrefixes` value never appears as a literal in the tree.** The guards
+  that forbid it import `THIS_REPOS_TICKET_PREFIX` from `test/fixture.ts`, which builds it by
+  concatenation, and `dev/scrub-check.sh` refuses the prefix with or without a digit after it, so
+  a placeholder key is caught too. It is the **bare prefix** rather than a whole key, twice over:
+  it forbids every ticket rather than one, and a whole key is exactly what a bulk
   find-and-replace over the tree would rewrite — leaving a guard that guards nothing while every
   check stays green. `dev/scrub-check.sh` writes each pattern so it cannot match itself
-  (`datav[a]ult`, `__D[V]B_`, `dvb[-_]gui`) for the same reason, and needs no allow-list at all
-  as a result.
+  (`datav[a]ult`, `__D[V]B_`, `D[N]-`) for the same reason, and needs no allow-list at all as a
+  result.
 - **A config key that names a repo's own skill or prompt is optional with NO default**
   (`forge.prDescriptionPrompt`, `tracker.planPrompt`): absent means the command refuses and names
   the key, because a default would put one repo's skill name into every hangar.

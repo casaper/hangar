@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { allowInstructions, direnvDirs } from '../src/commands/allow.ts';
 import { run } from '../src/exec.ts';
 import { cloneAt } from '../src/fleet.ts';
-import { fixtureConfigText, syntheticHangar } from './fixture.ts';
+import { fixtureConfigText, syntheticHangar, THIS_REPOS_TICKET_PREFIX } from './fixture.ts';
 
 /**
  * Which directories of a clone `hangar allow` aims direnv at.
@@ -91,7 +91,7 @@ test('what add-clone prints names both routes, and no directory of this repo', (
 
   // Rendered from the clone and the id, so nothing in it can name one repo's layout. The
   // `.envrc` directories are deliberately absent: they are config, and this text is captured.
-  for (const literal of ['angular', 'clone_0', 'DN-', '/Users/', '/home/']) {
+  for (const literal of ['angular', 'clone_0', THIS_REPOS_TICKET_PREFIX, '/Users/', '/home/']) {
     assert.ok(!text.includes(literal), `instructions name "${literal}":\n${text}`);
   }
 });

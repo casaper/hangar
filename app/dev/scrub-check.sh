@@ -45,7 +45,12 @@ SKIP2=':(exclude)app/dev/scrub-check.sh'
 # character classes are semantically identical, cost nothing, and are what stops a bulk
 # find-and-replace over the tree from rewriting this line and leaving a gate that detects nothing
 # while still exiting 0.
-IDENTIFIERS='datav[a]ult|dvb[-_]gui|gui[-_]next|__D[V]B_|DN-[0-9]'
+#
+# The ticket prefix is matched with or without a digit after it, so a placeholder key such as
+# `<prefix>XXXX` is caught too; the leading class keeps it from firing inside a longer word. The
+# test guards that must name it import `THIS_REPOS_TICKET_PREFIX` from `test/fixture.ts`, which
+# builds it by concatenation, so this still needs no allow-list.
+IDENTIFIERS='datav[a]ult|dvb[-_]gui|gui[-_]next|__D[V]B_|(^|[^A-Za-z0-9_])D[N]-'
 
 hits=$(git grep -n -I -E "$IDENTIFIERS" -- . "$SKIP1" "$SKIP2" || true)
 [ -z "$hits" ] || report 'organisation, project or ticket identifiers in tracked files:' "$hits"

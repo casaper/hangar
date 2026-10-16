@@ -7,7 +7,7 @@ import { test } from 'node:test';
 
 import { defaultSettings, personalToolAllows } from '../src/clone-config.ts';
 import { cloneAt } from '../src/fleet.ts';
-import { syntheticHangar } from './fixture.ts';
+import { syntheticHangar, THIS_REPOS_TICKET_PREFIX } from './fixture.ts';
 
 /**
  * The two standalone helpers in `bin/`, which no builder renders and no capture holds.
@@ -25,12 +25,16 @@ const script = (name: string): string => readFileSync(join(binDir, name), 'utf8'
  * Literals belonging to the repository this hangar happens to manage.
  *
  * The same list `generic-text.test.ts` guards the builders with, and for the same reason: a
- * hangar manages any repo, so a helper that names this one is wrong in every other. The BARE
- * ticket prefix rather than a whole key, deliberately -- it forbids every ticket rather than one,
- * and a bulk find-and-replace over the tree would rewrite a whole key and leave a guard that
- * guards nothing while every check stays green.
+ * hangar manages any repo, so a helper that names this one is wrong in every other.
  */
-const THIS_REPOS_OWN = ['dvb', 'DN-', 'clone_0', 'angular/', 'bitbucket', 'jira'] as const;
+const THIS_REPOS_OWN = [
+  'dvb',
+  THIS_REPOS_TICKET_PREFIX,
+  'clone_0',
+  'angular/',
+  'bitbucket',
+  'jira',
+] as const;
 
 for (const name of ['hangar-waypoint', 'hangar-commit-gate']) {
   test(`${name} names no repository, ticket or organisation`, () => {

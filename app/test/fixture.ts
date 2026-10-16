@@ -90,6 +90,17 @@ export const namesNoMachinePath = (text: string): boolean =>
   !text.includes('/Users/') && !text.includes('/home/');
 
 /**
+ * The live config's ticket prefix, which every guard that forbids it imports from here.
+ *
+ * Built by concatenation so the prefix never appears as one literal anywhere in the tree:
+ * `dev/scrub-check.sh` refuses it with or without a digit after it, and a guard spelling it out
+ * would need an allow-list there. It is the BARE prefix rather than a whole key, twice over: it
+ * forbids every ticket rather than one, and a whole key is exactly what a bulk find-and-replace
+ * over the tree would rewrite -- leaving a guard that guards nothing while every check passes.
+ */
+export const THIS_REPOS_TICKET_PREFIX = 'DN' + '-';
+
+/**
  * The first element of an array, narrowed.
  *
  * Exists because `tsc` and `eslint` disagree about indexed access in this package: `tsc` runs

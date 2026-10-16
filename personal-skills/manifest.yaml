@@ -66,10 +66,11 @@ skills:
     basedOn: 1a65a69a5b051bd3d3b12f14178dce849e3f5d12
     adoptedFrom: docs/agent_commit_behaviour_stays_as_is_but_user_can_opt_in_for_commit_last_behaviour
     reason: >-
-      Two touches, both forced by a personal skill being active in every repo on this machine and
+      Three touches, all forced by a personal skill being active in every repo on this machine and
       not just the one it was written in: the pre-split snapshot is taken with `hangar-waypoint`,
-      which is on PATH in every clone and at the hangar root, and the `check-commits.mjs` run is
-      made conditional on the repo actually shipping that file. The grouping rules, the staging
+      which is on PATH in every clone and at the hangar root, the `check-commits.mjs` run is
+      made conditional on the repo actually shipping that file, and the placeholder ticket key in
+      the "no fitting ticket" rule is a fictional prefix rather than that repo's own. The grouping rules, the staging
       and the verification stance are untouched. `basedOn` is the blob on the branch that ADDS
       this skill, which `adoptedFrom` names because it is reachable from nowhere else until that
       branch merges. Until then the row reads `pending` rather than red: waiting is the expected
