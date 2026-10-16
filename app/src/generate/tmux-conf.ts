@@ -443,6 +443,27 @@ export const editorKeyBinding = (
 ];
 
 /**
+ * `bind-key -T prefix C-f` -- reveal the current clone's ticket directory, `tmp/<KEY>`, in the
+ * file manager (Finder, on macOS), through `hangar browse tmp`.
+ *
+ * `C-f` rather than `f`: `f` is tmux's own `find-window`, and this conf takes no key tmux already
+ * binds. `C-f` is free on 3.7c and 3.8 for the reason `EDITOR_KEYS` gives. The same `if-shell -b`
+ * shape for the same reason, and the failure message is the useful one here: on the default
+ * branch, or before the ticket has been fetched, `browse tmp` refuses and exits non-zero.
+ */
+export const tmpKeyBinding = (hangar: Hangar): readonly string[] => [
+  'bind-key',
+  '-T',
+  'prefix',
+  'C-f',
+  'if-shell',
+  '-b',
+  `${hangar.paths.bin} browse tmp "#{@hangar_clone}" >/dev/null 2>&1`,
+  'display-message "opened the ticket folder for #{@hangar_clone}"',
+  'display-message "no ticket folder for #{@hangar_clone} -- run hangar browse tmp in a shell to see why"',
+];
+
+/**
  * Every key this conf binds, in one list -- the shape `barOptions` has, and for the same reason.
  *
  * A binding is a command rather than an option, so it is the part of the layer `restyle` has to
@@ -452,6 +473,7 @@ export const editorKeyBinding = (
 export const keyBindings = (hangar: Hangar): readonly (readonly string[])[] => [
   statusClickBinding(hangar),
   ...EDITOR_KEYS.map((key) => editorKeyBinding(hangar, key)),
+  tmpKeyBinding(hangar),
 ];
 
 /**
@@ -514,7 +536,8 @@ export const tmuxConfArtifact = (hangar: Hangar): Artifact => {
       '# A click on the ticket or the pull request opens it; a click anywhere else on the bar',
       '# switches to that window -- which tmux does NOT do by default, since its own binding for',
       '# this key changes the session and selects no window. See `statusClickBinding`.',
-      '# `C-b C-e` and `C-b v` open the editors of whichever clone the session belongs to.',
+      '# `C-b C-e` and `C-b v` open the editors of whichever clone the session belongs to, and',
+      '# `C-b C-f` its ticket folder under tmp/.',
       ...keyBindings(hangar).map(renderBinding),
       '',
       '# ---- the rest ---------------------------------------------------------------------',

@@ -396,15 +396,17 @@ servers
 
 program
   .command('browse')
-  .summary("Open a clone's ticket or pull request in the browser")
+  .summary("Open a clone's ticket or pull request in the browser, or its ticket folder")
   .description(
     [
       "Opens what a clone's branch says it is working on: the tracker issue whose key is in the branch name, or the pull request for that branch. `hangar status` prints both as text; this one hands them to the browser.",
       "It is also what a click on the clone's tmux bar runs. tmux cannot put a real hyperlink in a status line, so the bar marks the ticket and the pull request as clickable regions and binds a click to this command — which is why the clone is an argument rather than the one you are standing in.",
       'The pull request is asked of Bitbucket only when it is not already known, and the answer is remembered per branch. That is what lets the bar name the number without ever making the network call itself, and it means the first `browse pr` on a new branch is the slow one.',
+      "`tmp` opens the ticket's own directory under the clone's `tmp/` — the cached records and attachments — in the file manager (Finder, on macOS). `C-b C-f` inside a clone's tmux window runs it. A ticket with no directory there yet is refused rather than opening `tmp/` itself.",
+      'Nothing to open is an error, not a warning, so the keys and the click that run this can tell a press that opened something from one that did not.',
     ].join('\n\n'),
   )
-  .argument('<what>', 'ticket or pr')
+  .argument('<what>', 'ticket, pr or tmp')
   .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
   .option('-n, --dry-run', 'print the URL and open nothing')
   .action(async (what, clone, options) => {

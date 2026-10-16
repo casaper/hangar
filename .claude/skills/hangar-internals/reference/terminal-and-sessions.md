@@ -903,6 +903,13 @@ be pressed for the wrong clone -- and a session made by hand on this socket, whi
 option, expands to an empty argument, exits non-zero and gets the failure message. That is the
 whole degradation; there is no second `if-shell` testing for the option first.
 
+`C-b C-f` is the third key and the same shape: `hangar browse tmp "#{@hangar_clone}"`, which hands
+`<clone>/tmp/<KEY>` to the platform opener -- Finder. `C-f` because `f` is tmux's `find-window`.
+**`browse` exits 1 when there is nothing to open**, for all three of its targets, because every
+caller of it here branches on the exit status: exiting 0 after a warning would have this key and
+the bar's click report "opened" for a press that opened nothing. The folder is refused rather than
+falling back to `tmp/` itself when the ticket has none yet -- the press asked for one ticket.
+
 All the bindings are one list, `keyBindings` in `generate/tmux-conf.ts`, for the reason `barOptions`
 is one table: `TmuxServer.restyle` ISSUES them onto a server that is already running while the
 conf renders them for the ones that start later, and a binding in only one of the two is a key

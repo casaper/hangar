@@ -49,8 +49,10 @@ browser test run — that isolation is the entire reason the fleet exists.
   already run.
 - **The window says what that clone is on.** A bar across the top carries its tabs and the issue
   key and pull request its branch is working on; a footer along the bottom, in the clone's own
-  hue, names the clone, where in it you are standing, its git state and its branch. Click the key
-  or the pull request to open it in the browser — clicking a tab still switches to it.
+  hue, names the clone, where in it you are standing, its git state, whether its commit gate is
+  on, and its branch. Click the key or the pull request to open it in the browser — clicking a
+  tab still switches to it. `C-b v` opens the clone in its editor and `C-b C-f` opens its
+  ticket's folder in Finder.
 
   ```
    1 claude  2 shell                              ABC-1323  PR#1204  14:20

@@ -6,6 +6,7 @@ import {
   EDITOR_KEYS,
   editorKeyBinding,
   keyBindings,
+  tmpKeyBinding,
   paneBorderFormat,
   statusClickBinding,
   TMUX_SETTINGS,
@@ -400,4 +401,16 @@ test('a tmux server never inherits the session that started it', () => {
     leakedInEnvironment('NO_COLOR=1\nPATH=/usr/bin\n-CLAUDECODE\nHANGAR_MODE=ops\nCLAUDE_CODE_X=1'),
     ['NO_COLOR', 'HANGAR_MODE', 'CLAUDE_CODE_X'],
   );
+});
+
+test('the tmp-folder key takes no key tmux binds, and opens nothing on a view pane', () => {
+  // `f` is tmux's find-window, so the folder key is `C-f`, free on 3.7c and 3.8.
+  const binding = tmpKeyBinding(syntheticHangar());
+  assert.deepEqual(binding.slice(1, 4), ['-T', 'prefix', 'C-f']);
+  assert.equal(binding[4], 'if-shell');
+  assert.ok(
+    binding.some((word) => word.includes(' browse tmp "#{@hangar_clone}" >/dev/null 2>&1')),
+  );
+  const keys = keyBindings(syntheticHangar()).map((b) => `${String(b[2])} ${String(b[3])}`);
+  assert.equal(new Set(keys).size, keys.length, 'two bindings claim one key');
 });

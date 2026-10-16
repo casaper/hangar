@@ -167,14 +167,17 @@ separate `<thing>_preview`.
   clone, where in it the pane is standing, its git state and its branch. A click on the key or on
   `PR#1234` opens it in the browser; a click on a tab still switches to that window, and a click
   on a pane border still marks the pane. What a click runs is `hangar browse ticket|pr <clone>`,
-  which is also worth typing directly. **A click only arrives if the terminal emulator reports
+  which is also worth typing directly. **Three prefix keys act on the clone the window belongs
+  to**: `C-b C-e` and `C-b v` open its editor (`hangar edit`), and `C-b C-f` opens its ticket's
+  `tmp/<KEY>` folder in Finder (`hangar browse tmp`) — refused, with a message on the bar, on the
+  default branch or before the ticket has been fetched. **A click only arrives if the terminal emulator reports
   button presses, and that is not the same setting as the wheel** — iTerm2 has one for each, so a
   bar where scrolling works and nothing is clickable is the emulator rather than tmux. `doctor`'s
   `emulator` row appends `clicks not reported` and names the setting to change; it never changes
   it, and it is not counted as a problem, because with clicks reported a plain drag inside a pane
   selects in tmux rather than in the emulator — a trade the developer may have made on purpose.
   **The other half is the tmux server's own PATH**, which is launchd's when the terminal created
-  the server rather than `hangar open` — and then the click, `C-b C-e` and the bar's own
+  the server rather than `hangar open` — and then the click, the three keys and the bar's own
   pull-request refresh all find no `node` and do nothing. `doctor` has a row for that one too, and
   `hangar colours sync` is the repair; it writes onto the running server with nothing restarted.
 

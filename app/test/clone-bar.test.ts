@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { pullRequestLink, ticketLink } from '../src/commands/browse.ts';
+import { pullRequestLink, ticketLink, tmpLink } from '../src/commands/browse.ts';
 import { DETACHED } from '../src/git.ts';
 import { cloneAt } from '../src/fleet.ts';
 import {
@@ -239,4 +239,26 @@ test('the footer shows the commit gate exactly when the gate itself would act', 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('the tmp folder is the ticket the issue link names, and only when it is there', () => {
+  // Every answer of the pure builder side by side: the key is a parameter and so is the
+  // directory check, so nothing here touches a disk or a branch.
+  const h = syntheticHangar();
+  const clone = cloneAt(h, 1);
+  const key = { key: 'BE-1323', source: 'branch' } as const;
+  const present = tmpLink(clone, key, () => true);
+  assert.deepEqual(present, {
+    kind: 'url',
+    url: `${clone.path}/tmp/BE-1323`,
+    what: 'tmp/BE-1323',
+  });
+  const missing = tmpLink(clone, key, () => false);
+  assert.ok(
+    missing.kind === 'none' && missing.why.includes('tmp/BE-1323'),
+    JSON.stringify(missing),
+  );
+  assert.equal(tmpLink(clone, undefined, () => true).kind, 'none', 'no key, nothing to open');
+  const none = withTracker('tracker:\n  kind: none\n');
+  assert.equal(tmpLink(cloneAt(none, 1), key, () => true).kind, 'none', 'no tracker');
 });

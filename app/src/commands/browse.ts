@@ -1,17 +1,24 @@
+import { statSync } from 'node:fs';
+import { join } from 'node:path';
+
 import pc from 'picocolors';
 
 import { prSearchUrl, repoRef, usesBitbucket, type RepoRef } from '../bitbucket.ts';
 import { CliError } from '../exec.ts';
 import { currentBranch, DETACHED } from '../git.ts';
 import { requireClone, type Clone } from '../fleet.ts';
-import { inferTicket, issueUrl } from '../jira.ts';
+import { inferTicket, issueUrl, type TicketGuess } from '../jira.ts';
 import { platform } from '../platform/index.ts';
 import { readCachedPr, refreshPullRequest, type CachedPullRequest } from '../pr-cache.ts';
 import { note, ok, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
 
 /**
- * `hangar browse ticket|pr <clone>` -- open what a clone is working on, in the browser.
+ * `hangar browse ticket|pr|tmp <clone>` -- open what a clone is working on, in the browser.
+ *
+ * `tmp` is the odd one out: not a URL but the ticket's directory under the clone's `tmp/`, where
+ * the cached records and attachments land, handed to the platform's opener -- Finder, on macOS.
+ * `C-b C-f` in a clone's tmux window runs it.
  *
  * Two callers, and the second one is why the command exists at all:
  *
@@ -29,14 +36,16 @@ import type { Hangar } from '../hangar.ts';
  * exchange the URLs come from `issueUrl` and `prSearchUrl` rather than being spelled a second
  * time in a generated script.
  */
-export type BrowseWhat = 'ticket' | 'pr';
+export type BrowseWhat = 'ticket' | 'pr' | 'tmp';
 
-export const BROWSE_WHAT: readonly BrowseWhat[] = ['ticket', 'pr'];
+export const BROWSE_WHAT: readonly BrowseWhat[] = ['ticket', 'pr', 'tmp'];
 
 export const isBrowseWhat = (value: string): value is BrowseWhat =>
   (BROWSE_WHAT as readonly string[]).includes(value);
 
-/** A URL to open, or the reason there is none. Never a URL missing its host. */
+/**
+ * A URL or a local directory to open, or the reason there is none. Never a URL missing its host.
+ */
 export type Link =
   | { readonly kind: 'url'; readonly url: string; readonly what: string }
   | { readonly kind: 'none'; readonly why: string };
@@ -61,6 +70,44 @@ export const ticketLink = (clone: Clone): Link => {
   const url = issueUrl(clone.hangar, ticket.key);
   if (url === undefined) return { kind: 'none', why: 'this hangar has no tracker.baseUrl' };
   return { kind: 'url', url, what: ticket.key };
+};
+
+/**
+ * The ticket's directory under the clone's `tmp/`, given the guessed ticket and a way to ask
+ * whether a directory exists -- injected, so every answer can be printed side by side in a test.
+ *
+ * The key is `inferTicket`'s, the one `ticketLink` uses, so the key that opens the issue and the
+ * key that opens its directory cannot differ. A directory that does not exist yet is a refusal
+ * rather than a fallback to `tmp/` itself: the press asked for one ticket's files, and a Finder
+ * window on everything would answer a different question without saying so.
+ */
+export const tmpLink = (
+  clone: Clone,
+  ticket: TicketGuess | undefined,
+  isDirectory: (path: string) => boolean,
+): Link => {
+  if (clone.hangar.config.tracker.kind === 'none') {
+    return { kind: 'none', why: 'this hangar has no tracker configured' };
+  }
+  if (ticket === undefined) {
+    return {
+      kind: 'none',
+      why: "no issue key in the branch name or in this branch's commits",
+    };
+  }
+  const dir = join(clone.path, 'tmp', ticket.key);
+  if (!isDirectory(dir)) {
+    return { kind: 'none', why: `there is no tmp/${ticket.key} yet — fetch the ticket first` };
+  }
+  return { kind: 'url', url: dir, what: `tmp/${ticket.key}` };
+};
+
+const isDirectory = (path: string): boolean => {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
 };
 
 /**
@@ -114,6 +161,7 @@ export const browse = async (
 
   let link: Link;
   if (what === 'ticket') link = ticketLink(clone);
+  else if (what === 'tmp') link = tmpLink(clone, inferTicket(clone, branch), isDirectory);
   else {
     /*
      * The cache first, then Bitbucket -- and asking is right here in a way it never is on the
@@ -132,9 +180,12 @@ export const browse = async (
     link = pullRequestLink(repoRef(hangar, clone.path), branch, cached);
   }
 
+  /*
+   * A refusal and not a warning, because the tmux keys and the bar's click branch on the EXIT
+   * STATUS: exiting 0 here would have them report "opened" for a press that opened nothing.
+   */
   if (link.kind === 'none') {
-    warn(`nothing to open for ${what} in ${clone.name}: ${link.why}`);
-    return;
+    throw new CliError(`nothing to open for ${what} in ${clone.name}`, link.why);
   }
   note(pc.dim(link.url));
   if (opts.dryRun === true) return;
@@ -145,9 +196,9 @@ export const browse = async (
    * window.
    */
   if (!platform().capabilities.openExternally) {
-    note('this platform has no way to hand a URL to a browser — the link is above');
+    note('this platform has no way to hand a URL or a folder to the desktop — it is above');
     return;
   }
-  if (platform().openExternally(link.url)) ok(`opened ${what} ${link.what} for ${clone.name}`);
-  else warn(`could not open ${link.url}`);
+  if (!platform().openExternally(link.url)) throw new CliError(`could not open ${link.url}`);
+  ok(`opened ${what} ${link.what} for ${clone.name}`);
 };
