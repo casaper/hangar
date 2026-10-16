@@ -61,8 +61,9 @@ hangar_use_node() {
 # `packageManager` from the NEAREST package.json walking up, so inside app/ it answers
 # 12.8.2 as pinned, while at the hangar root -- whose package.json is scripts only and
 # declares no packageManager, deliberately and permanently -- it answers corepack's own
-# bundled default. Every root script is `pnpm --dir app`, so the pin governs every real
-# invocation.
+# bundled default. Every root script but `release` is `pnpm --dir app`, and `release`
+# runs `bin/hangar dev release`, which reaches its binaries by path and needs no pnpm --
+# so the pin governs every real invocation.
 hangar_use_pnpm() {
     local shim_dir="${1:-.hangar/pnpm-bin}"
     if [[ ! -x "$shim_dir/pnpm" ]] || [[ ! -e "$shim_dir/pnpm" ]]; then

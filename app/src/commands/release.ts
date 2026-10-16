@@ -73,8 +73,8 @@ type Gate = {
  * Every gate this repo has, run before anything is released.
  *
  * The binaries are reached BY PATH rather than through `pnpm run`, for the reason `bin/hangar`
- * and `app/.husky/commit-msg` both do it: pnpm lives inside an fnm multishell and moves with the
- * Node version, so anything needing it fails in a shell direnv has not touched.
+ * and `app/.husky/commit-msg` both do it: pnpm is a corepack shim in `.hangar/pnpm-bin` that only
+ * direnv puts on PATH, so anything needing it fails in a shell direnv has not touched.
  *
  * Two of these carry a note recorded nowhere else. **commitlint needs its
  * config named** -- `.commitlintrc.json` is in `app/` and this runs from the hangar root, so a

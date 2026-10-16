@@ -3,9 +3,9 @@
 # Hooks run with the working directory at the GIT ROOT, so every path here is root-relative
 # and `$1` (the message file) needs no rewriting.
 #
-# The binary is called by path rather than through `pnpm`, deliberately: pnpm lives inside an
-# fnm multishell and moves with the Node version, so a hook that needed it would fail in any
-# shell direnv has not touched -- a GUI git client, for one. Node still has to be findable,
+# The binary is called by path rather than through `pnpm`, deliberately: pnpm is a corepack
+# shim in .hangar/pnpm-bin that only direnv puts on PATH, so a hook that needed it would fail in
+# any shell direnv has not touched -- a GUI git client, for one. Node still has to be findable,
 # and this names the same fix `bin/hangar` names when it cannot find it either.
 command -v node >/dev/null 2>&1 || {
   echo "hangar: no node on PATH -- run \`direnv allow\` at the hangar root" >&2

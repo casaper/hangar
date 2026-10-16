@@ -685,7 +685,7 @@ of every bug this check exists for: correct today because nothing has happened y
 
 So the check and the builder moved together:
 
-- `settingsContentFor` now OVERLAYS the whole derived half — theme, statusline, memory directory,
+- `settingsContentFor` OVERLAYS the whole derived half — theme, statusline, memory directory,
   the hangar-root allow, the secrets deny, the health checks and the six hooks — and leaves the
   personal half exactly as the template had it. Overlay, never rebuild: a rewrite from
   `defaultSettings` would delete a developer's MCP servers to fix a theme.
