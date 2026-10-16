@@ -41,6 +41,9 @@ For every request, in this order:
 | "add / remove a clone" | `list` first; `hangar add-clone` via Bash in the background, `remove_clone` as a tool; say what it keeps and deletes first; a guard's refusal is the user's to override, by typing `--force` |
 | "close / restart clone N" | `close_preview` / `reload_preview`; warn that it ends a live Claude session |
 | "open a PR" | `pr_create_preview`, read the title back, then `pr_create` (draft) |
+| "doctor says files are not what the builder renders" (after a hangar update) | `colours_sync_preview`, then `colours_sync` for the hangar-root shell/tmux files (applied to the running tmux server, no restart); then `doctor_fix` for each clone's per-clone files |
+| "open clone N's ticket / PR / ticket folder" | `browse` with `ticket`, `pr` or `tmp` (Finder on `tmp/<KEY>`); a refusal (no key, folder not fetched yet) exits 1 and is the answer, not a retry |
+| "what is ⊠gate / ⊡gate on the footer?" | the commit gate: `⊠` blocks commits on that branch, `⊡ KEY` is armed for a ticket; `hangar-commit-gate status` inside that clone is the long form, and releasing it is the user's alone |
 
 **A tool that skips is not a failure to retry.** `open`, `checkout_default`, `close`, `reload` and
 `jira_plan` ask their own question where a human could answer it — a live Claude session in the clone, a dev
