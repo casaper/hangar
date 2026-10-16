@@ -305,7 +305,8 @@ export type TmuxServer = {
   /** Create the session on its first role's window, tagged and painted. False if tmux refused. */
   readonly createSession: (clone: Clone, first: TabSpec) => boolean;
   /**
-   * Write a clone's identity onto its session: the tag, the short label, the badge.
+   * Write a clone's identity onto its session: the tag, the short label, and a cleared
+   * `status-left`.
    *
    * Three `set` calls and idempotent, which is what lets every route into a session call it
    * rather than only the one that creates one. `open` calls it on the REUSE path for exactly
@@ -790,7 +791,7 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
         const clone = row.clone === undefined ? bySessionName.get(row.name) : byTag.get(row.clone);
         // Nothing to paint it with, so it keeps the neutral bar.
         if (clone === undefined) continue;
-        // The same builder `open` uses, so the badge cannot differ by route.
+        // The same builder `open` uses, so a session's identity cannot differ by route.
         paintSession(clone);
         const format = '#{window_id} #{@hangar_colour}';
         const ids = tmux(['list-windows', '-t', tmuxTarget(clone), '-F', format]);

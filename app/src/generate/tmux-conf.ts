@@ -268,7 +268,7 @@ export const barOptions = (hangar: Hangar): readonly BarOption[] => {
     /*
      * The clone in the TERMINAL WINDOW title, which is how a developer with one tab per clone
      * tells them apart at the level the emulator draws. A window name is the role alone, so this
-     * and the hue badge are the two places the clone is named.
+     * and the footer are the two places the clone is named.
      *
      * `@hangar_clone_label` and not `@hangar_clone`: the title is drawn in a width the emulator
      * decides and then truncates from the right, and the directory prefix is the same on every
