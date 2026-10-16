@@ -90,8 +90,8 @@ _hangar_vsfix_hex() {
 
 # $1 = r;g;b, or empty to restore the terminal default. $2 = the ink that reads on that
 # hue, $3 = the hue lifted far enough to read AS text on the status bar. Both arrive from
-# the table beside this file rather than being worked out here: choosing them needs WCAG
-# relative luminance, a gamma curve per channel, which is not arithmetic to redo in shell on
+# the table beside this file rather than being worked out here: choosing them needs APCA and
+# WCAG luminance, a gamma curve per channel, which is not arithmetic to redo in shell on
 # every `cd`. Only the tmux arm reads them; the others take the hue and ignore the rest.
 _hangar_vsfix_chrome_set() {
     [ "${_hangar_vsfix_chrome}" = 1 ] || return 0

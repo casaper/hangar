@@ -571,8 +571,8 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
    * pure white, whichever reads on that hue -- in front of it. A solid band of colour along the
    * bottom of the window is far easier to find across four near-identical windows than coloured
    * text is, and the ink is what makes every character on it legible without anybody pairing the
-   * two by hand. `palette.ts` has the proof that best-of-black-or-white cannot fall below 4.58:1
-   * for any hue, which is also why the git state on that band is glyphs and never colour.
+   * two by hand. `palette.ts` has the measurement that best-of-black-or-white cannot fall below
+   * `INK_FLOOR_LC` for any hue, which is also why the git state on that band is glyphs and never colour.
    *
    * `@hangar_clone` needs only this one write: measured on tmux 3.7c, a session-scope user option
    * is visible from a pane-context format too (`list-panes -a -F '#{@hangar_clone}'` answered for

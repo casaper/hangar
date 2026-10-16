@@ -16,8 +16,8 @@ import { tildify } from '../user-paths.ts';
  * table is the part that grows with the fleet and the parsing is two lines wherever it is needed.
  *
  * The last two are contrast decisions rather than renderings of the hue, and they are computed
- * in `src/palette.ts` and BAKED IN here for one reason: choosing them needs WCAG relative
- * luminance, which is a gamma curve per channel, and this file is read on every `cd`. `ink` is
+ * in `src/palette.ts` and BAKED IN here for one reason: choosing them needs APCA and WCAG
+ * luminance, each a gamma curve per channel, and this file is read on every `cd`. `ink` is
  * the pure black or pure white that reads on the hue; `<bar text>` is the hue lifted far enough
  * to read as text on the tmux status bar. Only the tmux arm of the hook beside this file uses
  * them.
@@ -75,8 +75,8 @@ export const cloneColoursArtifact = (hangar: Hangar, clones: readonly Clone[]): 
     '#',
     '# Formula, so the set reads as one family: shimmer = main + 40% toward white,',
     '# border = main x 0.8, statusline dim = main x 0.6. The two contrast fields are not',
-    '# ratios: ink is whichever of black and white reads better on the hue, which can never be',
-    '# worse than 4.58:1 for any colour, and <bar text> is a floor rather than a lightening --',
+    '# ratios: ink is whichever of black and white reads better on the hue by APCA, never under',
+    '# Lc 54 for any colour, and <bar text> is a floor rather than a lightening --',
     '# fourteen of the sixteen hues clear it untouched and come back byte-identical.',
     '',
     `${fn}() {`,

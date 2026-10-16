@@ -451,9 +451,9 @@ export const claudeLocalMdContent = (clone: Clone): string => {
  * activity bar. Deliberately not the status bar -- that is where the branch, the errors and every
  * extension put their own colours, and re-grounding it would be arguing with them.
  *
- * `ink` in front of `main` for the same reason as everywhere else: best-of-black-or-white cannot
- * fall below 4.58:1 on any sRGB colour, which is what makes every hue in the palette legible
- * without anybody checking (`palette.ts`, and `test/contrast.test.ts` holds it). Both title-bar
+ * `ink` in front of `main` for the same reason as everywhere else: best-of-black-or-white by APCA
+ * cannot fall below `INK_FLOOR_LC` on any sRGB colour, which is what makes every hue in the
+ * palette legible without anybody checking (`palette.ts`, and `test/contrast.test.ts` holds it). Both title-bar
  * states get the hue, so a clone is findable when its window is NOT the focused one -- which is
  * the moment the colours exist for.
  *

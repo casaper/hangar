@@ -108,8 +108,8 @@ shell has printed a prompt. So a clone's bar carries its name from the first fra
 windows inside it get theirs from the hook on the first `cd`.
 
 **The ink on the hue is chosen for you, and cannot be unreadable.** It is pure black or pure white,
-whichever contrasts more -- which for any colour at all is never worse than 4.58:1, so every hue in
-the palette clears WCAG AA without anybody checking a pair by hand. A window that is *not* current
+whichever contrasts more by APCA -- which for any colour at all is never worse than Lc 54, so every
+hue in the palette reads without anybody checking a pair by hand. A window that is *not* current
 shows the hue as text instead, lifted just far enough to read on the dark bar; fourteen of the
 sixteen hues need no lift at all and appear at full strength.
 

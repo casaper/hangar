@@ -252,7 +252,7 @@ user option inside the `#[…]` style spec: a per-window format with the value a
 (`@hangar_purpose`), which expands inside a format perfectly well.
 
 `MODE_COLOURS` in `src/palette.ts` holds the two hues — ops `#1f6feb`, dev `#b35400` — with ink
-from the same `inkFor` the clone hues use: white on both, at 4.63:1 and 5.02:1. **They are a
+from the same `inkFor` the clone hues use: white on both, at Lc 77 and Lc 79. **They are a
 hand-maintained duplicate of `statusline.sh`'s own two triples**, named here rather than left to
 be discovered. That file cannot source them: it is one of the hand-maintained mode files, derived
 from nothing under `app/src/**`, deliberately, because it must render a badge when everything else

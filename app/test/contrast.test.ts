@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  apcaContrast,
   barTextFor,
   CI_COLOURS,
   colourFor,
   contrastRatio,
   CONTRAST_FLOOR,
+  INK_FLOOR_LC,
   PALETTE,
   relativeLuminance,
   STATUS_BAR_BG,
@@ -44,56 +46,66 @@ test('the bar is readable with no hue involved at all', () => {
   );
 });
 
+const lc = (text: string, bg: string): number => Math.abs(apcaContrast(text, bg));
+
 test('every hue’s ink clears the floor on its own hue', () => {
   for (const colour of ALL) {
-    const ratio = contrastRatio(colour.main, colour.ink);
+    const value = lc(colour.ink, colour.main);
     assert.ok(
-      ratio >= CONTRAST_FLOOR,
-      `${colour.name}: ${colour.ink} on ${colour.main} is only ${ratio.toFixed(2)}:1`,
+      value >= INK_FLOOR_LC,
+      `${colour.name}: ${colour.ink} on ${colour.main} is only Lc ${value.toFixed(1)}`,
     );
   }
 });
 
-test('the ink is one of exactly two values, and the better of them', () => {
-  // The assertion that keeps the guarantee from being tuned away. The 4.58:1 floor below is a
-  // property of PURE black and white; a near-black picked to match the bar would look tidier,
-  // still pass the test above on today's sixteen hues, and quietly void the proof for the
-  // seventeenth. So the pair itself is pinned, not just the outcome.
+test('the ink is one of exactly two values, and the better of them by APCA', () => {
+  // The assertion that keeps the guarantee from being tuned away. The floor below is a property
+  // of PURE black and white; a near-black picked to match the bar would look tidier, still pass
+  // the test above on today's palette, and quietly void the floor for the next hue appended.
+  // So the pair itself is pinned, not just the outcome.
   for (const colour of ALL) {
     assert.ok(
       colour.ink === '#000000' || colour.ink === '#ffffff',
       `${colour.name}: ink is ${colour.ink}, which is neither black nor white`,
     );
-    const chosen = contrastRatio(colour.main, colour.ink);
-    const other = contrastRatio(colour.main, colour.ink === '#000000' ? '#ffffff' : '#000000');
+    const other = colour.ink === '#000000' ? '#ffffff' : '#000000';
     assert.ok(
-      chosen >= other,
-      `${colour.name}: the other ink reads better (${other.toFixed(2)}:1)`,
+      lc(colour.ink, colour.main) >= lc(other, colour.main),
+      `${colour.name}: the other ink reads better (Lc ${lc(other, colour.main).toFixed(1)})`,
     );
   }
 });
 
-test('best-of-black-or-white cannot fall below 4.58:1, for any colour at all', () => {
-  // The proof in closed form, which is the only way to state it: the two ratios cross where
-  // (L + 0.05)^2 = 0.0525, so the worst colour there can be is one landing exactly on that
-  // luminance -- and it is STILL above the floor. No sweep can show this, because 8-bit sRGB has
-  // no colour at exactly that luminance; the nearest sampled one comes out at 4.61 and would
-  // pass a check that had the real infimum wrong.
-  const crossing = Math.sqrt(0.0525) / 0.05;
-  assert.ok(
-    crossing >= CONTRAST_FLOOR,
-    `the worst case for any colour is ${crossing.toFixed(2)}:1`,
-  );
-  assert.ok(Math.abs(crossing - 4.58) < 0.01, `${crossing.toFixed(3)} should be the 4.58 quoted`);
-
-  // And then the whole luminance range, densely, as the check that the implementation agrees
-  // with the algebra. The ink decision depends on nothing but luminance, so the greys cover
-  // every hue -- including the NEXT one somebody appends to the palette.
-  for (let value = 0; value <= 255; value += 1) {
-    const grey = `#${value.toString(16).padStart(2, '0').repeat(3)}`;
-    const best = Math.max(contrastRatio(grey, '#000000'), contrastRatio(grey, '#ffffff'));
-    assert.ok(best >= crossing, `${grey}: best-of-two is ${best.toFixed(2)}:1, under the infimum`);
+test('the bug: WCAG 2.1 gave seven mid-tone hues black ink that reads worse', () => {
+  // The regression anchor, kept as arithmetic. By WCAG's ratio black wins on every one of these;
+  // by APCA, and by eye, white does. If this ever stops holding, the ink switch is no longer
+  // what decides them and the reason for APCA here needs re-measuring.
+  for (const name of ['magenta', 'violet', 'red', 'blue']) {
+    const colour = colourFor(1, name);
+    assert.equal(colour.ink, '#ffffff', `${name} should take white ink`);
+    assert.ok(
+      contrastRatio(colour.main, '#000000') > contrastRatio(colour.main, '#ffffff'),
+      `${name}: WCAG no longer prefers black, so this is not the case it was`,
+    );
   }
+});
+
+test(`best-of-black-or-white cannot fall below Lc ${String(INK_FLOOR_LC)}, for any colour`, () => {
+  // Both inks' Lc depend on nothing but the ground's luminance, so the greys reach every
+  // luminance an 8-bit colour can -- and a coarse RGB grid on top checks that the channel weights
+  // do not open a gap the greys miss. Measured infimum: Lc 54.55, at #d57eff.
+  const hex = (n: number): string => n.toString(16).padStart(2, '0');
+  const check = (ground: string): void => {
+    const best = Math.max(lc('#000000', ground), lc('#ffffff', ground));
+    assert.ok(best >= INK_FLOOR_LC, `${ground}: best-of-two is Lc ${best.toFixed(2)}`);
+  };
+  for (let value = 0; value <= 255; value += 1) check(`#${hex(value).repeat(3)}`);
+  for (let r = 0; r <= 255; r += 15) {
+    for (let g = 0; g <= 255; g += 15) {
+      for (let b = 0; b <= 255; b += 15) check(`#${hex(r)}${hex(g)}${hex(b)}`);
+    }
+  }
+  check('#d57eff');
 });
 
 test('barText clears the floor on the bar, and is a floor rather than a wash', () => {

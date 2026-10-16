@@ -651,22 +651,26 @@ Three things fell out of fixing it, and each one is a decision rather than a det
   of it would be wrong with nothing to report it. Both window styles keep a neutral base there as
   well, since `set -uw` restores what is in the conf: without one, a window leaving a clone falls
   back to tmux's green rather than to the bar.
-- **The ink is pure black or pure white, and that is what makes the floor PROVABLE.** Against
-  black the ratio is `(L + 0.05) / 0.05`, against white `1.05 / (L + 0.05)`; the two cross at
-  `(L + 0.05)^2 = 0.0525`, so the better of them is never worse than **4.58:1** on any sRGB colour
-  at all. Every hue in the palette and every hue anyone ever appends to it is therefore readable
-  with nobody checking. It holds for PURE black and white only -- a near-black tuned to the bar
-  looks tidier, still passes on today's sixteen, and silently voids the proof for the seventeenth,
-  which is why `test/contrast.test.ts` pins the pair and not just the outcome.
+- **The ink is pure black or pure white, chosen by APCA, and that is what makes the floor
+  MEASURABLE.** Both inks' Lc depend on the ground's luminance alone, so the worst case is where
+  the two curves cross: swept densely, the better of them is never under **Lc 54.55** on any sRGB
+  colour, and `INK_FLOOR_LC` is 54. Every hue anyone ever appends is therefore readable with
+  nobody checking. It holds for PURE black and white only -- a near-black tuned to the bar looks
+  tidier, still passes on today's palette, and silently voids the floor for the next hue, which is
+  why `test/contrast.test.ts` pins the pair and not just the outcome.
+- **APCA and not WCAG 2.1 for the ink, measured on this palette.** WCAG's ratio favours black on
+  saturated mid-tones, and picked it for magenta, violet, red, blue, amber, purple and indigo --
+  seven hues where white is the one a person reads. APCA flips exactly those seven. WCAG stays the
+  measure for coloured text on the bar's neutral grey (`barText`, `CI_COLOURS`), where it is not
+  choosing between two inks.
 - **`barText` is a floor, not a wash.** Fourteen hues clear 4.5:1 at full strength and come back
   byte-identical; only indigo (10% toward white) and crimson (33%) move. Reusing `shimmer` would
   have been one line, lightened all sixteen, and still promised nothing about a hue added later.
 
 **No library, and the reason is the guarantee rather than a dislike of dependencies.** culori,
 colorjs.io, wcag-contrast and apca-w3 were all weighed and none of them ships its own TypeScript
-types, in a package whose only `@types/*` is Node's. APCA -- the WCAG 3 draft, and genuinely
-better for light text on dark -- changes exactly one answer on this palette: indigo's ink flips to
-white. Both clear AA, so it buys a dependency and no readability.
+types, in a package whose only `@types/*` is Node's -- so APCA is hand-rolled too, its constants
+being the whole algorithm.
 
 **`pnpm golden` could not have caught any of this**, which is the cleanest example in this repo of
 where the capture net ends. `gated/*` pins the bytes of the rendered conf and the hue table, so it
@@ -951,7 +955,7 @@ read-only.
 
 **The state is glyphs and never colour, and that is a contrast property rather than a style.** The
 footer is `colour.ink` on the clone's hue, and ink is pure black or pure white, so `palette.ts`'s
-proof that it clears 4.58:1 on any hue covers every character on the line. A coloured mark would
+floor of APCA Lc 54 on any hue covers every character on the line. A coloured mark would
 throw that away for one clone out of sixteen -- a red `✗` on the red clone is invisible, and
 nothing in a review catches it, because it looks right in fifteen of the sixteen cases somebody
 might check.

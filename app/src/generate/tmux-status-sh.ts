@@ -44,7 +44,7 @@ import { type Artifact, artifactHeader } from './index.ts';
  * ## The state is GLYPHS, never colour
  *
  * The footer is drawn as `colour.ink` on the clone's hue, and ink is pure black or pure white,
- * so `palette.ts`'s proof that it clears 4.58:1 on any hue covers every character on the line.
+ * so `palette.ts`'s floor -- APCA Lc 54 on any hue -- covers every character on the line.
  * Colouring the git state would throw that away: a red mark on the red clone is invisible, and
  * nothing in a review catches it because it is only wrong for one clone out of sixteen. So each
  * state gets a glyph instead, and the whole footer inherits the contrast proof.

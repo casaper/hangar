@@ -122,23 +122,8 @@ const triple = (rgb: Rgb): string => rgb.join(';');
 /**
  * WCAG 2.1 relative luminance, and the contrast ratio between two colours.
  *
- * Hand-rolled rather than a dependency, and the reason is the GUARANTEE rather than a dislike of
- * dependencies. `ink` restricts itself to pure black and pure white, and for exactly two
- * candidates the floor is provable: against black the ratio is `(L + 0.05) / 0.05`, against white
- * `1.05 / (L + 0.05)`, and the two cross at `(L + 0.05)^2 = 0.0525`. So whichever is better is
- * never worse than **4.58:1** -- on any sRGB colour at all. That is WCAG AA for normal text, for
- * every hue in the table above and every hue anyone ever appends to it. Nothing to measure and
- * nothing to tune, which is the opposite of how the status bar got into the state it was in.
- *
- * **It holds for PURE black and white only.** A near-black picked to match the bar looks tidier
- * and silently voids it -- and degrades worst through `tmux-256color`'s colour cube, on the one
- * terminal here that has no true colour. So `ink` is one of exactly two values, and
- * `test/contrast.test.ts` asserts that it is.
- *
- * Four libraries were weighed -- culori, colorjs.io, wcag-contrast, apca-w3 -- and none of them
- * ships its own TypeScript types, in a package whose only `@types/*` is Node's. APCA (the WCAG 3
- * draft) is the better algorithm for light text on dark and would change exactly one answer here:
- * indigo's ink flips to white. Both clear AA, so it buys a dependency and no readability.
+ * The measure for coloured text on the tmux bar's neutral background -- `barTextFor` and
+ * `CI_COLOURS` below. It is NOT what picks the ink drawn ON a hue: see `apcaContrast`.
  */
 const channelLuminance = (channel: number): number => {
   const c = channel / 255;
@@ -155,6 +140,70 @@ export const contrastRatio = (a: string, b: string): number => {
   const second = relativeLuminance(b);
   return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
 };
+
+/**
+ * APCA lightness contrast (SAPC 0.0.98G-4g, the WCAG 3 draft) of `text` drawn on `bg`, as Lc.
+ *
+ * Signed the way APCA signs it: positive for dark text on a light ground, negative for light on
+ * dark. **This is what chooses `ink`, and WCAG 2.1 chose wrong.** Its ratio is known to favour
+ * black on saturated mid-tones, and on this palette it did so for seven hues -- magenta, violet,
+ * red, blue, amber, purple and indigo all had black ink that a person reads as the worse of the
+ * two. APCA flips exactly those seven to white and leaves the other nine alone.
+ *
+ * Hand-rolled for the reason `relativeLuminance` is: none of culori, colorjs.io or apca-w3 ships
+ * its own types, and the constants below are the whole algorithm.
+ */
+const APCA = {
+  trc: 2.4,
+  r: 0.2126729,
+  g: 0.7151522,
+  b: 0.072175,
+  normBg: 0.56,
+  normText: 0.57,
+  revText: 0.62,
+  revBg: 0.65,
+  blackThreshold: 0.022,
+  blackClamp: 1.414,
+  scale: 1.14,
+  offset: 0.027,
+  deltaYMin: 0.0005,
+  lowClip: 0.1,
+} as const;
+
+const apcaY = (hex: string): number => {
+  const [r, g, b] = parseHex(hex).map((c) => (c / 255) ** APCA.trc) as unknown as Rgb;
+  const y = APCA.r * r + APCA.g * g + APCA.b * b;
+  return y < APCA.blackThreshold ? y + (APCA.blackThreshold - y) ** APCA.blackClamp : y;
+};
+
+export const apcaContrast = (text: string, bg: string): number => {
+  const t = apcaY(text);
+  const b = apcaY(bg);
+  if (Math.abs(b - t) < APCA.deltaYMin) return 0;
+  if (b > t) {
+    const sapc = (b ** APCA.normBg - t ** APCA.normText) * APCA.scale;
+    return sapc < APCA.lowClip ? 0 : (sapc - APCA.offset) * 100;
+  }
+  const sapc = (b ** APCA.revBg - t ** APCA.revText) * APCA.scale;
+  return sapc > -APCA.lowClip ? 0 : (sapc + APCA.offset) * 100;
+};
+
+/**
+ * The least |Lc| the better of pure black and pure white reaches on ANY sRGB colour.
+ *
+ * Measured rather than proved: both inks' Lc depend on the ground's APCA luminance alone, so the
+ * worst case is where the two curves cross, and a sweep of that luminance from 0 to 1 in 200 000
+ * steps puts it at **Lc 54.55**, at Y 0.342 -- `#d57eff` is the nearest sampled colour. 54 is that
+ * figure rounded DOWN, which is what lets `test/contrast.test.ts` assert it over a dense sweep and
+ * not just over today's palette. It is above APCA's Lc 45 for bold text, which is how the footer
+ * draws (`paneBorderFormat`), and the palette's own weakest pick is orange's black at Lc 57.
+ *
+ * **It holds for PURE black and white only.** A near-black picked to match the bar looks tidier and
+ * silently voids it -- and degrades worst through `tmux-256color`'s colour cube, on the one
+ * terminal here that has no true colour. So `ink` is one of exactly two values, and the test
+ * asserts that it is.
+ */
+export const INK_FLOOR_LC = 54;
 
 /**
  * The tmux status bar's own colours, and the floor everything drawn on it clears.
@@ -179,14 +228,16 @@ const INK_DARK = '#000000';
 const INK_LIGHT = '#ffffff';
 
 /**
- * Text ON the hue: whichever of black and white reads better. See the proof above.
+ * Text ON the hue: whichever of black and white reads better, by APCA. See `INK_FLOOR_LC`.
  *
  * Exported because the clone hues are not the only thing drawn on a solid block of colour --
  * `MODE_COLOURS` below needs the same answer, and a second copy of a two-line contrast pick is
  * exactly the drift this file exists to prevent.
  */
 export const inkFor = (main: string): string =>
-  contrastRatio(main, INK_DARK) >= contrastRatio(main, INK_LIGHT) ? INK_DARK : INK_LIGHT;
+  Math.abs(apcaContrast(INK_DARK, main)) >= Math.abs(apcaContrast(INK_LIGHT, main))
+    ? INK_DARK
+    : INK_LIGHT;
 
 /**
  * The hue AS text on the bar: itself, or lifted toward white until it clears the floor.
@@ -204,7 +255,7 @@ export const inkFor = (main: string): string =>
  * else entirely -- whether this session may change the CLI or only run it -- so they are a
  * separate two-entry table rather than two more palette entries, and nothing derives them from
  * an index. `hangar up` paints one tmux tab per mode with them, ink from `inkFor`: white on
- * both, at 4.63:1 for ops and 5.02:1 for dev.
+ * both, at Lc 77 for ops and Lc 79 for dev.
  *
  * Cool blue for the mode that reads and runs, warm amber for the one that changes things.
  *
