@@ -583,16 +583,18 @@ the one that governs every emulator: anything on the opening side paints only wh
 created, and the hook paints whatever `$PWD` is in -- so a window made with `C-b c` inside a
 clone's session is coloured too, and so is a shell in a clone that is not in tmux at all.
 
-The one piece `open` paints itself is `status-left`, at SESSION scope when it creates the
-session. Two reasons, and the second decides it: the status bar has to be right the instant the
-client attaches, which is before any shell has printed a prompt and so before the hook has run
-once, and `status-left` IS a session option -- the hook could only reach it with `-g`, which would
-have whichever clone was entered last recolour the bar of every other session on the socket.
+The one piece `open` paints itself is the footer, `pane-border-format`, with the hue baked in
+(`tmux.ts`'s `paintWindow`, on every window it creates). Two reasons, and the second decides it:
+the bar has to be right the instant the client attaches, which is before any shell has printed a
+prompt and so before the hook has run once, and the format carries ONE clone's hue -- the hook
+could only reach every window with `-g`, which would have whichever clone was entered last
+recolour every other session on the socket. It is written per WINDOW rather than per session
+because it is a window option: at session scope it reaches only the current window.
 
-It is a **badge**: `#[fg=<ink>,bg=<hue>,bold] <clone> #[default]`. The hue is the background and
-not the text, because a solid block of colour is what a developer actually finds across four
-near-identical windows -- and because putting the hue behind text is only safe when something
-also chooses the text, which is the next section.
+The hue is the footer's **background** and not its text, because a solid band of colour is what
+a developer actually finds across four near-identical windows -- and because putting the hue
+behind text is only safe when something also chooses the text, which is the next section.
+`status-left` stays empty (see the measurements below).
 
 The hook sets five window options -- `@hangar_colour`, `window-status-current-style` (the hue as
 a BACKGROUND with the ink in front), `window-status-style` (the hue as text, in its lifted

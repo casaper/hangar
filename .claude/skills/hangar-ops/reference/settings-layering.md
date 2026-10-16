@@ -18,8 +18,10 @@ every clone (verify with `jq -S 'del(.theme)|del(.permissions.allow)' … | shas
   the store — every entry, not only tickets; and `scrub --quiet --recent`), the `PreToolUse` hook that serves a cached Jira ticket from the record
   store (additive — Claude Code merges it with the repo's own tracked `PreToolUse` guard rather
   than replacing it), the shared statusline, the application's own MCP servers and plugin switches, the
-  deny on the shared secrets file, and the two iTerm2 keys (`terminal.explorerKind`,
-  `terminal.external.osxExec`).
+  deny on the shared secrets file. Three more keys sit there in every clone and no hangar
+  builder writes them — the two iTerm2 keys (`terminal.explorerKind`,
+  `terminal.external.osxExec`) and `skillOverrides` — so they are the developer's, not
+  something `doctor --fix` restores.
 - `.claude/settings.json` is **tracked and shared** — never put a per-clone or personal value there.
 
 ## The hangar root's own settings

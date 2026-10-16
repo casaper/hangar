@@ -1,12 +1,11 @@
 # Notes that change what you type
 
-Split out of `commands.md`; the command tables and the tool map stay there.
+The traps per command; the command tables and the tool map are in `commands.md`.
 
 **These are written in the shell spelling**, because that is the form you hand to the user and the
-form the flags are named in. Everything here is equally true of the tool that runs it — the map
-above says which — with one substitution throughout: where a note says `-n`, the tool is the
-separate `<thing>_preview`.
-
+form the flags are named in. Everything here is equally true of the tool that runs it —
+`commands.md`'s map says which — with one substitution throughout: where a note says `-n`, the
+tool is the separate `<thing>_preview`.
 
 - **`pr create` and `pr update` are the only commands that write to the FORGE**, which makes their
   mistakes the only ones the whole team can see. Five things follow, and each one is a refusal
@@ -51,13 +50,8 @@ separate `<thing>_preview`.
   clone's VS Code window before changing a bookmark or editing there** — the extension writes its
   in-memory set back on any edit that moves a bookmarked line, and a window left on the old set
   has its next change withheld as "stale".
-- **`hangar exec` is the user's, and you cannot run it at all.** It is not `ask` — it is denied
-  in both modes AND blocked by a `PreToolUse` hook that reads the whole command line, so
-  `cd /somewhere && hangar exec ...` is refused too. Do not go looking for a spelling that gets
-  through; there is no tool either, and that is deliberate rather than a gap. Everything after
-  `--` is a shell snippet, so a schema could describe it and never constrain it, and it reaches
-  every clone in one call — including working trees other agents are live in. **When it is the
-  right answer, hand the user the exact line and let them run it**, `-n` first.
+- **`hangar exec` is the user's, and you cannot run it at all** — `SKILL.md` says why. The two
+  notes below are for writing the line you hand them, `-n` first.
 - **Everything after `--` is the snippet; everything before it selects clones.** So
   `hangar exec 1 3 -- git status -sb` runs in two clones and `hangar exec --all -- git fetch` in
   all of them. Your shell splits argv before hangar sees it and hangar rejoins it with single

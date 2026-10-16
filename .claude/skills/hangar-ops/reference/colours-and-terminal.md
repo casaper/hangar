@@ -22,8 +22,8 @@ the fleet that is not a pure function of the index, so it is remembered in
 `.hangar/colour-assignments.json` (sparse: a clone that was never re-coloured is not in it,
 which is why `add-clone` and `remove-clone` still need no bookkeeping). It is **not tracked, and
 nothing regenerates it** — the one file in the fleet that is both. `hangar colours change` is its
-only writer, and a hangar from before the move keeps its root-level copy read (permanently) until
-`hangar doctor --fix` moves it forward. The command
+only writer. A copy at the hangar root, `colour-assignments.json`, is read too (permanently), and
+`hangar doctor --fix` moves it into `.hangar/`. The command
 rebuilds everything that names the colour, which is the reason it exists rather than being three
 manual edits: the four generated artifacts, the clone's `.claude/settings.local.json` (it selects
 the theme by NAME, and a theme that no longer exists makes Claude Code fall back to the default
@@ -46,7 +46,7 @@ A theme change needs a Claude Code restart in that clone before it shows up.
 ## The terminal colour hook
 
 The same hues colour **the terminal** whenever the shell's `PWD` is inside a clone (any
-subdirectory included), via `clone-terminal.sh` here. It is a `chpwd` hook (zsh) or a
+subdirectory included), via `clone-terminal.sh` at the hangar root. It is a `chpwd` hook (zsh) or a
 `PROMPT_COMMAND` entry (bash), not a direnv hook, deliberately: direnv only fires on entering or
 leaving a directory that has an `.envrc`, redirects that file's stdout, and has no notion of
 "left the fleet entirely", so escape codes emitted from `.envrc` would be both fragile and
@@ -91,21 +91,25 @@ nothing leaks into a sibling. `tmux show -w` is how to see what painted a window
 
 ## What the status bar looks like, and why it is readable
 
-The bar itself is **neutral** -- a dark background with grey text -- and the clone's hue arrives on
-top of it as a **background block**:
+The bar is two lines. The top one is **neutral** -- a dark background with grey text -- with the
+window tabs on the left and the issue key, the pull request and the clock on the right; the
+current tab arrives on it as a **background block** in the clone's hue. The bottom line is the
+**footer**, drawn on the pane border: the clone, where in it the pane stands, its git state and
+its branch, on a band of the clone's hue.
 
 ```
- clone_01 │ 1 claude   2 shell   3 app                                    10:11
-└────────┘ └─────────┘
- the hue,   the window
- with an    you are in,
- ink on it  same shape
+ 1 claude   2 shell   3 app                      ABC-1323  ✎#862 ✗ ≈  10:11
+└─────────┘
+ the window you are in: the hue, with an ink on it
+ clone_01 · web/src · ✱? · ABC-1323-storefront-checkout
+└────────────────────────────────────────────────────────────────────────┘
+ the footer: the clone's hue, edge to edge
 ```
 
-The name badge on the left is the one piece `hangar open` paints, at SESSION scope when it creates
-a clone's session: the bar has to be right the instant the window attaches, which is before any
-shell has printed a prompt. So a clone's bar carries its name from the first frame, and the
-windows inside it get theirs from the hook on the first `cd`.
+**The clone is named on the footer, not up top** -- `status-left` is empty. `hangar open` paints
+the footer onto each window it creates, with the hue baked in, so the bar is right the instant
+the window attaches, before any shell has printed a prompt; the tabs get their hue from the hook
+on the first `cd`.
 
 **The ink on the hue is chosen for you, and cannot be unreadable.** It is pure black or pure white,
 whichever contrasts more by APCA -- which for any colour at all is never worse than Lc 54, so every

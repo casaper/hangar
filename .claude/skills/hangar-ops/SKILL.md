@@ -201,9 +201,3 @@ For questions that arrive often:
 - `reference/settings-layering.md` — which key belongs in which of the three settings files, why
   the hangar root carries no `permissions` block, and the rule that a running session never sees a
   change to either of the files it read at startup.
-
-## One prohibition worth repeating
-
-If you are running inside a clone rather than at the hangar root: **`hangar sync <your own index>`
-starts with `git stash push --include-untracked` on the tree you are working in.** The busy-clone
-skip applies only to `--all`. Naming a clone explicitly does not protect it.

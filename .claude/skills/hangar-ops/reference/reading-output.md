@@ -1,5 +1,10 @@
 # Reading the output
 
+**Tool output has no colour at all.** A tool result is the same text with the ANSI escapes
+stripped and `NO_COLOR` set, so anywhere below that a green `ok`, a red failure or a dim row is
+described, read the WORD and not the hue — every one of them is `ok`, `x`, `!` or an
+`optional:` prefix in the text itself. The clone bullet `●` survives; its hue does not.
+
 ## `hangar status <n>`
 
 Ten rows always, in this order: `dir`, `colour`, `branch`, `sync`, `worktree`, `issue`,
@@ -53,11 +58,6 @@ half: a repaired `.env.local` does nothing until direnv reloads it.
 sentence**, so the repair guidance is only in the human form. That is why the `ports` tool leaves
 `json` a parameter rather than always passing it: the default is what a person sees.
 
-**Tool output has no colour at all.** A tool result is the same text with the ANSI escapes
-stripped and `NO_COLOR` set, so anywhere below that a green `ok`, a red failure or a dim row is
-described, read the WORD and not the hue — every one of them is `ok`, `x`, `!` or an
-`optional:` prefix in the text itself. The clone bullet `●` survives; its hue does not.
-
 **The specific trap:** the clones get their per-clone ports from direnv, which the repo wires up in
 a `SessionStart` hook (`.claude/hooks/direnv-load.sh` — it appends a `direnv export` plus a `cd`
 wrapper to `CLAUDE_ENV_FILE`, so every Bash call in a clone session, and every `cd` inside one,
@@ -86,7 +86,7 @@ paraphrasing it. Only what is still outstanding is listed — under `--fix`, a c
 repaired stays in the count and drops out of the recap, because the recap is what the reader still
 has to act on. No bullets at all means nothing is outstanding.
 
-Four things to say correctly when you relay a report:
+What to say correctly when you relay a report:
 
 - **`settings targets` and `settings.local.json` are not the same question, so they can disagree
   and neither is wrong.** `settings targets` asks only whether the theme file and the statusline

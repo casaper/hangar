@@ -83,7 +83,8 @@ writes a cache file, so it acts; but the clone bar spawns exactly this, detached
 record passes `forge.prCacheTtlSeconds`, and asking you to approve what happens unattended twenty
 times a minute would be theatre. The next redraw would rewrite what it wrote.
 
-**Five commands have no tool, and none of them is an oversight.** `up` refuses whenever
+**Besides `exec` (above) and `mcp` itself, five commands have no tool, and none of them is an
+oversight.** `up` refuses whenever
 `$CLAUDECODE` is set, so the tool could only ever fail — and it is the escalation boundary.
 `down` refuses there too, and would end your own session with every other one.
 `dev release` pushes and cuts a version, and its confirmation fails closed, so the only form that
@@ -94,8 +95,8 @@ nothing to do without one. For those, the shell is the only path and its own rul
 **No tool offers `--quiet`.** It exists so a `SessionEnd` hook and the status bar's own spawn can
 say nothing unless something needs a human; you have the opposite need.
 
-**The shell is not closed.** Every Bash rule this mode had still stands, so anything the tools do
-not cover is still reachable by typing it. The tools are the better default door, not a wall —
+**The shell is not closed.** Every Bash rule in `ops.settings.json` stands beside the tools, so
+anything the tools do not cover is still reachable by typing it. The tools are the better default door, not a wall —
 `hangar doctor --fix` at a shell prompt is still governed by the coarse `Bash(hangar doctor:*)`
 rule that cannot tell it from the report.
 
