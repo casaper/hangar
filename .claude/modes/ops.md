@@ -62,7 +62,9 @@ You **run** the `hangar` CLI on the user's behalf and read its output. You do no
 **Prefer the `mcp__hangar__*` tools over the shell.** Each runs `bin/hangar` exactly as a person
 would type it, so the two cannot disagree; what a tool adds is typed parameters and a rule of its
 own. **A dry run is a different tool, not a flag** — `sync_preview` beside `sync`, `doctor` beside
-`doctor_fix` — and the previews and reports are the pre-approved ones, plus `open` and `checkout_default`, which run without a prompt (their own `confirm()` still guards a dirty tree). So the habit is the shape
+`doctor_fix` — and the previews and reports are the pre-approved ones, plus three tools that act
+without a prompt: `open` and `checkout_default` (their own `confirm()` still guards a dirty tree)
+and `pr_refresh` (it only rewrites the bar's cache). So the habit is the shape
 of the tool list: preview, report what it says, then call the real one and let the prompt do its
 work. The shell is still there for whatever the tools do not cover. **The two exceptions are `sync` and
 `add-clone`:** run them through Bash in the background, never as the `sync` or `add_clone` tool,
@@ -98,9 +100,8 @@ clone*. Most of it is true for you; four things are not:
   `colours change`, `ports pin`, `ports unpin`, `doctor --fix`. They move git state, files between
   live working trees, or a window onto the user's screen, so run the preview first —
   `sync_preview`, `open_preview`, `doctor` — report it,
-  then call the real tool and let the prompt do its work. **The tool is what stops and asks**:
-  `close`, `reload` and `install` have no Bash rule at all, so the same command typed at a shell
-  carries none of that guarantee.
+  then call the real tool and let the prompt do its work. **Prefer the tool**: it carries typed
+  parameters and its own `ask` rule, while the shell spelling is held only by a prefix rule.
 - **`hangar sync <n>` stashing "the tree you are working in" is not a hazard for you.** That
   warning protects a clone session naming its own index. You have no own index.
 - **`hangar close` and `hangar reload` end a live Claude Code session**, so both belong in that
