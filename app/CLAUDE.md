@@ -37,9 +37,10 @@ hangar root for the reason below.
 > `app/pnpm-lock.yaml` stays the lockfile.
 >
 > **`dev/scrub-check.sh` enforces that shape, because the obvious guard does not work.** A
-> `preinstall` script exiting 1 is measured not to work: **pnpm 10 does not run it** — not
+> `preinstall` script exiting 1 is measured not to work: **pnpm 10 did not run it** — not
 > even with a dependency present to install (probed both ways; `pnpm run preinstall` fires,
-> `pnpm install` does not), and npm skipped it too. So a stray `pnpm install` here still leaves an
+> `pnpm install` does not), and npm skipped it too. That probe predates the 12.8.2 pin and has
+> not been repeated on it; the gate holds either way. So a stray `pnpm install` here still leaves an
 > empty `node_modules`, which resolves nothing and harms nothing. What must never happen is this
 > file growing something to put in it, and that is the line the gate holds.
 > The same stray install writes an empty `pnpm-lock.yaml` beside it, which is why that path is
@@ -67,9 +68,9 @@ the history, `scan:literals` is `dev/scrub-check.sh` over the tree, and gitleaks
 a low-entropy pasted password that the second one catches (`hangar-internals/reference/release.md`
 has the canary). Both also run in `app/.husky/pre-commit` and inside `hangar dev release`.
 
-`pnpm` is not assumed to be on PATH: it lives inside an fnm multishell and so moves when the Node
-version moves. The hangar root's `.envrc` activates it through `hangar_use_pnpm` (defined in
-`.envrc.hangar`), alongside `hangar_use_node .nvmrc`, `hangar_use_gnu`, `PATH_add bin`,
+`pnpm` is not assumed to be on PATH: the hangar root's `.envrc` runs `hangar_use_pnpm` (defined
+in `.envrc.hangar`), which has corepack write its shims into the gitignored `.hangar/pnpm-bin/`
+and puts that directory on PATH — alongside `hangar_use_node .nvmrc`, `hangar_use_gnu`, `PATH_add bin`,
 `PATH_add .local/bin` (the `claude` shim that picks a mode) and `PATH_add app/node_modules/.bin`
 — which is how `tsc`, `eslint` and `prettier` are reached. If any of those commands is not found, the answer is
 almost always that direnv has not loaded: run `direnv allow` at the hangar root.
@@ -167,9 +168,9 @@ The two nets:
   - **Text that must name NO repo in particular.** `generic-text.test.ts` renders the per-clone
     builders against a config disagreeing with this repo's _and_ with every schema default, and
     asserts six literals from this repo appear nowhere in the result. A capture says what the
-    bytes are; only this says what they may never contain — and two of the six (`clone_`,
-    `.env.local`) are schema defaults, so a fixture agreeing with a default could not have shown
-    them. `hangar-internals/reference/doctor.md` has the table.
+    bytes are; only this says what they may never contain — and three of the six (`clone_NN`
+    and `clone_0`, from the default `clone_` prefix, and `.env.local`) follow from schema
+    defaults, so a fixture agreeing with a default could not have shown them. `hangar-internals/reference/doctor.md` has the table.
 
   Everything runs against a synthetic root and a synthetic `~/.claude`, and that is a requirement:
   `makeClone` reads `.hangar/colour-assignments.json` under the hangar root and caches it per
@@ -202,14 +203,15 @@ Three consequences worth knowing before editing the files they touch:
   placeholders, and `configDrift` in `config/drift.ts` excludes exactly those from the
   example-vs-live comparison. Everything else is still held equal — `forge.defaultBranch`
   included, which is the line that comparison was written for after the pair silently drifted.
-- **`app/test/generic-text.test.ts`'s `THIS_REPOS_OWN` names `DN-`, the live config's
-  `keyPrefixes`, and that is the only place in this repo that may.** It is the guard asserting
-  those strings never reach text generated for another hangar, and a guard has to name what it
-  forbids. The **bare prefix** rather than a whole key, twice over: it forbids every ticket rather
-  than one, and a whole key is exactly what a bulk find-and-replace over the tree would rewrite —
-  leaving a guard that guards nothing while every check stays green. `dev/scrub-check.sh` writes
-  its own patterns as `datav[a]ult` and `__D[V]B_` for the same reason, and needs no allow-list at
-  all as a result.
+- **The live config's `keyPrefixes` value is named only by the guards that forbid it** —
+  `THIS_REPOS_OWN` in `test/generic-text.test.ts` and `test/personal-tools.test.ts`, the literal
+  list in `test/allow.test.ts`, and `dev/scrub-check.sh`. A guard has to name what it forbids;
+  nothing else may, prose included. They name the **bare prefix** rather than a whole key, twice
+  over: it forbids every ticket rather than one, and a whole key is exactly what a bulk
+  find-and-replace over the tree would rewrite — leaving a guard that guards nothing while every
+  check stays green. `dev/scrub-check.sh` writes each pattern so it cannot match itself
+  (`datav[a]ult`, `__D[V]B_`, `dvb[-_]gui`) for the same reason, and needs no allow-list at all
+  as a result.
 - **A config key that names a repo's own skill or prompt is optional with NO default**
   (`forge.prDescriptionPrompt`, `tracker.planPrompt`): absent means the command refuses and names
   the key, because a default would put one repo's skill name into every hangar.
@@ -235,11 +237,13 @@ docs(test):  Say the suite exists, and say exactly what it does not cover
 flag, a seam, a driver or a generated artifact; `fix` corrects behaviour that was wrong; `docs` is `CLAUDE.md`,
 the README or the skills and nothing else.
 
-**Scopes** are the subsystem: `sync` `doctor` `open` `close` `tmp` `plans` `pr` `jira` `colours` `config`
-`editor` `terminal` `platform` `setup` `add-clone` `install` `resume` `ide` `status` `golden`
-`cli` `fleet` `ports` `bookmarks` `modes` `exec` `servers` `allow` `waypoint` `commit-gate` `skills`
-`scrub` `test` `mcp` `release` `deps` — `release` being `hangar dev release`, and also the scope
-semantic-release gives its own `chore(release)` commits. That list is documented and deliberately
+**Scopes** are the subsystem: `sync` `checkout-default` `doctor` `open` `close` `reload` `edit`
+`browse` `tmp` `plans` `pr` `jira` `jira-plan` `colours` `config` `editor` `terminal` `platform`
+`setup` `add-clone` `remove-clone` `install` `resume` `ide` `status` `list` `golden` `cli` `fleet`
+`ports` `bookmarks` `modes` `exec` `servers` `allow` `waypoint` `commit-gate` `rewrite` `skills`
+`scrub` `teach-rg` `test` `mcp` `release` `deps` — `modes` covering `hangar up`/`down` and the
+shim, `release` being `hangar dev release`, and also the scope semantic-release gives its own
+`chore(release)` commits. That list is documented and deliberately
 **not** enforced — a `scope-enum` rule goes red the first time somebody adds a subsystem, and this
 repo already knows what a check that is red in normal operation is worth.
 
@@ -257,8 +261,10 @@ refuses such a commit rather than escalating, and names it.
 **The hooks are `pnpm hooks`, once per clone of this repo, by hand** — `pnpm-workspace.yaml` sets
 `ignoreScripts: true`, so husky's `prepare` never runs. `commit-msg` is commitlint; `pre-commit`
 is `pnpm scan` on what is STAGED, and skips gitleaks with a message when it is not installed. They
-are fast feedback only: **`hangar dev release` is where none of it can be skipped** — every gate,
-`commitlint` over the whole range, and a missing gitleaks is an error there. There is no CI.
+are fast feedback only: **`hangar dev release` is the enforcement** — every gate, `commitlint`
+over the range since the last tag, and a missing gitleaks is an error there. Its
+`--skip-checks` skips the gates (for a run straight after doing them by hand) and nothing else:
+the preflight, the breaking-marker refusal and the confirmation still run. There is no CI.
 
 **`pnpm release` cuts one, from a terminal and never from CI.** `-n` changes nothing and is the
 first thing to run. **Read `hangar-internals/reference/release.md` before editing
@@ -293,9 +299,22 @@ The layout under `src/` is what `ls` shows; only what a listing cannot say is ke
   them names this machine's home directory, which is what puts them on the untracked side of the
   inventory below.
 - **`generate/index.ts`** — the dry-run-aware writer every generator goes through.
-- **`git.ts`'s `git` / `gitOut` / `gitTry` are the only way to run git in a clone.** They set no
-  editor AND `GIT_REFLOG_ACTION=hangar`, which is how `jira-plan` tells hangar's own branch moves
-  from a person's; a raw `run('git', …)` skips both without anything noticing.
+- **`git.ts`'s `git` / `gitOut` / `gitTry` are how anything that CHANGES a clone runs git.** They
+  set no editor AND `GIT_REFLOG_ACTION=hangar`, which is how `jira-plan` tells hangar's own branch
+  moves from a person's; a raw `run('git', …)` skips both without anything noticing. The few raw
+  calls left (`config/derive.ts`, `commands/plans.ts`) only read.
+- **`commands/vscode.ts`** — despite the name, the generic `editorSync` behind every
+  `ide <kind> sync`, not only VS Code's.
+- **`exec.ts`** — `run`, `runCaptured` and `CliError`, the subprocess wrappers; **`template.ts`**
+  — the `{token}` renderer every configurable path and URL goes through.
+- **`bitbucket.ts`** — the forge client; `pr-cache.ts` is the bar's on-disk pull-request record;
+  `pr-description.ts` FINDS the description the repo's own agent wrote, never writes one.
+- **`jira.ts`** — issue keys, URLs and inferring a branch's ticket; `jira-records.ts` — the
+  shared record store and its names. The hook itself is `commands/jira.ts`.
+- **`procs.ts`** — live Claude Code processes and dev-server listeners; `sessions.ts` — which
+  plan files a live agent holds; `claude-sessions.ts` — the transcripts `resume` picks from.
+- **`bookmarks/`** — the browser bookmark drivers behind `bookmarks sync`; **`release/`** — commit
+  parsing for `hangar dev release`; **`platform/`** — the platform seam below.
 - **`mcp/`** — `tools.ts` (which commands are exposed, and the schema read off the commander
   registry) and `server.ts` (the stdio JSON-RPC loop). **Nothing here may import `ui.ts`**: stdout
   is the protocol.
@@ -308,7 +327,8 @@ synthetic hangar they all use.
 implementations are equivalent. Adding a kind means implementing the interface and registering it;
 callers degrade one capability at a time instead of branching on a product name:
 
-- `editor/types.ts` — `EditorCapabilities` / `EditorDriver`; registered in `editor/kinds.ts`
+- `editor/types.ts` — `EditorCapabilities` / `EditorDriver`; the kind is declared in
+  `editor/kinds.ts` and dispatched to its driver in `editor/index.ts`'s `driverFor`
 - `terminal/types.ts` — `EmulatorCapabilities` / `EmulatorDriver`; registered in
   `terminal/index.ts`. It answers one question — _which program can open a window and raise one_ —
   because everything that needs enumerating, naming and typing into happens inside the hangar's own
@@ -441,6 +461,8 @@ Not tracked, and what writes each:
 - `.hangar/colour-assignments.json` — **INPUT** — `hangar colours change`, nothing else
 - `.hangar/port-pins.json` — **INPUT** — `hangar ports pin` / `unpin`, nothing else
 - `.hangar/claude-tmux.conf` — `hangar up`, every run
+- `.hangar/pnpm-bin/` — corepack's pnpm shims — direnv, through `hangar_use_pnpm`
+- `app/.claude/plans/`, `.remember/` — developer-mode session state, not a `hangar` command's
 
 Tracked: this file, the root `CLAUDE.md`, `README.md`, `bin/**`, `.local/bin/**`, `app/**`,
 `.envrc`, `.envrc.hangar`, `.nvmrc`, `.editorconfig`, `.gitleaks.toml`,
@@ -477,9 +499,8 @@ no hook in `.git/hooks`.
 Each entry is the source in `app/src/**`, the command that regenerates, and what it rewrites:
 
 - `config/schema.ts` → `hangar config schema` → `hangar.schema.json` (**tracked**)
-- `palette.ts` and `generate/{colours-sh,terminal-sh,tmux-conf,tmux-status-sh}.ts` →
-  `hangar colours sync` → `clone-colours.sh`, `clone-terminal.sh`, `clone-tmux.conf` **and**
-  `clone-tmux-status.sh` (gitignored)
+- `palette.ts` and `generate/*.ts` → `hangar colours sync` → the four root shell/tmux files
+  listed under **What `colours sync` generates** (gitignored)
 - any new config key → by hand → `hangar.config.example.yaml` (**tracked**)
 
 - **`hangar config schema --check` after touching `config/schema.ts` — and when `zod` moves.**
@@ -534,8 +555,8 @@ More root files are hand-maintained and belong to this package rather than to th
   to `import`. **Edit a scratch copy and `mv` it into `bin/`: each is live fleet-wide the moment it
   is saved.** Keep the copy's own name in a scratch DIRECTORY (`node --check` refuses `*.new`),
   and probe the gate from a copy under a temp hangar root: it works out where its lock file
-  lives from its own location. `test/personal-tools.test.ts` bans `dvb`, `DN-`, `clone_0`,
-  `angular/`, `bitbucket` and `jira` anywhere in waypoint and the gate, comments included.
+  lives from its own location. `test/personal-tools.test.ts` bans this repo's own names (its
+  `THIS_REPOS_OWN`) anywhere in waypoint and the gate, comments included.
   `hangar-internals/reference/root-tools.md` has what each refuses and why,
   including `hangar-rewrite`'s published-commit rule, the `personal-skills/` manifest row a new
   skill needs, and how to test any of them.
@@ -549,12 +570,9 @@ More root files are hand-maintained and belong to this package rather than to th
   across both `CLAUDE.md` files, `.claude/modes/*.md` and both skills before committing. The
   root file's "reach outside this machine" was also in `ops.md`.
 
-**One thing that looks broken and is not: `pnpm --version` differs by directory.** corepack reads
-`packageManager` from the NEAREST `package.json` walking up, so inside `app/` it answers the
-pinned 12.8.2, while the hangar root — whose `package.json` is scripts only and declares no
-`packageManager`, deliberately and permanently — answers corepack's own bundled default. Every
-root script is `pnpm --dir app`, so the pin governs every real invocation. `.envrc.hangar` records this beside `hangar_use_pnpm`; do not
-"fix" it.
+**One thing that looks broken and is not: `pnpm --version` differs by directory** — corepack
+reads the nearest `packageManager`, and the root `package.json` declares none. Do not "fix" it;
+`.envrc.hangar` has why, beside `hangar_use_pnpm`.
 
 ## The root `.gitignore`
 
@@ -563,10 +581,10 @@ before touching a line. Three things about it are easy to break:
 
 - **The clones, the secrets file, the two shared directories and the stray lockfile are ANCHORED**
   (`/clone_*/`, `/.env.shared`, `/plans/`, `/tmp/*`, `/pnpm-lock.yaml`). An unanchored `clone_*/`
-  matched a directory of that name anywhere in the tree and silently dropped 15 of golden's 136
-  files. `node_modules/` stays unanchored on purpose.
-- **`/tmp/*`, never `/tmp/`**: git does not descend into an excluded directory, so the one `!`
-  exception at the bottom of the file only works under the `*` form.
+  matched a directory of that name anywhere in the tree and silently dropped 15 of the 136 files
+  golden captured at the time. `node_modules/` stays unanchored on purpose.
+- **`/tmp/*`, never `/tmp/`**: git does not descend into an excluded directory, so a `!`
+  exception for a file under `tmp/` only works under the `*` form.
 - **The secrets entries are `/.env.shared`, `.env.local` and `/.env`** — the last has no file and
   is listed because `.envrc` would load one. `hangar.schema.json` stays TRACKED.
 
