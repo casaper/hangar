@@ -16,15 +16,25 @@
  *   ink     = black or white, whichever reads on main   -> text ON the hue
  *   barText = main, lifted until it clears the floor    -> the hue AS text, on the bar
  *
- * ORDER IS LOAD-BEARING and the list is append-only. A clone with no explicit assignment
- * takes `PALETTE[(N-1) % length]`, so inserting or reordering an entry silently re-colours
- * every clone after it -- and clone_01..03 have the original cyan / yellow / green wired into
- * muscle memory. Appending is always safe.
+ * ORDER IS LOAD-BEARING. A clone with no explicit assignment takes `PALETTE[(N-1) % length]`, so
+ * inserting, reordering or re-hueing an entry silently re-colours every clone at that slot --
+ * and clone_01..03 have the original cyan / yellow / green wired into muscle memory. Appending
+ * is always safe. Replacing a slot is safe only when no fleet reaches it, and a NAME that a
+ * `colour-assignments.json` holds must survive any replacement, whatever slot it sits in.
  *
- * Twelve hues sampled the wheel about as finely as a terminal dot usefully can; the four after
- * them (`purple` onward) fill the remaining gaps and are the least distinguishable of the set,
- * so the early entries stay the good ones. Every hue keeps one channel at 0xcc or 0xff, which
- * is what makes them read as one family.
+ * The set is chosen for DISTANCE, measured as CIEDE2000 between every pair: `deltaE2000` below,
+ * and `test/contrast.test.ts` holds the minimum to `PALETTE_MIN_DELTA_E`. The first nine and
+ * `silver` are the originals a fleet uses; slots 10-15 and 17-20 were picked by a greedy
+ * farthest-point search over an OKLCH grid against those ten AND `MODE_COLOURS` -- so a clone
+ * never resembles a mode tab -- keeping only vivid candidates (OKLCH chroma 0.13 or more) that
+ * read as text on a dark terminal (3:1 against `STATUS_BAR_BG`). Each pick was the farthest
+ * remaining, so the early entries stay the good ones: slot 10 was 28.9 from everything before
+ * it, slot 20 only 15.8. That is also why the list stops at twenty -- the next pick lands
+ * under 15 from an existing hue, which is a near-duplicate rather than a new colour.
+ *
+ * Lightness varies on purpose. Saturated hues at one lightness crowd each other -- `violet`
+ * against a full purple, `#cc44ff`, is only 9.3 -- and a deep `forest` beside a pale `pistachio`
+ * is distance hue alone cannot buy. The deep ones take white ink, the pale ones black, both by `inkFor`.
  *
  * Claude Code takes arbitrary 24-bit hex in a custom theme -- that is exactly what
  * `~/.claude/themes/dvb-clone-NN-*.json` already does with `claude`, `claudeShimmer`,
@@ -43,13 +53,17 @@ export const PALETTE = [
   { name: 'red', hex: '#ff4444' },
   { name: 'teal', hex: '#00ccaa' },
   { name: 'blue', hex: '#3399ff' },
-  { name: 'lime', hex: '#aaff00' },
-  { name: 'pink', hex: '#ff88bb' },
-  { name: 'amber', hex: '#cc8800' },
-  { name: 'purple', hex: '#cc44ff' },
-  { name: 'indigo', hex: '#5566ff' },
-  { name: 'crimson', hex: '#cc0044' },
+  { name: 'forest', hex: '#05773b' },
+  { name: 'olive', hex: '#908d12' },
+  { name: 'orchid', hex: '#f8b0fe' },
+  { name: 'pistachio', hex: '#e3fc96' },
+  { name: 'raspberry', hex: '#ae4c69' },
+  { name: 'salmon', hex: '#fc91a6' },
   { name: 'silver', hex: '#cccccc' },
+  { name: 'aqua', hex: '#21fcfe' },
+  { name: 'plum', hex: '#9b4ea2' },
+  { name: 'ochre', hex: '#b47b06' },
+  { name: 'spring', hex: '#13fd99' },
 ] as const satisfies readonly PaletteEntry[];
 
 /**
@@ -141,14 +155,86 @@ export const contrastRatio = (a: string, b: string): number => {
   return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
 };
 
+/** CIELAB (D65) of an sRGB hex, the space `deltaE2000` measures in. */
+const toLab = (hex: string): readonly [number, number, number] => {
+  const [r, g, b] = parseHex(hex).map((c) => {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  }) as unknown as Rgb;
+  const x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047;
+  const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883;
+  const f = (t: number): number => (t > 216 / 24389 ? Math.cbrt(t) : ((24389 / 27) * t + 16) / 116);
+  return [116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))];
+};
+
+/**
+ * CIEDE2000 colour difference between two hexes -- how far apart a person sees them.
+ *
+ * The measure `PALETTE` is chosen by. Euclidean RGB says nothing useful here: it rates two blues
+ * a person confuses as far apart and a green and a yellow-green as near. About 2 is a just
+ * noticeable difference; the palette's closest pair is held to `PALETTE_MIN_DELTA_E`.
+ */
+export const deltaE2000 = (a: string, b: string): number => {
+  const [l1, a1, b1] = toLab(a);
+  const [l2, a2, b2] = toLab(b);
+  const rad = Math.PI / 180;
+  const cBar = (Math.hypot(a1, b1) + Math.hypot(a2, b2)) / 2;
+  const g = 0.5 * (1 - Math.sqrt(cBar ** 7 / (cBar ** 7 + 25 ** 7)));
+  const ap1 = a1 * (1 + g);
+  const ap2 = a2 * (1 + g);
+  const cp1 = Math.hypot(ap1, b1);
+  const cp2 = Math.hypot(ap2, b2);
+  const hue = (x: number, y: number): number => {
+    const t = Math.atan2(y, x) / rad;
+    return t < 0 ? t + 360 : t;
+  };
+  const hp1 = hue(ap1, b1);
+  const hp2 = hue(ap2, b2);
+  let dh = hp2 - hp1;
+  if (cp1 * cp2 === 0) dh = 0;
+  else if (dh > 180) dh -= 360;
+  else if (dh < -180) dh += 360;
+  const dL = l2 - l1;
+  const dC = cp2 - cp1;
+  const dH = 2 * Math.sqrt(cp1 * cp2) * Math.sin((dh * rad) / 2);
+  const lBar = (l1 + l2) / 2;
+  const cpBar = (cp1 + cp2) / 2;
+  let hBar = hp1 + hp2;
+  if (cp1 * cp2 !== 0) {
+    if (Math.abs(hp1 - hp2) > 180) hBar += hp1 + hp2 < 360 ? 360 : -360;
+    hBar /= 2;
+  }
+  const t =
+    1 -
+    0.17 * Math.cos((hBar - 30) * rad) +
+    0.24 * Math.cos(2 * hBar * rad) +
+    0.32 * Math.cos((3 * hBar + 6) * rad) -
+    0.2 * Math.cos((4 * hBar - 63) * rad);
+  const sl = 1 + (0.015 * (lBar - 50) ** 2) / Math.sqrt(20 + (lBar - 50) ** 2);
+  const sc = 1 + 0.045 * cpBar;
+  const sh = 1 + 0.015 * cpBar * t;
+  const rt =
+    -2 *
+    Math.sqrt(cpBar ** 7 / (cpBar ** 7 + 25 ** 7)) *
+    Math.sin(60 * Math.exp(-(((hBar - 275) / 25) ** 2)) * rad);
+  return Math.sqrt((dL / sl) ** 2 + (dC / sc) ** 2 + (dH / sh) ** 2 + rt * (dC / sc) * (dH / sh));
+};
+
+/**
+ * The closest any two `PALETTE` entries may be, by `deltaE2000`. Raising it is fine; a new entry
+ * that cannot clear it is a near-duplicate of one already there, and belongs nowhere.
+ */
+export const PALETTE_MIN_DELTA_E = 15;
+
 /**
  * APCA lightness contrast (SAPC 0.0.98G-4g, the WCAG 3 draft) of `text` drawn on `bg`, as Lc.
  *
  * Signed the way APCA signs it: positive for dark text on a light ground, negative for light on
- * dark. **This is what chooses `ink`, and WCAG 2.1 chose wrong.** Its ratio is known to favour
- * black on saturated mid-tones, and on this palette it did so for seven hues -- magenta, violet,
- * red, blue, amber, purple and indigo all had black ink that a person reads as the worse of the
- * two. APCA flips exactly those seven to white and leaves the other nine alone.
+ * dark. **This is what chooses `ink`, and WCAG 2.1 chooses wrong.** Its ratio is known to favour
+ * black on saturated mid-tones, and on this palette it does so for six hues -- magenta, violet,
+ * red, blue, olive and ochre would take black ink that a person reads as the worse of the two.
+ * APCA gives exactly those six white and agrees with WCAG on the other fourteen.
  *
  * Hand-rolled for the reason `relativeLuminance` is: none of culori, colorjs.io or apca-w3 ships
  * its own types, and the constants below are the whole algorithm.
@@ -242,11 +328,11 @@ export const inkFor = (main: string): string =>
 /**
  * The hue AS text on the bar: itself, or lifted toward white until it clears the floor.
  *
- * A floor and not a wash. Fourteen of the sixteen hues already clear it and come back
+ * A floor and not a wash. Seventeen of the twenty hues already clear it and come back
  * BYTE-IDENTICAL, so full saturation -- which is where the palette's whole distinguishability
- * lives -- survives everywhere it can. Only indigo (10%) and crimson (33%) move at all. Reusing
- * `shimmer` would have been one line and would have lightened all sixteen while still promising
- * nothing about the seventeenth.
+ * lives -- survives everywhere it can. Only the three deep ones move: forest (22% toward white),
+ * raspberry and plum (18%). Reusing `shimmer` would have been one line and would have lightened
+ * all twenty while still promising nothing about the next one.
  */
 /**
  * The two hangar-ROOT modes, which are not clones and never appear in `PALETTE`.
@@ -318,8 +404,9 @@ export const CI_COLOURS = {
  *
  * The cube's levels are 0, 95, 135, 175, 215, 255 -- not evenly spaced, which is why the
  * thresholds below are not a plain division. Greys (232-255) are deliberately not considered:
- * every palette hue keeps one channel at 0xcc or 0xff, so none of them is a grey, and letting a
- * hue collapse onto one would defeat the point of having it.
+ * every palette hue but `silver` is vivid by construction (see the top of this file), `silver`
+ * already lands on the cube's own grey diagonal, and letting a hue collapse onto a grey ramp
+ * entry would defeat the point of having it.
  */
 const CUBE_LEVELS = [0, 95, 135, 175, 215, 255] as const;
 

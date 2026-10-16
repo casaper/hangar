@@ -8,8 +8,11 @@ import {
   colourFor,
   contrastRatio,
   CONTRAST_FLOOR,
+  deltaE2000,
   INK_FLOOR_LC,
+  MODE_COLOURS,
   PALETTE,
+  PALETTE_MIN_DELTA_E,
   relativeLuminance,
   STATUS_BAR_BG,
   STATUS_BAR_DIM,
@@ -121,8 +124,8 @@ test('barText clears the floor on the bar, and is a floor rather than a wash', (
   // colours exist for -- which is what reusing `shimmer` for this would have done to all of them.
   const untouched = ALL.filter((colour) => colour.barText === colour.main);
   assert.ok(
-    untouched.length >= PALETTE.length - 2,
-    `${String(PALETTE.length - untouched.length)} hues were lifted; only indigo and crimson need it`,
+    untouched.length >= PALETTE.length - 3,
+    `${String(PALETTE.length - untouched.length)} hues were lifted; only forest, raspberry and plum need it`,
   );
   for (const colour of ALL) {
     if (contrastRatio(colour.main, STATUS_BAR_BG) >= CONTRAST_FLOOR) {
@@ -172,7 +175,7 @@ test('the build-state colours clear the floor on the bar they are drawn on', () 
    *
    * Legal here only because the status bar's background is the fleet's one neutral. The FOOTER
    * is a clone's hue with ink on it, which is why the git state down there is glyphs and never
-   * colour -- a red mark on the red clone is invisible in exactly the one case out of sixteen
+   * colour -- a red mark on the red clone is invisible in exactly the one case out of twenty
    * nobody checks.
    */
   for (const [state, hex] of Object.entries(CI_COLOURS)) {
@@ -208,4 +211,51 @@ test('the build-state colours clear the floor on the bar they are drawn on', () 
     contrastRatio(CI_COLOURS.pass, CI_COLOURS.fail) < 1.5,
     'pass and fail now differ in luminance — the glyphs may no longer be load-bearing, recheck',
   );
+});
+
+test('no two hues are near-duplicates', () => {
+  // A palette is only as good as its closest pair: two clones a person cannot tell apart are one
+  // clone as far as the colours go.
+  for (const [i, entry] of PALETTE.entries()) {
+    for (const other of PALETTE.slice(i + 1)) {
+      const distance = deltaE2000(entry.hex, other.hex);
+      assert.ok(
+        distance >= PALETTE_MIN_DELTA_E,
+        `${entry.name} and ${other.name} are only ΔE ${distance.toFixed(1)} apart`,
+      );
+    }
+  }
+  const names = PALETTE.map((entry) => entry.name);
+  assert.equal(new Set(names).size, names.length, 'two palette entries share a name');
+});
+
+test('no hue resembles a mode tab, except the one a fleet already uses', () => {
+  // A clone tab that looks like the ops tab is the same confusion one level up, so the ten picked
+  // hues were searched against both mode colours too. `blue` predates that search and is in use,
+  // so it is the one named exception, at ΔE 14.4 from ops -- close, still well clear of the 9.3
+  // the test below rejects.
+  for (const entry of PALETTE) {
+    for (const [mode, colour] of Object.entries(MODE_COLOURS)) {
+      const distance = deltaE2000(entry.hex, colour.main);
+      const floor = entry.name === 'blue' ? 14 : PALETTE_MIN_DELTA_E;
+      assert.ok(distance >= floor, `${entry.name} is ΔE ${distance.toFixed(1)} from ${mode} mode`);
+    }
+  }
+});
+
+test('the floor rejects the near-duplicate it was set against', () => {
+  // The anchor, as arithmetic: `violet` against a full purple, `#cc44ff`, which a hue-wheel pick
+  // with no distance floor adds without a second look. If this ever clears the floor, the floor
+  // has been lowered past what it is for.
+  assert.ok(deltaE2000('#9966ff', '#cc44ff') < 10);
+  assert.ok(deltaE2000('#9966ff', '#cc44ff') < PALETTE_MIN_DELTA_E);
+});
+
+test('deltaE2000 behaves as a distance', () => {
+  // Structural checks rather than reference data: zero on identity, symmetric, and black to white
+  // is the full lightness range, 100.
+  assert.equal(deltaE2000('#ffffff', '#ffffff'), 0);
+  assert.ok(Math.abs(deltaE2000('#000000', '#ffffff') - 100) < 0.01);
+  const symmetric = deltaE2000('#00ccff', '#3399ff') - deltaE2000('#3399ff', '#00ccff');
+  assert.ok(Math.abs(symmetric) < 1e-9, 'ΔE is not symmetric');
 });

@@ -77,7 +77,7 @@ export const cloneColoursArtifact = (hangar: Hangar, clones: readonly Clone[]): 
     '# border = main x 0.8, statusline dim = main x 0.6. The two contrast fields are not',
     '# ratios: ink is whichever of black and white reads better on the hue by APCA, never under',
     '# Lc 54 for any colour, and <bar text> is a floor rather than a lightening --',
-    '# fourteen of the sixteen hues clear it untouched and come back byte-identical.',
+    '# seventeen of the twenty hues clear it untouched and come back byte-identical.',
     '',
     `${fn}() {`,
     '    case "$1" in',

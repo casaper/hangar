@@ -46,7 +46,7 @@ import { type Artifact, artifactHeader } from './index.ts';
  * The footer is drawn as `colour.ink` on the clone's hue, and ink is pure black or pure white,
  * so `palette.ts`'s floor -- APCA Lc 54 on any hue -- covers every character on the line.
  * Colouring the git state would throw that away: a red mark on the red clone is invisible, and
- * nothing in a review catches it because it is only wrong for one clone out of sixteen. So each
+ * nothing in a review catches it because it is only wrong for one clone out of twenty. So each
  * state gets a glyph instead, and the whole footer inherits the contrast proof.
  *
  * ## The key pattern is DERIVED from `tracker.keyPrefixes`, and is an approximation

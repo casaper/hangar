@@ -659,13 +659,14 @@ Three things fell out of fixing it, and each one is a decision rather than a det
   tidier, still passes on today's palette, and silently voids the floor for the next hue, which is
   why `test/contrast.test.ts` pins the pair and not just the outcome.
 - **APCA and not WCAG 2.1 for the ink, measured on this palette.** WCAG's ratio favours black on
-  saturated mid-tones, and picked it for magenta, violet, red, blue, amber, purple and indigo --
-  seven hues where white is the one a person reads. APCA flips exactly those seven. WCAG stays the
+  saturated mid-tones, and picks it for magenta, violet, red, blue, olive and ochre -- six hues
+  where white is the one a person reads. APCA gives exactly those six white. WCAG stays the
   measure for coloured text on the bar's neutral grey (`barText`, `CI_COLOURS`), where it is not
   choosing between two inks.
-- **`barText` is a floor, not a wash.** Fourteen hues clear 4.5:1 at full strength and come back
-  byte-identical; only indigo (10% toward white) and crimson (33%) move. Reusing `shimmer` would
-  have been one line, lightened all sixteen, and still promised nothing about a hue added later.
+- **`barText` is a floor, not a wash.** Seventeen hues clear 4.5:1 at full strength and come back
+  byte-identical; only forest (22% toward white), raspberry and plum (18%) move. Reusing `shimmer`
+  would have been one line, lightened all twenty, and still promised nothing about a hue added
+  later.
 
 **No library, and the reason is the guarantee rather than a dislike of dependencies.** culori,
 colorjs.io, wcag-contrast and apca-w3 were all weighed and none of them ships its own TypeScript
@@ -956,8 +957,8 @@ read-only.
 **The state is glyphs and never colour, and that is a contrast property rather than a style.** The
 footer is `colour.ink` on the clone's hue, and ink is pure black or pure white, so `palette.ts`'s
 floor of APCA Lc 54 on any hue covers every character on the line. A coloured mark would
-throw that away for one clone out of sixteen -- a red `✗` on the red clone is invisible, and
-nothing in a review catches it, because it looks right in fifteen of the sixteen cases somebody
+throw that away for one clone out of twenty -- a red `✗` on the red clone is invisible, and
+nothing in a review catches it, because it looks right in nineteen of the twenty cases somebody
 might check.
 
 | glyph | means | from |
@@ -1117,7 +1118,7 @@ on.
 The two lines sit on different backgrounds and that is the whole of it: the top bar is the
 fleet's one neutral (`STATUS_BAR_BG`), so `palette.ts` can prove a floor against it, while the
 footer is a clone's hue with ink on it, where a red mark on the red clone is invisible in exactly
-the one case out of sixteen nobody checks. That is why the footer's git state is glyphs and never
+the one case out of twenty nobody checks. That is why the footer's git state is glyphs and never
 colour, and why this is not an inconsistency.
 
 Two measurements hold that up:

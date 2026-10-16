@@ -212,8 +212,8 @@ export const coloursChange = (
 /**
  * `hangar colours list` -- the whole palette, painted, with who has what.
  *
- * The swatch is the point: the names are only labels and two of them (violet / purple,
- * red / crimson) mean very little until you see them side by side.
+ * The swatch is the point: the names are only labels and several of them (olive / ochre,
+ * orchid / salmon) mean very little until you see them side by side.
  */
 export const coloursList = (hangar: Hangar): void => {
   const owners = new Map(discoverClones(hangar).map((clone) => [clone.colour.name, clone]));

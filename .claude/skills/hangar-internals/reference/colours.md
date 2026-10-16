@@ -81,8 +81,11 @@ Not generated, because it holds no per-clone data: each clone's untracked
 `~/.claude/themes/<id>-clone-NN-*.json` files already do exactly that for `claude`,
 `claudeShimmer`, `briefLabelClaude`, `promptBorder` and `promptBorderShimmer` — so the palette is
 limited by what a human can tell apart at a glance, not by anything Claude Code enforces. It
-holds 16 hues; the last four fill the gaps left by the first twelve and are the least
-distinguishable, so low indices stay the good ones.
+holds 20 hues, chosen for CIEDE2000 distance: the nine originals plus `silver`, and ten picked by
+a greedy farthest-point search against them and the two mode colours, so low indices stay the
+good ones. `src/palette.ts`'s header has the search, and `test/contrast.test.ts` holds the closest
+pair to `PALETTE_MIN_DELTA_E`. Re-hueing a slot re-colours every clone at it; a name held in
+`colour-assignments.json` must survive any change.
 
 Two consumers cannot source
 `clone-colours.sh` and carry their own copy — the theme JSONs (static JSON) and the statusline
