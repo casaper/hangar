@@ -125,11 +125,11 @@ export const tmuxTarget = (clone: Clone): string => `=${tmuxSessionName(clone)}:
  * takes the clone anyway, because what a window is called is a question about a clone's window
  * even when the answer does not use it.
  *
- * The clone is named twice and neither of them is here: the hue badge in `status-left`, which is
- * a block of colour a developer finds across four near-identical windows, and
+ * The clone is named twice and neither of them is here: the footer on the pane border, which is
+ * a band of colour a developer finds across four near-identical windows, and
  * `set-titles-string`, because a terminal window in the dock has no bar to read -- and that one
  * names it by `cloneShortName`, since the title is drawn at a width the emulator decides. A third
- * naming in the window name puts the clone in every tab beside a badge already saying it
+ * naming in the window name puts the clone in every tab above a footer already saying it
  * (`1 01 claude`, for as many tabs as the clone has roles).
  */
 export const tmuxWindowName = (_clone: Clone, role: string): string => role;
