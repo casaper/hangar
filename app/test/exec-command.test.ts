@@ -236,17 +236,23 @@ test('the guard lets everything else through, `exec` in another tool included', 
   }
 });
 
-test('the guard fails OPEN on a payload it cannot read, and ignores other tools', () => {
+test('the guard fails OPEN on a payload it cannot read and CLOSED on a command it cannot', () => {
   /*
    * Deliberately the opposite of the command check. An unparseable payload means Claude Code
    * changed shape, and blocking every Bash call in the fleet over that would be far worse than
    * the thing being guarded -- whereas an unreadable COMMAND inside a well-formed payload is
    * the case where somebody is hiding something.
    */
-  for (const input of ['not json', '', '{"tool_name":"Bash","tool_input":{}}']) {
+  for (const input of ['not json', '']) {
     const res = spawnSync(GUARD, { input, encoding: 'utf8' });
     assert.equal(res.status, 0);
     assert.equal(res.stdout.trim(), '', `it spoke up about: ${input}`);
+  }
+  for (const toolInput of [{}, { command: 42 }, { command: '' }]) {
+    const input = JSON.stringify({ tool_name: 'Bash', tool_input: toolInput });
+    const res = spawnSync(GUARD, { input, encoding: 'utf8' });
+    assert.equal(res.status, 0);
+    assert.match(res.stdout, /"deny"/, `it let through: ${input}`);
   }
   const read = spawnSync(GUARD, {
     input: JSON.stringify({ tool_name: 'Read', tool_input: { file_path: '/x' } }),

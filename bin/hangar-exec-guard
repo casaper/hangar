@@ -38,7 +38,13 @@ process.stdin.on('end', () => {
   }
   if (payload?.tool_name !== 'Bash') process.exit(0);
   const command = payload?.tool_input?.command;
-  if (typeof command !== 'string' || command === '') process.exit(0);
+  if (typeof command !== 'string' || command === '') {
+    deny(
+      'This Bash call carries no command string the guard can read, so it is refused rather ' +
+        'than waved through: the guard cannot tell what it would run.',
+    );
+    return;
+  }
 
   const reason = invokesHangarExec(command)
     ? '`hangar exec` runs a shell snippet in every clone you name, and is reserved for the ' +
@@ -56,7 +62,10 @@ process.stdin.on('end', () => {
       : undefined;
 
   if (reason === undefined) process.exit(0);
+  deny(reason);
+});
 
+function deny(reason) {
   process.stdout.write(
     JSON.stringify({
       hookSpecificOutput: {
@@ -66,7 +75,7 @@ process.stdin.on('end', () => {
       },
     }) + '\n',
   );
-});
+}
 
 /**
  * Does this command line publish anything?
