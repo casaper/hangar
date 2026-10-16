@@ -36,13 +36,17 @@ take the one that matches what you are touching:
 | changing `sync`, `merge-default`, `rebase-default`, `checkout-default`, `pr create` or `pr update`; debugging a `SYNC PAUSE`, a stash that did not come back, a headless run, or a pull request that opened wrong | `reference/sync.md` |
 | changing `tmp merge`, `plans collect`, `jira hook` or the ticket record store; explaining a `.from-<clone>` copy, a lost `relation:` key or a denied fetch | `reference/jira-cache.md` |
 | changing `ide <kind> sync`, any `editor/*.ts` driver, or the per-clone absolute-path rewriting | `reference/editors.md` |
-| changing `open`'s window handling, an emulator driver, the tmux layer or the clone bar, `resume`'s session discovery, or `bookmarks sync` | `reference/terminal-and-sessions.md` |
+| changing `open`'s window handling, `close`, `reload`, `jira-plan`'s launch, `edit`, `browse`, `servers`, an emulator driver, the tmux layer or the clone bar, `pr refresh`, `resume`'s session discovery, `remove-clone`, or `bookmarks sync` | `reference/terminal-and-sessions.md` |
 | changing `palette.ts`, anything under `generate/`, or what `colours sync` writes | `reference/colours.md` |
-| changing the zod schema, the loader, discovery, the no-config gate, `forge.defaultBranch`, or `hangar.schema.json` and why `zod` moving can stale it | `reference/config.md` |
-| changing `doctor`, any generated per-clone artifact, or the plan archive | `reference/doctor.md` |
-| changing `hangar up` or `hangar down`, the `claude` mode shim, the two hangar-root modes, their permission rules, or what a hangar-root session is told it is | `reference/modes.md` |
+| changing the zod schema, the loader, discovery, the no-config gate, `setup`, `forge.defaultBranch`, or `hangar.schema.json` and why `zod` moving can stale it | `reference/config.md` |
+| changing `doctor`, `add-clone`, `install`, `scrub`, `ports pin`/`unpin`, any generated per-clone artifact, or the plan archive | `reference/doctor.md` |
+| changing `hangar up` or `hangar down`, the `claude` mode shim, the two hangar-root modes, their permission rules, `hangar mcp` and its tool table, `allow`, `skills sync`, `exec` and its guard, or what a hangar-root session is told it is | `reference/modes.md` |
 | changing `bin/hangar-waypoint`, `hangar-commit-gate`, `hangar-rewrite` or `hangar-exec-guard`, or `personal-skills/` | `reference/root-tools.md` |
 | cutting a release, changing what a commit type is worth, the CHANGELOG's sections, the commitlint rules or the husky hooks; rewriting this repo's history | `reference/release.md` |
+| changing `hangar dev golden` or what it captures | `app/dev/golden/README.md` |
+
+`status`, `list`, `plans stamp` and `teach-rg` have no reference file: their code and the
+`hangar-ops` skill are the record.
 
 Two things are deliberately elsewhere:
 
@@ -66,7 +70,8 @@ Stated here because they cut across every reference file:
 - **Degrade one capability at a time; never gate globally.** The editor and terminal seams declare
   what a driver can do rather than pretending the implementations are equivalent, and every caller
   drops exactly the capability that is missing. A clone configured `[zed, vscode]` cannot lose
-  VS Code to Zed's launcher; GNOME Terminal cannot receive a `SYNC PAUSE` and says so once.
+  VS Code to Zed's launcher; GNOME Terminal cannot raise an open clone's window (`raiseByTty` is
+  false), so `open` prints the `tmux attach` line instead and everything else still works.
 - **A check that is red in normal operation is a check nobody reads.** This is why `doctor` warns
   rather than fails on a `forge.defaultBranch` that disagrees with a clone's `origin/HEAD`, why how
   much of the shared cache a clone has linked is deliberately not checked at all, and why

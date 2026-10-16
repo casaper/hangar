@@ -1,6 +1,6 @@
 # `doctor`, and the two rules for anything generated into a clone
 
-`app/src/commands/doctor.ts` (777) and the builders in `clone-config.ts` (493) it compares against.
+`app/src/commands/doctor.ts` and the builders in `clone-config.ts` it compares against.
 Also the plan archive, because `plansDirectory` is the setting `doctor` checks and cannot fix.
 
 Two rules for anything `hangar` GENERATES into a clone, both learned from the identity file:
@@ -16,18 +16,29 @@ Two rules for anything `hangar` GENERATES into a clone, both learned from the id
   exception, because its content is `vscode sync`'s business rather than a generator's.
 
 `hangar doctor` is the regression net for everything that lives outside git and so cannot be
-restored by a pull — ports, the `CLAUDE.local.md` + `.git/info/exclude` pair (the identity file by
-CONTENT, since it is generated, so a stale or hand-edited one is rewritten — existence alone was
-the check for a while, and three clones spent it telling their sessions the fleet had three
-clones), `.envrc.private`, **one row per `repo.symlinks[]` entry** (printing that entry's `why`
-when it is missing), the theme and whether the file it names resolves, **one health-check allow per
-port role that declares one**, one declaration-only row per `repo.install[]` step, that `tmp/` is
-the clone's own directory, the shared `tmp/` store named in `permissions.additionalDirectories`
-(part of the `settings.local.json` row), the six hooks in `settings.local.json` (plan collection,
-the cache merge, the scrub, the ticket record hook, the exec guard and the commit gate — each
-repair re-reads the file, so a clone missing two of them gets both in one `--fix` pass), the sibling remotes in both
-directions, and the
-`checkout.defaultRemote=origin` those remotes make necessary.
+restored by a pull. Per clone:
+
+- `git repo`, and the ports in the clone's dotenv.
+- The `CLAUDE.local.md` + `.git/info/exclude` pair — the identity file by CONTENT, since it is
+  generated, so a stale or hand-edited one is rewritten. An existence-only check let three
+  clones tell their sessions the fleet had three clones.
+- `.envrc.private`, and **one row per `repo.symlinks[]` entry**, printing that entry's `why` when
+  it is missing.
+- `settings.local.json`, including **one health-check allow per port role that declares one** and
+  the shared `tmp/` store in `permissions.additionalDirectories`; and `settings targets`.
+- `plansDirectory`, and `stray plan dirs` — a `.claude/plans` below the clone root, left by a
+  session started in a subdirectory.
+- The six hooks in `settings.local.json`: plan collection, the cache merge, the scrub, the ticket
+  record hook, the exec guard and the commit gate. Each repair re-reads the file, so a clone
+  missing two of them gets both in one `--fix` pass.
+- `theme json`, and whether the file it names resolves.
+- `colour` — two clones on one hue, because the palette wrapped or an assignment was forced onto
+  a sibling's hue — and `colour assignment`, an assigned name that is not in the palette and so
+  is silently ignored.
+- `sibling remotes` in both directions, and the `checkout.defaultRemote=origin` (`git config`)
+  those remotes make necessary.
+- That `tmp/` is the clone's own directory, the `*.code-workspace` pair, and one declaration-only
+  row per `repo.install[]` step.
 
 **The commit gate is the one hook whose absence is not a hazard**, and its row says so rather than
 scolding: the script is silent on both events with no state file, so a clone that never locks a
@@ -45,12 +56,21 @@ the banner, which is the "never told why" state above reached by a different roa
 the command alone would have passed every clone wired before the split, so `--fix` would never
 have rewritten one.
 
-Above the clones it also holds the
-hangar's own generated `CLAUDE.local.md` and `.claude/settings.json` to their renders, reports
-the machine's required tooling, reports the shared secrets file and the variables expected in it
-(**creating the file** under `--fix`, never its contents), warns when a declared
-`editor.rootPathKeys` table has no file in any clone to apply it to, reports the two mode settings
-files without repairing them, and migrates a legacy `colour-assignments.json`.
+Above the clones it also:
+
+- holds the hangar's own generated `CLAUDE.local.md` and `.claude/settings.json` to their renders;
+- reports the machine's required tooling, the `platform` and its capabilities, and the `emulator`
+  row with what that terminal can open and raise;
+- reads the live tmux server's options back (`reportTmux`) and names the repair without running
+  it, because that repair is `kill-server`;
+- reports the shared secrets file and the variables expected in it (**creating the file** under
+  `--fix`, never its contents);
+- warns when a declared `editor.rootPathKeys` table has no file in any clone to apply it to;
+- compares `forge.defaultBranch` with each clone's `origin/HEAD` and only warns
+  (`reference/config.md`);
+- reports the two mode settings files without repairing them, and migrates a legacy
+  `colour-assignments.json`.
+
 Run it after any re-clone. **How much of the shared cache a clone links is deliberately not a
 check** — a clone's `tmp/` entries settle at the next `tmp merge`, which is what linking per entry
 means, and a check that is red in normal operation is a check nobody reads.
@@ -144,7 +164,7 @@ findings in 919 files**, which is worth exactly as much as no check at all:
 - **No bare `clone` and no bare `sibling`.** Both are ordinary English in a repository — "clone the
   repo", "the sibling element" — and `sibling` matched only prose, never once a real leak. Every
   leak measured arrived as `this clone`.
-- **No colour names at all.** The palette is `red`, `green`, `blue` and thirteen more ordinary
+- **No colour names at all.** The palette is `red`, `green`, `blue` and seventeen more ordinary
   words, and a ticket about a status indicator is full of them. A colour leak arrives attached to
   a clone in practice, which the phrase pattern already catches.
 
@@ -172,7 +192,7 @@ values in it named the repo Hangar was built in rather than the repo it was poin
 | `node dev/ports.mjs` (×2) | `portCheckHint(hangar)` | `repo.portCheckCommand` was a schema key nothing read |
 | `clone_NN/` | `clones.prefix` + `<NN>` | `clone_` is also the schema DEFAULT prefix |
 | `.env.local` | `repo.cloneEnv.file` | `.env.local` is also the schema DEFAULT filename |
-| `tmp/ABC-1234/ticket_ABC-1234.md` | `exampleIssueKey(hangar)` | no hangar but this one has `DN-` keys |
+| `tmp/ABC-1234/ticket_ABC-1234.md` | `exampleIssueKey(hangar)` | no hangar but the one the example was written in has those keys |
 | "each cached **Jira** record" | branched on `tracker.kind` | a trackerless hangar has no record store at all |
 | `<clone_NN>` in `clone-colours.sh` | `<clone>` | a usage placeholder, beside a line already saying `"$clone"` |
 
@@ -402,7 +422,7 @@ setup check is for. **The machine's CAPABILITIES do not** -- a `ps` that will no
 that cannot bring a window it opened to the front. Those are facts about where the fleet is running
 and are permanent on some platforms, so counting them would leave a correctly configured GNOME
 Terminal hangar permanently non-zero. The dim `optional:` secret rows stay out by construction,
-since they go through `note`. The five `report*` helpers return their warning MESSAGES (`readonly
+since they go through `note`. The six `report*` helpers return their warning MESSAGES (`readonly
 string[]`) rather than sharing a mutable module variable, for the reason `two-hangars.test.ts`
 exists -- the count is `.length`, so there is one source for both the tally and the recap below.
 
@@ -666,7 +686,7 @@ of every bug this check exists for: correct today because nothing has happened y
 So the check and the builder moved together:
 
 - `settingsContentFor` now OVERLAYS the whole derived half — theme, statusline, memory directory,
-  the hangar-root allow, the secrets deny, the health checks and the three hooks — and leaves the
+  the hangar-root allow, the secrets deny, the health checks and the six hooks — and leaves the
   personal half exactly as the template had it. Overlay, never rebuild: a rewrite from
   `defaultSettings` would delete a developer's MCP servers to fix a theme.
 - The two permission ARRAYS are add-if-absent. A stale deny only ever restricts, and a stale

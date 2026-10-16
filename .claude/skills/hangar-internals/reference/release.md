@@ -38,7 +38,11 @@ convenient — without the check, a local clone missing a tag would make the sam
   `app/package.json` is still `0.x`. `test/release-commits.test.ts` pins both spellings and the
   bang, because missing one IS the failure — this gate is worth exactly what its parser catches.
 - **The gates.** There is no CI. This is the only place typecheck, lint, format, the suite, both
-  scans, the golden gate and `commitlint` all have to pass.
+  scans and the golden gate all run together, plus `commitlint` over the range when there is a
+  previous tag to start it from (a first release has none, so it lints nothing). **`--skip-checks`
+  skips exactly this step**, for a run straight after the gates were run by hand: it warns
+  `gates skipped`, and the preflight, the breaking-change refusal and the confirmation all still
+  run.
 - **The confirmation.** The next thing that happens is a push to a published repository.
   `confirm` reads `/dev/tty` and returns false when there is none, so a run nobody is watching
   declines instead of releasing. **`-y` is the only way past it, and it is a flag rather than a
@@ -104,7 +108,7 @@ not.
 | --- | --- |
 | `semantic-release --dry-run --no-ci` in a throwaway clone | `The next release version is 0.14.0`; `Allowed to push to the Git repository` over SSH; the only failing step is the GitHub token |
 | `{ "type": "chore", "scope": "release", "hidden": true }` ahead of the bare `chore` entry | the commit disappears from the regenerated file; behind it, nothing changes |
-| A `preinstall` script exiting 1, as a guard on the hangar-root `package.json` | **does not fire.** pnpm 10 does not run it, not even with a dependency present to install — `pnpm run preinstall` does, `pnpm install` does not, and npm skipped it too |
+| A `preinstall` script exiting 1, as a guard on the hangar-root `package.json` | **does not fire** (measured on pnpm 10, not re-run on the 12.x pin). pnpm did not run it, not even with a dependency present to install — `pnpm run preinstall` did, `pnpm install` did not, and npm skipped it too |
 
 The third is why the guard is `dev/scrub-check.sh` asserting the root `package.json`'s shape
 rather than an install hook; `app/CLAUDE.md`'s package blockquote carries the reasoning.
@@ -183,7 +187,8 @@ the tag is the last release, and there are no commits after it.
 ## What enforcement looks like without CI
 
 There is no `.github/` and no CI. The husky hooks are fast feedback for whoever ran `pnpm hooks`,
-and the release preflight is the place nothing can be skipped. Two details of it live in
+and the release is the one run where every gate is applied to the whole range — unless
+`--skip-checks` is typed, which skips the gates and nothing else. Two details of it live in
 `commands/release.ts` and nowhere else:
 
 - **commitlint needs `--config app/.commitlintrc.json`.** The config is in `app/`, the release
@@ -227,13 +232,19 @@ otherwise, and that is a decision, not a commit message. The release refuses rat
 escalating: `preMajor` would turn a stray `!` into a version silently and differently depending on
 what else was in the range.
 
-**`app/.husky/commit-msg` reaches `commitlint` by path rather than through `pnpm`** (pnpm lives
-inside an fnm multishell and moves with the Node version, so a hook needing it fails in any shell
-direnv has not touched), and names `direnv allow` when it cannot find `node` — the same failure
-and the same fix `bin/hangar` already reports. **`app/.husky/pre-commit`** calls `gitleaks` by
+**`app/.husky/commit-msg` reaches `commitlint` by path rather than through `pnpm`** (pnpm is a
+corepack shim in `.hangar/pnpm-bin` that only direnv puts on PATH, so a hook needing it fails in
+any shell direnv has not touched — a GUI git client, for one), and names `direnv allow` when it
+cannot find `node` — the same failure and the same fix `bin/hangar` already reports. **`app/.husky/pre-commit`** calls `gitleaks` by
 NAME and skips with a message when it is absent: gitleaks is a per-machine developer tool
 (`brew install gitleaks`), not a dependency of this package. `scrub-check.sh` has no such
 dependency and always runs.
+
+**Nothing installs the hooks for you.** `app/pnpm-workspace.yaml` sets `ignoreScripts: true` — no
+dependency's install scripts run, the supply-chain defence — and that includes this package's own
+`prepare`, which is where husky would normally install itself. So `pnpm hooks` is a manual, once
+per clone of this repo. The same file's `minimumReleaseAge` (14 days, in minutes) is the floor every
+dependency bump waits for.
 
 ## Rewriting history
 

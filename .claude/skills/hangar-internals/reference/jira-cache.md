@@ -282,10 +282,10 @@ it got instead. Five properties are the whole design:
   empty, and absent is declined — reading it as "no neighbours" would turn a full sync into one
   linked file.
 - **It never reimplements the naming.** Where each file belongs comes from that clone's own
-  `tracker.namerScript`, one subprocess per file. In this hangar that is
-  `jira-scope/jira-cache.mjs name`; `paths.mjs` calls itself the single owner of every filename
-  in that directory, it is tracked and branch-versioned, and an untracked copy of `stemFor` here
-  would drift the first time a branch changed a relation slug.
+  `tracker.namerScript`, one subprocess per file. In the hangar this was built in, that is a
+  `name` subcommand of the repo's own cache script, whose path module calls itself the single
+  owner of every filename in that directory; it is tracked and branch-versioned, and an untracked
+  copy of its naming here would drift the first time a branch changed a relation slug.
 - **It never hands back a worse copy than the clone already has.** This is the case after a fetch
   a flat-layout clone made: the write replaces the inode, so the clone holds the fresh copy while
   the store still holds the previous one until the next `tmp merge`. Linking then would put the
@@ -300,22 +300,20 @@ it got instead. Five properties are the whole design:
 
 ## The hook is wired only where a tracker is declared
 
-`tracker.kind` has defaulted to `none` since the schema was written, and every consumer that reads
-tracker DATA branches on it — `issueUrl`, this hook's own decline, `tmp merge`'s record-store pass,
-`status`'s issue row, `secrets.ts`'s `ATLASSIAN_*` variables, `setup`'s blank-means-none question
-and both `CLAUDE.local.md` builders. **The wiring did not.** `withJiraHook` read no config, so a
-hangar with no tracker got the hook in every clone anyway, `doctor` reported it *missing* when it
-was correctly absent, and `--fix` installed it.
+`tracker.kind` defaults to `none`, and every consumer that reads tracker DATA branches on it —
+`issueUrl`, this hook's own decline, `tmp merge`'s record-store pass, `status`'s issue row,
+`secrets.ts`'s `ATLASSIAN_*` variables, `setup`'s blank-means-none question and both
+`CLAUDE.local.md` builders. **The wiring has to as well.** A `withJiraHook` that reads no config
+puts the hook in every clone of a hangar with no tracker, `doctor` reports it *missing* when it is
+correctly absent, and `--fix` installs it.
 
-`status`'s issue row had the same shape of bug and is fixed with it: its own header claimed it
-distinguished "no key in this branch" from "this hangar has no tracker", while the no-key arm
-returned before anything read the config. So a tracker-less clone was told its BRANCH was named
-wrong — a complaint about a convention that hangar never adopted — and a branch carrying a
-key-shaped token was told `tracker.baseUrl` was missing, which names the one key that is not the
-reason. The `kind` check now comes first, and `statusOf` skips `inferTicket` entirely when there
-is no tracker: a branch with no key in its name sends it to `git merge-base` and `git log`, so
-`status --all` was spending two subprocesses per clone deriving a key for a row that could only
-ever say there is no tracker.
+`status`'s issue row had the same shape of bug: a no-key arm that returns before anything reads
+the config tells a tracker-less clone its BRANCH is named wrong — a complaint about a convention
+that hangar never adopted — and tells a branch carrying a key-shaped token that `tracker.baseUrl`
+is missing, which names the one key that is not the reason. So the `kind` check comes first, and
+`statusOf` skips `inferTicket` entirely when there is no tracker: a branch with no key in its name
+sends it to `git merge-base` and `git log`, two subprocesses per clone on `status --all` for a row
+that can only say there is no tracker.
 
 That is the same defect as the four literals below, one level up: obeyed in the one hangar that
 happens to want it, and imposed on every other. It is not dangerous — the decline above is the
@@ -363,11 +361,9 @@ None of this needs anything from the clones. Their `.claude/` is shared with eve
 contributor and must work without this fleet, so the record store appears in no tracked file: the
 skill writes exactly what it always wrote, and `tmp merge` and the hook do the rest.
 
-The old per-key mechanism — `tmp/<KEY>` linked into `~/.claude/<id>-jira` by
-`hangar jira link` — is **gone**, and so are that command and the pass that drained the old store
-into this one. The store is the hangar's own `tmp/`, and `tmp merge` links every entry rather than
-only the `DN-####` directories (which left `pr-*.md` and `author-aliases.md` unshared in whichever
-clone made them).
+The store is the hangar's own `tmp/`, and `tmp merge` links every entry rather than only the
+ticket-key directories such as `ABC-1323/`: linking those alone leaves `pr-*.md` and
+`author-aliases.md` unshared in whichever clone made them.
 
 **Whether a destination is already pointing at the store is asked as a link TARGET, not by
 comparing two inodes.** The inode compare answered `undefined` for a path it could not stat, so
@@ -376,13 +372,6 @@ every destination look linked, and the hook denied the fetch while naming files 
 there. That is the one outcome a cache must never produce, since an agent then cannot read a
 ticket for a reason invisible from inside the clone.
 
-`ticket_<KEY>.md`, its relation variants and Jira attachments are clone- and branch-independent,
-which is the point. **A PR description is not** — it is derived from the working-tree diff, so it
-is shared as a side effect and is last-writer-wins when two clones work one ticket at once. One
-ticket normally belongs to one clone, so this is bounded, but do not trust a PR description you
-did not just generate in this clone.
-
-`tmp/` is gitignored by the tracked `tmp/` rule, which matches the real directory and everything
-under it — the per-entry links included. So nothing about `tmp` belongs in `.git/info/exclude`;
-that file is back to hiding `/CLAUDE.local.md` alone. A clone that still carries the old `/tmp`
-line is fine — it excludes something already ignored.
+Why a PR description is shared as a side effect and last-writer-wins, and why nothing about `tmp`
+belongs in `.git/info/exclude`, is the root `CLAUDE.md`'s **Shared `tmp/`** section. A clone whose
+exclude file still carries a `/tmp` line is fine — it excludes something already ignored.

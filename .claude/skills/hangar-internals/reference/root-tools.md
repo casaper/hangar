@@ -13,9 +13,11 @@ rather than `hangar` subcommands, what each refuses, and how `personal-skills/` 
   `waypoint` is pre-approved WHOLE, `restore` included, and that rests on two properties together:
   a restore records an undo snapshot before it writes, AND it refuses any path resolving to the
   repo root. The gate is pre-approved only as `status`; `lock`, `release` and `unlock` prompt,
-  because an agent that can release its own gate has no gate — and the hook refuses those verbs
-  and any command naming its own state file, because a permission rule matches only the START of
-  a command string and `hangar-commit-gate status && … release` sails straight past one.
+  because an agent that can release its own gate has no gate. The hook does nothing while the
+  gate is neither locked nor armed; under a lock it refuses `release`, `unlock` and any command
+  naming its own state file, because a permission rule matches only the START of a command string
+  and `hangar-commit-gate status && … release` sails straight past one. `lock` itself is refused
+  only while armed, below.
   **`arm --ticket <KEY>` is a lock for a branch that does not exist yet**, and it exists for
   `hangar jira-plan`, which starts a planning agent on the default branch -- unlockable -- that
   cuts the ticket's branch minutes later. The PreToolUse hook PROMOTES an armed gate to the

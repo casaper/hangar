@@ -1,7 +1,7 @@
 # The config: two files, the no-config gate, and the one key that writes itself
 
-`app/src/config/schema.ts` (479), `load.ts` (211), `derive.ts` (183), `default-branch.ts` (306),
-plus the `preAction` gate in `cli.ts`.
+`app/src/config/schema.ts`, `load.ts`, `derive.ts`, `default-branch.ts`, plus the `preAction`
+gate in `cli.ts`.
 
 ## The config file is split in two, and one of them is not in git
 
@@ -12,7 +12,7 @@ its default, and every alternative that the cross-field checks will not let stan
 
 Three properties hold that pair together, and each is a decision:
 
-- **The example is a faithful SUPERSET of the live file, and `hangar config validate` now checks
+- **The example is a faithful SUPERSET of the live file, and `hangar config validate` checks
   it.** `hangar config show` on each must differ only in the free-text `_` note **and in five
   site-identity keys** — `displayName`, `profile`, `forge.originUrl`, `forge.webBaseUrl` and
   `tracker.baseUrl`. It is the only committed record of how this hangar is configured, so a
@@ -27,15 +27,10 @@ Three properties hold that pair together, and each is a decision:
   `forge.defaultBranch` is still compared, which is the point: it is the line the check was
   written for.
 
-  For a long time that was asserted here and run by nothing, and the two had duly drifted — by
-  the single worst line available. `forge.defaultBranch` read `main` in the committed example and
-  `master` live. The example is not just documentation: it is what a colleague copies to join a
-  fleet for a repo somebody has already configured, which is the fastest and most complete way in
-  (`setup` derives from an existing clone, so on a fresh machine it derives nothing and leaves out
-  the symlinks, the port-check command and the tracker scripts). So the copy came up naming a
-  branch the repo does not have, and `checkout-default`, `open -c`'s fast-forward and `sync`'s
-  no-forge fallback all aimed at it. `doctor` catches that eventually — it compares the recorded
-  branch with each clone's `origin/HEAD` — but only after the first `add-clone`.
+  The check exists because the pair drifted while nothing ran it — `forge.defaultBranch` read
+  `main` in the example and `master` live, and the example is what a colleague copies to join a
+  fleet, so the copy aimed `checkout-default`, `open -c` and `sync`'s no-forge fallback at a
+  branch the repo does not have. `doctor` notices only after the first `add-clone`.
 
   `config/drift.ts` compares the two as PARSED configs rather than as file text, which is what
   makes it a real check instead of a formatting one: both sides have every default applied, so a
@@ -52,10 +47,11 @@ Three properties hold that pair together, and each is a decision:
 - **It is not a second marker.** `isHangarRoot` tests `CONFIG_FILENAME` exactly, so the example
   can sit in a hangar root without being mistaken for one — and `hangar --hangar <dir>` on a
   copy is how you validate it (nothing loads the example's own filename).
-- **You cannot uncomment two alternatives.** `superRefine` rejects two port roles whose bases
-  are fewer than `PORT_CAPACITY` whole steps apart, an `install` step naming both `manager` and `command`,
-  `rootPathKeys` with no VS Code-family kind to read them, and a tracker with no `baseUrl`. So
-  the example carries alternatives as COMMENTS beside one live choice.
+- **You cannot uncomment two alternatives.** The config's `superRefine` rejects two port roles
+  whose bases are fewer than `PORT_CAPACITY` whole steps apart, `rootPathKeys` with no VS
+  Code-family kind to read them, and a tracker with no `baseUrl`; the install step's own `.refine`
+  rejects one naming both `manager` and `command`. So the example carries alternatives as
+  COMMENTS beside one live choice.
 
 **The rule for what a live config keeps:** a value that pins state already on disk or already
 running stays written down even when it equals the default — `clones.prefix` and `clones.pad`
@@ -87,13 +83,16 @@ because a non-zero exit from a PreToolUse hook can block the tool call it exists
 The three `SessionEnd` hooks (`plans collect`, `tmp merge`, `scrub`) are deliberately NOT exempt: a missing
 config there is worth surfacing, and a session ending is the safe moment to surface it.
 
-The gate tests EXISTENCE and never parses. That is what keeps `config validate` and `doctor`
-able to do their jobs: both exist to report an invalid config, and a gate that parsed the file
-would stop them before they could. So the four config readers that are reached outside a
-command's own `loadConfigFile` — `currentHangarId`, `terminalColourSettings`, `terminal` and
-`editorConfig` — now catch only the UNPARSEABLE case, where falling back beats refusing (a
-`colours sync` that regenerates with default colouring is better than one that will not run).
-`EditorSelection.fellBack` therefore means exactly one thing now: the config would not parse.
+**An existing file that will not parse is refused too, except by the three commands that exist to
+report it.** `resolveForCommand` in `cli.ts` runs `loadHangar` — which throws on an invalid
+config — for every command but `TOLERATES_INVALID_CONFIG`: `doctor`, `config show` and
+`config validate`. Those three go through `loadHangarTolerant`, which falls back to the schema's
+defaults and records it ONCE, as `Hangar.configFellBack` (with `configError` for the message to
+print). Every reader below them — `currentHangarId`, `terminalColourSettings`, `terminal`,
+`editorConfig` — takes the flag rather than catching on its own: four independent fallbacks were
+indistinguishable from a wired reader whenever a config equalled the defaults, so nothing could
+tell one from a swallowed error. `EditorSelection.fellBack` is that flag, and means exactly one
+thing: the config would not parse.
 
 ## One gate sits below that one, in `bin/hangar`
 
@@ -145,11 +144,10 @@ exists. `terminal-and-sessions.md` has the refresh architecture, the lock and th
 ## `forge.defaultBranch` — asked once per hangar, not once per command
 
 Every clone in a hangar is a clone of ONE repo, so which branch that repo treats as its default
-is a property of the **hangar**, not of a clone. It used to be re-derived per clone per command
-from `origin/HEAD`, with a `remoteHeadBranch()` that fell back to the literal `master` — wrong
-for every repo that uses `main`, and wrong SILENTLY, which is the failure this fleet is built
-against. `config/default-branch.ts` is now the only place that answers the question, and
-`remoteHeadBranch` is gone.
+is a property of the **hangar**, not of a clone. Re-deriving it per clone per command from
+`origin/HEAD`, with a fallback to the literal `master`, is wrong for every repo that uses `main`,
+and wrong SILENTLY, which is the failure this fleet is built against.
+`config/default-branch.ts` is the only place that answers the question.
 
 **Required in effect, optional in the schema.** Nobody types the value: the first command that
 needs it detects it and writes it into `hangar.config.yaml`, and every command afterwards reads
@@ -189,10 +187,11 @@ Five properties, each of which is a decision:
   naming this branch. Anything else and it writes nothing and says what to add by hand — the
   caller already has the value, so a failure costs one re-detection and nothing else. The rename
   is atomic because four clone sessions and their `SessionEnd` hooks share this file.
-- **It keys on the threaded hangar's root, and the `Map` is now load-bearing rather than
+- **It keys on the threaded hangar's root, and the `Map` is load-bearing rather than
   aspirational.** Two hangars resolved in one process must stay disjoint, and since the root comes
   from real discovery (`--hangar`, then the walk, then `HANGAR_ROOT`) there can genuinely be more
-  than one key. `pnpm golden` renders three in a single run: this hangar and both fixtures.
+  than one key. `test/two-hangars.test.ts` is what holds that; `pnpm golden` cannot, because
+  `dev/golden.sh` runs the binary once per hangar.
 - **`doctor` compares the stored value with each clone's `origin/HEAD`, and only warns.** (How to
   relay that row to a user is `hangar-ops/reference/reading-output.md`, which states the same
   rule — change one and change both.) Storing
@@ -208,24 +207,25 @@ Five properties, each of which is a decision:
 The rule, and it was broken in a way only a foreign repo could reach: **a value `setup` cannot
 observe is asked for, offered by a preset, or left out with a comment saying what it would do.**
 
-What it used to write into every config it produced was this fleet: the Playwright symlink, the
-eight VS Code path keys under `angular/`, `portCheckCommand: [node, dev/ports.mjs, --json]`, this
-organisation's Jira host as the tracker default, and
-`envrcDirs: ['.', '<appDir>', 'tests/playwright-regression-tests']`. That last one is the tell that
-none of it was ever exercised against another repo: `detectAppDir` returns `''` for a repo with no
-`package.json`, so the rendered list was `['.', '', 'tests/...']`, `envrcDirs` is
-`z.array(z.string().min(1))`, and **`setup` wrote a config to disk and then threw validating it.**
+A `setup` that writes literals writes the fleet it was built in into every config: the
+Playwright symlink, the eight VS Code path keys under `angular/`,
+`portCheckCommand: [node, dev/ports.mjs, --json]`, this organisation's Jira host as the tracker
+default, and
+`envrcDirs: ['.', '<appDir>', 'tests/playwright-regression-tests']`. That last one shows none of
+it is exercised against another repo: `detectAppDir` returns `''` for a repo with no
+`package.json`, so the rendered list is `['.', '', 'tests/...']`, `envrcDirs` is
+`z.array(z.string().min(1))`, and **`setup` writes a config to disk and then throws validating it.**
 
-Three things now hold it to the rule:
+Three things hold it to the rule:
 
 - **`envrcDirs` and `editor.rootPathKeys` are DERIVED**, from `git ls-files -- '*.envrc'` and from
   a clone's own `.vscode/settings.json` (any value starting with the clone's path is a per-clone
   path, whatever extension put it there). Both reproduce this hangar's hand-maintained config
   exactly, which is the identity substitution that proves the derivation rather than the literal.
 - **`setup -n` validates the render**, through `parseConfigText` — the parse/validate half of
-  `loadConfigFile`, split out to work over text. The dry run used to `return` before the only parse
-  in the command, so the one invocation that could have caught a config setup cannot load was the
-  one that skipped the check. That gap is where the `envrcDirs` bug lived.
+  `loadConfigFile`, split out to work over text. A dry run that `return`s before the only parse in
+  the command skips the check in the one invocation that could catch a config setup cannot load,
+  and that gap is where the `envrcDirs` bug lived.
 - **The golden net captures `setup -n` per preset in an EMPTY temp directory**, not against this
   hangar. With no clones there is nothing to derive from, which is exactly a colleague's first run.
   Pointing it here would need `--force`, which would leave the live gitignored config one `-n`
@@ -234,7 +234,7 @@ Three things now hold it to the rule:
 ### `envrcDirs` has a consumer, and the shell function that reaches it cannot be shell
 
 `hangar allow` runs `direnv allow` in every directory of a clone that has an `.envrc` — the same
-union `add-clone` already printed as paste-able lines, now something to run. A repo having more
+union `add-clone` prints as paste-able lines, made something to run. A repo having more
 than one is the normal case (this one has three) and all of them are tracked, so any pull changes
 their content and direnv blocks the lot at once.
 
@@ -264,9 +264,8 @@ A preset supplies the two answers no checkout can produce — `ports.roles[]` an
 `repo.cloneEnv.vars` — and writes them out as plain config. **It is never read again at runtime**,
 which is the whole design constraint: a runtime `if (profile === 'sql-postgrest')` would
 re-introduce exactly the hardcoding this track spent five items deleting. `profile:` in a written
-config is a label; no code consults it, and `app/src/profiles/` was never written and now never
-will be. Two hangars needing zero profile code was the evidence the config boundary had been drawn
-in the right place.
+config is a label; no code consults it, and there is no `app/src/profiles/`. Two hangars needing
+zero profile code was the evidence the config boundary had been drawn in the right place.
 
 Every preset's port bases sit in different residue classes mod the default step of 100, because the
 schema rejects two roles whose clones would collide — correctly: `api: 3000` beside `admin: 3100`
@@ -287,9 +286,9 @@ check the clones that exist for any port claimed twice (`portCollisions` in `por
 
 ### The secrets file is created, and every line is commented out
 
-`setup` used to NAME a secrets file it never created, so a fresh hangar had `doctor` red and `sync`
-with no token to read — both of which get diagnosed as bugs rather than as "nobody has filled this
-in yet". It is created at `secrets.mode` (0600) with the variable names the config implies, all
+A `setup` that only NAMES a secrets file leaves a fresh hangar with `doctor` red and `sync` with
+no token to read — both of which get diagnosed as bugs rather than as "nobody has filled this in
+yet". So it is created at `secrets.mode` (0600) with the variable names the config implies, all
 commented out. Not `BITBUCKET_TOKEN=`: a set-but-empty variable is indistinguishable from a real
 one to everything downstream, so an empty token makes `sync` report a 401 instead of "no token
 configured". An existing file is never overwritten — it holds live credentials.

@@ -23,9 +23,7 @@ under **Which emulator opens the window** below, before the tmux layer it hands 
   emulator that cannot bring a window forward.
 
 - **Window order is the order of `terminal.tabs[]`**, because each one is created in turn and tmux
-  numbers them as they arrive. The config's key is `tabs` rather than `windows` for the reason
-  worth keeping: what the developer sees is a tab bar, and a key named after the implementation
-  would need a sentence of explanation on every read.
+  numbers them as they arrive.
 
 - **`hangar resume` is the only picker that sees all of a clone's sessions.** Claude Code's
   own `--resume` list is scoped to the directory it was started in, so a session started in
@@ -440,8 +438,8 @@ baked in at import is the trap `hangar.ts` records.
 ## Which emulator opens the window, and what each one can do
 
 `app/src/terminal/**`. `hangar open` gives a clone **one tab of the developer's emulator**, and
-that tab is a client attached to **that clone's tmux session** — one tmux window inside it per `terminal.tabs[]` role,
-named for the clone and the role. `--window` puts it in a window of its own and
+that tab is a client attached to **that clone's tmux session** — one tmux window inside it per
+`terminal.tabs[]` role, named for the role alone. `--window` puts it in a window of its own and
 `terminal.placement` sets the default. So the emulator is asked for two things and nothing else:
 **open one tab or window running one command**, and **bring one it opened to the front**.
 Everything that happens inside — creating the roles, naming them, ordering them, moving between
@@ -517,8 +515,8 @@ sessions deep, with the two clones nobody reopened left holding a single `zsh` w
 Nothing then says so. The footer job is `#(clone-tmux-status.sh footer "#{@hangar_clone}" …)` and
 every failure in that script is a deliberate silent `exit 0`, so an empty tag renders an empty
 footer; `set-titles-string` reads `@hangar_clone_label` and drops the clone out of the window
-title; the click binding and `C-b C-e` hand `hangar browse` and `hangar edit` an empty argument.
-Three symptoms, one missing `set`, and no error anywhere.
+title; the click binding, `C-b C-e`/`C-b v` and `C-b C-f` hand `hangar browse`, `hangar edit` and
+`hangar browse tmp` an empty argument. Three symptoms, one missing `set`, and no error anywhere.
 
 The repair had the same hole in it. `paintSession` ran only from `createSession`, and `restyle`
 identified a session by the very tag that was missing -- so `hangar colours sync`, the one command
@@ -622,9 +620,9 @@ actually looking at is the one window with no colour.
 **A tmux server inherits the environment of whatever starts it.** `hangar open` run as an MCP
 tool started clone 5's server with operator mode's `NO_COLOR=1` (set by `mcp/server.ts`),
 `CLAUDECODE=1`, `HANGAR_MODE=ops` and `CLAUDE_CODE_*`, and every window made later inherited
-them: Claude Code drew no colour at all, with every generated colour file correct. `tmux.ts` now
+them: Claude Code drew no colour at all, with every generated colour file correct. `tmux.ts`
 spawns tmux through `scrubbedEnv` and `createSession` unsets the same names from a standing
-server (`isSessionLeak` is the list). A running Claude Code process keeps what it started with,
+server (`isSessionLeak` is the list, `CLAUDE_PROJECT_DIR` included). A running Claude Code process keeps what it started with,
 so a healed server still needs `hangar reload`. Diagnose with
 `tmux -L hangar-<id> show-environment -g`.
 
@@ -775,9 +773,12 @@ fleet in order to add a link, so there is one binding and it falls through:
 
 ```
 bind-key -T root MouseDown1Status if-shell -F '#{m:hangar-*,#{mouse_status_range}}' \
-  'run-shell -b "<hangar>/bin/hangar browse #{s/hangar-//:mouse_status_range} #{@hangar_clone}"' \
+  'if-shell -b "<hangar>/bin/hangar browse <range> #{@hangar_clone} >/dev/null 2>&1" \
+     "display-message \"opened …\"" "display-message \"hangar browse … failed …\""' \
   'select-window -t ='
 ```
+
+`<range>` is `#{s/hangar-//:mouse_status_range}`; `statusClickBinding` has the exact text.
 
 **`select-window` and not tmux's own default, which cannot do this job.** 3.7c binds
 `switch-client -t =`, and the name is the trap: from tmux's manual, *"As a special case, `-t` may
@@ -791,7 +792,7 @@ two bars shows one.
 That went unnoticed because nothing here can find it. The conf renders, tmux loads it without
 complaint, `pnpm golden` pins the bytes and `pnpm test` asserts the shape -- and every one of them
 is equally happy with a binding that does nothing. It took a person with a mouse.
-`test/tmux-conf.test.ts` now pins the command by name and asserts `switch-client` appears nowhere,
+`test/tmux-conf.test.ts` pins the command by name and asserts `switch-client` appears nowhere,
 which is the closest a suite with no tmux server in it can get.
 
 **The binding is half of it: the emulator has to deliver the click.** iTerm2 splits mouse
@@ -834,9 +835,10 @@ every server.** One `hangar open` starts inherits direnv's PATH. One the EMULATO
 `attachCommand` is `new-session -A`, so a restored tab with the server gone makes the server
 itself -- inherits launchd's `/usr/bin:/bin:/usr/sbin:/sbin`, which has no `node` in it. An
 absolute `bin/hangar` still reaches the script; the script then cannot find Node and answers with
-its own bootstrap error. THREE things run that way and every one of them was dead: `hangar browse` on
-a click, `hangar edit` on `C-b C-e`, and `clone-tmux-status.sh`'s detached `hangar pr refresh`.
-Two of the three fail in total silence. Measured here: every pull-request record was 8236 seconds old against a 90-second TTL with five sessions
+its own bootstrap error. FIVE things run that way and every one of them is dead without `node`:
+`hangar browse` on a click, `hangar edit` on `C-b C-e` and on `C-b v`, `hangar browse tmp` on
+`C-b C-f`, and `clone-tmux-status.sh`'s detached `hangar pr refresh`. The refresh fails in total
+silence; the bindings say only that the command failed. Measured here: every pull-request record was 8236 seconds old against a 90-second TTL with five sessions
 drawing their bars, and every attached clone refreshed within three seconds of `node`'s directory
 being put on the server's global PATH.
 
@@ -861,9 +863,9 @@ a value in single quotes and cannot escape one, so a single quote in that branch
 conf line early and tmux would load the result without complaining.
 
 `#{m:…}` is a glob match and `#{s/hangar-//:…}` strips the prefix, so **the range name IS the
-argument** and there is no table mapping one to the other. `run-shell` expands formats in its
+argument** and there is no table mapping one to the other. `if-shell` expands formats in its
 command before running it -- verified, `#{@hangar_clone}` arriving as `clone_01` -- and `-b` keeps
-tmux from blocking on a browser. `bin/hangar` by absolute path, because `run-shell` inherits the
+tmux from blocking on a browser. `bin/hangar` by absolute path, because the command inherits the
 SERVER's environment, which is whatever shell started it and need not have direnv's PATH; the same
 reason `iterm2.ts` names tmux absolutely.
 
@@ -919,18 +921,11 @@ that works on half the fleet.
 
 ### The clone comes from the session tag, and that is a correctness property
 
-Each field is a `#(…)` job calling `clone-tmux-status.sh <field> "#{@hangar_clone}"`. The tag is
-expanded into the command TEXT rather than the script reading a pane's working directory, for two
-reasons and the second is a bug rather than a preference:
-
-- Identity is the session, which is this module's oldest rule. A pane `cd`'d out of the clone is
-  still that clone's pane, and `#{pane_current_path}` would have it report nothing -- or, standing
-  in a sibling clone's directory, report the sibling's branch.
-- **A tmux job is keyed on the EXPANDED command**, so two sessions whose formats expand to the
-  same shell command share one job and one answer. With the clone name in the text, `clone_01` and
-  `clone_02` rendered their own branches at the same moment on one server (measured, two clients).
-  Without something session-specific in there, every bar in the fleet would show whichever clone's
-  job ran first.
+Each field is a `#(…)` job calling `clone-tmux-status.sh <field> "#{@hangar_clone}"`, the tag
+expanded into the command TEXT rather than read from a pane's working directory. `barOptions`'
+header has both reasons; the one that is a bug rather than a preference is that **a tmux job is
+keyed on the EXPANDED command**, so without the clone name in the text every bar in the fleet
+would show whichever clone's job ran first.
 
 `#{…}` does expand inside `#()`, with either quoting -- but the format value is single-quoted on
 the way into the conf and tmux processes no escapes inside single quotes, so the job uses DOUBLE
@@ -1025,7 +1020,7 @@ script is SILENT, which is why `doctor` byte-compares it like the conf.
 ### The pull request is on disk, keyed on the branch AND on time
 
 Two Bitbucket calls with a token and an eight-second timeout each, so the question cannot be
-behind a five-second refresh at all. `pr-cache.ts` holds the answer and
+behind a ten-second refresh at all. `pr-cache.ts` holds the answer and
 `generate/tmux-status-sh.ts` reads that file and nothing else.
 
 The record is one line, space-separated, no JSON: the only reader that matters is generated
@@ -1034,7 +1029,7 @@ whose failure mode is a bar that has quietly stopped saying anything. Neither a 
 URL may contain a space, so a space is a separator no value can forge.
 
 ```
-<branch> <id> <url> <fetchedAt> <state> <draft> <ci> <review>
+<branch> <id> <url> <fetchedAt> <state> <draft> <ci> <review> <reviewers> <approvals>
 ```
 
 **Keyed on the branch, which is still the correctness property.** A line whose branch is not the
@@ -1118,7 +1113,7 @@ stale base and resolve conflicts against it.
 
 | axis | glyphs |
 | --- | --- |
-| pull request | `✎` draft · *(nothing)* open and ready · `✔` merged · `✖` declined |
+| pull request | `✎` draft · *(nothing)* open and ready · `✔` merged · `✖` declined · `⊘` superseded |
 | build | `✓` pass · `✗` fail · `◌` running · *(nothing)* no build reported |
 | review | `+a/n` approved (`a` of `n` reviewers) · `≈` changes requested · `◷` reviewers assigned, none decided · `·` nobody asked |
 
@@ -1130,7 +1125,7 @@ just handed to its reviewers — exactly like one nobody has been asked to look 
 `participants` the one with the verdicts. The two numbers are appended fields of the cache record,
 and a line without them reads as 0 of 0 and draws a bare `+`.
 
-A merged or declined pull request draws its glyph and its number and nothing else: the build and
+A merged, declined or superseded pull request draws its glyph and its number and nothing else: the build and
 the reviews are settled, and a green tick beside a merged PR is a fact nobody is deciding anything
 on.
 
@@ -1184,11 +1179,12 @@ and the bar are forge-agnostic, and only the fetch is not.
 open -- four sessions and eleven windows kept the green bar, and `doctor` could only name
 `kill-server`, which it refuses to run because that ends every live agent in the fleet.
 
-It did not have to. Every option the bar needs is a global **session** or **window** option rather
-than a server option, so `colours sync` writes them onto the live server, then re-paints each
-session's badge through the same `paintSession` builder `open` uses, then each of its windows. That
-is the actual line between these and the four settings in `TMUX_SETTINGS`: two of those are server
-options, and for them `kill-server` really is the only repair.
+It does not have to. Every option the bar needs is a global **session** or **window** option
+rather than a server option, so `colours sync` writes them onto the live server, then re-paints
+each session through the same `paintSession` builder `open` uses -- its tag, its label, and a
+cleared session-scope `status-left` -- then each of its windows. That is the actual line between
+these and the four settings in `TMUX_SETTINGS`: two of those are server options, which only a
+`source-file` reaches -- `hangar reload`, see above.
 
 **One table feeds both, and it has to.** `barOptions` is rendered into the conf and written onto
 the live server by `TmuxServer.restyle`; a list of globals written out in `restyle` beside the
@@ -1199,9 +1195,10 @@ bar that is right on a fresh server and a version behind on the one somebody is 
 file and nothing else, with nothing to say which happened.
 
 The **key bindings are the exception to the table**, because a binding is a command and there is
-nothing for `set` to carry it. They have a list of their own, `keyBindings`, and `restyle` issues
-each one for exactly the same reason it writes the options: a live server would otherwise keep the
-bar and lose the link, and keep the bar and lose `C-b C-e`.
+nothing for `set` to carry it. They have a list of their own, `keyBindings` (the root socket's
+is `KEY_BINDINGS` in `claude-tmux-conf.ts`), and `restyle` issues each one for exactly the same
+reason it writes the options: a live server would otherwise keep the bar and lose the link, and
+keep the bar and lose `C-b C-e`.
 
 A window's own `@hangar_colour` tag wins over its session's clone, looked up by hex because
 `colours change` means a clone's hue need not be the one its index implies. That is the case the
@@ -1213,12 +1210,6 @@ and `--check`, being the one thing in that command that touches state outside th
 `TMUX_SETTINGS` is documented as the four settings Claude Code needs -- growing it with a style
 would make `doctor` claim something it was not written to say.
 
-**`send-keys -l -- <text>` then a separate `Enter`.** `-l` is literal, so a word like `Enter`
-inside a `SYNC PAUSE` message stays a word instead of becoming a keypress, and `--` guards a
-message beginning with a dash. The newline has to be its own call for the same reason `-l` is
-used: without it the line sits unsent on the agent's input, which is the worst of the three
-outcomes — delivered, and not read.
-
 ### Exercised, unlike two of the four window-openers
 
 Konsole and GNOME Terminal ship on documentation alone and their headers say so. tmux does not,
@@ -1226,13 +1217,13 @@ because it is the same program on macOS. Against tmux 3.7c here: a session creat
 a window per role, the roles read back in `tabs[]` order, `has-session` answering correctly for a
 clone with a session and one without, a second `open` of the same clone raising the existing
 session and creating nothing, a detached clone reattached with its shell's scrollback intact, four
-sessions carrying four distinct `status-left` hues with no global leak, and a real `SYNC PAUSE`
+sessions carrying four distinct session-scope hues with no global leak, and a real `SYNC PAUSE`
 line landed in the pane on a named tty and -- confirmed with `capture-pane` -- in **no** other of
 four. A tty nothing owns returns false, so `sync` reports a miss rather than claiming a pause.
 
 The status bar was exercised on the live fleet with four Claude sessions running throughout and
-none disturbed: `colours sync` reported `restyled 4 live tmux session(s)`, and all four badges and
-all eleven windows read back with `bg=<hue>,fg=<ink>`. The HOOK's tmux arm was exercised on a
+none disturbed: `colours sync` reported `restyled 4 live tmux session(s)`, and all four sessions
+and all eleven windows read back with `bg=<hue>,fg=<ink>`. The HOOK's tmux arm was exercised on a
 throwaway socket instead -- `tmux -L hangar-probe -f clone-tmux.conf` -- which is also the check
 that the conf loads at all: a `cd` into a clone wrote `@hangar_colour=#ffcc00` and the matching
 `bg=#ffcc00,fg=#000000,bold`, and that hue's non-current style came back byte-identical to its
@@ -1244,15 +1235,12 @@ positionally and `clone-terminal.sh` split them ending `name=${rest#* }` -- ever
 second space. Appending `ink` and `barText` therefore landed them INSIDE `$name`, which the hook
 exports as `HANGAR_CLONE_COLOUR`: measured, `cyan #000000 #00ccff`. Nothing typechecks a generated
 shell string, so the only thing that would have noticed is a developer's own prompt printing a hex
-after the colour name. The split is now one uniform pair of steps per field with only the last
+after the colour name. The split is one uniform pair of steps per field with only the last
 taken by `#* `, so a sixth field cannot corrupt the fifth -- and fields are appended, never
 reordered, so `$1..$3` stay where anything already reading them expects.
 
-iTerm2 is exercised on this machine, and three of its behaviours are recorded in `iterm2.ts`
-rather than here because they are that driver's own: `write text` into a session that was just
-created is accepted and dropped, a bare `create tab with default profile` returns `missing
-value`, and `command` is argv rather than a shell line -- so `exec` starts nothing and PATH is the
-application's, which is why the attach command names tmux by absolute path.
+iTerm2 is exercised on this machine; its three driver-specific behaviours are recorded in
+`iterm2.ts`.
 
 ## `bookmarks sync` — the browser's file belongs to the browser
 

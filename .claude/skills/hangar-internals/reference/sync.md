@@ -1,7 +1,7 @@
 # `sync`, its two other names, `checkout-default`, and the two forge writes
 
 The most dangerous command in the CLI and the two that share its machinery.
-`app/src/commands/sync.ts` (882 lines) and `checkout-default.ts` (328); the shared landing step is
+`app/src/commands/sync.ts` and `checkout-default.ts`; the shared landing step is
 `landOnBranch`. `pr create` and `pr update` are here too, at the end: they are the only commands
 that write to the FORGE rather than to a working tree, which is a different blast radius reached
 through the same Bitbucket adapter.
@@ -18,12 +18,14 @@ through the same Bitbucket adapter.
   writes a pause message, then a closing message afterwards. Each one leads with a marker — `SYNC
   PAUSE`, then **exactly one** `SYNC FINISHED` or `SYNC ABORTED`, which the pause promises and a
   `finally` delivers. That guarantee is the point: six paths lead out of a sync between the two
-  messages, five of them used to send nothing, and an agent told to STOP and wait for a message that
-  never comes waits for good. The closing message **reports the state it found** rather than an
-  outcome — a half-applied operation, files still conflicted, work still in a stash — because those
+  messages, a closing message sent only on the happy path leaves five of them silent, and an agent
+  told to STOP and wait for a message that never comes waits for good. The closing message
+  **reports the state it found** rather than an outcome — a half-applied operation, files still conflicted, work still in a stash — because those
   combine, and it says whether to resume or to stand still and tell the user. `--all` **skips**
   clones with a live session unless `--include-busy`. Rebase vs merge follows the rule "rebase only
   my own linear branch"; anything with merge commits, or started by someone else, is merged instead.
+  `--no-session-notify` turns the whole protocol off and only warns how many live sessions it did
+  not tell, so the sync then runs under a live agent that has had no warning.
   It **refuses to start on a clone that is already mid-rebase or mid-merge** — finish or abort that
   first, because step one is a `git stash push` and it would bury the half-applied state in a stash
   nobody thinks to look in.
@@ -31,8 +33,11 @@ through the same Bitbucket adapter.
   `master`.** Nothing local knows that branch: a branch cut from `master` can have a PR onto
   `release9`, or onto another branch of this fleet (a stacked PR — one clone's PR onto another
   clone's branch), and every fork-point heuristic answers `master` for all of them. So `sync`
-  asks the Bitbucket REST API, authenticated with `BITBUCKET_TOKEN` from `.env.shared` (an
-  Atlassian API token; Bitbucket Cloud takes it as a bearer token). The target is **printed on
+  asks the Bitbucket REST API, authenticated with the variable `forge.tokenEnvKey` names
+  (`DEFAULT_BITBUCKET_TOKEN_ENV_KEY`, `BITBUCKET_TOKEN`, when it names none), read from the
+  environment and then the shared secrets file — an Atlassian API token, which Bitbucket Cloud
+  takes as a bearer token. A hard-coded name here is a soft failure: a token under another name is
+  indistinguishable from no token, and the target is reported as a guess. The target is **printed on
   every run** with where it came from, and `-n` shows it without changing anything. Priority is
   `--onto <ref>` > the open PR's destination > the default branch. Two open PRs onto different
   branches **abort** and ask for `--onto`; a destination that does not exist on origin even
@@ -115,11 +120,10 @@ through the same Bitbucket adapter.
     flags could have reintroduced the hang they sit next to: `--input-format stream-json` is the
     SDK host protocol, and `--permission-prompts` defaults either to `host` — nobody answering,
     so the first tool call outside the allowlist blocks until the ten-minute timeout and the sync
-    rolls back — or to nobody, which denies and carries on. An A/B of the two spawn shapes on a
-    call outside the allowlist answers it: both auto-deny with `This command requires approval`,
-    the model reads the refusal and continues, and both reach `result success`. Nothing needs
-    `--permission-prompts none` pinned, and a future default that changes this is what that A/B
-    is for.
+    rolls back — or to nobody, which denies and carries on. Measured with both spawn shapes on a
+    call outside the allowlist: both auto-deny, the model continues, and both reach
+    `result success`, so nothing pins `--permission-prompts none`; re-run that A/B if the default
+    changes.
   - **The channel exists only when `process.stdin` is a tty.** An agent driving `sync` through a
     Bash tool, a script or a `SessionEnd` hook has no terminal, gets no reader, and gets the
     fire-and-forget run unchanged. The reader is built with `terminal: false` and released
@@ -177,7 +181,9 @@ Every decision below follows from that one asymmetry.
   carrying on there turns a network timeout into a duplicate pull request somebody has to decline.
   So `pr create` stops and prints the reason. The query is deliberately OPEN-only, so a branch
   reused after its first pull request merged can still get a second -- `pickPullRequest`'s own
-  reasoning, from the other direction.
+  reasoning, from the other direction. **`pr update` asks the other way, `anyState: true`**, so a
+  merged or declined pull request is REPORTED as such and refused rather than reported as absent:
+  "there is none" would send somebody to `pr create` to open a second one.
 - **A branch that already has one open is reported at exit 0, not refused.** "Unless one already
   exists" is what makes the command safe to re-run without first working out whether the last run
   got that far, and an error exit would make every wrapper treat the idempotent case as a failure.

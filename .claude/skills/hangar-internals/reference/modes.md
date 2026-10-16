@@ -328,13 +328,15 @@ single reason, which this file had already written down as unsolved:
 > one without the other.
 
 That is why the `allow` list below contains only commands whose prefix cannot widen into something
-that acts, and why operator mode asks about twenty things it could safely be given. **MCP
+that acts, and why operator mode asks about many things it could safely be given. **MCP
 permission rules have no argument matching at all** — Claude Code skips any `mcp__` rule that
 contains parentheses, silently, when the settings file loads — so the granularity is exactly the
 tool name. Two names, two rules, nothing to widen.
 
-**Nearly every command is a tool, and the exceptions are four.** `claude` could only ever fail,
-for the `$CLAUDECODE` reason above, on the one command that must not be reachable. `dev release`
+**Nearly every command is a tool, and the exceptions are `NOT_EXPOSED` in `src/mcp/tools.ts`.**
+`up` and `down` could only ever fail, for the `$CLAUDECODE` reason above, and are the commands
+that must not be reachable. `exec` is never exposed and never run by an agent at all. `mcp` is the
+server itself. `dev release`
 pushes and cuts a version behind a confirmation that fails closed, so the only form that completes
 as a tool call is the one carrying `-y`. `dev golden` writes a partial capture that would read as
 the gate without being it, and aimed at `dev/golden/gated` would half-overwrite the baseline.
@@ -378,9 +380,10 @@ is load-bearing rather than cautious:
   in-process call would take the auto-decide branch every time, silently and correctly-looking.
 - **About twenty `console.log` and `process.stdout.write` calls bypass `ui.ts`'s `emit`.** On a
   stdio server stdout *is* the protocol, so one of those lands in the middle of a JSON-RPC frame
-  and the client reports a broken server with no clue why. `captureOutput()` catches the rest and
-  is a module-level global besides, with no isolation between concurrent calls.
-- **`process.exit`** anywhere in a command would take the server with it.
+  and the client reports a broken server with no clue why.
+- **`captureOutput()` is a module-level global**, with no isolation between concurrent calls.
+
+A `process.exit` in a command (`setup` has one) would take an in-process server with it besides.
 
 The cost is one Node start per call, 0.24-0.28s, against a tool call's own latency — and it buys
 behaviour byte-identical with what a person types, which is what lets `reference/commands.md`
@@ -402,7 +405,7 @@ the settings file change in one edit. `open` and `checkout_default` are the two 
 
 **`dev.settings.json` enumerates none of them, and that is the deliberate asymmetry rather than the
 same omission.** The enumeration is a boundary, and developer mode has none to hold — it may already
-write `app/**`, run `hangar dev` and open either tab. Giving it forty-one rules would be a second
+write `app/**`, run `hangar dev` and open either tab. Giving it a rule per tool would be a second
 list to keep in step for no guarantee, and the test would then be pinning a file whose whole content
 is "yes" repeated. Operator mode is the one with something to lose. It reads the tracked
 `ops.settings.json` by a path relative to itself, which is portable because that file is
@@ -530,10 +533,11 @@ one `printf`. Verified byte-identical output under bash, zsh, sh and dash. **A f
 promises it never fails has to hold when something other than bash runs it**, and the shebang only
 covers the direct-exec path — not `sh <path>`, which is how a command string can reach it.
 
-The `statusLine` command is an **absolute** path in all three settings files, which is the same
-thing `autoMemoryDirectory` in the tracked root `.claude/settings.json` already does. A relative
-one could not work anyway: developer mode's working directory is `app/`, so the two modes would
-need different relative paths to one script.
+The `statusLine` command is never a relative path. The generated root `.claude/settings.json`
+names the script **absolutely**; the two tracked mode files name `hangar-statusline <mode>` on
+PATH, for the reason under "The one machine-specific line" below. A relative one could not work
+anyway: developer mode's working directory is `app/`, so the two modes would need different
+relative paths to one script.
 
 **One case this gets wrong, bounded and written down rather than engineered around:** a nested
 interactive claude started from inside an ops session by the real binary's ABSOLUTE path skips the
@@ -658,14 +662,14 @@ Publication forced the question for every tracked file naming one machine's home
 these two answered differently from the rest. `.claude/settings.json` became generated and
 gitignored; `.claude/modes/{ops,dev}.settings.json` did not.
 
-The reason is an escalation path, not tidiness. `ops.settings.json`'s ~40 `allow`/`ask`/`deny`
+The reason is an escalation path, not tidiness. `ops.settings.json`'s `allow`/`ask`/`deny`
 entries **are** operator mode's boundary. Operator mode is denied `Edit(./.claude/modes/**)` —
-that denial is the whole reason the mode pair exists — and it is *allowed* `Bash(hangar doctor:*)`.
-So a `doctor --fix` that generated that file would let operator mode rewrite its own permission
-list through a command it is permitted to run, and the asymmetry this file spends its length
+that denial is the whole reason the mode pair exists — and `Bash(hangar doctor:*)` is one `ask`
+away. So a `doctor --fix` that generated that file would let operator mode rewrite its own
+permission list through a command one approval runs, and the asymmetry this file spends its length
 justifying would be gone. `setup` was no better and is now named in both spellings —
 `Bash(hangar setup)`, `Bash(hangar setup:*)` and `mcp__hangar__setup` all `ask` — which is the
-reason `setup` is exposed as a tool at all rather than left out with `claude` and `dev`: a command
+reason `setup` is exposed as a tool at all rather than left out with `up` and `dev`: a command
 that reaches the config is better named than merely unlisted.
 
 So `doctor` **reports and offers no repair**, the same shape as the `settings targets` check for
@@ -752,4 +756,4 @@ would have done it.
 
 One consequence of that last item is a design fact rather than a probe failure: **sessions here
 start in `auto`, not manual.** A mode that wants the acting commands to stop and ask has to say so
-with `ask` rules, which is why operator mode carries twenty of them.
+with `ask` rules, which is why operator mode carries one for every acting command and tool.

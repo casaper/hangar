@@ -1,12 +1,14 @@
 # The editors: what `ide sync` rewrites, and why VS Code outranks the rest
 
-`app/src/commands/vscode.ts` (319), `app/src/editor/**` (nine drivers). The table of which
+`app/src/commands/vscode.ts`, `app/src/editor/**` (six driver modules — `vscode`, `jetbrains`,
+`zed`, `emacs`, `vim`, `launch-only` — behind `index.ts` and `kinds.ts`). The table of which
 editor gets launched how, and what Hangar keeps in step for each, is the first section below.
 
 **`hangar ide vscode sync` is a text transform, not a copy**, and it is the only editor for which
 that is true — `$PROJECT_DIR$` and project-relative settings spare all the others. Two reasons. A
-handful of VS Code settings take an **absolute** path into the checkout — `stylelint.stylelintPath`,
-`stylelint.configFile`, `stylelint.configBasedir`, `prettier.prettierPath`, `prettier.configPath`,
+handful of VS Code settings take an **absolute** path into the checkout — in the repo this was
+built in, eight of them: `stylelint.stylelintPath`, `stylelint.configFile`,
+`stylelint.configBasedir`, `prettier.prettierPath`, `prettier.configPath`,
 `jestrunner.projectPath`, `coverage-gutters.manualCoverageFilePaths`,
 `storyExplorer.server.internal.npm.dir` — and VS Code resolves them against nothing, so those must
 differ per clone while every other key should be identical. It discovers the checkout root the
@@ -18,10 +20,12 @@ reserialised; key order and the hand-maintained tab indentation are preserved as
 Three things follow that are worth knowing:
 
 - **The key list is declared, not sniffed** — and it is **config**, not code: `editor.rootPathKeys`
-  in `hangar.config.yaml` (`config/schema.ts:334`, a `z.record` of setting key → path relative to
-  the clone root), seeded by `hangar setup` (`commands/setup.ts:267`) from the eight defaults in
-  `editor/vscode.ts:51`. It used to be a hard-coded table in an `app/src/vscode.ts` that no longer
-  exists; the move changed where you add a key, not what happens if you forget to. A clone-specific
+  in `hangar.config.yaml` (`editor.rootPathKeys` in `config/schema.ts`, a `z.record` of setting
+  key → path relative to the clone root, defaulting to `{}`). `hangar setup` fills it through
+  `detectRootPathKeys` in `config/derive.ts`, which reads the absolute paths off the first clone's
+  own `.vscode/settings.json`; an empty table is the normal answer for a repo whose settings are
+  relative. A wrong list is not a missing feature: `templatize` finds no checkout root, rewrites
+  nothing, and `hangar ide vscode sync` is a no-op that reports success. A clone-specific
   setting that is missing from it gets copied verbatim and leaves one clone's tool path aimed at
   another clone's `node_modules` — silent, exactly like a Storybook health check on a sibling's
   port. A rendered file that still contains another clone's directory name is therefore a **hard
@@ -246,29 +250,24 @@ caveat:
   `C-b C-e` runs. `open` opens no editor without `-e`, so building the drivers unconditionally
   would put "this driver would not build" in front of a developer who wanted a terminal window and
   can do nothing with the warning.
-- **`editorFor(kind)` builds only the kind asked for and does NOT catch.** It used to pick from
-  `editors()`, which made `hangar ide vscode sync` construct every other configured driver
-  first and depend on all of them. And an editor the developer named by running
+- **`editorFor(kind)` builds only the kind asked for and does NOT catch.** Picking from
+  `editors()` would make `hangar ide vscode sync` construct every other configured driver first
+  and depend on all of them. And an editor the developer named by running
   `hangar ide <kind> sync` is not a bystander: its failure is the answer to that command.
 
-What this was checked with, since the seed suite covers the pure core and reaches none of this:
-`kinds` set to all seven families at
-once (`doctor` printed seven honest rows, no throw), VS Code placed **third** in that list (its
-row still green), and `zedDriver` temporarily made to throw at construction — `doctor` reported
-`the zed editor driver would not build: …` and VS Code's row survived, while `hangar ide zed sync`
-raised, which is the intended asymmetry. The live VS Code path: `openWorkspaceFile` found
-clone_03's already-open workspace and `launch` returned `reused: true`, so it focused that window
-instead of opening a second one on the identical twin.
+Checked by hand, since the seed suite reaches none of this: with `zedDriver` made to throw at
+construction and VS Code third of seven kinds, `doctor` kept VS Code's row green while
+`hangar ide zed sync` raised — the intended asymmetry.
 
-**The window-state file that makes `openWorkspaceFile` work is platform-specific, and moved onto
-the platform seam at F11.** It is `~/Library/Application Support/<stateDir>/User/globalStorage/
+**The window-state file that makes `openWorkspaceFile` work is platform-specific, and lives on
+the platform seam.** It is `~/Library/Application Support/<stateDir>/User/globalStorage/
 storage.json` on macOS and `~/.config/<stateDir>/User/globalStorage/storage.json` on Linux — only
 the config directory differs, which is exactly what `PlatformDriver.machineConfigDir` carries.
 Written for macOS it does not fail elsewhere: it returns a plausible path, the read throws, the
 catch reports "no opinion", and `open` opens a **second** window on a workspace that was already
 open — the duplicate this whole mechanism exists to prevent, and the way two Claude Code sessions
-end up in one clone. It now returns `undefined` on a platform whose location is unknown, so the
-caller gets a nullable rather than a wrong path. `<stateDir>` still matters as much as ever: every
+end up in one clone. So it returns `undefined` on a platform whose location is unknown, and the
+caller gets a nullable rather than a wrong path. `<stateDir>` matters just as much: every
 fork has its own (`Code`, `Cursor`, `Windsurf`, `Code - Insiders`), and reading the wrong one
 answers about a different application's windows.
 
@@ -276,8 +275,7 @@ answers about a different application's windows.
 editor's doing: who works out which window already has the clone open (`focus-existing` when
 Hangar must, `self-deduping` when the editor does, `a tmux window` for terminal vim, which is not
 a window at all), and whether there is a setup to keep in step (`sync` / `sync, per-clone paths` /
-`launch only`). It used to print `$PROJECT_DIR$` for Xcode and vim, describing a mechanism neither
-has.
+`launch only`). It never prints `$PROJECT_DIR$` for Xcode or vim, which have no such mechanism.
 
 ## The `*.code-workspace` artifact is gated on the configured editors, and the gate is one predicate
 
