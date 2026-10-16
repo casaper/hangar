@@ -44,6 +44,7 @@ For every request, in this order:
 | "doctor says files are not what the builder renders" (after a hangar update) | `colours_sync_preview`, then `colours_sync` for the hangar-root shell/tmux files (applied to the running tmux server, no restart); then `doctor_fix` for each clone's per-clone files |
 | "open clone N's ticket / PR / ticket folder" | `browse` with `ticket`, `pr` or `tmp` (Finder on `tmp/<KEY>`); a refusal (no key, folder not fetched yet) exits 1 and is the answer, not a retry |
 | "what is ⊠gate / ⊡gate on the footer?" | the commit gate: `⊠` blocks commits on that branch, `⊡ KEY` is armed for a ticket; `hangar-commit-gate status` inside that clone is the long form, and releasing it is the user's alone |
+| "make clone N <colour>" / "which colours are free?" | `colours_list` (this hangar's palette, who holds what), then `colours_change`; a hue for the whole hangar is `palette.hues` / `palette.rotate` in the config, which is a config edit for the user, then `colours_sync` |
 
 **A tool that skips is not a failure to retry.** `open`, `checkout_default`, `close`, `reload` and
 `jira_plan` ask their own question where a human could answer it — a live Claude session in the clone, a dev
@@ -127,7 +128,9 @@ by declining to look.
 clone you name, so it is simultaneously a way to spell any command denied above and a way into
 working trees other agents are live in. It is denied AND enforced by a `PreToolUse` hook that
 reads the whole command line, so no spelling gets past it and none should be attempted. There is
-no tool for it either. When the fleet needs one, hand the user the exact line — `-n` first — and
+no tool for it either.
+It matches the text anywhere in the line, so a `grep` or heredoc that merely QUOTES it is refused
+too: search with the Grep tool, or put the text in a file, rather than taking the refusal as a stop. When the fleet needs one, hand the user the exact line — `-n` first — and
 let them run it from the hangar root.
 
 **Every other denial is a guardrail, not a sandbox.** Bash is not denied, so a deny on writing is not a
