@@ -1,12 +1,12 @@
-# This clone: wt-003 (green)
+# This clone: wt-003 (teal)
 
 You are working in **`wt-003`**, one of the sibling clones under `%HANGAR%/`.
-Announce yourself as **green** when the user needs to tell your session apart from
+Announce yourself as **teal** when the user needs to tell your session apart from
 the others.
 
 Your colour is wired the same way as every other clone: the shared statusline script
 `~/.claude/wt-clone-statusline.sh` (it derives the hue from this directory) plus the theme
-`~/.claude/themes/wt-clone-003-green.json`, both selected in this clone's untracked
+`~/.claude/themes/wt-clone-003-teal.json`, both selected in this clone's untracked
 `.claude/settings.local.json`. The status line shows the colour in every permission mode; the
 input-box border only does in Manual mode, which is expected — see the shared memory
 `clone-colour-identity` before "fixing" it.
@@ -14,7 +14,7 @@ input-box border only does in Manual mode, which is expected — see the shared 
 |            |                                                                                  |
 | ---------- | -------------------------------------------------------------------------------- |
 | Root       | `%HANGAR%/wt-003` |
-| Colour     | green                                                                            |
+| Colour     | teal                                                                             |
 | PostgREST  | 3237                                                                             |
 | PostgreSQL | 5669                                                                             |
 | Swagger UI | 8317                                                                             |

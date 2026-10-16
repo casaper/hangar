@@ -26,9 +26,9 @@
 
 hangar_vsfix_colour() {
     case "$1" in
-        checkout_0001) printf '0;204;255 45 cyan #000000 #00ccff'    ;;   # #00ccff
-        checkout_0002) printf '255;204;0 220 yellow #000000 #ffcc00' ;;   # #ffcc00
-        checkout_0003) printf '0;204;0 40 green #000000 #00cc00'     ;;   # #00cc00
+        checkout_0001) printf '138;154;91 101 moss #ffffff #8a9a5b'  ;;   # #8a9a5b
+        checkout_0002) printf '112;128;144 66 slate #ffffff #778695' ;;   # #708090
+        checkout_0003) printf '142;69;133 96 plum #ffffff #a971a2'   ;;   # #8e4585
         *)             return 1 ;;
     esac
 }

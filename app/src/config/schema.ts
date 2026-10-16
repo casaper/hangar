@@ -587,7 +587,11 @@ const secretsSchema = z.strictObject({
 });
 
 const paletteSchema = z.strictObject({
-  /** REPLACES the built-in 16. Order is load-bearing and append-only. */
+  /**
+   * REPLACES the built-in 20 rather than extending them. Order is load-bearing and append-only.
+   * Names and hexes are unique: `colours change` finds a hue by name and a tmux window's tag
+   * finds it by hex, so a duplicate makes either lookup pick one of two silently.
+   */
   hues: z
     .array(
       z.strictObject({
@@ -596,6 +600,12 @@ const paletteSchema = z.strictObject({
       }),
     )
     .min(1)
+    .refine((hues) => new Set(hues.map((hue) => hue.name)).size === hues.length, {
+      message: 'two hues share a name',
+    })
+    .refine((hues) => new Set(hues.map((hue) => hue.hex.toLowerCase())).size === hues.length, {
+      message: 'two hues share a hex',
+    })
     .optional(),
   /**
    * Index rotation, so a second hangar's clones start on different hues.

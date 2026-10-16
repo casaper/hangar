@@ -1,11 +1,11 @@
 {
-  "name": "checkout_0001 (cyan)",
+  "name": "checkout_0001 (moss)",
   "base": "dark",
   "overrides": {
-    "claude": "#00ccff",
-    "claudeShimmer": "#66e0ff",
-    "briefLabelClaude": "#00ccff",
-    "promptBorder": "#00a3cc",
-    "promptBorderShimmer": "#00ccff"
+    "claude": "#8a9a5b",
+    "claudeShimmer": "#b8c29c",
+    "briefLabelClaude": "#8a9a5b",
+    "promptBorder": "#6e7b48",
+    "promptBorderShimmer": "#8a9a5b"
   }
 }

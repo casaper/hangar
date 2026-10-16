@@ -630,9 +630,9 @@ secrets:
 # --------------------------------------------------------------------------------------------
 # Palette -- the per-clone hues
 # --------------------------------------------------------------------------------------------
-# Omit the whole section to use the built-in 16 hues unrotated, which is what this hangar does.
+# Omit the whole section to use the built-in 20 hues unrotated, which is what this hangar does.
 # palette:
-#   # REPLACES the built-in 16 rather than extending them. Order is load-bearing and
+#   # REPLACES the built-in 20 rather than extending them. Order is load-bearing and
 #   # append-only: clone N takes hues[N-1], so inserting a hue re-colours every clone after it.
 #   hues:
 #     - { name: cyan, hex: '#00ccff' }

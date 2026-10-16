@@ -16,8 +16,8 @@
  *   ink     = black or white, whichever reads on main   -> text ON the hue
  *   barText = main, lifted until it clears the floor    -> the hue AS text, on the bar
  *
- * ORDER IS LOAD-BEARING. A clone with no explicit assignment takes `PALETTE[(N-1) % length]`, so
- * inserting, reordering or re-hueing an entry silently re-colours every clone at that slot --
+ * ORDER IS LOAD-BEARING. A clone with no explicit assignment takes slot `(N-1) % length` of its
+ * hangar's `effectivePalette` -- this list unless the config sets `palette.hues` -- so inserting, reordering or re-hueing an entry silently re-colours every clone at that slot --
  * and clone_01..03 have the original cyan / yellow / green wired into muscle memory. Appending
  * is always safe. Replacing a slot is safe only when no fleet reaches it, and a NAME that a
  * `colour-assignments.json` holds must survive any replacement, whatever slot it sits in.
@@ -66,21 +66,34 @@ export const PALETTE = [
   { name: 'spring', hex: '#13fd99' },
 ] as const satisfies readonly PaletteEntry[];
 
+export const paletteEntry = (
+  palette: readonly PaletteEntry[],
+  name: string,
+): PaletteEntry | undefined => palette.find((entry) => entry.name === name);
+
 /**
- * The colour names as a union type, not just strings.
+ * The hues ONE hangar's clones draw from: `palette.hues` if the config sets it, else `PALETTE`,
+ * rotated by `palette.rotate`.
  *
- * `as const satisfies` above is what buys this: the entries keep their literal types (so this
- * union is the real list) while still being checked against `PaletteEntry`. Commander's
- * `.choices(PALETTE_NAMES)` then narrows `hangar colours change`'s argument to exactly
- * these, so a typo is a usage error listing the real names -- and adding a hue to the table
- * extends the CLI's accepted values with no second list to update.
+ * The rotation is applied here, on read, rather than by anybody reordering a list -- which is
+ * what keeps a hue list append-only while still letting a second hangar's clone 1 start on a
+ * different hue from the first's. Hexes are lowercased because `colourByHex` matches what the
+ * shell hook wrote, and the schema accepts either case.
+ *
+ * A per-hangar VALUE, never module state: one process can render two hangars, and a palette
+ * cached here would hand the second one the first one's hues.
  */
-export type ColourName = (typeof PALETTE)[number]['name'];
-
-export const PALETTE_NAMES: readonly ColourName[] = PALETTE.map((entry) => entry.name);
-
-export const paletteEntry = (name: string): PaletteEntry | undefined =>
-  PALETTE.find((entry) => entry.name === name);
+export const effectivePalette = (config: {
+  readonly hues?: readonly PaletteEntry[] | undefined;
+  readonly rotate: number;
+}): readonly PaletteEntry[] => {
+  const base = (config.hues ?? PALETTE).map((entry) => ({
+    name: entry.name,
+    hex: entry.hex.toLowerCase(),
+  }));
+  const shift = config.rotate % base.length;
+  return [...base.slice(shift), ...base.slice(0, shift)];
+};
 
 export type Rgb = readonly [number, number, number];
 
@@ -424,17 +437,21 @@ const toX256 = ([r, g, b]: Rgb): number => 16 + 36 * cubeIndex(r) + 6 * cubeInde
 /**
  * The colour for a clone index (1-based), or the one it was explicitly assigned.
  *
- * The formula is still the default and still needs no bookkeeping: `PALETTE[(N-1) % length]`,
- * wrapping once the palette is exhausted, which is a degraded but working state -- two clones
+ * The formula is still the default and still needs no bookkeeping: `palette[(N-1) % length]`,
+ * from the hangar's `effectivePalette`, wrapping once the palette is exhausted, which is a degraded but working state -- two clones
  * share a hue and `hangar doctor` says so. `override` is a palette NAME, from
  * `colour-assignments.json`; an unknown one falls back to the formula rather than throwing,
  * because every command builds a Clone and none of them should die on a typo in that file.
  * `hangar doctor` is what reports it.
  */
-export const colourFor = (index: number, override?: string): CloneColour => {
-  const assigned = override === undefined ? undefined : paletteEntry(override);
-  const slot = (index - 1) % PALETTE.length;
-  const entry = assigned ?? PALETTE[slot];
+export const colourFor = (
+  palette: readonly PaletteEntry[],
+  index: number,
+  override?: string,
+): CloneColour => {
+  const assigned = override === undefined ? undefined : paletteEntry(palette, override);
+  const slot = (index - 1) % palette.length;
+  const entry = assigned ?? palette[slot];
   if (!entry) throw new Error(`no palette entry for clone index ${index}`);
   const main = parseHex(entry.hex);
   return {
@@ -447,7 +464,7 @@ export const colourFor = (index: number, override?: string): CloneColour => {
     x256: toX256(main),
     ink: inkFor(entry.hex),
     barText: barTextFor(entry.hex),
-    reused: assigned === undefined && index > PALETTE.length,
+    reused: assigned === undefined && index > palette.length,
     explicit: assigned !== undefined,
   };
 };
@@ -461,9 +478,12 @@ export const colourFor = (index: number, override?: string): CloneColour => {
  * name deliberately: `colours change` means a clone's hue need not be the one its index implies,
  * and the hex is the same either way.
  */
-export const colourByHex = (hex: string): CloneColour | undefined => {
-  const entry = PALETTE.find((candidate) => candidate.hex === hex.toLowerCase());
-  return entry === undefined ? undefined : colourFor(1, entry.name);
+export const colourByHex = (
+  palette: readonly PaletteEntry[],
+  hex: string,
+): CloneColour | undefined => {
+  const entry = palette.find((candidate) => candidate.hex === hex.toLowerCase());
+  return entry === undefined ? undefined : colourFor(palette, 1, entry.name);
 };
 
 const ESC = '\u001b';

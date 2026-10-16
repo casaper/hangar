@@ -34,7 +34,7 @@ import {
  * this file rather than by a screenshot three weeks later.
  */
 
-const ALL = PALETTE.map((entry) => colourFor(1, entry.name));
+const ALL = PALETTE.map((entry) => colourFor(PALETTE, 1, entry.name));
 
 test('the bar is readable with no hue involved at all', () => {
   // The floor before any clone is in the picture. A bar whose own text fails is a bar that
@@ -84,7 +84,7 @@ test('the bug: WCAG 2.1 gave seven mid-tone hues black ink that reads worse', ()
   // by APCA, and by eye, white does. If this ever stops holding, the ink switch is no longer
   // what decides them and the reason for APCA here needs re-measuring.
   for (const name of ['magenta', 'violet', 'red', 'blue']) {
-    const colour = colourFor(1, name);
+    const colour = colourFor(PALETTE, 1, name);
     assert.equal(colour.ink, '#ffffff', `${name} should take white ink`);
     assert.ok(
       contrastRatio(colour.main, '#000000') > contrastRatio(colour.main, '#ffffff'),
@@ -150,7 +150,7 @@ test('the bug: tmux’s own default put a clone hue at 1.00:1 against the bar', 
   // This is why the conf now names its own background, and the number is what makes that
   // decision impossible to undo by accident.
   const TMUX_DEFAULT_GREEN = '#00cc00';
-  const green = colourFor(1, 'green');
+  const green = colourFor(PALETTE, 1, 'green');
   assert.ok(
     contrastRatio(green.main, TMUX_DEFAULT_GREEN) < 1.05,
     'the green clone on tmux’s green bar is the same colour twice',

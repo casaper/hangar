@@ -221,9 +221,9 @@ ports. `unpin` refuses when the formula would put the clone on a port a still-pi
 and names the sibling to release first. Between `unpin` and `doctor --fix` the clone's derived ports
 and its `.env.local` disagree, so run the two together.
 
-**`colours change`'s `<colour>` is a fixed choice list**, from `src/palette.ts`: `cyan`, `yellow`,
-`green`, `orange`, `magenta`, `violet`, `red`, `teal`, `blue`, `forest`, `olive`, `orchid`,
-`pistachio`, `raspberry`, `salmon`, `silver`, `aqua`, `plum`, `ochre`, `spring`. A typo is a usage error listing the real names, not a silent no-op.
+**`colours change`'s `<colour>` is a name from THIS hangar's palette** — the config's
+`palette.hues` if it sets one, else the built-in twenty in `src/palette.ts`. `hangar colours list`
+names them; a typo is refused with the real names listed, not a silent no-op.
 
 **Per-command notes** — the traps, the flags that mean something unusual, `scrub` and
 `config validate` — are in `command-notes.md`. Read the section for the command you are about to

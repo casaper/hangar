@@ -1,11 +1,11 @@
 {
-  "name": "wt-001 (cyan)",
+  "name": "wt-001 (violet)",
   "base": "dark",
   "overrides": {
-    "claude": "#00ccff",
-    "claudeShimmer": "#66e0ff",
-    "briefLabelClaude": "#00ccff",
-    "promptBorder": "#00a3cc",
-    "promptBorderShimmer": "#00ccff"
+    "claude": "#9966ff",
+    "claudeShimmer": "#c1a3ff",
+    "briefLabelClaude": "#9966ff",
+    "promptBorder": "#7a51cc",
+    "promptBorderShimmer": "#9966ff"
   }
 }

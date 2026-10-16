@@ -192,10 +192,11 @@ secrets:
       optional: true
 
 palette:
-  # Declared, and read by NOTHING today -- `config.palette` has a schema and no consumer, so the
-  # capture beside this file records the built-in 16 and an unrotated assignment. That is what a
-  # fixture is for: the day either key becomes live, this tree diffs and the diff is the proof.
-  # `dev/fixture.config.yaml` sets `rotate` alone; the replacement hue list is only here.
+  # A replacement hue list, rotated by one: clones 1-3 are moss, slate and plum, and the
+  # capture beside this file records them in every theme name and identity file.
+  # `dev/fixture.config.yaml` sets `rotate` alone; the replacement hue list is only here, so
+  # the built-in, UNROTATED formula is in neither capture -- `test/palette-config.test.ts`
+  # holds that one.
   hues:
     - name: rust
       hex: '#b7410e'

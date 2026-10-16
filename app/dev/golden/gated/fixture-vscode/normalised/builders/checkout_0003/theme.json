@@ -1,11 +1,11 @@
 {
-  "name": "checkout_0003 (green)",
+  "name": "checkout_0003 (plum)",
   "base": "dark",
   "overrides": {
-    "claude": "#00cc00",
-    "claudeShimmer": "#66e066",
-    "briefLabelClaude": "#00cc00",
-    "promptBorder": "#00a300",
-    "promptBorderShimmer": "#00cc00"
+    "claude": "#8e4585",
+    "claudeShimmer": "#bb8fb5",
+    "briefLabelClaude": "#8e4585",
+    "promptBorder": "#71376a",
+    "promptBorderShimmer": "#8e4585"
   }
 }

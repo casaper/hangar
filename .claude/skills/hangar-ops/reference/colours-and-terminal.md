@@ -16,7 +16,9 @@ What `hangar colours sync` writes, and how the hues are derived from `src/palett
 `colours_change` act and both ask. `colours change` has no preview because the command has no
 `-n` — `colours_list` beforehand is the report.
 
-To change what a hue LOOKS LIKE, edit `src/palette.ts` and run `hangar colours sync`. To give
+To change what a hue LOOKS LIKE, edit `src/palette.ts` — or, for this hangar alone, set
+`palette.hues` (a replacement list) or `palette.rotate` in `hangar.config.yaml` — and run
+`hangar colours sync`. To give
 one clone a different hue, `hangar colours change 4 red` — that is the only per-clone value in
 the fleet that is not a pure function of the index, so it is remembered in
 `.hangar/colour-assignments.json` (sparse: a clone that was never re-coloured is not in it,

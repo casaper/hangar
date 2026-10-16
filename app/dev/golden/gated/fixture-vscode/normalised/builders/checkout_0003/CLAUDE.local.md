@@ -1,12 +1,12 @@
-# This clone: checkout_0003 (green)
+# This clone: checkout_0003 (plum)
 
 You are working in **`checkout_0003`**, one of the sibling clones under `%HANGAR%/`.
-Announce yourself as **green** when the user needs to tell your session apart from
+Announce yourself as **plum** when the user needs to tell your session apart from
 the others.
 
 Your colour is wired the same way as every other clone: the shared statusline script
 `~/.claude/vsfix-clone-statusline.sh` (it derives the hue from this directory) plus the theme
-`~/.claude/themes/vsfix-clone-0003-green.json`, both selected in this clone's untracked
+`~/.claude/themes/vsfix-clone-0003-plum.json`, both selected in this clone's untracked
 `.claude/settings.local.json`. The status line shows the colour in every permission mode; the
 input-box border only does in Manual mode, which is expected — see the shared memory
 `clone-colour-identity` before "fixing" it.
@@ -14,7 +14,7 @@ input-box border only does in Manual mode, which is expected — see the shared 
 |                   |                                                                                         |
 | ----------------- | --------------------------------------------------------------------------------------- |
 | Root              | `%HANGAR%/checkout_0003` |
-| Colour            | green                                                                                   |
+| Colour            | plum                                                                                    |
 | Next dev server   | 4300                                                                                    |
 | Storybook         | 6106                                                                                    |
 | Playwright report | 9423                                                                                    |

@@ -1,11 +1,11 @@
 {
-  "name": "wt-003 (green)",
+  "name": "wt-003 (teal)",
   "base": "dark",
   "overrides": {
-    "claude": "#00cc00",
-    "claudeShimmer": "#66e066",
-    "briefLabelClaude": "#00cc00",
-    "promptBorder": "#00a300",
-    "promptBorderShimmer": "#00cc00"
+    "claude": "#00ccaa",
+    "claudeShimmer": "#66e0cc",
+    "briefLabelClaude": "#00ccaa",
+    "promptBorder": "#00a388",
+    "promptBorderShimmer": "#00ccaa"
   }
 }

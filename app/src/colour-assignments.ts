@@ -24,7 +24,8 @@ const DOC_KEY = '_';
 
 const DOC =
   'Written by `hangar colours change <clone> <colour>`. Keys are clone indices; values are ' +
-  'palette names from app/src/palette.ts. A clone that is not listed takes PALETTE[(N-1) % length].';
+  'names from the hangar palette (palette.hues in hangar.config.yaml, else app/src/palette.ts). ' +
+  'A clone that is not listed takes the palette slot its index gives.';
 
 type Assignments = Map<number, string>;
 

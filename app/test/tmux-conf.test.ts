@@ -86,7 +86,7 @@ test('the conf is hangar-level: it names no clone and no clone HUE', () => {
   // guards strictly more than forbidding the shape did: it covers the DERIVED values too, and
   // a shimmer or a border leaking in is the likelier mistake than a raw palette entry.
   for (const entry of PALETTE) {
-    const colour = colourFor(1, entry.name);
+    const colour = colourFor(PALETTE, 1, entry.name);
     for (const [what, value] of [
       ['main', colour.main],
       ['shimmer', colour.shimmer],

@@ -110,8 +110,9 @@ absolute path, `git init`s each `cloneAt(hangar, i).path`, and runs with `node p
 scratchpad and run that copy — e.g. `sh <copy> footer clone_01 <root>/clone_01` renders the real
 footer before `colours sync` has been run.
 
-**A palette or ink change is invisible to `pnpm golden` past slot 3**: both fixtures have three
-clones (cyan, yellow, green), so `test/contrast.test.ts` is the only net for every other hue — a
+**A palette or ink change is invisible to `pnpm golden` outside six hues**: both fixtures have
+three clones, `fixture` on built-in slots 6–8 (`palette.rotate: 5`) and `fixture-vscode` on its own
+`palette.hues`, so `test/contrast.test.ts` is the only net for every other built-in hue — a
 comment-only golden diff there is expected, not proof of no change.
 
 **Measure a VS Code extension from its bundle**,

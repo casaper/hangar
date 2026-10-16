@@ -21,7 +21,7 @@ claude-tmux-conf   %HANGAR%/.hangar/claude-tmux.conf
 port-roles         web(VSFIX_WEB_PORT)=4200 storybook(VSFIX_STORYBOOK_PORT)=6006 e2eReport(VSFIX_E2E_REPORT_PORT)=9323
 port-step/offset   50 / 0
 
-clone checkout_0001  index=1  colour=cyan  theme=vsfix-clone-0001-cyan
+clone checkout_0001  index=1  colour=moss  theme=vsfix-clone-0001-moss
   ports  VSFIX_WEB_PORT=4200 VSFIX_STORYBOOK_PORT=6006 VSFIX_E2E_REPORT_PORT=9323
   env.local              -> %HANGAR%/checkout_0001/.env.development.local
   envrc.private          -> %HANGAR%/checkout_0001/.envrc.private
@@ -30,7 +30,7 @@ clone checkout_0001  index=1  colour=cyan  theme=vsfix-clone-0001-cyan
   settings-default.json  -> %HANGAR%/checkout_0001/.claude/settings.local.json
   workspace-1.json       -> %HANGAR%/checkout_0001/vsfix.0001.code-workspace
   workspace-2.json       -> %HANGAR%/checkout_0001/web/vsfix.0001.code-workspace
-  theme.json             -> %HOME%/.claude/themes/vsfix-clone-0001-cyan.json
+  theme.json             -> %HOME%/.claude/themes/vsfix-clone-0001-moss.json
   git-info-exclude       -> %HANGAR%/checkout_0001/.git/info/exclude
   direnv-snippet         -> (printed by add-clone)
   health-check-allows    -> %HANGAR%/checkout_0001/.claude/settings.local.json
@@ -38,7 +38,7 @@ clone checkout_0001  index=1  colour=cyan  theme=vsfix-clone-0001-cyan
   symlink-web_e2e_.env.local -> %HANGAR%/checkout_0001/web/e2e/.env.local
   symlink-web_.env.secrets -> %HANGAR%/checkout_0001/web/.env.secrets
 
-clone checkout_0002  index=2  colour=yellow  theme=vsfix-clone-0002-yellow
+clone checkout_0002  index=2  colour=slate  theme=vsfix-clone-0002-slate
   ports  VSFIX_WEB_PORT=4250 VSFIX_STORYBOOK_PORT=6056 VSFIX_E2E_REPORT_PORT=9373
   env.local              -> %HANGAR%/checkout_0002/.env.development.local
   envrc.private          -> %HANGAR%/checkout_0002/.envrc.private
@@ -47,7 +47,7 @@ clone checkout_0002  index=2  colour=yellow  theme=vsfix-clone-0002-yellow
   settings-default.json  -> %HANGAR%/checkout_0002/.claude/settings.local.json
   workspace-1.json       -> %HANGAR%/checkout_0002/vsfix.0002.code-workspace
   workspace-2.json       -> %HANGAR%/checkout_0002/web/vsfix.0002.code-workspace
-  theme.json             -> %HOME%/.claude/themes/vsfix-clone-0002-yellow.json
+  theme.json             -> %HOME%/.claude/themes/vsfix-clone-0002-slate.json
   git-info-exclude       -> %HANGAR%/checkout_0002/.git/info/exclude
   direnv-snippet         -> (printed by add-clone)
   health-check-allows    -> %HANGAR%/checkout_0002/.claude/settings.local.json
@@ -55,7 +55,7 @@ clone checkout_0002  index=2  colour=yellow  theme=vsfix-clone-0002-yellow
   symlink-web_e2e_.env.local -> %HANGAR%/checkout_0002/web/e2e/.env.local
   symlink-web_.env.secrets -> %HANGAR%/checkout_0002/web/.env.secrets
 
-clone checkout_0003  index=3  colour=green  theme=vsfix-clone-0003-green
+clone checkout_0003  index=3  colour=plum  theme=vsfix-clone-0003-plum
   ports  VSFIX_WEB_PORT=4300 VSFIX_STORYBOOK_PORT=6106 VSFIX_E2E_REPORT_PORT=9423
   env.local              -> %HANGAR%/checkout_0003/.env.development.local
   envrc.private          -> %HANGAR%/checkout_0003/.envrc.private
@@ -64,7 +64,7 @@ clone checkout_0003  index=3  colour=green  theme=vsfix-clone-0003-green
   settings-default.json  -> %HANGAR%/checkout_0003/.claude/settings.local.json
   workspace-1.json       -> %HANGAR%/checkout_0003/vsfix.0003.code-workspace
   workspace-2.json       -> %HANGAR%/checkout_0003/web/vsfix.0003.code-workspace
-  theme.json             -> %HOME%/.claude/themes/vsfix-clone-0003-green.json
+  theme.json             -> %HOME%/.claude/themes/vsfix-clone-0003-plum.json
   git-info-exclude       -> %HANGAR%/checkout_0003/.git/info/exclude
   direnv-snippet         -> (printed by add-clone)
   health-check-allows    -> %HANGAR%/checkout_0003/.claude/settings.local.json

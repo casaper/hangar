@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { cloneShortName, type Clone } from './fleet.ts';
+import { cloneShortName, paletteOf, type Clone } from './fleet.ts';
 import { run } from './exec.ts';
 import type { Hangar } from './hangar.ts';
 import { barOptions, keyBindings, paneBorderFormat } from './generate/tmux-conf.ts';
@@ -804,7 +804,9 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
            * session one colour would throw that away until its next `cd`. An untagged window
            * (one that no shell has printed a prompt in yet) takes the session's.
            */
-          const colour = (tagged === undefined ? undefined : colourByHex(tagged)) ?? clone.colour;
+          const colour =
+            (tagged === undefined ? undefined : colourByHex(paletteOf(clone.hangar), tagged)) ??
+            clone.colour;
           const style = `bg=${colour.main},fg=${colour.ink}`;
           tmux(['set', '-w', '-t', id, 'window-status-current-style', `${style},bold`]);
           tmux(['set', '-w', '-t', id, 'window-status-style', `fg=${colour.barText}`]);

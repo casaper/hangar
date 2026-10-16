@@ -91,7 +91,7 @@
       }
     ]
   },
-  "theme": "custom:vsfix-clone-0002-yellow",
+  "theme": "custom:vsfix-clone-0002-slate",
   "statusLine": {
     "type": "command",
     "command": "%HOME%/.claude/vsfix-clone-statusline.sh"

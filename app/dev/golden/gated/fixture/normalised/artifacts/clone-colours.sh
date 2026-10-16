@@ -26,9 +26,9 @@
 
 hangar_wt_colour() {
     case "$1" in
-        wt-001) printf '0;204;255 45 cyan #000000 #00ccff'    ;;   # #00ccff
-        wt-002) printf '255;204;0 220 yellow #000000 #ffcc00' ;;   # #ffcc00
-        wt-003) printf '0;204;0 40 green #000000 #00cc00'     ;;   # #00cc00
+        wt-001) printf '153;102;255 99 violet #ffffff #9966ff' ;;   # #9966ff
+        wt-002) printf '255;68;68 203 red #ffffff #ff4444'     ;;   # #ff4444
+        wt-003) printf '0;204;170 43 teal #000000 #00ccaa'     ;;   # #00ccaa
         *)      return 1 ;;
     esac
 }

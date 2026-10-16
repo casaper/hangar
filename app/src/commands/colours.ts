@@ -14,7 +14,7 @@ import {
   settingsContentFor,
   settingsPath,
 } from '../clone-config.ts';
-import { discoverClones, requireClone } from '../fleet.ts';
+import { discoverClones, paletteOf, requireClone } from '../fleet.ts';
 import { claudeSessionsIn } from '../procs.ts';
 import { cloneColoursArtifact } from '../generate/colours-sh.ts';
 import { applyArtifact, type Artifact, type ArtifactOutcome } from '../generate/index.ts';
@@ -23,7 +23,7 @@ import { terminalHookArtifact } from '../generate/terminal-sh.ts';
 import { tmuxConfArtifact } from '../generate/tmux-conf.ts';
 import { tmuxStatusArtifact } from '../generate/tmux-status-sh.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
-import { colourFor, paint, paletteEntry, PALETTE, PALETTE_NAMES } from '../palette.ts';
+import { colourFor, paint, paletteEntry } from '../palette.ts';
 import { tmuxServer, tmuxSocketName } from '../tmux.ts';
 import { tildify } from '../user-paths.ts';
 import { CliError } from '../exec.ts';
@@ -100,13 +100,15 @@ export type ColoursChangeOptions = { force?: boolean | undefined };
 /** The palette names no clone is currently using, for the "pick another" hint. */
 const freeColours = (hangar: Hangar): string[] => {
   const taken = new Set(discoverClones(hangar).map((clone) => clone.colour.name));
-  return PALETTE_NAMES.filter((name) => !taken.has(name));
+  return paletteOf(hangar)
+    .map((entry) => entry.name)
+    .filter((name) => !taken.has(name));
 };
 
 /**
  * `hangar colours change <clone> <colour>` -- give one clone a hue of your choosing.
  *
- * The hue is normally `PALETTE[(N-1) % length]` and there is nothing to argue with, so this
+ * The hue is normally slot `(N-1) % length` of the hangar's palette and there is nothing to argue with, so this
  * persists an explicit assignment (`colour-assignments.json`) and then rebuilds EVERYTHING
  * derived from it. That last part is the whole command: four artifacts and two per-clone files
  * carry the colour, and the theme and the identity file carry its NAME, so a half-done change
@@ -126,9 +128,11 @@ export const coloursChange = (
   opts: ColoursChangeOptions,
 ): void => {
   const clone = requireClone(hangar, ref);
-  const entry = paletteEntry(colour);
+  const palette = paletteOf(hangar);
+  const entry = paletteEntry(palette, colour);
   if (entry === undefined) {
-    throw new CliError(`unknown colour: ${colour}`, `Available: ${PALETTE_NAMES.join(', ')}`);
+    const names = palette.map((candidate) => candidate.name).join(', ');
+    throw new CliError(`unknown colour: ${colour}`, `Available: ${names}`);
   }
 
   if (clone.colour.name === entry.name) {
@@ -168,7 +172,7 @@ export const coloursChange = (
   // one is a different path and the old one would just sit there for ever.
   const staleTheme = themePath(clone);
 
-  const formula = colourFor(clone.index).name;
+  const formula = colourFor(palette, clone.index).name;
   if (entry.name === formula) {
     clearColourAssignment(hangar, clone.index);
     ok(`back on the palette formula for index ${String(clone.index)} (${formula})`);
@@ -217,17 +221,16 @@ export const coloursChange = (
  */
 export const coloursList = (hangar: Hangar): void => {
   const owners = new Map(discoverClones(hangar).map((clone) => [clone.colour.name, clone]));
-  const width = Math.max(...PALETTE_NAMES.map((name) => name.length));
-  const slotWidth = String(PALETTE.length).length;
-  for (const [slot, entry] of PALETTE.entries()) {
-    const colour = colourFor(1, entry.name);
+  const palette = paletteOf(hangar);
+  const width = Math.max(...palette.map((entry) => entry.name.length));
+  const slotWidth = String(palette.length).length;
+  for (const [slot, entry] of palette.entries()) {
+    const colour = colourFor(palette, 1, entry.name);
     const owner = owners.get(entry.name);
     const held =
       owner === undefined
         ? ''
-        : pc.dim(
-            `clone_${String(owner.index).padStart(2, '0')}${owner.colour.explicit ? ' (assigned)' : ''}`,
-          );
+        : pc.dim(`${owner.name}${owner.colour.explicit ? ' (assigned)' : ''}`);
     console.log(
       `  ${paint(colour, '●')} ${entry.name.padEnd(width)}  ${pc.dim(entry.hex)}  ${pc.dim(
         `slot ${String(slot + 1).padStart(slotWidth)}`,

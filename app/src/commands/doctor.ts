@@ -76,7 +76,7 @@ import { usesBitbucket } from '../bitbucket.ts';
 import { editors, type EditorDriver } from '../editor/index.ts';
 import { CliError } from '../exec.ts';
 import { skillDriftRows } from './skills.ts';
-import { discoverClones, requireClone, type Clone } from '../fleet.ts';
+import { discoverClones, paletteOf, requireClone, type Clone } from '../fleet.ts';
 import { applyArtifact, type Artifact } from '../generate/index.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
 import {
@@ -826,7 +826,7 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
       name: 'colour',
       ok: false,
       detail: clone.colour.reused
-        ? `the palette has wrapped — ${clone.colour.name} is also ${sameHue.map((c) => c.name).join(', ')}. Add a hue to src/palette.ts.`
+        ? `the palette has wrapped — ${clone.colour.name} is also ${sameHue.map((c) => c.name).join(', ')}. Add a hue to the config's \`palette.hues\`, or to src/palette.ts if it sets none.`
         : `${clone.colour.name} is also ${sameHue.map((c) => c.name).join(', ')} — recolour one with \`hangar colours change\``,
     });
   }
@@ -834,7 +834,7 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
   // An assignment naming a hue that is not in the palette: `colourFor` falls back to the
   // formula, so the file looks edited and changes nothing. A hand-edit typo, always.
   const assigned = colourAssignmentFor(hangar, clone.index);
-  if (assigned !== undefined && paletteEntry(assigned) === undefined) {
+  if (assigned !== undefined && paletteEntry(paletteOf(hangar), assigned) === undefined) {
     checks.push({
       name: 'colour assignment',
       ok: false,

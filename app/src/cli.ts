@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 
-import { Argument, Command, Option, type CommandUnknownOpts } from '@commander-js/extra-typings';
+import { Command, Option, type CommandUnknownOpts } from '@commander-js/extra-typings';
 import pc from 'picocolors';
 
 import { addClone } from './commands/add-clone.ts';
@@ -60,7 +60,6 @@ import {
 } from './config/load.ts';
 import type { Hangar } from './hangar.ts';
 import { CliError } from './exec.ts';
-import { PALETTE_NAMES } from './palette.ts';
 
 /**
  * `hangar` -- fleet-level orchestration for a hangar's clones.
@@ -1070,10 +1069,10 @@ colours
   .command('change')
   .description('Give one clone a colour of your choosing, and rebuild everything that names it')
   .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
-  // `.choices()` rather than a free string: extra-typings narrows the argument to the palette
-  // names, so a typo is a usage error listing the real ones instead of a clone silently keeping
-  // the hue it had. The names are DATA in src/palette.ts -- adding a hue extends this list.
-  .addArgument(new Argument('<colour>', 'palette colour').choices(PALETTE_NAMES))
+  // A free string, not `.choices()`: the names are the HANGAR's palette (`palette.hues` can
+  // replace the built-in set), which is not known until the config loads. `coloursChange`
+  // refuses an unknown name and lists the real ones.
+  .argument('<colour>', 'palette colour (`hangar colours list` names them)')
   .option('--force', 'allow a colour a sibling clone already has')
   .action((clone, colour, options) => {
     coloursChange(requireHangar(), clone, colour, options);

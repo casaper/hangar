@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { colourAssignmentFor } from './colour-assignments.ts';
 import { CliError } from './exec.ts';
 import type { Hangar } from './hangar.ts';
-import { colourFor, type CloneColour } from './palette.ts';
+import { colourFor, effectivePalette, type CloneColour, type PaletteEntry } from './palette.ts';
 import { portPinFor } from './port-pins.ts';
 import { portsFor, type ClonePorts } from './ports.ts';
 
@@ -86,11 +86,15 @@ export const cloneNameFor = (hangar: Hangar, index: number): string =>
 export const cloneShortName = (clone: Clone): string =>
   String(clone.index).padStart(clone.hangar.config.clones.pad, '0');
 
+/** The hues this hangar's clones draw from -- see `effectivePalette`. */
+export const paletteOf = (hangar: Hangar): readonly PaletteEntry[] =>
+  effectivePalette(hangar.config.palette);
+
 const makeClone = (hangar: Hangar, index: number): Clone => ({
   name: cloneNameFor(hangar, index),
   index,
   path: join(hangar.root, cloneNameFor(hangar, index)),
-  colour: colourFor(index, colourAssignmentFor(hangar, index)),
+  colour: colourFor(paletteOf(hangar), index, colourAssignmentFor(hangar, index)),
   ports: portsFor(hangar, index, portPinFor(hangar, index)),
   portsPinned: portPinFor(hangar, index) !== undefined,
   hangar,

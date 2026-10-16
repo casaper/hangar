@@ -33,9 +33,9 @@ clone="$(printf '%s' "$dir" | sed -n "s|^${FLEET}/\(checkout_[0-9][0-9][0-9][0-9
 
 # Same triples as the theme files: main / dim.
 case "$clone" in
-    checkout_0001) main="0;204;255"; dim="0;122;153" ;;   # cyan
-    checkout_0002) main="255;204;0"; dim="153;122;0" ;;   # yellow
-    checkout_0003) main="0;204;0";   dim="0;122;0"   ;;   # green
+    checkout_0001) main="138;154;91";  dim="82;92;54" ;;   # moss
+    checkout_0002) main="112;128;144"; dim="67;76;86" ;;   # slate
+    checkout_0003) main="142;69;133";  dim="85;41;79" ;;   # plum
     *)             main="150;150;150"; dim="100;100;100" ;;
 esac
 

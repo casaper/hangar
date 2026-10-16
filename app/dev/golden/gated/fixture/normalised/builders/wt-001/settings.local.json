@@ -91,7 +91,7 @@
       }
     ]
   },
-  "theme": "custom:wt-clone-001-cyan",
+  "theme": "custom:wt-clone-001-violet",
   "statusLine": {
     "type": "command",
     "command": "%HOME%/.claude/wt-clone-statusline.sh"
