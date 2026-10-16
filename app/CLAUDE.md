@@ -225,7 +225,7 @@ docs(test):  Say the suite exists, and say exactly what it does not cover
 flag, a seam, a driver or a generated artifact; `fix` corrects behaviour that was wrong; `docs` is `CLAUDE.md`,
 the README or the skills and nothing else.
 
-**Scopes** are the subsystem: `sync` `doctor` `open` `tmp` `plans` `pr` `jira` `colours` `config`
+**Scopes** are the subsystem: `sync` `doctor` `open` `close` `tmp` `plans` `pr` `jira` `colours` `config`
 `editor` `terminal` `platform` `setup` `add-clone` `install` `resume` `ide` `status` `golden`
 `cli` `fleet` `ports` `bookmarks` `modes` `exec` `servers` `allow` `waypoint` `commit-gate` `skills`
 `scrub` `test` `mcp` `release` `deps` — `release` being `hangar dev release`, and also the scope
