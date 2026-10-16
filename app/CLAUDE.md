@@ -105,6 +105,15 @@ file-write deny is an `Edit(...)` rule, and `Write(...)` deny rules are never ma
 imports `test/fixture.ts`'s `syntheticHangar({ root: mkdtempSync(…), configText })` and `src/**` by
 absolute path, `git init`s each `cloneAt(hangar, i).path`, and runs with `node probe.ts` from `app/`.
 
+**Run a generated script against the live fleet without installing it**: after `pnpm golden`,
+`sed 's#%HANGAR%#<root>#g' dev/golden/advisory/hangar/normalised/artifacts/<file>` into the
+scratchpad and run that copy — e.g. `sh <copy> footer clone_01 <root>/clone_01` renders the real
+footer before `colours sync` has been run.
+
+**A palette or ink change is invisible to `pnpm golden` past slot 3**: both fixtures have three
+clones (cyan, yellow, green), so `test/contrast.test.ts` is the only net for every other hue — a
+comment-only golden diff there is expected, not proof of no change.
+
 **Measure a VS Code extension from its bundle**,
 `~/.vscode/extensions/<publisher.name>-<ver>/dist/*.js`: slice around a match with `python3 -I`
 (`s.find(…)`), because `grep -oE` refuses a `{0,300}` context. Its workspace-scoped state is SQLite
