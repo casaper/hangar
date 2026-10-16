@@ -111,6 +111,17 @@ absolute path, `git init`s each `cloneAt(hangar, i).path`, and runs with `node p
 scratchpad and run that copy — e.g. `sh <copy> footer clone_01 <root>/clone_01` renders the real
 footer before `colours sync` has been run.
 
+**`advisory/` moves with the live fleet** (process counts, the PR cache, new commits), so prove
+a change left this hangar alone by copying `dev/golden/advisory` to the scratchpad BEFORE the
+edit and diffing after; only `artifacts/` and `builders/` count.
+
+**Test a `scrub-check.sh` pattern with a canary in a TRACKED file** — it is `git grep` over the
+working tree, so an untracked file is never scanned: back the file up, append the canary, run
+`sh dev/scrub-check.sh`, restore it and check `git diff --quiet` before anything is committed.
+
+**Stage part of a file without `git add -p`** (interactive, unsupported here): filter the hunks
+of `git diff -U3 -- <file>` in a scratchpad script and pipe them to `git apply --cached --recount -`.
+
 **A palette or ink change is invisible to `pnpm golden` outside six hues**: both fixtures have
 three clones, `fixture` on built-in slots 6–8 (`palette.rotate: 5`) and `fixture-vscode` on its own
 `palette.hues`, so `test/contrast.test.ts` is the only net for every other built-in hue — a
@@ -138,6 +149,9 @@ Both conventions exist because they caught something, and both apply to every ed
   only warns. Ask `inProgressOperation`, `conflictedFiles`, `syncStashes` instead. Whether an
   integration got committed is the one thing git cannot answer, so that one is carried, and a
   carried flag needs guarding for the paths that do nothing (`up-to-date` integrates nothing).
+- **A per-hangar value handed to a pure helper is a REQUIRED parameter, never one defaulted to
+  the built-in.** A default compiles at every call site and silently answers for the wrong
+  hangar; a required one makes `tsc` name each caller (that is how `colourFor`'s six were found).
 
 The two nets:
 
