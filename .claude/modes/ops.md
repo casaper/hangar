@@ -128,10 +128,10 @@ by declining to look.
 clone you name, so it is simultaneously a way to spell any command denied above and a way into
 working trees other agents are live in. It is denied AND enforced by a `PreToolUse` hook that
 reads the whole command line, so no spelling gets past it and none should be attempted. There is
-no tool for it either.
-It matches the text anywhere in the line, so a `grep` or heredoc that merely QUOTES it is refused
-too: search with the Grep tool, or put the text in a file, rather than taking the refusal as a stop. When the fleet needs one, hand the user the exact line — `-n` first — and
-let them run it from the hangar root.
+no tool for it either. It matches the text anywhere in the line, so a `grep` or heredoc that
+merely QUOTES it is refused too: search with the Grep tool, or put the text in a file, rather
+than taking the refusal as a stop. When the fleet needs one, hand the user the exact line — `-n`
+first — and let them run it from the hangar root.
 
 **Every other denial is a guardrail, not a sandbox.** Bash is not denied, so a deny on writing is not a
 deny on `sed -i`; the rules say what this mode is FOR, and routing a write around them is the one
