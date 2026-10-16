@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { pullRequestLink, ticketLink } from '../src/commands/browse.ts';
@@ -178,4 +181,62 @@ test('a hangar with no tracker is told so, rather than being handed a keyless li
   const link = ticketLink(cloneAt(withTracker('tracker:\n  kind: none\n'), 1));
   assert.equal(link.kind, 'none');
   assert.match(link.why, /no tracker/);
+});
+
+test('the footer shows the commit gate exactly when the gate itself would act', () => {
+  /*
+   * The footer arm, run for real against a throwaway hangar: a clone that is a git repo on a
+   * branch, and the state file `bin/hangar-commit-gate` writes, in the shape `writeState` writes
+   * it. Three states and the one trap -- a lock naming ANOTHER branch, which the gate's own
+   * `activeLock` ignores and the footer therefore must too.
+   */
+  const root = mkdtempSync(join(tmpdir(), 'hangar-gate-'));
+  try {
+    const h = syntheticHangar({ root });
+    const clone = cloneAt(h, 1);
+    const git = (...args: string[]): string =>
+      execFileSync('git', ['-C', clone.path, ...args], { encoding: 'utf8' });
+    mkdirSync(clone.path, { recursive: true });
+    git('init', '-q', '-b', 'feature/BE-1323_close_the_tab');
+    git(
+      '-c',
+      'user.email=t@e.invalid',
+      '-c',
+      'user.name=t',
+      '-c',
+      'commit.gpgsign=false',
+      'commit',
+      '-q',
+      '--allow-empty',
+      '-m',
+      'x',
+    );
+    const script = join(root, 'status.sh');
+    writeFileSync(script, tmuxStatusArtifact(h).content, { mode: 0o755 });
+    mkdirSync(h.paths.commitGateState, { recursive: true });
+    const state = join(h.paths.commitGateState, `${clone.name}.json`);
+    const footer = (gate?: object): string => {
+      rmSync(state, { force: true });
+      if (gate !== undefined) writeFileSync(state, `${JSON.stringify(gate, null, 2)}\n`);
+      return execFileSync('sh', [script, 'footer', clone.name, clone.path], { encoding: 'utf8' });
+    };
+
+    assert.ok(!footer().includes('gate'), 'no state file, nothing shown');
+    const locked = footer({
+      locked: true,
+      branch: 'feature/BE-1323_close_the_tab',
+      ticket: 'BE-1323',
+      locked_at: '2026-01-01T00:00:00.000Z',
+    });
+    assert.ok(locked.includes(' · ⊠gate · feature/BE-1323'), locked);
+    const elsewhere = footer({ locked: true, branch: 'feature/BE-7_other', ticket: 'BE-7' });
+    assert.ok(
+      !elsewhere.includes('gate'),
+      `a lock on another branch is not this one's: ${elsewhere}`,
+    );
+    const armed = footer({ armed: true, ticket: 'BE-1323', armed_at: '2026-01-01T00:00:00.000Z' });
+    assert.ok(armed.includes(' · ⊡gate BE-1323 · '), armed);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

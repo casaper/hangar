@@ -120,6 +120,11 @@ const PATH_MAX = 36;
  *
  * `✔` is the only one that appears alone: it means there is nothing else to say, so a clean tree
  * reads as one character rather than as an empty gap that could equally be a broken script.
+ *
+ * The two gate marks are not git state and so get their own segment: `⊠` is a lock in force on
+ * this branch, `⊡` a gate armed for a ticket whose branch is not cut yet. Single-width BMP symbols
+ * rather than a padlock emoji, because tmux and the emulator disagree on an emoji's width and the
+ * rest of the line then lands a column off.
  */
 const GLYPHS = {
   clean: '✔',
@@ -130,6 +135,8 @@ const GLYPHS = {
   inProgress: '⚑',
   ahead: '⇡',
   behind: '⇣',
+  gateLocked: '⊠',
+  gateArmed: '⊡',
 } as const;
 
 /**
@@ -182,6 +189,7 @@ export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
     `KEY_PATTERN=${sq(issueKeyPattern(hangar))}`,
     `DEFAULT_BRANCH=${sq(hangar.config.forge.defaultBranch ?? '')}`,
     `HANGAR=${sq(hangar.paths.bin)}`,
+    `GATE_DIR=${sq(hangar.paths.commitGateState)}`,
     `PR_TTL=${String(prCacheTtlSeconds(hangar))}`,
     `PR_LOCK_STALE=${String(PR_LOCK_STALE_SECONDS)}`,
     `BRANCH_MAX=${String(BRANCH_MAX)}`,
@@ -274,6 +282,27 @@ export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
     `  [ -n "$ahead" ] && marks="\${marks}${GLYPHS.ahead}\${ahead}"`,
     `  [ -n "$behind" ] && marks="\${marks}${GLYPHS.behind}\${behind}"`,
     '',
+    '  # The commit gate, from the state file `hangar-commit-gate` writes one key per line. Locked',
+    "  # counts only on the branch the lock names -- the same rule as the gate's own activeLock,",
+    '  # so a lock left on another branch is not shown as blocking this one. Armed names its',
+    '  # ticket, because an armed clone sits on the default branch, which does not.',
+    '  gate="" g_locked="" g_armed="" g_branch="" g_ticket=""',
+    '  if [ -f "$GATE_DIR/$clone.json" ]; then',
+    '    while IFS= read -r line; do',
+    '      case "$line" in',
+    `      *'"locked": true'*) g_locked=1 ;;`,
+    `      *'"armed": true'*) g_armed=1 ;;`,
+    `      *'"branch": "'*) g_branch=\${line#*'"branch": "'}; g_branch=\${g_branch%'"'*} ;;`,
+    `      *'"ticket": "'*) g_ticket=\${line#*'"ticket": "'}; g_ticket=\${g_ticket%'"'*} ;;`,
+    '      esac',
+    '    done <"$GATE_DIR/$clone.json"',
+    '    if [ -n "$g_locked" ]; then',
+    `      [ -n "$branch" ] && [ "$g_branch" = "$branch" ] && gate=${sq(`${GLYPHS.gateLocked}gate`)}`,
+    '    elif [ -n "$g_armed" ] && [ -n "$g_ticket" ]; then',
+    `      gate="${GLYPHS.gateArmed}gate $g_ticket"`,
+    '    fi',
+    '  fi',
+    '',
     '  # `status -b` names the branch too, and answers on a detached HEAD where `symbolic-ref`',
     '  # cannot -- there it prints `HEAD (no branch)`, which is the honest thing to show.',
     '  [ -n "$branch" ] || branch=$head',
@@ -284,6 +313,7 @@ export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
     '  out=" $clone"',
     '  [ -n "$rel" ] && out="$out · $rel"',
     '  out="$out · $marks"',
+    '  [ -n "$gate" ] && out="$out · $gate"',
     '  [ -n "$branch" ] && out="$out · $branch"',
     '  printf \'%s \' "$out"',
     '  ;;',

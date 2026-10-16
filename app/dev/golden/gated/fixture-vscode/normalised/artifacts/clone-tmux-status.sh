@@ -11,6 +11,7 @@ PR_DIR='%HANGAR%/.hangar/pr'
 KEY_PATTERN='^(UI|PLAT)-[0-9]+'
 DEFAULT_BRANCH='release'
 HANGAR='%HANGAR%/bin/hangar'
+GATE_DIR='%HANGAR%/.hangar/commit-gate'
 PR_TTL=45
 PR_LOCK_STALE=300
 BRANCH_MAX=72
@@ -105,6 +106,27 @@ EOF
   [ -n "$ahead" ] && marks="${marks}⇡${ahead}"
   [ -n "$behind" ] && marks="${marks}⇣${behind}"
 
+  # The commit gate, from the state file `hangar-commit-gate` writes one key per line. Locked
+  # counts only on the branch the lock names -- the same rule as the gate's own activeLock,
+  # so a lock left on another branch is not shown as blocking this one. Armed names its
+  # ticket, because an armed clone sits on the default branch, which does not.
+  gate="" g_locked="" g_armed="" g_branch="" g_ticket=""
+  if [ -f "$GATE_DIR/$clone.json" ]; then
+    while IFS= read -r line; do
+      case "$line" in
+      *'"locked": true'*) g_locked=1 ;;
+      *'"armed": true'*) g_armed=1 ;;
+      *'"branch": "'*) g_branch=${line#*'"branch": "'}; g_branch=${g_branch%'"'*} ;;
+      *'"ticket": "'*) g_ticket=${line#*'"ticket": "'}; g_ticket=${g_ticket%'"'*} ;;
+      esac
+    done <"$GATE_DIR/$clone.json"
+    if [ -n "$g_locked" ]; then
+      [ -n "$branch" ] && [ "$g_branch" = "$branch" ] && gate='⊠gate'
+    elif [ -n "$g_armed" ] && [ -n "$g_ticket" ]; then
+      gate="⊡gate $g_ticket"
+    fi
+  fi
+
   # `status -b` names the branch too, and answers on a detached HEAD where `symbolic-ref`
   # cannot -- there it prints `HEAD (no branch)`, which is the honest thing to show.
   [ -n "$branch" ] || branch=$head
@@ -115,6 +137,7 @@ EOF
   out=" $clone"
   [ -n "$rel" ] && out="$out · $rel"
   out="$out · $marks"
+  [ -n "$gate" ] && out="$out · $gate"
   [ -n "$branch" ] && out="$out · $branch"
   printf '%s ' "$out"
   ;;

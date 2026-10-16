@@ -39,6 +39,9 @@
  * measured reason: this runs before EVERY Bash tool call in every clone, where loading
  * `app/src/cli.ts` would cost ~0.25s of type stripping against a bare node start.
  *
+ * **The state file has a second reader**: the clone footer on the tmux bar greps it to draw the
+ * gate's state, and relies on `writeState`'s one-key-per-line JSON to do that without a parser.
+ *
  * CommonJS -- the hangar root's package.json declares no `"type"` on purpose. Do not add
  * `import` here.
  */

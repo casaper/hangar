@@ -970,6 +970,15 @@ might check.
 | `✱` | changed and not staged | `M` or `D` in the work-tree column |
 | `?` | untracked | `??` |
 | `⇡n` `⇣n` | ahead of, behind its upstream | the `## ` line's `[ahead n, behind n]` |
+| `⊠gate` | the commit gate blocks commits here | a lock naming the checked-out branch |
+| `⊡gate KEY` | the gate is armed for that ticket | `armed`, and no lock yet |
+
+The two gate marks are their own ` · ` segment after the git state, read from
+`.hangar/commit-gate/<clone>.json` (`HangarPaths.commitGateState`). The script greps the file
+rather than parsing JSON, which holds only because `hangar-commit-gate` writes it one key per line
+-- change `writeState`'s indent and the footer goes quiet. A lock counts only on the branch it
+names, `activeLock`'s own rule: the gate leaves a lock in place when its branch is checked out
+elsewhere, and a footer saying `⊠gate` there would claim a block that is not happening.
 
 `✔` is decided BEFORE the arrows, so a tree that is clean and merely ahead reads `✔⇡6` rather than
 a lone `⇡6` that looks like an answer with its first half missing. Both counts are checked to be

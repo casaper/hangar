@@ -55,6 +55,12 @@ export type HangarPaths = {
    * call in every clone, so it may not pay a CLI load.
    */
   readonly commitGate: string;
+  /**
+   * Where `commitGate` keeps one state file per clone, `<clone dir>.json`. The gate works this
+   * out from its own location (`statePath` there) because it reads no config; this is the same
+   * directory for the one other reader, the clone footer in `generate/tmux-status-sh.ts`.
+   */
+  readonly commitGateState: string;
   readonly plans: string;
   readonly tmp: string;
   /**
@@ -201,6 +207,7 @@ export const pathsFor = (
     execGuard: join(root, 'bin', 'hangar-exec-guard'),
     waypoint: join(root, 'bin', 'hangar-waypoint'),
     commitGate: join(root, 'bin', 'hangar-commit-gate'),
+    commitGateState: join(root, '.hangar', 'commit-gate'),
     plans: join(root, 'plans'),
     tmp,
     jiraTickets: join(tmp, 'jira-tickets'),

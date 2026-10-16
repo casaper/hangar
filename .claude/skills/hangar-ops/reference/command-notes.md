@@ -184,6 +184,11 @@ separate `<thing>_preview`.
   finish, `✚✱?` is work in three states at once. They are glyphs rather than colours on purpose:
   the footer sits on the clone's hue, and a red mark on the red clone would be invisible.
 
+  **The commit gate shows there too.** `⊠gate` means `git commit` is blocked on this branch right
+  now; `⊡gate ABC-1323` means the gate is armed and will lock the first branch naming that ticket.
+  Nothing shows when the gate is off, or when its lock names a branch that is not checked out.
+  `hangar-commit-gate status` is the long form.
+
   **The pull request says what it is doing, not just its number.** `✎#862 ✗ ≈` is draft, build
   failing, changes requested. Three axes, one glyph each:
 
