@@ -761,7 +761,7 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
        */
       for (const option of barOptions(hangar)) tmux(['set', '-g', option.name, option.value]);
       /*
-       * And the keys -- the click on the bar, and `C-b C-e` for the clone's editors -- which are
+       * And the keys -- the click on the bar, and `C-b C-e` / `C-b v` for the clone's editors -- which are
        * the parts of this layer that are not options: a key binding is a command, so there is
        * nothing for `set` to carry it. Applied here rather than left to the conf for exactly the
        * same reason as the options above.

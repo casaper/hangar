@@ -12,7 +12,7 @@ import { syncVscodeBookmarks } from '../editor/vscode-bookmarks-sync.ts';
  * opens a window; this opens the editors and touches no git state, no session and no window --
  * which is what makes it safe to bind to a key and press twice by accident.
  *
- * **That key is why the command exists.** `clone-tmux.conf` binds `C-b C-e` to run it for the
+ * **That key is why the command exists.** `clone-tmux.conf` binds `C-b C-e` and `C-b v` to run it for the
  * clone the session belongs to, so a developer sitting in a clone's tmux window can put that
  * clone in front of them in VS Code without leaving the keyboard or naming an index. The
  * alternative -- binding the key to `hangar open --editor` -- would fetch, move a branch and

@@ -870,9 +870,9 @@ person, once. Measured on this machine, `bin/hangar --version` costs 0.24-0.28s 
 for shell plus git -- so everything the bar REFRESHES is a generated script, and in exchange the
 URLs come from `issueUrl` and `prSearchUrl` rather than being spelled a second time in shell.
 
-### `C-b C-e` opens the clone's editors, and that is why `hangar edit` exists
+### `C-b C-e` and `C-b v` open the clone's editors, and that is why `hangar edit` exists
 
-The second binding, and the only other key this conf takes:
+The second binding, issued once per key in `EDITOR_KEYS`:
 
 ```
 bind-key -T prefix C-e if-shell -b '<hangar>/bin/hangar edit "#{@hangar_clone}" >/dev/null 2>&1' \
@@ -880,9 +880,11 @@ bind-key -T prefix C-e if-shell -b '<hangar>/bin/hangar edit "#{@hangar_clone}" 
   'display-message "hangar edit failed for #{@hangar_clone} -- run it in a shell to see why"'
 ```
 
-`C-e` for "editor", and it is free: on tmux 3.7c the prefix table binds `C-b`, `C-o`, `C-z` and
-the four `C-arrow`s and no other Ctrl key, and this conf does not move the prefix -- so the key
-takes nothing away, the same rule the click above is built on. `list-keys -T prefix` is how that
+`C-e` for "editor" and `v` for VS Code, and both are free: on tmux 3.7c and 3.8 the prefix table
+binds `C-b`, `C-o`, `C-z` and the four `C-arrow`s and no other Ctrl key, and leaves `v` unbound,
+and this conf does not move the prefix -- so neither key takes anything away, the same rule the
+click above is built on. `i` and `f` were the other candidates and are not free: tmux binds them
+to `display-message` and `find-window`. `list-keys -T prefix` is how that
 was checked and is how the next one should be.
 
 **`hangar edit` is a command rather than a flag on `open` BECAUSE of this key.** A key press has
@@ -901,7 +903,7 @@ be pressed for the wrong clone -- and a session made by hand on this socket, whi
 option, expands to an empty argument, exits non-zero and gets the failure message. That is the
 whole degradation; there is no second `if-shell` testing for the option first.
 
-Both bindings are one list, `keyBindings` in `generate/tmux-conf.ts`, for the reason `barOptions`
+All the bindings are one list, `keyBindings` in `generate/tmux-conf.ts`, for the reason `barOptions`
 is one table: `TmuxServer.restyle` ISSUES them onto a server that is already running while the
 conf renders them for the ones that start later, and a binding in only one of the two is a key
 that works on half the fleet.

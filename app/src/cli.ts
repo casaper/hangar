@@ -527,7 +527,7 @@ program
   .description(
     [
       'Open each clone in every editor `editor.kinds` lists. It is the editor half of `hangar open` on its own: no branch is fetched or checked out, no tmux session is created and no terminal window is opened.',
-      "That is also what makes it safe to bind to a key, and `clone-tmux.conf` binds one: `C-b C-e` inside a clone's tmux window opens that clone's editors, without naming an index.",
+      "That is also what makes it safe to bind to a key, and `clone-tmux.conf` binds two: `C-b C-e` or `C-b v` inside a clone's tmux window opens that clone's editors, without naming an index.",
       'An editor that lives inside a terminal — `vim` with no GUI build — is the one kind this cannot open, because it needs a tmux window to live in. It is named and skipped; `hangar open <clone> -e` is what puts it there.',
     ].join('\n\n'),
   )

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 import {
   barOptions,
+  EDITOR_KEYS,
   editorKeyBinding,
   keyBindings,
   paneBorderFormat,
@@ -340,11 +341,15 @@ test('every key binding is rendered into the conf, from the one list', () => {
   }
 });
 
-test('the editor key takes no key tmux already binds, and never opens a view pane', () => {
-  const binding = editorKeyBinding(syntheticHangar());
-  // Measured on 3.7c: the prefix table binds C-b, C-o, C-z and the four C-arrows, and this conf
-  // does not move the prefix. C-e is free, so this binding takes nothing away.
-  assert.deepEqual(binding.slice(1, 4), ['-T', 'prefix', 'C-e']);
+test('the editor keys take no key tmux already binds, and never open a view pane', () => {
+  // Measured on 3.7c and 3.8: the prefix table binds C-b, C-o, C-z and the four C-arrows, leaves
+  // `v` unbound, and this conf does not move the prefix. So these bindings take nothing away --
+  // and `i` and `f`, the other obvious letters, are tmux's own display-message and find-window.
+  assert.deepEqual([...EDITOR_KEYS], ['C-e', 'v']);
+  for (const key of EDITOR_KEYS) {
+    assert.deepEqual(editorKeyBinding(syntheticHangar(), key).slice(1, 4), ['-T', 'prefix', key]);
+  }
+  const binding = editorKeyBinding(syntheticHangar(), 'v');
   // `if-shell`, not `run-shell`: tmux displays a run-shell's stdout in view mode in the current
   // pane, which for a command that reports what it opened means a scratch view over whatever the
   // developer was looking at, on every press. Both streams are redirected for the same reason.

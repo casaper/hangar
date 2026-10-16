@@ -401,11 +401,17 @@ export const statusClickBinding = (hangar: Hangar): readonly string[] => {
 };
 
 /**
- * `bind-key -T prefix C-e` -- open the current clone's editors, without naming it.
+ * The prefix-table keys that open the current clone's editors: `C-b C-e` and `C-b v`.
  *
- * `C-b C-e` for "editor", and it is free: on tmux 3.7c the prefix table binds `C-b`, `C-o`, `C-z`
- * and the four `C-arrow`s and no other Ctrl key, and this conf does not move the prefix. So it
- * takes nothing away, which is the same rule the click binding below is built on.
+ * `C-e` for "editor" and `v` for VS Code, and both are free: on tmux 3.7c and 3.8 the prefix
+ * table binds `C-b`, `C-o`, `C-z` and the four `C-arrow`s and no other Ctrl key, and leaves `v`
+ * unbound, and this conf does not move the prefix. So neither takes anything away, which is the
+ * same rule the click binding below is built on. `list-keys -T prefix` is how that was checked.
+ */
+export const EDITOR_KEYS = ['C-e', 'v'] as const;
+
+/**
+ * `bind-key -T prefix <key>` -- open the current clone's editors, without naming it.
  *
  * **`if-shell -b`, and not `run-shell -b`.** From tmux's own documentation for `run-shell`: "If
  * -C is not given, any output to stdout is displayed in view mode (in the pane specified by -t or
@@ -421,11 +427,14 @@ export const statusClickBinding = (hangar: Hangar): readonly string[] => {
  * `bin/hangar` by ABSOLUTE path, for the same reason as the click: the shell tmux runs here
  * inherits the SERVER's environment, which need not have direnv's PATH.
  */
-export const editorKeyBinding = (hangar: Hangar): readonly string[] => [
+export const editorKeyBinding = (
+  hangar: Hangar,
+  key: (typeof EDITOR_KEYS)[number] = 'C-e',
+): readonly string[] => [
   'bind-key',
   '-T',
   'prefix',
-  'C-e',
+  key,
   'if-shell',
   '-b',
   `${hangar.paths.bin} edit "#{@hangar_clone}" >/dev/null 2>&1`,
@@ -442,7 +451,7 @@ export const editorKeyBinding = (hangar: Hangar): readonly string[] => [
  */
 export const keyBindings = (hangar: Hangar): readonly (readonly string[])[] => [
   statusClickBinding(hangar),
-  editorKeyBinding(hangar),
+  ...EDITOR_KEYS.map((key) => editorKeyBinding(hangar, key)),
 ];
 
 /**
@@ -501,11 +510,11 @@ export const tmuxConfArtifact = (hangar: Hangar): Artifact => {
       '# this file reaches only servers that start after it is written.',
       ...barOptions(hangar).map((o) => `set -g ${o.name} ${quoteTmuxValue(o.value)}`),
       '',
-      '# ---- the two keys ------------------------------------------------------------------',
+      '# ---- the keys ----------------------------------------------------------------------',
       '# A click on the ticket or the pull request opens it; a click anywhere else on the bar',
       '# switches to that window -- which tmux does NOT do by default, since its own binding for',
       '# this key changes the session and selects no window. See `statusClickBinding`.',
-      '# `C-b C-e` opens the editors of whichever clone the session belongs to.',
+      '# `C-b C-e` and `C-b v` open the editors of whichever clone the session belongs to.',
       ...keyBindings(hangar).map(renderBinding),
       '',
       '# ---- the rest ---------------------------------------------------------------------',

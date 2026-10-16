@@ -101,7 +101,7 @@ separate `<thing>_preview`.
   `--no-claude` still narrows what the real run does; `-n` is how you see it first.
 - **`open` opens no editor unless `-e` is passed**, and `hangar edit <clone>` is that half on its
   own — the editors, and nothing else: no fetch, no branch, no session, no window. The clone's own
-  tmux windows bind `C-b C-e` to it, so a developer sitting in a clone can open it in VS Code
+  tmux windows bind `C-b C-e` and `C-b v` to it, so a developer sitting in a clone can open it in VS Code
   without naming an index. `close --no-editor` and `reload --no-editor` are the other direction
   and are unchanged: `close` shuts a window that is open, and `reload --no-editor` is about
   rewriting the editors' per-clone files rather than about launching anything.
