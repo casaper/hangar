@@ -39,7 +39,7 @@ hangar root for the reason below.
 > **`dev/scrub-check.sh` enforces that shape, because the obvious guard does not work.** A
 > `preinstall` script exiting 1 is measured not to work: **pnpm 10 did not run it** — not
 > even with a dependency present to install (probed both ways; `pnpm run preinstall` fires,
-> `pnpm install` does not), and npm skipped it too. That probe predates the 12.8.2 pin and has
+> `pnpm install` does not), and npm skipped it too. That probe predates the 12.10.1 pin and has
 > not been repeated on it; the gate holds either way. So a stray `pnpm install` here still leaves an
 > empty `node_modules`, which resolves nothing and harms nothing. What must never happen is this
 > file growing something to put in it, and that is the line the gate holds.
@@ -49,7 +49,7 @@ hangar root for the reason below.
 **There is no build step.** Node strips the types and runs `src/cli.ts` directly, so an edit is
 live the moment it is saved and there is nothing to rebuild before trying it.
 
-**The package manager is pnpm**, pinned by `packageManager: "pnpm@12.8.2"` in `app/package.json`,
+**The package manager is pnpm**, pinned by `packageManager: "pnpm@12.10.1"` in `app/package.json`,
 which is the single source of truth for both the shell and CI. Run the CLI's own checks **from
 `app/`** — they cover the CLI, not the app:
 

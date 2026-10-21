@@ -3,7 +3,7 @@
   "version": "0.33.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@12.8.2",
+  "packageManager": "pnpm@12.10.1",
   "description": "Hangar -- orchestrates a fleet of full clones of one repo for parallel Claude Code sessions.",
   "scripts": {
     "typecheck": "tsc --noEmit",
