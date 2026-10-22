@@ -1,9 +1,8 @@
 ---
 name: bg-shorten-comment
 description: |
-  Runs the shorten-comment skill on one comment in a background subagent and relays its report when it finishes, so the session is not blocked while the comment is trimmed. Invoked as /bg-shorten-comment <file-path-ref> [low|medium|high]; the level defaults to shorten-comment's own medium.
+  Runs the shorten-comment skill on one comment in a background subagent and relays only its short report, so the comment-shortening transcript (the block lookup, the reads, the judgment) never enters this conversation's context. Prefer this over invoking shorten-comment inline whenever the comment is a side task to other work, or the user asks for it in the background, without blocking, or "via a subagent". Use shorten-comment directly only when the user wants to watch or discuss the judgment itself. Invoked as /bg-shorten-comment <file-path-ref> [low|medium|high]; the level defaults to shorten-comment's own medium.
 argument-hint: '[file-path-ref] [low|medium|high]'
-disable-model-invocation: true
 allowed-tools: Agent
 ---
 
