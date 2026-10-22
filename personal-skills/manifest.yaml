@@ -35,7 +35,8 @@ skills:
     reason: >-
       Adds the "Reporting -- the edit is the verdict" contract (one line per changed block, no
       narrated justification) and judges every block in a file from a single read instead of one
-      Read per comment. Both are speed, not policy: the pre-edit safety gates are untouched.
+      Read per comment. Both are speed, not policy: the pre-edit safety gates are untouched. Its
+      description also points side-task and background requests at bg-shorten-comment.
 
   - name: shorten-changed-comments
     divergence: intentional
@@ -117,4 +118,4 @@ skills:
     divergence: standalone
     reason: >-
       No tracked counterpart: a wrapper that runs the personal shorten-comment in a background
-      subagent, so the main session is not blocked while one comment is trimmed.
+      subagent, so the shortening transcript stays out of the calling session's context.
