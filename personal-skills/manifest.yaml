@@ -125,3 +125,17 @@ skills:
     reason: >-
       No tracked counterpart: runs any typed prompt in a fresh background agent and relays its
       report, so the work's transcript stays out of the calling session's context.
+
+  - name: bg-shorten-changed-comments
+    divergence: standalone
+    reason: >-
+      No tracked counterpart: a wrapper that runs the personal shorten-changed-comments in a
+      background subagent, so the sweep's transcript stays out of the calling session's context.
+      The subagent cannot ask, so at the selection question it takes the recommended sweep-all.
+
+  - name: bg-shorten-all-comments
+    divergence: standalone
+    reason: >-
+      No tracked counterpart: a wrapper that runs the personal shorten-all-comments in a
+      background subagent, so the sweep's transcript stays out of the calling session's context.
+      The subagent cannot ask, so at the large-file level question it keeps the level given.
