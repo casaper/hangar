@@ -206,6 +206,11 @@ Regenerating writes a local file. **Uploading it is the user's**: name `hangar p
 
 ## Step 7 — the report
 
+**Every invocation ends in the table, no exceptions.** Not when nothing changed since the last
+run, not while a check or another agent is still running. A check whose evidence is stale or in
+flight is a ❓ row with the reason in its evidence cell — never a reason to skip, shorten or
+postpone the table. A run that reuses an earlier verdict still prints the whole table.
+
 One table first:
 
 | area            | verdict | evidence                                                   |
