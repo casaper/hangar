@@ -42,13 +42,17 @@ skills:
     divergence: intentional
     mirrors: .claude/skills/shorten-changed-comments/SKILL.md
     basedOn: f221fc77b02c174a0a6d340f99a7fa01ee9e57b8
-    reason: Honours shorten-comment's reporting contract; keeps the Step 1b selection question.
+    reason: >-
+      Honours shorten-comment's reporting contract; keeps the Step 1b selection question. Its
+      description also points side-task and background requests at bg-shorten-changed-comments.
 
   - name: shorten-all-comments
     divergence: intentional
     mirrors: .claude/skills/shorten-all-comments/SKILL.md
     basedOn: 6df88f3131ef327ec11fdfe79c40bcad6f4ef4be
-    reason: Honours shorten-comment's reporting contract; keeps the Step 2 snapshot/covers checks.
+    reason: >-
+      Honours shorten-comment's reporting contract; keeps the Step 2 snapshot/covers checks. Its
+      description also points side-task and background requests at bg-shorten-all-comments.
 
   - name: fix-commit
     divergence: intentional
