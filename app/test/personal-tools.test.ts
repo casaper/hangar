@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
@@ -248,6 +249,54 @@ test('the rewrite tool rebases only an unpublished range, and never leaves one s
   const squash = /const autosquash = [\s\S]*?\n};\n/.exec(text)?.[0] ?? '';
   assert.match(squash, /refusePublishedRange\(/);
   assert.match(squash, /'rebase', '--abort'/);
+});
+
+test('the rewrite status lists exactly the commits no remote holds', () => {
+  /*
+   * `git log --not --remotes` with no positive revision lists nothing at all, so without `HEAD`
+   * `status` tells every repo that all of its history is published and nothing can be
+   * rewritten. The verbs ask per commit and would still work, but the report would steer toward
+   * correcting forward. A repo with one published commit and one local one tells the two apart.
+   */
+  const root = mkdtempSync(join(tmpdir(), 'hangar-rewrite-'));
+  try {
+    const git = (cwd: string, ...args: string[]): string =>
+      execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8' });
+    const commit = (cwd: string, message: string): void => {
+      git(
+        cwd,
+        '-c',
+        'user.email=t@e.invalid',
+        '-c',
+        'user.name=t',
+        '-c',
+        'commit.gpgsign=false',
+        'commit',
+        '-q',
+        '--allow-empty',
+        '-m',
+        message,
+      );
+    };
+    const upstream = join(root, 'upstream');
+    const work = join(root, 'work');
+    execFileSync('git', ['init', '-q', '-b', 'main', upstream]);
+    commit(upstream, 'published commit');
+    execFileSync('git', ['clone', '-q', upstream, work]);
+    const status = (): string =>
+      execFileSync('node', [join(binDir, 'hangar-rewrite'), 'status'], {
+        cwd: work,
+        encoding: 'utf8',
+      });
+
+    assert.match(status(), /Nothing here is unpublished/);
+    commit(work, 'local commit');
+    const out = status();
+    assert.match(out, /local commit/);
+    assert.doesNotMatch(out, /published commit/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('the rewrite tool is deliberately NOT pre-approved', () => {

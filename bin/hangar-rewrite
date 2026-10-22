@@ -275,7 +275,7 @@ const status = (root) => {
   const branch = gitTry(['rev-parse', '--abbrev-ref', 'HEAD']) ?? '(detached)';
   console.log(`On ${branch}, in ${root}.`);
 
-  const unpublished = gitTry(['log', '--oneline', '--not', '--remotes']);
+  const unpublished = gitTry(['log', '--oneline', 'HEAD', '--not', '--remotes']);
   if (!unpublished) {
     console.log('\nNothing here is unpublished — every commit is already on a remote,');
     console.log('so nothing can be rewritten. Correct forward with a new commit.');
