@@ -112,3 +112,9 @@ skills:
       No tracked counterpart: an en-NZ/en-GB proofreader ported from a Claude Desktop project
       prompt, the English sibling of deutsch-korrektur with the same modes, levels and flagging.
       It reaches the clipboard only through the personal `copy-to-clipboard`.
+
+  - name: bg-shorten-comment
+    divergence: standalone
+    reason: >-
+      No tracked counterpart: a wrapper that runs the personal shorten-comment in a background
+      subagent, so the main session is not blocked while one comment is trimmed.
