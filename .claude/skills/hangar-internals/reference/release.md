@@ -80,6 +80,13 @@ a one-line diff they did not make, so the script puts the heading back. That hea
 load-bearing: `.releaserc.json` sets `changelogTitle` to it, and semantic-release prepends _under_
 it.
 
+**The script's `sed` must run as BSD sed too**, because nothing guarantees direnv's GNU coreutils
+are on PATH: a shell outside the hangar's `.envrc` gets `/usr/bin/sed`. That is why the
+expression is `1{/^$/d;}`, since BSD sed rejects it without the `;`, and why its output is
+assigned before `printf` uses it. A failure inside printf's argument escapes `set -e`, so the
+script exits 0 having written the bare heading over all of `CHANGELOG.md`. That is measured, and
+it looks like a genuine regeneration diff.
+
 **`hangar --version` reads `app/package.json`** rather than repeating it, so a release bump moves
 one file. A literal copy is the kind of duplicate nothing notices until a tool moves the other one.
 
