@@ -23,5 +23,8 @@ app/node_modules/.bin/conventional-changelog \
   -k app/package.json \
   --tag-prefix v
 
-printf '# Changelog\n\n%s\n' "$(sed '1{/^$/d}' CHANGELOG.md)" > CHANGELOG.md.tmp
+# The `;` is for BSD sed, which rejects `1{/^$/d}`. The assignment is for `set -e`: a failing
+# substitution inside printf's argument does not stop the script, and wrote an empty changelog.
+body=$(sed '1{/^$/d;}' CHANGELOG.md)
+printf '# Changelog\n\n%s\n' "$body" > CHANGELOG.md.tmp
 mv CHANGELOG.md.tmp CHANGELOG.md
