@@ -3,7 +3,7 @@
   "version": "0.33.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@12.10.1",
+  "packageManager": "pnpm@12.12.1",
   "description": "Hangar -- orchestrates a fleet of full clones of one repo for parallel Claude Code sessions.",
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -29,10 +29,10 @@
   "dependencies": {
     "@commander-js/extra-typings": "^15.0.0",
     "commander": "^15.0.0",
-    "dotenv": "^18.0.6",
+    "dotenv": "^18.0.7",
     "picocolors": "^1.1.1",
     "yaml": "2.9.1",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.3",
@@ -40,7 +40,7 @@
     "@eslint/js": "10.0.1",
     "@semantic-release/changelog": "7.0.0",
     "@semantic-release/git": "11.0.1",
-    "@types/node": "24.19.1",
+    "@types/node": "24.19.2",
     "conventional-changelog-cli": "5.0.0",
     "conventional-changelog-conventionalcommits": "8.0.0",
     "eslint": "10.12.0",
@@ -48,10 +48,10 @@
     "eslint-plugin-n": "18.4.1",
     "husky": "9.1.7",
     "jiti": "2.7.0",
-    "prettier": "^3.9.9",
+    "prettier": "^3.9.10",
     "semantic-release": "25.0.9",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.1",
-    "typescript-language-server": "6.0.1"
+    "typescript-language-server": "6.0.2"
   }
 }
