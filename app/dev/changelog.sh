@@ -24,7 +24,8 @@ app/node_modules/.bin/conventional-changelog \
   --tag-prefix v
 
 # The `;` is for BSD sed, which rejects `1{/^$/d}`. The assignment is for `set -e`: a failing
-# substitution inside printf's argument does not stop the script, and wrote an empty changelog.
+# substitution inside printf's argument does not stop the script, and printf then writes the bare
+# heading over the whole changelog.
 body=$(sed '1{/^$/d;}' CHANGELOG.md)
 printf '# Changelog\n\n%s\n' "$body" > CHANGELOG.md.tmp
 mv CHANGELOG.md.tmp CHANGELOG.md
