@@ -106,6 +106,10 @@ export const hangarClaudeLocalMdContent = (hangar: Hangar): string => {
   // Whether a layout change is mid-rollout. Not WHICH clones: this file reaches every clone
   // session, and naming them would make it stale for all of them each time one is released.
   const pinned = portPins(hangar).size > 0;
+  // With slots the off-formula sentence is said ALWAYS, whatever is borrowed right now: a take
+  // that changed this file would make it stale in every clone session, each time.
+  const slots = cfg.ports.slots;
+  const offFormula = pinned || slots !== undefined;
   const { prefix, pad } = cfg.clones;
   const example = `${prefix}${'1'.padStart(pad, '0')}`;
 
@@ -148,7 +152,7 @@ export const hangarClaudeLocalMdContent = (hangar: Hangar): string => {
   const ports =
     cfg.ports.roles.length === 0
       ? 'This hangar assigns no ports. Nothing per-clone depends on one.\n'
-      : `Every clone's ports are a pure function of its index${pinned ? ', unless it is pinned' : ''}:
+      : `Every clone's ports are a pure function of its index${offFormula ? ', unless it is pinned' : ''}:
 
     port = base + ${String(cfg.ports.offset)} + (index - 1) * ${String(cfg.ports.step)}
 
@@ -176,12 +180,19 @@ ever holds a base port itself.`
 assume a server on a default port is yours** — \`hangar ports\` is the answer for the fleet, and
 each clone's own \`CLAUDE.local.md\` names its own.
 ${
-  pinned
+  slots !== undefined
     ? `
+**The first ${String(slots)} clones' port sets are slots**, which any clone can borrow with
+\`hangar ports take <clone>\` while the clone holding one serves nothing — the two swap. So a
+clone may sit on another index's ports, and for that clone the formula above is not the answer —
+its own \`CLAUDE.local.md\` is.
+`
+    : pinned
+      ? `
 **Some clones are pinned to the ports they had before this layout**, and for those the formula
 above is not the answer — their own \`CLAUDE.local.md\` is.
 `
-    : ''
+      : ''
 }`;
 
   const extras: string[] = [];

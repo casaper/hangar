@@ -1,7 +1,9 @@
 import { existsSync, renameSync, rmSync, unlinkSync } from 'node:fs';
 
 import { CliError } from '../exec.ts';
-import { discoverClones, requireClone, type Clone } from '../fleet.ts';
+import { cloneAt, discoverClones, requireClone, type Clone } from '../fleet.ts';
+import { rewritePortArtifacts } from '../clone-config.ts';
+import { portsFor, portSummary, strandedBy } from '../ports.ts';
 import { clearColourAssignment, colourAssignmentsLabel } from '../colour-assignments.ts';
 import { themePath } from '../generate/theme-json.ts';
 import { clearPortPin } from '../port-pins.ts';
@@ -166,6 +168,23 @@ export const removeClone = (hangar: Hangar, ref: string, opts: RemoveCloneOption
   // 5b. its port pin, for the same reason: the next clone at this index starts on the formula.
   if (clearPortPin(hangar, clone.index)) {
     ok(`dropped its port pin from ${tildify(hangar.paths.portPinsFile)}`);
+  }
+  //     And the clone a `ports take` swapped onto THIS clone's formula goes home, when it is idle
+  //     and nothing claims its own ports -- else the next clone at this index lands on its ports.
+  const stranded = strandedBy(hangar, clone, siblings);
+  if (stranded !== undefined) {
+    const partner = siblings.find((sibling) => sibling.name === stranded.name);
+    if (partner !== undefined && runningServersIn(partner).servers.length === 0) {
+      clearPortPin(hangar, partner.index);
+      rewritePortArtifacts(cloneAt(hangar, partner.index));
+      ok(
+        `moved ${partner.name} back onto its own ports (${portSummary(portsFor(hangar, partner.index))})`,
+      );
+    } else if (partner !== undefined) {
+      warn(
+        `${partner.name} is serving on ${clone.name}'s ports and stays there; \`hangar ports take ${String(partner.index)}\` moves it once it is idle`,
+      );
+    }
   }
 
   // 5c. its VS Code bookmarks base: a clone reusing the index with no file of its own would read

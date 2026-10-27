@@ -34,6 +34,7 @@ another name.
 | `ports` | `ports` (`json` is a parameter) | — |
 | `ports pin` | `ports_pin_preview` | `ports_pin` |
 | `ports unpin` | `ports_unpin_preview` | `ports_unpin` |
+| `ports take` | `ports_take_preview` | `ports_take` |
 | `scrub` | `scrub` | — |
 | `status` | `status` | — |
 | `servers list` | `servers_list` | — |
@@ -191,6 +192,7 @@ stderr as having no tool at all, is the developer tab's to fix, not yours.
 | `colours list` | — | — | report |
 | `ports pin` | `[clones...]` | `-a, --all` · `-n, --dry-run` | **act [user]** — holds clones on the ports their `.env.local` names now |
 | `ports unpin` | `<clone>` | `-n, --dry-run` | **act [user]** — releases one clone to the formula; `doctor <clone> --fix` then moves it |
+| `ports take` | `<clone>` | `--slot <n>` · `-n, --dry-run` | **act [user]** — swaps every port of the clone with an idle slot's holder and rewrites both clones' `.env.local`, health-check allow and `CLAUDE.local.md` |
 | `servers list` | `[clones...]` (defaults to every clone) | `-a, --all` · `--stale` · `--roles` | report |
 | `servers start` | `[clones...]` | `-a, --all` · `--role <id...>` · `-n, --dry-run` | **act [user]** (needs the clone to have a tmux session) |
 | `servers kill` | `[clones...]` | `-a, --all` · `--role <id...>` · `--name <stem...>` · `--pid <pid...>` · `--force` · `-n, --dry-run` · `-y, --yes` | **act [user]** |
@@ -220,6 +222,16 @@ health-check allow, the identity file. Then, per clone and when it is idle: `por
 ports. `unpin` refuses when the formula would put the clone on a port a still-pinned sibling holds
 and names the sibling to release first. Between `unpin` and `doctor --fix` the clone's derived ports
 and its `.env.local` disagree, so run the two together.
+
+**`ports take <clone>` is how a clone past `ports.slots` gets ports something outside the hangar
+allows by name** — an identity provider's redirect hosts, say, which list only the first clones'.
+It moves every role at once onto the clone's home slot when that is free, else the lowest slot
+whose holder serves nothing, and moves the holder onto the ports the clone left (or home, when
+nothing else claims them). It refuses while the clone itself is serving, when no slot is idle, and
+when lsof cannot say which are. Both clones' files are rewritten in the same run, so there is no
+`doctor --fix` to follow; restart the servers, `reload` both clones so their sessions re-read
+`CLAUDE.local.md`, and `bookmarks sync` if the roles carry bookmarks. Running it on the other clone
+swaps them back, and a clone back on its formula keeps no pin. `hangar ports` shows a SLOT column.
 
 **`colours change`'s `<colour>` is a name from THIS hangar's palette** — the config's
 `palette.hues` if it sets one, else the built-in twenty in `src/palette.ts`. `hangar colours list`

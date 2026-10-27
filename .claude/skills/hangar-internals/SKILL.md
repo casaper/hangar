@@ -39,7 +39,7 @@ take the one that matches what you are touching:
 | changing `open`'s window handling, `close`, `reload`, `jira-plan`'s launch, `edit`, `browse`, `servers`, an emulator driver, the tmux layer or the clone bar, `pr refresh`, `resume`'s session discovery, `remove-clone`, or `bookmarks sync` | `reference/terminal-and-sessions.md` |
 | changing `palette.ts`, anything under `generate/`, or what `colours sync` writes | `reference/colours.md` |
 | changing the zod schema, the loader, discovery, the no-config gate, `setup`, `forge.defaultBranch`, or `hangar.schema.json` and why `zod` moving can stale it | `reference/config.md` |
-| changing `doctor`, `add-clone`, `install`, `scrub`, `ports pin`/`unpin`, any generated per-clone artifact, or the plan archive | `reference/doctor.md` |
+| changing `doctor`, `add-clone`, `install`, `scrub`, `ports pin`/`unpin`/`take`, any generated per-clone artifact, or the plan archive | `reference/doctor.md` |
 | changing `hangar up` or `hangar down`, the `claude` mode shim, the two hangar-root modes, their permission rules, `hangar mcp` and its tool table, `allow`, `skills sync`, `exec` and its guard, or what a hangar-root session is told it is | `reference/modes.md` |
 | changing `bin/hangar-waypoint`, `hangar-commit-gate`, `hangar-rewrite` or `hangar-exec-guard`, or `personal-skills/` | `reference/root-tools.md` |
 | probing git, Claude Code permissions, a command's file I/O, a generated script or a VS Code extension without touching the live fleet | `reference/probing.md` |

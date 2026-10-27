@@ -66,6 +66,8 @@ ports:
   step: 100
   # A residue class no other hangar uses, and non-zero so a formula that drops it is visible.
   offset: 37
+  # Fewer slots than the fixture has clones, so clone 3 renders as a clone outside them.
+  slots: 2
   roles:
     - id: api
       envKey: FIXTURE_API_PORT

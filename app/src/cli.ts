@@ -29,7 +29,7 @@ import { scrub } from './commands/scrub.ts';
 import { skillsList, skillsSync } from './commands/skills.ts';
 import { bookmarksSync } from './commands/bookmarks.ts';
 import { prCreate, prRefresh, prUpdate } from './commands/pr.ts';
-import { ports, portsPin, portsUnpin } from './commands/ports.ts';
+import { ports, portsPin, portsTake, portsUnpin } from './commands/ports.ts';
 import { removeClone } from './commands/remove-clone.ts';
 import { resume } from './commands/resume.ts';
 import { setup } from './commands/setup.ts';
@@ -271,6 +271,22 @@ portsCommand
   .option('-n, --dry-run', 'print the ports it would move to, and change nothing')
   .action((clone, options) => {
     portsUnpin(requireHangar(), clone, options);
+  });
+
+portsCommand
+  .command('take')
+  .summary("Move a clone onto an idle slot's ports, swapping the clone that held them")
+  .description(
+    [
+      "Slots are the first `ports.slots` clones' port sets -- the ports something outside the hangar allows by name, such as an identity provider's redirect hosts. This moves every port of the clone onto a slot whose holder is serving nothing, and moves the holder onto the ports the clone left (or home, when nothing else claims them). Its own home slot is tried first, then the lowest.",
+      "Both clones' .env.local, health-check allows and CLAUDE.local.md are rewritten. The same command on the other clone swaps them back, and a clone back on its own formula keeps no pin.",
+    ].join('\n\n'),
+  )
+  .argument('<clone>', 'clone name, e.g. clone_10 (or just 10)')
+  .option('--slot <n>', 'take this slot rather than the first free one')
+  .option('-n, --dry-run', 'print the swap, and change nothing')
+  .action((clone: string, options) => {
+    portsTake(requireHangar(), clone, options);
   });
 
 program

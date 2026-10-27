@@ -7,7 +7,8 @@ import type { Hangar } from './hangar.ts';
  * Two clones sharing a dev server means a test run in one silently verifies the other's code --
  * the single worst failure a hangar can produce. So the ports are a pure function of the clone
  * index rather than something a human types into a dotenv file, and `hangar doctor` checks the
- * file still agrees with the formula.
+ * file still agrees with the formula. The one input beside the index is the clone's pin, which
+ * a layout rollout or a slot swap (`hangar ports take`) writes, and which `portsFor` is handed.
  *
  * The roles come from `ports.roles[]` in the config, in the order written there. They used to be
  * a CLOSED UNION of three names -- `ng`, `storybook`, `playwrightReport` -- with their bases
@@ -110,3 +111,175 @@ export const roleUrl = (entry: ClonePort): string | undefined =>
 /** `ng 4300 · storybook 6106 · playwright 9423` -- the one-line form `status` and `open` print. */
 export const portSummary = (ports: ClonePorts): string =>
   ports.map((entry) => `${entry.role.id} ${String(entry.port)}`).join(' · ');
+
+/**
+ * Slot `k`'s ports: clone k's formula, whoever holds them now.
+ *
+ * Slots exist because something outside the hangar allows ports BY NAME -- an identity provider's
+ * redirect hosts -- and that list stops at however many clones it was told about. A clone past it
+ * borrows an idle slot with `hangar ports take` rather than the list growing with the fleet.
+ */
+export const slotPorts = (hangar: Hangar, slot: number): ClonePorts => portsFor(hangar, slot);
+
+const samePorts = (a: ClonePorts, b: ClonePorts): boolean =>
+  a.length === b.length && a.every((entry, i) => entry.port === b[i]?.port);
+
+/** Which slot a port set is EXACTLY -- every role -- or undefined. */
+export const slotOf = (hangar: Hangar, ports: ClonePorts): number | undefined => {
+  const slots = hangar.config.ports.slots ?? 0;
+  for (let slot = 1; slot <= slots; slot += 1) {
+    if (samePorts(ports, slotPorts(hangar, slot))) return slot;
+  }
+  return undefined;
+};
+
+/**
+ * The pin that puts clone `index` on `ports`: undefined when those ARE its formula, so a swap
+ * back leaves no bookkeeping behind and a fleet with nothing borrowed has no pin file at all.
+ */
+export const pinFor = (
+  hangar: Hangar,
+  index: number,
+  ports: ClonePorts,
+): ReadonlyMap<string, number> | undefined =>
+  samePorts(ports, portsFor(hangar, index))
+    ? undefined
+    : new Map(ports.map((entry) => [entry.role.envKey, entry.port]));
+
+/** What `planTake` needs of a clone: its identity and the ports it derives now. */
+export type SlotClone = {
+  readonly name: string;
+  readonly index: number;
+  readonly ports: ClonePorts;
+};
+
+export type PortMove = {
+  readonly clone: SlotClone;
+  readonly to: ClonePorts;
+  readonly pin: ReadonlyMap<string, number> | undefined;
+};
+
+export type TakePlan = {
+  readonly slot: number;
+  /** The clone swapped out of the slot; undefined when nobody held it (a removed clone's slot). */
+  readonly holder: SlotClone | undefined;
+  /** The taker's move first, then the holder's. */
+  readonly moves: readonly PortMove[];
+};
+
+export type TakeRefusal = { readonly refused: string; readonly hint?: string };
+
+/**
+ * Which slot `taker` should take, and where its holder goes. PURE -- what is running is handed in.
+ *
+ * Preference: `wantSlot` when given, else the taker's own home slot, else the lowest. A slot is
+ * free when nothing listens on its ports and its holder runs nothing; a holder with only a live
+ * Claude session is NOT busy, because idle prompt context is what fills the slots this exists for.
+ *
+ * The holder goes HOME when nobody else claims its formula ports -- so a chain of borrowings
+ * unwinds instead of every clone drifting further off its formula -- and otherwise onto the
+ * ports the taker leaves. Every move is a whole port set: a slot is all of a clone's roles at
+ * once, because what allows the ports by name allows every role's.
+ */
+export const planTake = (
+  hangar: Hangar,
+  taker: SlotClone,
+  clones: readonly SlotClone[],
+  busy: { readonly clones: ReadonlySet<string>; readonly slots: ReadonlySet<number> },
+  wantSlot?: number,
+): TakePlan | TakeRefusal => {
+  const slots = hangar.config.ports.slots;
+  if (slots === undefined) {
+    return {
+      refused: 'this hangar declares no slots',
+      hint: 'Set `ports.slots` in hangar.config.yaml to how many clones the outside allow-list names.',
+    };
+  }
+  if (wantSlot !== undefined && (wantSlot < 1 || wantSlot > slots)) {
+    return { refused: `there is no slot ${String(wantSlot)}; slots are 1-${String(slots)}` };
+  }
+  const current = slotOf(hangar, taker.ports);
+  if (current !== undefined && (wantSlot === undefined || wantSlot === current)) {
+    return { refused: `${taker.name} already holds slot ${String(current)}` };
+  }
+  if (busy.clones.has(taker.name)) {
+    return {
+      refused: `${taker.name} is serving, and taking a slot moves every one of its ports`,
+      hint: `Stop its servers first (\`hangar servers kill ${String(taker.index)}\`).`,
+    };
+  }
+
+  const others = clones.filter((clone) => clone.name !== taker.name);
+  const holderOf = (slot: number): SlotClone | undefined =>
+    others.find((clone) => samePorts(clone.ports, slotPorts(hangar, slot)));
+  const whyBusy = (slot: number): string | undefined => {
+    const holder = holderOf(slot);
+    if (holder !== undefined && busy.clones.has(holder.name)) return `${holder.name} is serving`;
+    if (busy.slots.has(slot)) return 'something is listening on its ports';
+    return undefined;
+  };
+
+  const home = taker.index <= slots ? [taker.index] : [];
+  const order =
+    wantSlot !== undefined
+      ? [wantSlot]
+      : [
+          ...home,
+          ...Array.from({ length: slots }, (_, i) => i + 1).filter((s) => s !== taker.index),
+        ];
+  const slot = order.find((s) => s !== current && whyBusy(s) === undefined);
+  if (slot === undefined) {
+    return {
+      refused: `no slot is free — ${order
+        .filter((s) => s !== current)
+        .map((s) => `slot ${String(s)}: ${whyBusy(s) ?? 'held'}`)
+        .join('; ')}`,
+      hint: 'Stop the servers in a clone you are not using, then take its slot.',
+    };
+  }
+
+  const to = slotPorts(hangar, slot);
+  const holder = holderOf(slot);
+  const moves: PortMove[] = [{ clone: taker, to, pin: pinFor(hangar, taker.index, to) }];
+  if (holder !== undefined) {
+    const formula = portsFor(hangar, holder.index);
+    const formulaPorts = new Set(formula.map((entry) => entry.port));
+    const homeFree =
+      !formula.some((entry) => to.some((t) => t.port === entry.port)) &&
+      !others.some(
+        (clone) =>
+          clone.name !== holder.name && clone.ports.some((entry) => formulaPorts.has(entry.port)),
+      );
+    const dest = homeFree ? formula : taker.ports;
+    moves.push({ clone: holder, to: dest, pin: pinFor(hangar, holder.index, dest) });
+  }
+  return { slot, holder, moves };
+};
+
+/**
+ * The clone a removed one leaves off its formula: the one sitting on the removed clone's formula
+ * ports, swapped there by a `take`. Undefined when nobody is, or when that clone's own formula is
+ * claimed by anybody that remains -- then it stays where it is, and the pin keeps saying so.
+ *
+ * Releasing it matters beyond tidiness: `add-clone` reuses the removed index, and its formula is
+ * exactly the ports this clone holds.
+ */
+export const strandedBy = (
+  hangar: Hangar,
+  removed: SlotClone,
+  remaining: readonly SlotClone[],
+): SlotClone | undefined => {
+  const vacated = portsFor(hangar, removed.index);
+  const partner = remaining.find(
+    (clone) => clone.name !== removed.name && samePorts(clone.ports, vacated),
+  );
+  if (partner === undefined) return undefined;
+  const home = new Set(portsFor(hangar, partner.index).map((entry) => entry.port));
+  const claimed = remaining.some(
+    (clone) =>
+      clone.name !== removed.name &&
+      clone.name !== partner.name &&
+      clone.ports.some((entry) => home.has(entry.port)),
+  );
+  return claimed ? undefined : partner;
+};

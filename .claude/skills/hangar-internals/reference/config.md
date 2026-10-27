@@ -281,8 +281,9 @@ pair of integers is congruent mod 1, so congruence alone would refuse every step
 there is one residue class and nothing for the rule to protect, and `offset: 1` is what puts clone
 `N` on `base + N`, leaving the base — a repo's own default port, which is where a server started
 without the clone's environment lands — to no clone at all. What the schema cannot see is two
-LAYOUTS: while `hangar ports pin` holds some clones on an earlier one, `doctor` and `hangar ports`
-check the clones that exist for any port claimed twice (`portCollisions` in `ports.ts`).
+LAYOUTS: while `hangar ports pin` holds some clones on an earlier one, or `ports take` has swapped
+some into slots, `doctor` and `hangar ports` check the clones that exist for any port claimed twice
+(`portCollisions` in `ports.ts`).
 
 ### The secrets file is created, and every line is commented out
 

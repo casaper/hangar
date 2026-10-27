@@ -32,7 +32,8 @@ its own test runs. That is the whole reason the hangar exists.
 
 There is **no fixed number of clones and no list of them anywhere.** They are whatever clone
 directories exist; everything per-clone is a pure function of the index, so adding or removing one
-needs no bookkeeping. `CLAUDE.local.md` gives the directory pattern and the port formula.
+needs no bookkeeping. The one exception is a pin, which moves a clone's ports off its formula —
+`hangar ports take` swapping it into a slot, or a layout change — and `hangar ports` shows it. `CLAUDE.local.md` gives the directory pattern and the port formula.
 
 The colour is the one derived value a human can override — `hangar colours change <clone>
 <colour>` — and the only thing in the fleet that needs a file to remember it.
@@ -111,8 +112,8 @@ nothing". A clone session is welcome to all of them, and `plans collect` and `tm
 already run there from `SessionEnd` hooks. **Every other command acts, and is the user's, from
 the hangar root** — among them `sync` (under any of its three names), `checkout-default`, `open`,
 `jira-plan`, `edit`, `close`, `reload`, `down`, `add-clone`, `install`, `remove-clone`, `exec`,
-`servers start`, `servers kill`, `bookmarks sync`, `colours change`, `ports pin`, `ports unpin`
-and `doctor --fix`.
+`servers start`, `servers kill`, `bookmarks sync`, `colours change`, `ports pin`, `ports unpin`,
+`ports take` and `doctor --fix`.
 
 **A commit gate can arm itself in your clone without you running anything.** `hangar jira-plan`
 starts a ticket's agent on the default branch with the gate ARMED for that ticket, and the gate

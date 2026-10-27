@@ -8,6 +8,7 @@ import {
   claudeLocalMdPath,
   envLocalContent,
   envLocalPath,
+  portClaims,
   envrcPrivateContent,
   envrcPrivatePath,
   excludeBlock,
@@ -35,7 +36,7 @@ import { allowInstructions } from './allow.ts';
 import { coloursSync } from './colours.ts';
 import { statusOf } from './status.ts';
 import type { Hangar } from '../hangar.ts';
-import { portSummary } from '../ports.ts';
+import { portCollisions, portsFor, portSummary } from '../ports.ts';
 import { forgetCloneBookmarks } from '../editor/vscode-bookmarks-sync.ts';
 
 /**
@@ -84,9 +85,28 @@ const settingsTemplate = (clone: Clone, siblings: readonly Clone[]): SettingsJso
   return defaultSettings(clone);
 };
 
+/**
+ * `nextFreeIndex`, skipping any index whose formula ports an existing clone holds -- which a clone
+ * swapped there by `hangar ports take` does, and a new clone on them would share its dev server.
+ */
+export const freeIndexOffEveryPort = (hangar: Hangar, existing: readonly Clone[]): number => {
+  const claims = existing.map(portClaims);
+  let index = nextFreeIndex(hangar);
+  const taken = new Set(existing.map((clone) => clone.index));
+  while (
+    portCollisions([...claims, { name: '(new)', ports: portsFor(hangar, index) }]).some((c) =>
+      c.claims.some((claim) => claim.clone === '(new)'),
+    )
+  ) {
+    index += 1;
+    while (taken.has(index)) index += 1;
+  }
+  return index;
+};
+
 export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
   const existing = discoverClones(hangar);
-  const index = nextFreeIndex(hangar);
+  const index = freeIndexOffEveryPort(hangar, existing);
   // A port pin left at this index by a clone that used to live here, dropped BEFORE the clone is
   // built: `clone.ports` is what the `.env.local` below is written from, and a new clone starts on
   // the formula. `nextFreeIndex` only returns an index with no directory, so any pin is an orphan.

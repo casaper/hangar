@@ -325,6 +325,34 @@ for a pin file edited by hand. A pin for an index with no clone is reported the 
 colour assignment is, and `add-clone` and `remove-clone` both drop one, because `nextFreeIndex`
 reuses gaps.
 
+## Slots, and why borrowing a port is a swap rather than a lease
+
+Something outside the hangar can allow ports BY NAME — this fleet's identity provider accepts
+redirect hosts for the first eight clones' ports only — and a ninth clone would otherwise mean
+asking for the list to grow every time the fleet does. `ports.slots: N` makes the first N clones'
+port sets slots, and `hangar ports take <clone>` moves a clone onto an idle one. It is written as
+**two pins**, the taker on the slot and the holder on the ports the taker left, and not as a lease
+beside the formula, because a pin is already what every consumer of `clone.ports` honours: no new
+derivation, no clone ever without ports, and the collision net above covers a swap exactly as it
+covers a rollout. A pin that would equal its own formula is cleared rather than written, so a swap
+back leaves no file.
+
+- **A move is the whole port set, every role.** What allows the ports by name allows every role's,
+  and a clone half on one slot and half on another would be a collision waiting for the next take.
+- **Idle means nothing listens**, by pid file or by lsof on the holder's ports and on the slot's,
+  and an lsof that did not run is a refusal: a guess here moves a clone from under its own server.
+  A live Claude session is NOT busy — idle prompt context is what fills the slots — but is warned
+  about, because its `CLAUDE.local.md` was read at startup. Its env is not stale: the repo's
+  direnv hook re-exports on every Bash call.
+- **The holder goes home when nothing else claims its formula**, else onto the taker's old ports,
+  so a chain of takes unwinds instead of drifting.
+- **`remove-clone` sends home the clone a take parked on the removed clone's formula** when it is
+  idle (`strandedBy`), and **`add-clone` skips an index whose formula an existing clone holds**
+  (`freeIndexOffEveryPort`): `nextFreeIndex` reuses gaps, and the gap's ports are exactly where the
+  swapped clone sits.
+- **The hangar-root `CLAUDE.local.md` states the slots whenever `ports.slots` is set**, not when
+  something is borrowed, so a take does not make it stale in every clone session.
+
 ## `--fix` runs to the end, and a symlink is judged on where it POINTS
 
 Two bugs in one report, both found by walking a colleague's first day, and both about the same

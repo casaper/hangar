@@ -6,7 +6,13 @@ import type { Hangar } from './hangar.ts';
 import { tildify } from './user-paths.ts';
 
 /**
- * Clones held on the ports they already have, while the port layout moves under the fleet.
+ * Clones that are not on their formula ports, for one of two reasons.
+ *
+ * A SLOT SWAP: `hangar ports take` moves a clone onto an idle slot's ports and its holder onto
+ * the ports it left, as two pins. A pin that lands back on its formula is cleared rather than
+ * written, so swapping back leaves nothing. The rest of this note is the other reason.
+ *
+ * A LAYOUT ROLLOUT: clones held on the ports they already have, while the layout moves.
  *
  * A layout change in `ports` would otherwise move EVERY clone at once -- and a clone's port is
  * where its running dev server is, what its live session was told at startup and what its
@@ -27,7 +33,8 @@ const DOC_KEY = '_';
 
 const DOC =
   'Written by `hangar ports pin` and `hangar ports unpin`. Keys are clone indices; values map ' +
-  'each port env var to the port that clone keeps. A clone that is not listed takes the formula.';
+  'each port env var to the port that clone keeps -- held through a layout change, or swapped by ' +
+  '`hangar ports take`. A clone that is not listed takes the formula.';
 
 /** envKey -> port, for one clone. */
 export type PortPin = ReadonlyMap<string, number>;

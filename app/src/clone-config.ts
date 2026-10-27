@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import type { Clone } from './fleet.ts';
@@ -1149,4 +1149,17 @@ export const portClaims = (clone: Clone): { readonly name: string; readonly port
     return port === undefined || port === entry.port ? [] : [{ role: entry.role, port }];
   });
   return { name: clone.name, ports: [...clone.ports, ...written] };
+};
+
+/**
+ * Rewrite the three files a clone's ports are written into, through the builders `doctor` holds
+ * them to -- so a `ports take` leaves both clones green rather than handing over a `doctor --fix`.
+ */
+export const rewritePortArtifacts = (clone: Clone): void => {
+  writeFileSync(envLocalPath(clone), envLocalContent(clone), 'utf8');
+  const settings = readSettings(clone);
+  if (settings !== undefined) {
+    writeFileSync(settingsPath(clone), settingsContentFor(clone, settings), 'utf8');
+  }
+  writeFileSync(claudeLocalMdPath(clone), claudeLocalMdContent(clone), 'utf8');
 };

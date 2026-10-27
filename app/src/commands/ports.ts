@@ -1,10 +1,21 @@
 import pc from 'picocolors';
 
-import { portClaims, readEnvLocalPorts } from '../clone-config.ts';
+import { portClaims, readEnvLocalPorts, rewritePortArtifacts } from '../clone-config.ts';
 import { CliError } from '../exec.ts';
-import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
+import { cloneAt, discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import { clearPortPin, setPortPin } from '../port-pins.ts';
-import { describeCollision, portCollisions, portsFor, portSummary, roleUrl } from '../ports.ts';
+import {
+  describeCollision,
+  planTake,
+  portCollisions,
+  portsFor,
+  portSummary,
+  roleUrl,
+  slotOf,
+  slotPorts,
+  type ClonePorts,
+} from '../ports.ts';
+import { claudeSessionsIn, listenersOn, runningServersIn } from '../procs.ts';
 import { cloneLabel, note, ok, table, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
 
@@ -43,6 +54,11 @@ const inspect = (hangar: Hangar): Row[] =>
 export const ports = (hangar: Hangar, opts: PortsOptions): void => {
   const rows = inspect(hangar);
   const anyPinned = rows.some((row) => row.clone.portsPinned);
+  const hasSlots = hangar.config.ports.slots !== undefined;
+  const slotCell = (clone: Clone): string => {
+    const slot = slotOf(hangar, clone.ports);
+    return slot === undefined ? '' : String(slot);
+  };
 
   if (opts.json === true) {
     console.log(
@@ -52,6 +68,7 @@ export const ports = (hangar: Hangar, opts: PortsOptions): void => {
           index: clone.index,
           colour: clone.colour.name,
           pinned: clone.portsPinned,
+          slot: slotOf(hangar, clone.ports) ?? null,
           ports: clone.ports.map((entry) => ({
             id: entry.role.id,
             envKey: entry.role.envKey,
@@ -74,11 +91,13 @@ export const ports = (hangar: Hangar, opts: PortsOptions): void => {
     [
       pc.dim('CLONE'),
       ...hangar.config.ports.roles.map((role) => pc.dim(role.label)),
+      ...(hasSlots ? [pc.dim('SLOT')] : []),
       ...(anyPinned ? [pc.dim('PINNED')] : []),
     ],
     ...rows.map(({ clone }) => [
       cloneLabel(clone),
       ...clone.ports.map((entry) => String(entry.port)),
+      ...(hasSlots ? [slotCell(clone)] : []),
       ...(anyPinned ? [clone.portsPinned ? 'pinned' : ''] : []),
     ]),
   ]);
@@ -87,7 +106,9 @@ export const ports = (hangar: Hangar, opts: PortsOptions): void => {
   for (const collision of collisions) warn(`two clones claim port ${describeCollision(collision)}`);
   if (anyPinned) {
     note(
-      'A pinned clone keeps the ports it had before the layout changed; `hangar ports unpin <clone>` releases it to the formula.',
+      hasSlots
+        ? 'A pinned clone is off its formula: swapped into or out of a slot by `hangar ports take`, or held through a layout change.'
+        : 'A pinned clone keeps the ports it had before the layout changed; `hangar ports unpin <clone>` releases it to the formula.',
     );
   }
 
@@ -213,5 +234,108 @@ export const portsUnpin = (hangar: Hangar, ref: string, opts: UnpinOptions): voi
   note(
     `Next: \`hangar doctor ${String(clone.index)} --fix\` rewrites its .env.local, health-check allow and CLAUDE.local.md; ` +
       `then restart that clone's servers, and \`hangar reload ${String(clone.index)}\` so its Claude session starts on the new ports.`,
+  );
+};
+
+export type TakeOptions = { slot?: string | undefined; dryRun?: boolean | undefined };
+
+/** `ng 4210 → 4201 · storybook 6110 → 6101` -- one clone's move, role by role. */
+const describeMove = (from: ClonePorts, to: ClonePorts): string =>
+  from
+    .map(
+      (entry, i) => `${entry.role.id} ${String(entry.port)} → ${String(to[i]?.port ?? entry.port)}`,
+    )
+    .join(' · ');
+
+/**
+ * `hangar ports take <clone>` -- move a clone onto an idle slot's ports, all roles at once.
+ *
+ * A SWAP, written as two pins, rather than a lease: every consumer of a clone's ports already
+ * honours a pin, so nothing new derives a port, no clone is ever left without one, and the
+ * collision net `doctor` runs covers a swap the same as a layout rollout. Swapping back is the
+ * same command on the other clone, and two pins that land on their formulas leave no file.
+ *
+ * A clone's sessions re-read its `.env.local` on every Bash call, through the repo's own direnv
+ * hook, but its `CLAUDE.local.md` was read once at startup and still names the old ports -- so
+ * the holder's live session is warned about by name, and `reload` is the next step for both.
+ */
+export const portsTake = (hangar: Hangar, ref: string, opts: TakeOptions): void => {
+  const taker = requireClone(hangar, ref);
+  const wantSlot = opts.slot === undefined ? undefined : Number.parseInt(opts.slot, 10);
+  if (wantSlot !== undefined && !Number.isInteger(wantSlot)) {
+    throw new CliError(`--slot ${String(opts.slot)} is not a slot number`);
+  }
+  const clones = discoverClones(hangar);
+  const slots = hangar.config.ports.slots ?? 0;
+
+  const candidates = clones.filter(
+    (clone) => clone.index === taker.index || slotOf(hangar, clone.ports) !== undefined,
+  );
+  const busyClones = new Set<string>();
+  for (const clone of candidates) {
+    const scan = runningServersIn(clone);
+    if (!scan.portsChecked) {
+      throw new CliError(
+        'cannot tell which slots are idle — lsof did not run',
+        'A take that guessed could move a clone out from under its own dev server.',
+      );
+    }
+    if (scan.servers.length > 0) busyClones.add(clone.name);
+  }
+  const busySlots = new Set<number>();
+  const slotList = Array.from({ length: slots }, (_, i) => i + 1);
+  const listening = listenersOn(slotList.flatMap((s) => slotPorts(hangar, s).map((e) => e.port)));
+  for (const slot of slotList) {
+    if (slotPorts(hangar, slot).some((entry) => listening?.has(entry.port) === true)) {
+      busySlots.add(slot);
+    }
+  }
+
+  const plan = planTake(hangar, taker, clones, { clones: busyClones, slots: busySlots }, wantSlot);
+  if ('refused' in plan)
+    throw new CliError(`${taker.name} takes nothing — ${plan.refused}`, plan.hint);
+
+  // The net behind the plan: what the moved clones will claim against what every other clone
+  // derives AND still has written, which is the window a pin edited by hand can open.
+  const moved = new Set(plan.moves.map((move) => move.clone.name));
+  const contested = portCollisions([
+    ...clones.filter((clone) => !moved.has(clone.name)).map(portClaims),
+    ...plan.moves.map((move) => ({ name: move.clone.name, ports: move.to })),
+  ]);
+  if (contested.length > 0) {
+    throw new CliError(
+      `${taker.name} takes nothing — the swap would put two clones on one port: ${contested.map(describeCollision).join('; ')}`,
+      'Run `hangar doctor` and repair the clone in the way first.',
+    );
+  }
+
+  const lines = plan.moves.map(
+    (move) => `${move.clone.name}: ${describeMove(move.clone.ports, move.to)}`,
+  );
+  const holderSessions =
+    plan.holder === undefined ? [] : claudeSessionsIn(cloneAt(hangar, plan.holder.index).path);
+  if (opts.dryRun === true) {
+    note(`${taker.name} would take slot ${String(plan.slot)}:`);
+    for (const line of lines) note(`  ${line}`);
+    return;
+  }
+
+  for (const move of plan.moves) {
+    if (move.pin === undefined) clearPortPin(hangar, move.clone.index);
+    else setPortPin(hangar, move.clone.index, move.pin);
+  }
+  for (const move of plan.moves) rewritePortArtifacts(cloneAt(hangar, move.clone.index));
+
+  ok(`${taker.name} took slot ${String(plan.slot)}`);
+  for (const line of lines) note(`  ${line}`);
+  if (plan.holder !== undefined && holderSessions.length > 0) {
+    warn(
+      `${plan.holder.name} has a live Claude session that still believes it holds slot ${String(plan.slot)}; its env follows .env.local, its CLAUDE.local.md does not until it restarts`,
+    );
+  }
+  const reloads = plan.moves.map((move) => String(move.clone.index)).join(' ');
+  note(
+    `Next: \`hangar reload ${reloads}\` so the sessions read their new ports, \`direnv allow\` in any pane that asks, ` +
+      `then start ${taker.name}'s servers. Role bookmarks follow at the next \`hangar bookmarks sync\`.`,
   );
 };

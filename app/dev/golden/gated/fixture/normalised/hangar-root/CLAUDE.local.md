@@ -25,7 +25,7 @@ the only answer, and `git -C wt-001 branch --show-current` the only answer about
 
 ## Ports
 
-Every clone's ports are a pure function of its index:
+Every clone's ports are a pure function of its index, unless it is pinned:
 
     port = base + 37 + (index - 1) * 100
 
@@ -40,6 +40,11 @@ guarantee: two hangars with different offsets can never collide for any clone co
 reserved block, which fails silently once a hangar outgrows it. **Never hard-code a port and never
 assume a server on a default port is yours** — `hangar ports` is the answer for the fleet, and
 each clone's own `CLAUDE.local.md` names its own.
+
+**The first 2 clones' port sets are slots**, which any clone can borrow with
+`hangar ports take <clone>` while the clone holding one serves nothing — the two swap. So a
+clone may sit on another index's ports, and for that clone the formula above is not the answer —
+its own `CLAUDE.local.md` is.
 
 ## Symlinks every clone carries
 

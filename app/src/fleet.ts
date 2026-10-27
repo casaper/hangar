@@ -50,7 +50,8 @@ export type Clone = {
   readonly colour: CloneColour;
   readonly ports: ClonePorts;
   /**
-   * Whether `.hangar/port-pins.json` holds this clone on ports it had before a layout change.
+   * Whether `.hangar/port-pins.json` holds this clone off its formula -- through a layout change,
+   * or swapped by `hangar ports take`.
    * For REPORTING only -- `ports` already carries the pinned values, so no consumer branches on it.
    */
   readonly portsPinned: boolean;

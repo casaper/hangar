@@ -410,6 +410,13 @@ const portsSchema = z.strictObject({
    * server out from under a live session, which is what `hangar ports pin` is for.
    */
   offset: z.int().min(0).default(0),
+  /**
+   * How many of the first clones' port sets are SLOTS any clone can borrow with `hangar ports
+   * take` -- the ports something outside the hangar allows by name, such as an identity
+   * provider's redirect hosts. Slot k is clone k's formula ports. Absent means no slots, and no
+   * default: the number is whatever that outside allow-list holds, which no schema can know.
+   */
+  slots: z.int().min(1).optional(),
   /** Ordered; the order is the display order. Empty means this hangar assigns no ports. */
   roles: z.array(portRoleSchema),
 });

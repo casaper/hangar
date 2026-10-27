@@ -444,7 +444,7 @@ Not tracked, and what writes each:
 - `clone-colours.sh`, `clone-terminal.sh`, `clone-tmux.conf`, `clone-tmux-status.sh` —
   `hangar colours sync`
 - `.hangar/colour-assignments.json` — **INPUT** — `hangar colours change`, nothing else
-- `.hangar/port-pins.json` — **INPUT** — `hangar ports pin` / `unpin`, nothing else
+- `.hangar/port-pins.json` — **INPUT** — `hangar ports pin` / `unpin` / `take`, nothing else
 - `.hangar/claude-tmux.conf` — `hangar up`, every run
 - `.hangar/pnpm-bin/` — corepack's pnpm shims — direnv, through `hangar_use_pnpm`
 - `app/.claude/plans/`, `.remember/` — developer-mode session state, not a `hangar` command's

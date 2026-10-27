@@ -98,7 +98,7 @@ clone*. Most of it is true for you; four things are not:
 - **The commands that file reserves "for the user, from the fleet root" are the ones you are here
   to drive** — `sync`, `checkout-default`, `open`, `jira-plan`, `edit`, `close`, `reload`,
   `add-clone`, `install`, `remove-clone`, `servers start`, `servers kill`, `bookmarks sync`,
-  `colours change`, `ports pin`, `ports unpin`, `doctor --fix`. They move git state, files between
+  `colours change`, `ports pin`, `ports unpin`, `ports take`, `doctor --fix`. They move git state, files between
   live working trees, or a window onto the user's screen, so run the preview first —
   `sync_preview`, `open_preview`, `doctor` — report it,
   then call the real tool and let the prompt do its work. **Prefer the tool**: it carries typed

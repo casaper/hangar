@@ -104,7 +104,7 @@ import {
 } from '../tmp.ts';
 import { paletteEntry } from '../palette.ts';
 import { portPins } from '../port-pins.ts';
-import { describeCollision, portCollisions, portSummary } from '../ports.ts';
+import { describeCollision, portCollisions, portSummary, slotOf } from '../ports.ts';
 import { platform } from '../platform/index.ts';
 import { claudeSessionDiagnostic, claudeSessionsIn } from '../procs.ts';
 import { terminal, type EmulatorCapabilities, type MouseReporting } from '../terminal/index.ts';
@@ -264,7 +264,14 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
   const contested = portCollisions(siblings.map(portClaims)).filter((collision) =>
     collision.claims.some((claim) => claim.clone === clone.name),
   );
-  const summary = `${portSummary(clone.ports)}${clone.portsPinned ? ' (pinned)' : ''}`;
+  const slot = slotOf(hangar, clone.ports);
+  const summary = `${portSummary(clone.ports)}${
+    slot !== undefined && slot !== clone.index
+      ? ` (slot ${String(slot)})`
+      : clone.portsPinned
+        ? ' (pinned)'
+        : ''
+  }`;
   checks.push({
     name: '.env.local ports',
     ok: portProblems.length === 0,

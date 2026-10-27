@@ -359,6 +359,13 @@ ports:
   offset: 1
   # offset: 0
 
+  # How many of the first clones' port sets are SLOTS, which any clone can borrow with
+  # `hangar ports take <clone>` while the clone holding one serves nothing -- the two swap. For
+  # ports something outside the hangar allows by name, such as an identity provider's redirect
+  # hosts: slot k is clone k's formula ports, so that list never has to grow with the fleet.
+  # Optional with no default; leave it out and `ports take` refuses.
+  slots: 8
+
   # Ordered; the order is the display order. `roles: []` is legal and means this hangar assigns
   # no ports -- but the `ports` key itself is required, so "no ports" has to be said out loud.
   roles:
