@@ -314,9 +314,14 @@ export const portsTake = (hangar: Hangar, ref: string, opts: TakeOptions): void 
   );
   const holderSessions =
     plan.holder === undefined ? [] : claudeSessionsIn(cloneAt(hangar, plan.holder.index).path);
+  const sessionWarning =
+    plan.holder !== undefined && holderSessions.length > 0
+      ? `${plan.holder.name} has a live Claude session that still believes it holds slot ${String(plan.slot)}; its env follows .env.local, its CLAUDE.local.md does not until it restarts`
+      : undefined;
   if (opts.dryRun === true) {
     note(`${taker.name} would take slot ${String(plan.slot)}:`);
     for (const line of lines) note(`  ${line}`);
+    if (sessionWarning !== undefined) warn(sessionWarning);
     return;
   }
 
@@ -328,11 +333,7 @@ export const portsTake = (hangar: Hangar, ref: string, opts: TakeOptions): void 
 
   ok(`${taker.name} took slot ${String(plan.slot)}`);
   for (const line of lines) note(`  ${line}`);
-  if (plan.holder !== undefined && holderSessions.length > 0) {
-    warn(
-      `${plan.holder.name} has a live Claude session that still believes it holds slot ${String(plan.slot)}; its env follows .env.local, its CLAUDE.local.md does not until it restarts`,
-    );
-  }
+  if (sessionWarning !== undefined) warn(sessionWarning);
   const reloads = plan.moves.map((move) => String(move.clone.index)).join(' ');
   note(
     `Next: \`hangar reload ${reloads}\` so the sessions read their new ports, \`direnv allow\` in any pane that asks, ` +

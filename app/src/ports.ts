@@ -270,6 +270,8 @@ export const strandedBy = (
   remaining: readonly SlotClone[],
 ): SlotClone | undefined => {
   const vacated = portsFor(hangar, removed.index);
+  // A removed HOLDER's formula is a slot, and whoever sits on it took it on purpose.
+  if (slotOf(hangar, vacated) !== undefined) return undefined;
   const partner = remaining.find(
     (clone) => clone.name !== removed.name && samePorts(clone.ports, vacated),
   );

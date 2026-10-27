@@ -124,6 +124,15 @@ test('removing a taker names the clone it left on its formula, and only when tha
   const swapped = apply(fleet, plan(planTake(hangar, at(3), fleet, NONE)).moves);
   const remaining = swapped.filter((clone) => clone.index !== 3);
   assert.equal(strandedBy(hangar, at(3), remaining)?.name, 'wt-001');
+  // Removing the HOLDER instead: the taker sits on its slot on purpose and stays there.
+  assert.equal(
+    strandedBy(
+      hangar,
+      at(1),
+      swapped.filter((clone) => clone.index !== 1),
+    ),
+    undefined,
+  );
   // Nobody swapped: nothing is stranded.
   assert.equal(strandedBy(hangar, at(3), [at(1), at(2)]), undefined);
   // Its home claimed by another: it stays where it is.
