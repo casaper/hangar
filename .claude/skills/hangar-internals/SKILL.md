@@ -42,6 +42,7 @@ take the one that matches what you are touching:
 | changing `doctor`, `add-clone`, `install`, `scrub`, `ports pin`/`unpin`, any generated per-clone artifact, or the plan archive | `reference/doctor.md` |
 | changing `hangar up` or `hangar down`, the `claude` mode shim, the two hangar-root modes, their permission rules, `hangar mcp` and its tool table, `allow`, `skills sync`, `exec` and its guard, or what a hangar-root session is told it is | `reference/modes.md` |
 | changing `bin/hangar-waypoint`, `hangar-commit-gate`, `hangar-rewrite` or `hangar-exec-guard`, or `personal-skills/` | `reference/root-tools.md` |
+| probing git, Claude Code permissions, a command's file I/O, a generated script or a VS Code extension without touching the live fleet | `reference/probing.md` |
 | cutting a release, changing what a commit type is worth, the CHANGELOG's sections, the commitlint rules or the husky hooks; rewriting this repo's history | `reference/release.md` |
 | changing `hangar dev golden` or what it captures | `app/dev/golden/README.md` |
 
@@ -50,10 +51,10 @@ take the one that matches what you are touching:
 
 Two things are deliberately elsewhere:
 
-- **The code map, the seams, and the two conventions for changing this CLI** are in
+- **The code map, the seams, and the three conventions for changing this CLI** are in
   `app/CLAUDE.md`, which Claude Code loads by itself the first time a session reads any file under
   `app/`. So they are already in context whenever you are actually editing; read that file directly
-  if you have not touched `app/` yet, because the two conventions govern every edit here.
+  if you have not touched `app/` yet, because the three conventions govern every edit here.
 - **The command surface** — every flag, every default, which commands only report — is the
   `hangar-ops` skill. It is the operator's manual; this is not.
 

@@ -532,8 +532,8 @@ developer session for you. Under `hangar up` that tab is already the next window
 
 **Developer mode is for changing the `hangar` CLI itself** — the TypeScript in `app/src/**`, the
 config schema, the generated artifacts, the skills, and operator mode's own instructions. Its
-working directory is `app/`, so `app/CLAUDE.md` — the package layout, the two conventions the code
-follows, the code map and the five extension seams — is loaded from the first turn instead of
+working directory is `app/`, so `app/CLAUDE.md` — the package layout, the three conventions the
+code follows, the code map and the five extension seams — is loaded from the first turn instead of
 lazily.
 
 Use whichever tab matches the question: "the CLI needs to do something different" is the developer

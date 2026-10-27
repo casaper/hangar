@@ -94,48 +94,19 @@ edit script that quotes it as an anchor is refused. Put such a script in a scrat
 **Search a clone with `git -C <clone> grep`, never `grep -r`**: a clone carries `node_modules`
 and a multi-GB `tmp/`, and `grep -r` over one runs past the Bash timeout.
 
-**Probe git behaviour with a script file in the scratchpad** (`sh probe.sh`, its repo under
-`mktemp -d`): a long one-line probe that creates commits is refused permission.
-
-**Probe Claude Code permissions with `claude -p … --permission-mode acceptEdits < /dev/null`** in
-a `mktemp -d` project with its own `.claude/settings.local.json` — `default` mode refuses every
-write, inside the project too, so it cannot tell a rule from no rule. One measured answer: a
-file-write deny is an `Edit(...)` rule, and `Write(...)` deny rules are never matched.
-
-**Probe a command's file I/O in a throwaway hangar, never the live fleet**: a scratchpad `.ts` that
-imports `test/fixture.ts`'s `syntheticHangar({ root: mkdtempSync(…), configText })` and `src/**` by
-absolute path, `git init`s each `cloneAt(hangar, i).path`, and runs with `node probe.ts` from `app/`.
-
-**Run a generated script against the live fleet without installing it**: after `pnpm golden`,
-`sed 's#%HANGAR%#<root>#g' dev/golden/advisory/hangar/normalised/artifacts/<file>` into the
-scratchpad and run that copy — e.g. `sh <copy> footer clone_01 <root>/clone_01` renders the real
-footer before `colours sync` has been run.
-
-**`advisory/` moves with the live fleet** (process counts, the PR cache, new commits), so prove
-a change left this hangar alone by copying `dev/golden/advisory` to the scratchpad BEFORE the
-edit and diffing after; only `artifacts/` and `builders/` count.
-
-**Test a `scrub-check.sh` pattern with a canary in a TRACKED file** — it is `git grep` over the
-working tree, so an untracked file is never scanned: back the file up, append the canary, run
-`sh dev/scrub-check.sh`, restore it and check `git diff --quiet` before anything is committed.
-
-**Stage part of a file without `git add -p`** (interactive, unsupported here): filter the hunks
-of `git diff -U3 -- <file>` in a scratchpad script and pipe them to `git apply --cached --recount -`.
+**Probe in a scratchpad or a throwaway hangar, never the live fleet.** The recipes — git
+behaviour, Claude Code permissions, a command's file I/O, a generated script, an `advisory/` diff, a
+`scrub-check.sh` canary, partial staging, a VS Code extension — are in
+`hangar-internals/reference/probing.md`.
 
 **A palette or ink change is invisible to `pnpm golden` outside six hues**: both fixtures have
 three clones, `fixture` on built-in slots 6–8 (`palette.rotate: 5`) and `fixture-vscode` on its own
 `palette.hues`, so `test/contrast.test.ts` is the only net for every other built-in hue — a
 comment-only golden diff there is expected, not proof of no change.
 
-**Measure a VS Code extension from its bundle**,
-`~/.vscode/extensions/<publisher.name>-<ver>/dist/*.js`: slice around a match with `python3 -I`
-(`s.find(…)`), because `grep -oE` refuses a `{0,300}` context. Its workspace-scoped state is SQLite
-at `~/Library/Application Support/Code/User/workspaceStorage/<hash>/state.vscdb`
-(`workspace.json` beside it names the workspace); open it with `sqlite3 'file:…?mode=ro'`.
+## Three conventions for changing it, and the two nets behind them
 
-## Two conventions for changing it, and the two nets behind them
-
-Both conventions exist because they caught something, and both apply to every edit under
+All three exist because they caught something, and all three apply to every edit under
 `app/src/**`.
 
 - **Anything that produces text for a human or an agent gets a PURE builder, given its facts and
@@ -507,8 +478,8 @@ Five of those look like exceptions and are not:
 ## The hangar root files this package owns
 
 The code is in `app/`, but files one level up are generated out of it — so changing their source
-and not regenerating them leaves a hangar that contradicts itself. Nothing catches that: there is
-no hook in `.git/hooks`.
+and not regenerating them leaves a hangar that contradicts itself. Nothing catches that: neither
+husky hook regenerates or checks them — `pre-commit` runs only the two scans.
 
 Each entry is the source in `app/src/**`, the command that regenerates, and what it rewrites:
 
