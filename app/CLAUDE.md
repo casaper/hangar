@@ -68,6 +68,21 @@ the history, `scan:literals` is `dev/scrub-check.sh` over the tree, and gitleaks
 a low-entropy pasted password that the second one catches (`hangar-internals/reference/release.md`
 has the canary). Both also run in `app/.husky/pre-commit` and inside `hangar dev release`.
 
+**A dependency sweep is targeted, never a bare `pnpm update` of the manifest.** The floor is
+`minimumReleaseAge` in `pnpm-workspace.yaml`, and four things it does not do for you:
+
+- `pnpm add <pkg>@<ver>` per package; `savePrefix: ''` rewrites a caret to an exact pin, so put
+  it back by hand when the bump should not change the range. A bare `pnpm update` is the
+  transitive sweep and leaves the manifest alone (pnpm 12 rejects `--depth Infinity`).
+- `pnpm outdated` compares only against `latest`, so check peer ceilings by hand:
+  `typescript` is held by `typescript-eslint`'s `typescript` peer, and pnpm installs across a
+  violated peer with a warning, not an error.
+- `@types/node` tracks the runtime major in `.nvmrc`, not the registry.
+- The `packageManager` pin ignores the floor: check pnpm's own publish dates with
+  `npm view pnpm time`.
+
+A zod bump also needs `hangar config schema --check`. The commit is `chore(deps)`.
+
 `pnpm` is not assumed to be on PATH: the hangar root's `.envrc` runs `hangar_use_pnpm` (defined
 in `.envrc.hangar`), which has corepack write its shims into the gitignored `.hangar/pnpm-bin/`
 and puts that directory on PATH — alongside `hangar_use_node .nvmrc`, `hangar_use_gnu`, `PATH_add bin`,
