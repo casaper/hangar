@@ -314,8 +314,9 @@ The layout under `src/` is what `ls` shows; only what a listing cannot say is ke
 - **`generate/index.ts`** — the dry-run-aware writer every generator goes through.
 - **`git.ts`'s `git` / `gitOut` / `gitTry` are how anything that CHANGES a clone runs git.** They
   set no editor AND `GIT_REFLOG_ACTION=hangar`, which is how `jira-plan` tells hangar's own branch
-  moves from a person's; a raw `run('git', …)` skips both without anything noticing. The few raw
-  calls left (`config/derive.ts`, `commands/plans.ts`) only read.
+  moves from a person's; a raw `run('git', …)` skips both without anything noticing. The raw calls
+  left (`git grep "run('git'" src`) either only read or touch no existing clone — `add-clone`'s
+  `git clone`, and `release`'s fetch of the hangar repo itself.
 - **`commands/vscode.ts`** — despite the name, the generic `editorSync` behind every
   `ide <kind> sync`, not only VS Code's.
 - **`exec.ts`** — `run`, `runCaptured` and `CliError`, the subprocess wrappers; **`template.ts`**
