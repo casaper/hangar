@@ -466,7 +466,7 @@ clone's window is open and not in front, and `open` prints the `attach` line tha
 job. Opening is the floor — a driver that cannot open a window is `none`, which is a mode rather
 than a failure.
 
-Three things about that table are decisions rather than gaps. iTerm2 is handed its command at
+Five things about that table are decisions rather than gaps. iTerm2 is handed its command at
 creation and never typed into afterwards, for the three measured reasons under **Exercised**
 below; nothing is typed at a raw tty, for the reason under the platform seam above; and:
 
@@ -477,6 +477,19 @@ below; nothing is typed at a raw tty, for the reason under the platform seam abo
   none of it. So a tab is attempted, the tab count is checked to have actually grown — System
   Events reports success for a key it delivered nowhere — and a refusal falls back to a window
   naming what to allow. The developer asked for their clone, not for a piece of window furniture.
+- **iTerm2's tab colour is sent by the tab itself, at creation.** The tab runs tmux as its own
+  process, so no shell ever stands outside tmux there, and the shell hook's tmux arm only sets
+  tmux's options — every clone tab stayed uncoloured in iTerm2's tab bar while its tmux bar was
+  right. `iterm2TabColourCommand` wraps the attach line as `/bin/sh -c 'printf "%b" "$1"; shift;
+  exec "$@"' sh '<OSC 6 ×3>' <attach argv>`: a fixed script with no quote inside it, the attach
+  tokens left as top-level argv, and tmux still the session's process on the same tty. A tmux
+  `client-attached` hook writing the colour to `#{client_tty}` would also repaint on re-attach and
+  was rejected for exactly the no-raw-tty reason above. The cost is that a tab already open keeps
+  what it had until it is reopened. Gated on `terminal.colour.chrome`, like the hook.
+- **`hangar up` resets the tab it attaches to** (`tabResetFor`, the hook's own `bg;*;default`),
+  before tmux owns the tty. The attach takes over the shell `up` was typed into, and an iTerm2 tab
+  keeps the last OSC 6 it was sent — so the hangar tab came up wearing a clone's hue, left by that
+  shell. Why the hook's own reset had not cleared it was not established.
 
 ## The tmux layer
 

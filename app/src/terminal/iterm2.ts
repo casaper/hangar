@@ -39,8 +39,44 @@ import {
  * The raise reads `tty of s`; both it and the opening are exercised on this machine.
  */
 
+/**
+ * The attach command, preceded by iTerm2's OSC 6 tab colour. Pure and exported.
+ *
+ * The tab is the one place that can send it. It runs tmux as its own process, so no shell ever
+ * stands outside tmux there for `clone-terminal.sh` to paint from -- inside, the hook takes its
+ * tmux arm and sets tmux's own options, and tmux would swallow an OSC 6 anyway. So the tab prints
+ * the colour once and `exec`s the attach command: tmux is still the session's process, on the same
+ * tty, which is what `raiseByTty` and `awaitClient` look for.
+ *
+ * **The `sh -c` hop keeps `command` argv.** The script is a fixed literal with no quote inside it,
+ * the colour is its own argument, and the attach command's tokens follow as top-level argv,
+ * unchanged -- so nothing is ever quoted inside quotes, and whether iTerm2's tokenizer takes `'\''`
+ * is never asked. `%b` with `\0033`/`\0007` because that is the octal spelling every `printf`
+ * expands under `%b`.
+ *
+ * The bytes are the shell hook's own `iterm2` arm. A tmux `client-attached` hook writing them to
+ * the client's tty would also repaint on a re-attach, and was rejected: that tty is one tmux is
+ * drawing on, and nothing in this CLI types at a raw tty.
+ */
+export const iterm2TabColourCommand = (command: string, rgb: string): string => {
+  const [r = '0', g = '0', b = '0'] = rgb.split(';');
+  const osc = (channel: string, value: string): string =>
+    `\\0033]6;1;bg;${channel};brightness;${value}\\0007`;
+  return [
+    '/bin/sh -c',
+    `'printf "%b" "$1"; shift; exec "$@"'`,
+    'sh',
+    `'${osc('red', r)}${osc('green', g)}${osc('blue', b)}'`,
+    command,
+  ].join(' ');
+};
+
 const openScript = (spec: WindowSpec): string => {
-  const command = asString(spec.command);
+  const command = asString(
+    spec.tabColour === undefined
+      ? spec.command
+      : iterm2TabColourCommand(spec.command, spec.tabColour),
+  );
   if (spec.placement === 'window') {
     return [
       'tell application "iTerm2"',

@@ -23,7 +23,12 @@ import {
   type TmuxServer,
 } from '../tmux.ts';
 import { tildify } from '../user-paths.ts';
-import { terminal, type EmulatorCapabilities, type Placement } from '../terminal/index.ts';
+import {
+  terminal,
+  type EmulatorCapabilities,
+  type Placement,
+  type WindowSpec,
+} from '../terminal/index.ts';
 import { note, ok, step, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
 import { portSummary } from '../ports.ts';
@@ -431,6 +436,21 @@ export const describeAction = (action: OpenAction, done: boolean): string => {
   }
 };
 
+/**
+ * What an emulator is handed for one clone's tab. Pure and exported.
+ *
+ * The hue only when `terminal.colour.chrome` is on -- the switch the shell hook already obeys, so
+ * turning the chrome layer off turns off the tab `open` creates too.
+ */
+export const windowSpecFor = (clone: Clone, command: string, placement: Placement): WindowSpec => ({
+  command,
+  placement,
+  // The same shortening tmux's `set-titles-string` uses, so the title an emulator is handed at
+  // creation and the one tmux writes over it a moment later agree.
+  title: `${cloneShortName(clone)} · ${clone.hangar.id}`,
+  tabColour: clone.hangar.config.terminal.colour.chrome ? clone.colour.mainTriple : undefined,
+});
+
 /** Perform one action. Returns false when the step failed and the caller should say so. */
 const perform = (
   server: TmuxServer,
@@ -444,15 +464,7 @@ const perform = (
     case 'create-window':
       return server.addWindow(clone, action.tab);
     case 'open-emulator': {
-      if (
-        !driver.open({
-          command: action.command,
-          placement: action.placement,
-          // The same shortening tmux's `set-titles-string` uses, so the title an emulator is
-          // handed at creation and the one tmux writes over it a moment later agree.
-          title: `${cloneShortName(clone)} · ${clone.hangar.id}`,
-        })
-      ) {
+      if (!driver.open(windowSpecFor(clone, action.command, action.placement))) {
         return false;
       }
       /*

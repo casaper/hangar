@@ -13,6 +13,7 @@ import {
 import { applyArtifact } from '../generate/index.ts';
 import type { Hangar } from '../hangar.ts';
 import { MODE_COLOURS } from '../palette.ts';
+import { terminalKindFromEnv } from '../terminal/index.ts';
 import { claudeDir, tildify } from '../user-paths.ts';
 import { claudeSocketName, tmuxBinary, tmuxSocketOf } from '../tmux.ts';
 import { confirm, note, ok, step, warn } from '../ui.ts';
@@ -460,6 +461,27 @@ const applyBar = (srv: Server): void => {
 };
 
 /**
+ * iTerm2's "tab colour back to default", for the terminal `up` is about to attach. Pure.
+ *
+ * The hangar tab carries no clone's colour, and nothing else would clear one: the attach takes
+ * over the shell `up` was typed into, and an iTerm2 tab keeps the last OSC 6 it was sent until
+ * something resets it. So a tab whose shell once stood in a clone came up wearing that clone's
+ * hue. These are the shell hook's own reset bytes, sent once, BEFORE tmux owns the tty.
+ *
+ * Only to a terminal, only outside tmux (which would swallow them), only to iTerm2 -- the one
+ * emulator whose tab this sequence colours -- and only with the chrome layer on, the switch the
+ * shell hook obeys.
+ */
+export const tabResetFor = (
+  env: NodeJS.ProcessEnv,
+  isTty: boolean,
+  chrome: boolean,
+): string | undefined =>
+  isTty && chrome && (env['TMUX'] ?? '') === '' && terminalKindFromEnv(env) === 'iterm2'
+    ? '\x1b]6;1;bg;*;default\x07'
+    : undefined;
+
+/**
  * Attach this terminal, taking the session over from any other client.
  *
  * `-d` is what makes the pair a singleton in practice: two clients on one session mirror each
@@ -470,9 +492,15 @@ const applyBar = (srv: Server): void => {
  * `TMUX`/`TMUX_PANE` are unset so this works from inside another tmux, and stdio is inherited
  * because from here on the client IS this terminal.
  */
-const attach = (srv: Server): void => {
+const attach = (hangar: Hangar, srv: Server): void => {
   const others = srv.clientTtys();
   if (others.length > 0) warn(`detaching ${others.join(', ')} -- one client at a time`);
+  const reset = tabResetFor(
+    process.env,
+    process.stdout.isTTY,
+    hangar.config.terminal.colour.chrome,
+  );
+  if (reset !== undefined) process.stdout.write(reset);
   const res = run(
     '/usr/bin/env',
     ['-u', 'TMUX', '-u', 'TMUX_PANE', tmuxBinary(), '-L', srv.socket, 'attach', '-d', '-t', TARGET],
@@ -661,5 +689,5 @@ export const up = (hangar: Hangar, opts: UpOptions): void => {
     note(`the ${select} tab is selected -- this client is already attached, C-b d to leave`);
     return;
   }
-  attach(srv);
+  attach(hangar, srv);
 };

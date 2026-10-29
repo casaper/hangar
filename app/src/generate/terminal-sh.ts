@@ -36,6 +36,7 @@ export type TerminalColourSettings = {
  * | ------ | ------------------------------------------ | ----------------------------------------- |
  * | chrome | `tmux set -w` window options               | every window `hangar open` creates        |
  * |        | iTerm2's OSC 6 tab colour                  | iTerm2, in a shell outside tmux           |
+ * |        | the same OSC 6, sent once by the tab       | the iTerm2 tab `hangar open` creates      |
  * |        | OSC 11 background, darkened to a tint      | Konsole, VTE (GNOME Terminal), xterm, …   |
  * |        | nothing at all                             | Terminal.app, which understands neither   |
  * | title  | OSC 0 (and OSC 30 for Konsole's tab)       | everywhere                                |

@@ -62,10 +62,17 @@ It paints **three independent layers**, because the emulators support wildly dif
 | ------ | -------------------------------------- | -------------------------------------------- |
 | chrome | `tmux set -w` window options, full hue | every window `hangar open` creates           |
 | chrome | iTerm2's OSC 6 tab colour, at full hue | iTerm2, in a shell outside tmux              |
+| chrome | the same OSC 6, sent once at creation  | the iTerm2 tab `hangar open` creates         |
 | chrome | OSC 11 background, darkened to a tint  | Konsole, GNOME Terminal/VTE, xterm, kitty, … |
 | chrome | nothing at all                         | Terminal.app, which ignores OSC 11           |
 | title  | OSC 0 (plus OSC 30 for Konsole's tab)  | everywhere recognised                        |
 | env    | `HANGAR_CLONE*` variables              | everywhere, with no terminal support at all  |
+
+**An iTerm2 tab that `hangar open` creates has no shell outside tmux**, so the hook can never
+send its tab colour: the tab prints the clone's OSC 6 itself, once, before it starts tmux. A tab
+that is already open keeps what it had until it is closed and reopened — `open` on an open clone
+only raises it. **The `hangar up` tab carries no clone colour**: `up` resets the iTerm2 tab before
+it attaches, so a shell that once stood in a clone does not hand its hue to the hangar tab.
 
 The **env layer is the floor** and the reason this works on terminals nobody has thought about: a
 prompt or a starship config can colour itself from `HANGAR_CLONE_SGR` (a real escape sequence,

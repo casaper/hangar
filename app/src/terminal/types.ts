@@ -96,6 +96,15 @@ export type WindowSpec = {
    * characters that distinguish them.
    */
   readonly title?: string | undefined;
+  /**
+   * The clone's hue as `r;g;b`, for the emulators that colour a TAB rather than a background.
+   *
+   * Best effort, like `title`, and absent when `terminal.colour.chrome` is off. Only iTerm2 reads
+   * it: the tab `open` creates runs tmux as its own process, so no shell ever stands outside tmux
+   * in it to send the colour -- the shell hook's tmux arm can only set tmux's own options. So the
+   * colour has to be sent by the tab itself, once, before tmux owns the tty.
+   */
+  readonly tabColour?: string | undefined;
 };
 
 /** A tab in the current window, or a window of its own. `terminal.placement` picks the default. */

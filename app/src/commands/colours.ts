@@ -209,7 +209,7 @@ export const coloursChange = (
 
   console.log('');
   note(
-    `${pc.dim('new shell')} for the iTerm2 tab colour, ${pc.dim('restart Claude Code')} in ${clone.name} for the theme.`,
+    `${pc.dim('new shell')} or ${pc.dim('a reopened tab')} for the iTerm2 tab colour, ${pc.dim('restart Claude Code')} in ${clone.name} for the theme.`,
   );
 };
 
