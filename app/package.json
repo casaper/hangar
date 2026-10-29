@@ -12,6 +12,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "node --test \"test/**/*.test.ts\"",
+    "deps:survey": "node dev/deps-survey.ts",
     "hangar": "node src/cli.ts",
     "golden": "sh dev/golden.sh",
     "scan": "pnpm scan:secrets && pnpm scan:literals",

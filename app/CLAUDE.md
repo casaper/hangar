@@ -68,7 +68,8 @@ the history, `scan:literals` is `dev/scrub-check.sh` over the tree, and gitleaks
 a low-entropy pasted password that the second one catches (`hangar-internals/reference/release.md`
 has the canary). Both also run in `app/.husky/pre-commit` and inside `hangar dev release`.
 
-**A dependency sweep is targeted, never a bare `pnpm update` of the manifest.** The floor is
+**A dependency sweep is targeted, never a bare `pnpm update` of the manifest.** The
+`hangar-deps` skill runs one end to end, and `pnpm deps:survey` measures it. The floor is
 `minimumReleaseAge` in `pnpm-workspace.yaml`, and what else a sweep has to know:
 
 - `pnpm add <pkg>@<ver>` per package; `savePrefix: ''` rewrites a caret to an exact pin, so put
