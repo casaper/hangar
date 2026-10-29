@@ -107,6 +107,11 @@ BSD spelling fails partway through a multi-file edit, and a half-edited `src/**`
 `/opt/homebrew/bin/tmux -L hangar-<id> …` directly, `type -P` does not exist (use `command -v`),
 and an unquoted glob that matches nothing is an error (`--include=*.ts`, `echo ===`), so quote it.
 
+**What runs in an emulator tab is one `list-clients` away**:
+`tmux -L hangar-<id>[-claude] list-clients -F '#{client_tty} #{client_pid} #{client_termtype}'`,
+then `ps -o ppid=` on the pid. A tab from `hangar open` runs tmux with no shell outside it;
+a `hangar up` tab runs it under the shell `up` was typed into.
+
 **The exec guard matches `hangar exec` anywhere in a Bash command, heredoc text included** — an
 edit script that quotes it as an anchor is refused. Put such a script in a scratchpad file and run
 `python3 -I <file>`.
@@ -123,6 +128,9 @@ behaviour, Claude Code permissions, a command's file I/O, a generated script, an
 three clones, `fixture` on built-in slots 6–8 (`palette.rotate: 5`) and `fixture-vscode` on its own
 `palette.hues`, so `test/contrast.test.ts` is the only net for every other built-in hue — a
 comment-only golden diff there is expected, not proof of no change.
+
+**`syntheticHangar()` has `terminal.colour.chrome: false`** (from `dev/fixture.config.yaml`),
+so a test of anything behind the chrome gate has to set it on explicitly.
 
 ## Three conventions for changing it, and the two nets behind them
 
