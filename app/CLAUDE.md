@@ -69,7 +69,7 @@ a low-entropy pasted password that the second one catches (`hangar-internals/ref
 has the canary). Both also run in `app/.husky/pre-commit` and inside `hangar dev release`.
 
 **A dependency sweep is targeted, never a bare `pnpm update` of the manifest.** The floor is
-`minimumReleaseAge` in `pnpm-workspace.yaml`, and four things it does not do for you:
+`minimumReleaseAge` in `pnpm-workspace.yaml`, and what else a sweep has to know:
 
 - `pnpm add <pkg>@<ver>` per package; `savePrefix: ''` rewrites a caret to an exact pin, so put
   it back by hand when the bump should not change the range. A bare `pnpm update` is the
@@ -80,6 +80,10 @@ has the canary). Both also run in `app/.husky/pre-commit` and inside `hangar dev
 - `@types/node` tracks the runtime major in `.nvmrc`, not the registry.
 - The `packageManager` pin ignores the floor: check pnpm's own publish dates with
   `npm view pnpm time`.
+- The `conventional-commits-parser` unmet-peer warning is pre-existing: it comes from the
+  deprecated `conventional-changelog-cli` chain, and it clears only when that CLI is replaced.
+- An audit fix waits on the floor too: `npm view <pkg> time --json` gives the patched version's
+  publish date, and that date plus 14 days is when the fix can be installed.
 
 A zod bump also needs `hangar config schema --check`. The commit is `chore(deps)`.
 
