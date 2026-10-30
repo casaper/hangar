@@ -86,11 +86,17 @@ skills:
     reason: No tracked counterpart in any managed repo -- this one exists only at user level.
 
   - name: pr-readiness
-    divergence: standalone
+    divergence: intentional
+    mirrors: .claude/skills/pr-readiness/SKILL.md
+    basedOn: a88dd79a1f07971faaa86aef9278cb7cd591a819
+    # The real branch name carries a ticket key, which no tracked file may; the suffix finds it.
+    adoptedFrom: feature/<ticket>_test_guide_lane_routing
     reason: >-
-      No tracked counterpart. It drives the repo's own pr-description, test and storybook skills
-      rather than replacing any of them, and integrates through `hangar-rewrite rebase` where the
-      repo's rules deny `git rebase`.
+      The tracked copy is for a checkout with no hangar: it only reports how far the branch is from
+      its target, and reads the pull request through a read-only forge script of its own. This
+      one keeps the hangar's answers -- `hangar list` for review state, `hangar sync -n` for the
+      target and strategy -- and integrates: through `hangar-rewrite rebase` where the repo's rules
+      deny `git rebase`, and by merging otherwise.
 
   - name: copy-to-clipboard
     divergence: intentional
