@@ -151,8 +151,8 @@ export const ticketBinding = (hangar: Hangar, repo: string, branch: string): str
  * Which ticket a clone is working on.
  *
  * In order: the branch's binding (see `ticketBinding`), then the branch name
- * (`features/ABC-1337_...`), then the most recent key mentioned in the commits this branch has
- * added on top of the default branch, since plenty of branches carry no issue key at all. Every
+ * (`features/ABC-1337_...`), then the earliest key mentioned in the non-merge commits this branch
+ * has added on top of the default branch, since plenty of branches carry no issue key at all. Every
  * step is per-clone and per-branch, which is the whole point. A binding of {@link NO_TICKET}
  * stops the search: the branch says on purpose that it has no ticket, and a key in one of its
  * commits must not overrule that.
@@ -178,8 +178,11 @@ export const inferTicket = (clone: Clone, branch = currentBranch(clone.path)): T
   const base = gitTry(clone.path, ['merge-base', `origin/${defaultBranch}`, 'HEAD']);
   if (base === undefined) return undefined;
   // Subjects only, not bodies: subjects follow the repo's commit convention, whereas a body
-  // is free prose and a much richer source of key-shaped noise.
-  const subjects = gitTry(clone.path, ['log', '--format=%s', `${base}..HEAD`]) ?? '';
+  // is free prose and a much richer source of key-shaped noise. Merges are skipped because
+  // "Merge branch 'features/ABC-1338_...'" names the branch merged IN; the earliest commit wins
+  // because a branch is cut for its first ticket. The repo's own resolver picks the same way.
+  const subjects =
+    gitTry(clone.path, ['log', '--no-merges', '--reverse', '--format=%s', `${base}..HEAD`]) ?? '';
   const fromCommits = firstTrackedKey(clone.hangar, subjects);
   return fromCommits === undefined ? undefined : { key: fromCommits, source: 'commit' };
 };

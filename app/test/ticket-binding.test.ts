@@ -90,6 +90,37 @@ test('a key under a prefix the tracker does not own is no ticket', () => {
   });
 });
 
+test("the commit fallback takes the earliest key, and never a merge's", () => {
+  const root = mkdtempSync(join(tmpdir(), 'hangar-root-'));
+  // The fallback reads the default branch from the config file at the hangar root.
+  writeFileSync(join(root, 'hangar.config.yaml'), fixtureConfigText());
+  const hangar = syntheticHangar({ root });
+  try {
+    withRepo((repo, git) => {
+      const empty = (subject: string): void => {
+        git(
+          ...['-c', 'user.email=t@e.invalid', '-c', 'user.name=t'],
+          ...['commit', '-q', '--allow-empty', '-m', subject],
+        );
+      };
+      git('update-ref', `refs/remotes/origin/${hangar.config.forge.defaultBranch ?? ''}`, 'HEAD');
+      git('checkout', '-q', '-b', 'side');
+      empty('side work');
+      git('checkout', '-q', '-b', 'feature/no-key', 'main');
+      empty('feat: BE-1 first');
+      empty('feat: BE-2 second');
+      git(
+        ...['-c', 'user.email=t@e.invalid', '-c', 'user.name=t'],
+        ...['merge', '-q', '--no-ff', '-m', "Merge branch 'feature/BE-9_other'", 'side'],
+      );
+      const clone = { ...cloneAt(hangar, 1), path: repo };
+      assert.deepEqual(inferTicket(clone), { key: 'BE-1', source: 'commit' });
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('the bar and list take the same order as inferTicket', () => {
   const hangar = syntheticHangar();
   assert.equal(issueKeyFor(hangar, 'feature/BE-1_x', 'BE-2'), 'BE-2');

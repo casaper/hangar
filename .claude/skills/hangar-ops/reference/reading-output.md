@@ -35,7 +35,8 @@ Rows that need care when you relay them:
   configured, so it never means a missing config. `none, on purpose` means the branch's ticket
   binding says `none`: its work belongs to no ticket, and nothing is missing. A URL may carry
   `(from this branch's ticket binding in git config)`, the strongest signal, or `(from a commit on
-  this branch, not from the branch name)` — that parenthesis is a weaker signal than a branch name.
+  this branch, not from the branch name)` — that parenthesis is a weaker signal than a branch name,
+  and names the earliest key in a non-merge commit subject.
   (A fourth, `(no link — this hangar has no tracker.baseUrl)`, is defensive: the schema requires
   `baseUrl` whenever the kind is not `none`, so a config that loaded cannot produce it.)
 - **`pull request`** is a **search URL**, not a link to a specific PR. It does not mean a PR exists.
