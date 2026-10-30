@@ -88,7 +88,7 @@ skills:
   - name: pr-readiness
     divergence: intentional
     mirrors: .claude/skills/pr-readiness/SKILL.md
-    basedOn: a88dd79a1f07971faaa86aef9278cb7cd591a819
+    basedOn: dbf075a1b018b2ce4c22d42f315184b8672dea2c
     # The real branch name carries a ticket key, which no tracked file may; the suffix finds it.
     adoptedFrom: feature/<ticket>_test_guide_lane_routing
     reason: >-

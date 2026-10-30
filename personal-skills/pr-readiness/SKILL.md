@@ -36,11 +36,21 @@ git log --oneline --not --remotes             # what is local only
 hangar-commit-gate status 2>/dev/null         # a locked gate means no commits, merges included
 ```
 
-- **The issue key.** Take it from the argument if one was given. Otherwise take it from the
-  branch name, using the repo's own key pattern: the one its pr-description collector uses, its
-  `CLAUDE.md`, or the "issue keys" row of the `CLAUDE.local.md` above it. `ABC-1323` in
-  `feature/ABC-1323_add_export` is the shape. With no key, the objectives come from the plan and
-  the commits alone, and the report says so.
+- **The issue key.** When the repo has `.claude/skills/jira-scope/ticket.mjs`, run
+  `node .claude/skills/jira-scope/ticket.mjs [issue-key]`, passing the argument through when one
+  was given, and take what it prints, `{ key, source, branch }`:
+  - a key is the ticket. Name its `source` in the report; `commit` is the weakest, since only a
+    commit subject named it;
+  - `"none"` means the branch belongs to no ticket on purpose, and nothing is missing;
+  - `null` means nobody has said. If the user names a key, offer to record it on the branch with
+    the binding the "ticket binding" row of the `CLAUDE.local.md` above names, so no later skill
+    asks again.
+
+  Without that script, take the argument, otherwise the key in the branch name, using the repo's
+  own key pattern: the one its pr-description collector uses, its `CLAUDE.md`, or the "issue
+  keys" row of that `CLAUDE.local.md`. `ABC-1323` in `feature/ABC-1323_add_export` is the shape.
+  With no key, the objectives come from the plan and the commits alone, and the report says
+  whether that was `none` or unknown.
 - **Which clone this is**, from `CLAUDE.local.md`, if there is one. That gives the index the
   `hangar` commands below take.
 - **The pull request.** Run `hangar list` and read this clone's row: the number, draft, build and
