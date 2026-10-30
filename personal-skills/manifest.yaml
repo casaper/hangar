@@ -26,6 +26,12 @@
 # from until it merges. The row reads `pending` and is not a failure; the comparison resumes by
 # itself the day the branch lands, green if the skill arrived unchanged and naming the move if it
 # did not. Drop `adoptedFrom` then; it does nothing once there is something to compare against.
+#
+# retireOnMerge: true marks a copy that exists only until the project's own lands. While the
+# original is absent it changes nothing -- the row reads `pending` as above. Once the original is
+# on the default branch the row reads `retire` and `hangar doctor` fails it, whatever the blob
+# says, until the copy is removed: personal-skills/<name>/, its row here, and the link
+# ~/.claude/skills/<name>, which `hangar skills sync` never prunes by itself.
 
 skills:
   - name: shorten-comment
@@ -91,6 +97,8 @@ skills:
     basedOn: dbf075a1b018b2ce4c22d42f315184b8672dea2c
     # The real branch name carries a ticket key, which no tracked file may; the suffix finds it.
     adoptedFrom: feature/<ticket>_test_guide_lane_routing
+    # Kept only until the project copy merges; it then takes over, review state and all.
+    retireOnMerge: true
     reason: >-
       The tracked copy is for a checkout with no hangar: it only reports how far the branch is from
       its target, and reads the pull request through a read-only forge script of its own. This

@@ -1771,6 +1771,8 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
    * default branch, a skill with no counterpart and a skill adopted before its branch merged are
    * all normal, and a check that is red in normal operation is a check nobody reads. `pending` is
    * the newest of them and was learned the hard way: it read as "the link was never made".
+   * `retire` IS a failure: a copy marked `retireOnMerge` whose original has landed, and it names
+   * the removal that clears it.
    */
   for (const row of skillDriftRows(hangar)) {
     if (row.ok) continue;

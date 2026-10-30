@@ -1,7 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { classifyDrift, type DriftFacts, type SkillEntry } from '../src/commands/skills.ts';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import {
+  classifyDrift,
+  readManifest,
+  type DriftFacts,
+  type SkillEntry,
+} from '../src/commands/skills.ts';
+import { CliError } from '../src/exec.ts';
+import { syntheticHangar } from './fixture.ts';
 
 /**
  * The personal-skill drift verdict, through its pure classifier.
@@ -107,4 +118,36 @@ test('a copy that may not differ is compared by content, and only there', () => 
     classifyDrift(entry({ divergence: 'none' }), facts({ ours: MOVED })).kind,
     'drifted',
   );
+});
+
+test('a copy kept until its original merges waits quietly, then names its own removal', () => {
+  const interim = entry({ adoptedFrom: 'feature/adds-it', retireOnMerge: true });
+  // Until the merge, exactly what it would be without the flag: kept, and not a failure.
+  assert.equal(classifyDrift(interim, facts({ original: undefined })).kind, 'pending');
+  // After it, retired whether the skill landed as adopted or changed on the way in -- unchanged
+  // is the case that would otherwise go quietly green and shadow the project skill for good.
+  for (const original of [ORIGINAL, MOVED]) {
+    const landed = classifyDrift(interim, facts({ original }));
+    assert.equal(landed.kind, 'retire', `original ${original.slice(0, 9)}`);
+    assert.match(landed.detail, /personal-skills\/shorten-comment\//);
+    assert.match(landed.detail, /manifest row/);
+    assert.match(landed.detail, /~\/\.claude\/skills\/shorten-comment/);
+  }
+});
+
+test('the manifest refuses retireOnMerge on a skill that has nothing to merge', () => {
+  const root = mkdtempSync(join(tmpdir(), 'hangar-skills-'));
+  try {
+    mkdirSync(join(root, 'personal-skills'));
+    writeFileSync(
+      join(root, 'personal-skills', 'manifest.yaml'),
+      'skills:\n  - name: alone\n    divergence: standalone\n    retireOnMerge: true\n',
+    );
+    assert.throws(
+      () => readManifest(syntheticHangar({ root })),
+      (error: unknown) => error instanceof CliError && (error.hint ?? '').includes('retireOnMerge'),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

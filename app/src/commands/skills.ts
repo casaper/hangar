@@ -72,6 +72,15 @@ export type SkillEntry = {
    * Vestigial once the branch merges -- the comparison resumes on its own -- and removable.
    */
   readonly adoptedFrom?: string | undefined;
+  /**
+   * The personal copy exists only until the project's own lands on the default branch, and is then
+   * removed rather than kept as an override.
+   *
+   * Needed because landing unchanged is SILENT otherwise: `basedOn` names the blob that merges, so
+   * the row turns from `pending` to `ok` and nothing ever says the copy has done its job -- while it
+   * goes on shadowing the project skill everyone else now runs.
+   */
+  readonly retireOnMerge?: boolean | undefined;
   readonly reason?: string | undefined;
 };
 
@@ -102,6 +111,7 @@ const entrySchema = z
     mirrors: z.string().min(1).optional(),
     basedOn: z.string().min(1).optional(),
     adoptedFrom: z.string().min(1).optional(),
+    retireOnMerge: z.boolean().optional(),
     reason: z.string().optional(),
   })
   .superRefine((entry, ctx) => {
@@ -115,6 +125,12 @@ const entrySchema = z
       ctx.addIssue({
         code: 'custom',
         message: `\`${entry.name}\` is \`standalone\` but names an \`adoptedFrom:\` branch, and nothing standalone is ever compared against one`,
+      });
+    }
+    if (entry.divergence === 'standalone' && entry.retireOnMerge === true) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `\`${entry.name}\` is \`standalone\` but sets \`retireOnMerge:\`, and a skill with no tracked counterpart has nothing that could merge`,
       });
     }
     if (entry.divergence === 'intentional' && entry.basedOn === undefined) {
@@ -159,6 +175,7 @@ export type DriftState =
   | { readonly kind: 'ok'; readonly detail: string }
   | { readonly kind: 'drifted'; readonly detail: string }
   | { readonly kind: 'pending'; readonly detail: string }
+  | { readonly kind: 'retire'; readonly detail: string }
   | { readonly kind: 'standalone'; readonly detail: string }
   | { readonly kind: 'not-compared'; readonly detail: string };
 
@@ -221,6 +238,18 @@ export const classifyDrift = (entry: SkillEntry, facts: DriftFacts): DriftState 
           kind: 'pending',
           detail: `not on ${facts.branch} yet -- adopted from ${entry.adoptedFrom}`,
         };
+  }
+
+  // Ahead of the `basedOn` comparison: once the original has landed, the copy goes whether it
+  // arrived unchanged or not. All three parts, the link included -- `sync` never prunes a link
+  // whose row is gone, so deleting the row and the directory alone leaves it dangling.
+  if (entry.retireOnMerge === true) {
+    return {
+      kind: 'retire',
+      detail:
+        `on ${facts.branch} now -- remove personal-skills/${entry.name}/, its manifest row ` +
+        `and ~/.claude/skills/${entry.name}`,
+    };
   }
 
   if (entry.divergence === 'intentional') {
@@ -449,11 +478,12 @@ export const skillDriftRows = (
       link.kind === 'foreign' || (link.kind === 'not-a-link' && !adoptable(hangar, entry.name));
     return {
       name: `personal skill ${entry.name}`,
-      // `drifted` is the only failing state. `not-compared`, `standalone` and `pending` are all
-      // normal: a shallow clone, a skill with no counterpart, and one adopted before its branch
-      // merged. None of them means anything is wrong, and a row red in normal operation is read
-      // as broken -- this one was, on the day it was added.
-      ok: drift.kind !== 'drifted' && !linkProblem,
+      // `drifted` and `retire` are the failing states. `not-compared`, `standalone` and `pending`
+      // are all normal: a shallow clone, a skill with no counterpart, and one adopted before its
+      // branch merged. None of them means anything is wrong, and a row red in normal operation is
+      // read as broken -- this one was, on the day it was added. `retire` is red once, on the day
+      // the original lands, and the removal it names clears it.
+      ok: drift.kind !== 'drifted' && drift.kind !== 'retire' && !linkProblem,
       detail: linkProblem
         ? link.kind === 'foreign'
           ? `linked to ${tildify(link.target)}, which is not this hangar`

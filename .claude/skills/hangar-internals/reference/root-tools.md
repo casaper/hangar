@@ -76,6 +76,12 @@ rather than `hangar` subcommands, what each refuses, and how `personal-skills/` 
   **A new skill there also needs a row in `personal-skills/manifest.yaml`** — `name`, a
   `divergence` (`standalone` when no tracked skill carries its name) and a `reason` — then
   `hangar skills sync -n`, `sync` and `list` to link it.
+  **A copy meant to last only until the project's own merges sets `retireOnMerge: true`.**
+  Without it, a skill that lands exactly as adopted turns its row from `pending` to `ok` and
+  goes on shadowing the project skill with nothing to say so. With it, the row reads `retire`
+  and `doctor` fails it from the day the original is on the default branch, naming the three
+  things to remove: the directory here, the manifest row and the link in `~/.claude/skills`.
+  The link is named because `sync` never prunes one whose row is gone.
 - **`.envrc.hangar`** — `hangar_use_node`, `hangar_use_pnpm`, `hangar_use_gnu`. **Functions only,
   no side effects**: direnv's `source_env` does a `pushd` into this file's own directory, so a
   relative path written here would resolve against the hangar root instead of the caller, and
