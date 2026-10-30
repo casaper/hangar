@@ -4,11 +4,11 @@ description: >
   Judges whether the current branch's pull request is actually done, and brings it up to date on
   the way. Checks every objective in the ticket and the plan against the diff, classifies the
   existing test coverage (unaffected, still passing, passing because of this change, unknown),
-  re-runs Jest and Storybook ONLY where their status is unknown, checks the repo's documentation
-  rules, integrates the pull request's target branch (rebase when nothing is published, merge
-  otherwise), and regenerates the PR description when it has gone stale. Use whenever the user
-  asks "is this PR done?", "is it ready for review?", "check my pull request", "anything missing
-  before I mark it ready?", "can this go out?".
+  re-runs unit tests and Storybook ONLY where their status is unknown, checks the repo's
+  documentation rules, integrates the pull request's target branch (rebase when nothing is
+  published, merge otherwise), and regenerates the PR description when it has gone stale. Use
+  whenever the user asks "is this PR done?", "is it ready for review?", "check my pull request",
+  "anything missing before I mark it ready?", "can this go out?".
 when_to_use: The branch has, or is about to have, a pull request, and the question is whether it is finished.
 argument-hint: '[issue-key]'
 allowed-tools: Read, Grep, Glob, Bash, Edit, Skill, Agent, AskUserQuestion
@@ -42,9 +42,10 @@ hangar-commit-gate status 2>/dev/null         # a locked gate means no commits, 
   - a key is the ticket. Name its `source` in the report; `commit` is the weakest, since only a
     commit subject named it;
   - `"none"` means the branch belongs to no ticket on purpose, and nothing is missing;
-  - `null` means nobody has said. If the user names a key, offer to record it on the branch with
-    the binding the "ticket binding" row of the `CLAUDE.local.md` above names, so no later skill
-    asks again.
+  - `null` means nobody has said. If the user names a key, offer to record it on the branch so no
+    later skill asks again: with `node .claude/skills/jira-scope/bind.mjs <KEY|none>` when the
+    repo has that script, which validates the value and finds the branch itself, otherwise with
+    the binding the "ticket binding" row of the `CLAUDE.local.md` above names.
 
   Without that script, take the argument, otherwise the key in the branch name, using the repo's
   own key pattern: the one its pr-description collector uses, its `CLAUDE.md`, or the "issue
@@ -141,8 +142,9 @@ because an OLDER run passed is the failure this step exists to catch.
 
 A run counts as **known** only if one of these holds:
 
-1. **This session ran it**, after the last edit to any file it covers, and you saw its summary
-   line (for Jest, `Tests:` and `Test Suites:`, never a truncated tail).
+1. **This session ran it**, after the last edit to any file it covers, and you saw its whole
+   summary, never a truncated tail (for Vitest, `Test Files` and `Tests`, plus `Errors` when
+   present; for Jest, `Tests:` and `Test Suites:`).
 2. **An artifact proves it.** A JUnit report, a results JSON or a coverage summary counts when:
    - it is identified by its suite names, not its filename, since two runners may write the same
      file;
@@ -169,10 +171,10 @@ runner the repo has:
 Then run the unknowns, **scoped**, through the repo's own skills. Find them under
 `.claude/skills/` and follow their instructions over anything written here:
 
-- **Jest** (or the repo's unit runner). Run the specs related to the changed files
-  (`--findRelatedTests <files>`, or the path pattern the repo's jest skill documents). Run the full
-  suite only when shared or core code changed, so that "related" is not a bounded set. Run the
-  repo's typecheck too if its test runner does not type-check.
+- **Unit tests**, through the repo's unit-test skill. Run the specs related to the changed files,
+  the way that skill scopes a run (per-file includes, a related-tests flag or a path pattern). Run
+  the full suite only when shared or core code changed, so that "related" is not a bounded set.
+  Run the repo's typecheck too if its test runner does not type-check.
 - **Storybook** (build and interaction tests). Use the repo's storybook skill, against THIS
   checkout's own dev server and port. If it is not running, say so or start it the way that skill
   says. Never point at a server you did not start in this checkout. A new or changed component
