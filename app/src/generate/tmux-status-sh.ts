@@ -59,8 +59,9 @@ import { type Artifact, artifactHeader } from './index.ts';
  * them. It agrees with `jira.ts` on every branch name this fleet produces and differs only where
  * a digit run is followed immediately by a letter (`ABC-13231x`), which no branch here is.
  *
- * **With no configured prefixes there is no ticket field at all**, and that is deliberate rather
- * than unfinished. `jira.ts`'s untargeted matcher leans on a sixteen-entry denylist of key-shaped
+ * **With no configured prefixes the branch name gives no ticket field**, and that is deliberate
+ * rather than unfinished. A ticket binding still does: its value is checked whole against the key
+ * shape, not found in free text, so it needs no denylist. `jira.ts`'s untargeted matcher leans on a sixteen-entry denylist of key-shaped
  * things that are not keys (`UTF-8`, `SHA-256`), and its own comment says why: a confident link
  * to a ticket that does not exist is worse than saying nothing. Reimplementing that list in shell
  * is exactly the duplicate this file exists to avoid, so the bar stays quiet instead.

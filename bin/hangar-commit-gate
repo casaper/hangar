@@ -137,8 +137,8 @@ const unlockable = (root, branch) => {
 
 /**
  * A key inside a branch name, `_` and `/` counting as separators. The same pattern as the CLI's
- * `KEY_IN_TEXT_RE`, which this script cannot import; a test holds the two equal, because a third
- * spelling here once read no key in a prefix with a digit in it.
+ * `KEY_IN_TEXT_RE`, which this script cannot import; a test holds the two equal, so the gate and
+ * the CLI agree on which branches name a ticket.
  */
 const KEY_IN_TEXT_RE = /(?<![A-Za-z0-9])[A-Z][A-Z0-9]+-\d+(?![A-Za-z0-9])/;
 
@@ -193,9 +193,8 @@ const banner = (lock) =>
   ].join('\n');
 
 /**
- * What a session starting under an ARMED gate is told. Without it the ticket reached the agent only
- * through its first prompt, so a resumed or restarted session in the same clone did not know which
- * ticket it was there for, nor that the branch it cuts must name it for the lock to take.
+ * What a session starting under an ARMED gate is told. The only other place the ticket reaches the
+ * agent is its first prompt, which a resumed or restarted session in the same clone never sees.
  */
 const armedBanner = (state) =>
   [

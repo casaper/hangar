@@ -28,13 +28,14 @@ rather than `hangar` subcommands, what each refuses, and how `personal-skills/` 
   ticket no branch names, or at another branch, turns it off without releasing anything -- and
   allows commits, since there is no ticket branch yet. The ticket must be a WHOLE token of the
   branch name, so a gate armed for `ABC-12` does not promote on `ABC-123_…`. **A session that
-  starts while armed is told its ticket** in a `SessionStart` banner: before that, the ticket
-  reached the agent only as `jira-plan`'s first prompt, so a resumed or restarted session in the
-  same clone did not know which ticket it was there for. `lock` with no `--ticket` reads the key
-  with `jira.ts`'s `KEY_IN_TEXT_RE`, mirrored because the script cannot import it and held equal
-  by `test/ticket-binding.test.ts`: its own `[A-Z]{2,}-\d+` read no key under a prefix with a
-  digit in it, and took `XABC-1` for one. The gate writes no ticket binding: it only locks a branch
-  that already names its ticket, so a binding it wrote would only ever repeat the name. Three ways were
+  starts while armed is told its ticket** in a `SessionStart` banner, because `jira-plan`'s first
+  prompt is the only other place the ticket reaches the agent, and a resumed or restarted session
+  in the same clone does not see that prompt again. `lock` with no `--ticket` reads the key with
+  `jira.ts`'s `KEY_IN_TEXT_RE`, mirrored because the script cannot import it and held equal by
+  `test/ticket-binding.test.ts`, so the gate and the CLI agree on which branches name a ticket: a
+  prefix with a digit in it (`A1B-12`) is one, and a key glued to letters (`fooABC-1`,
+  `ABC-12x`) is not. The gate writes no ticket binding: it only locks a branch that already names
+  its ticket, so a binding it wrote would only ever repeat the name. Three ways were
   weighed and are not used: a `post-checkout` hook (no lag, but it lives in each clone's
   `.git/hooks` beside the repo's own and fires on every checkout), a `lock` line in the repo's
   planning skill (hangar tooling in the team's tracked repo, and a step an agent can skip), and a

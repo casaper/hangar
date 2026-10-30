@@ -1019,7 +1019,10 @@ branch shapes: `fixes/ABC-1323_x` and `fixes/ui/ABC-1401_y` both answer, `featur
 not (which is exactly what the lookbehind is for), and it differs from `jira.ts` only where a
 digit run is followed immediately by a letter.
 
-**With no configured prefixes there is no ticket field at all.** `jira.ts`'s untargeted matcher
+**With no configured prefixes the branch name gives no ticket field.** A ticket binding
+(`tracker.branchConfigKey`) still does, and outranks the name whenever one is set: its value is
+checked whole against the key shape rather than found in free text, so it needs no denylist, and
+`none` blanks the field on purpose. `jira.ts`'s untargeted matcher
 leans on a sixteen-entry denylist of key-shaped things that are not keys (`UTF-8`, `SHA-256`), and
 its own comment says why: a confident link to a ticket that does not exist is worse than saying
 nothing. Reimplementing that list in shell is precisely the "change one, change both" duplicate
