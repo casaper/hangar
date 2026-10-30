@@ -1,6 +1,6 @@
 import type { Clone } from './fleet.ts';
 import { tryDefaultBranch } from './config/default-branch.ts';
-import { currentBranch, gitTry } from './git.ts';
+import { currentBranch, DETACHED, gitTry } from './git.ts';
 import type { Hangar } from './hangar.ts';
 import { render } from './template.ts';
 
@@ -24,7 +24,7 @@ export const KEY_RE = /^[A-Z][A-Z0-9]+-\d+$/;
  * name" while the key sat in the branch name. The lookarounds exclude only letters and digits,
  * so a key may abut `_`, `/`, `-`, `.` or a space.
  */
-const KEY_IN_TEXT_RE = /(?<![A-Za-z0-9])[A-Z][A-Z0-9]+-\d+(?![A-Za-z0-9])/g;
+export const KEY_IN_TEXT_RE = /(?<![A-Za-z0-9])[A-Z][A-Z0-9]+-\d+(?![A-Za-z0-9])/g;
 
 /**
  * Prefixes that look exactly like an issue key but never are. Without this, `UTF-8`,
@@ -66,7 +66,18 @@ export const issueKeysIn = (text: string): { key: string; start: number; end: nu
   return found;
 };
 
-const firstIssueKey = (text: string): string | undefined => issueKeysIn(text)[0]?.key;
+/**
+ * The first key in `text` this hangar's tracker could own: with `tracker.keyPrefixes` set, a key
+ * under any other prefix is skipped rather than returned. The schema calls the prefixes a
+ * whitelist, and the bar has always honoured them -- so without this, `browse ticket` could open
+ * a ticket for a branch whose bar field was blank.
+ */
+const firstTrackedKey = (hangar: Hangar, text: string): string | undefined => {
+  const prefixes = hangar.config.tracker.keyPrefixes ?? [];
+  return issueKeysIn(text).find(
+    ({ key }) => prefixes.length === 0 || prefixes.includes(key.split('-')[0] ?? ''),
+  )?.key;
+};
 
 /**
  * The web URL for an issue key, or `undefined` when this hangar has no tracker.
@@ -91,17 +102,60 @@ export const issueUrl = (hangar: Hangar, key: string): string | undefined => {
 
 export type TicketGuess = {
   readonly key: string;
-  /** How much to trust it: `branch` is authoritative, `commit` is a good guess. */
-  readonly source: 'branch' | 'commit';
+  /**
+   * How much to trust it: `binding` was set on purpose, `branch` is authoritative, `commit` is a
+   * good guess.
+   */
+  readonly source: 'binding' | 'branch' | 'commit';
+};
+
+/** What a branch's ticket binding holds when its work deliberately belongs to no ticket. */
+export const NO_TICKET = 'none';
+
+/** A ticket, a branch bound to no ticket on purpose, or nothing found. */
+export type TicketInference = TicketGuess | typeof NO_TICKET | undefined;
+
+export const ticketKeyOf = (ticket: TicketInference): string | undefined =>
+  ticket === undefined || ticket === NO_TICKET ? undefined : ticket.key;
+
+/**
+ * What a binding's raw value means: a key, {@link NO_TICKET}, or `undefined` for unset or
+ * unreadable. A value that is neither is ignored rather than trusted, so a typo falls through to
+ * the branch name instead of linking to a ticket that does not exist.
+ */
+export const bindingMeaning = (value: string | undefined): string | undefined => {
+  const trimmed = value?.trim();
+  if (trimmed === undefined) return undefined;
+  if (trimmed === NO_TICKET) return NO_TICKET;
+  return KEY_RE.test(trimmed) ? trimmed : undefined;
+};
+
+/**
+ * The branch's ticket binding, `git config branch.<branch>.<tracker.branchConfigKey>`.
+ *
+ * The convention is the managed repo's and works without a hangar: it is how a branch whose name
+ * carries no key -- or whose work belongs to no ticket at all -- says which. Hangar only reads it,
+ * and only when the config names the variable; the key is optional with no default, because the
+ * variable's name is the repo's choice.
+ */
+export const ticketBinding = (hangar: Hangar, repo: string, branch: string): string | undefined => {
+  const tracker = hangar.config.tracker;
+  if (tracker.kind === 'none' || tracker.branchConfigKey === undefined) return undefined;
+  if (branch === '' || branch === DETACHED || branch === 'HEAD') return undefined;
+  return bindingMeaning(
+    gitTry(repo, ['config', '--get', `branch.${branch}.${tracker.branchConfigKey}`]),
+  );
 };
 
 /**
  * Which ticket a clone is working on.
  *
- * The branch name is the real signal (`features/ABC-1337_...`), but plenty of branches here
- * carry no issue key at all, so the fallback is the most recent key mentioned in the commits
- * this branch has added on top of the default branch. That is per-clone and per-branch, which
- * is the whole point.
+ * In order: the branch's binding (see `ticketBinding`), then the branch name
+ * (`features/ABC-1337_...`), then the most recent key mentioned in the commits this branch has
+ * added on top of the default branch, since plenty of branches carry no issue key at all. Every
+ * step is per-clone and per-branch, which is the whole point. A binding of {@link NO_TICKET}
+ * stops the search: the branch says on purpose that it has no ticket, and a key in one of its
+ * commits must not overrule that.
  *
  * NOT used as a fallback: the newest directory in `tmp/`. The per-ticket Jira cache is shared
  * across the whole fleet, so every clone's `tmp/` holds the same keys with the same mtimes --
@@ -109,11 +163,12 @@ export type TicketGuess = {
  *
  * Never throws: "no ticket" is a normal answer.
  */
-export const inferTicket = (
-  clone: Clone,
-  branch = currentBranch(clone.path),
-): TicketGuess | undefined => {
-  const fromBranch = firstIssueKey(branch);
+export const inferTicket = (clone: Clone, branch = currentBranch(clone.path)): TicketInference => {
+  const bound = ticketBinding(clone.hangar, clone.path, branch);
+  if (bound === NO_TICKET) return NO_TICKET;
+  if (bound !== undefined) return { key: bound, source: 'binding' };
+
+  const fromBranch = firstTrackedKey(clone.hangar, branch);
   if (fromBranch !== undefined) return { key: fromBranch, source: 'branch' };
 
   // The non-throwing, non-networking form on purpose: this function's contract is that "no
@@ -125,6 +180,6 @@ export const inferTicket = (
   // Subjects only, not bodies: subjects follow the repo's commit convention, whereas a body
   // is free prose and a much richer source of key-shaped noise.
   const subjects = gitTry(clone.path, ['log', '--format=%s', `${base}..HEAD`]) ?? '';
-  const fromCommits = firstIssueKey(subjects);
+  const fromCommits = firstTrackedKey(clone.hangar, subjects);
   return fromCommits === undefined ? undefined : { key: fromCommits, source: 'commit' };
 };

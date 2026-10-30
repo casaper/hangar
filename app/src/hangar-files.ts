@@ -140,6 +140,12 @@ export const hangarClaudeLocalMdContent = (hangar: Hangar): string => {
           ? 'any key-shaped token, minus a denylist'
           : (cfg.tracker.keyPrefixes ?? []).map((p) => `\`${p}-…\``).join(', '),
     ),
+    row(
+      'ticket binding',
+      cfg.tracker.kind === 'none' || cfg.tracker.branchConfigKey === undefined
+        ? '_none read — the branch name decides_'
+        : `\`git config branch.<branch>.${cfg.tracker.branchConfigKey}\` — a key, or \`none\``,
+    ),
   ];
 
   /*

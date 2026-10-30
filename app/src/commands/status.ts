@@ -11,7 +11,7 @@ import {
   syncState,
   type StashEntry,
 } from '../git.ts';
-import { inferTicket, issueUrl, type TicketGuess } from '../jira.ts';
+import { inferTicket, issueUrl, NO_TICKET, type TicketInference } from '../jira.ts';
 import { claudeSessionsIn, runningServersIn } from '../procs.ts';
 import { cloneLabel, fail, heading, note, ok, table, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
@@ -114,9 +114,12 @@ export const strandedStashRow = (entries: readonly StashEntry[]): string[][] =>
  * token fell into the arm below instead and blamed a missing `tracker.baseUrl`, which is a
  * third wrong answer for the same one cause.
  */
-export const issueRow = (clone: Clone, ticket: TicketGuess | undefined): string => {
+export const issueRow = (clone: Clone, ticket: TicketInference): string => {
   if (clone.hangar.config.tracker.kind === 'none') {
     return pc.dim('no tracker configured for this hangar');
+  }
+  if (ticket === NO_TICKET) {
+    return pc.dim("none, on purpose (this branch's ticket binding says `none`)");
   }
   if (ticket === undefined) {
     return pc.dim("none inferred (no issue key in the branch name or in this branch's commits)");
@@ -131,7 +134,9 @@ export const issueRow = (clone: Clone, ticket: TicketGuess | undefined): string 
   const from =
     ticket.source === 'commit'
       ? pc.dim('  (from a commit on this branch, not from the branch name)')
-      : '';
+      : ticket.source === 'binding'
+        ? pc.dim("  (from this branch's ticket binding in git config)")
+        : '';
   return `${url}${from}`;
 };
 

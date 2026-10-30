@@ -2,7 +2,7 @@ import pc from 'picocolors';
 
 import { usesBitbucket } from '../bitbucket.ts';
 import { discoverClones } from '../fleet.ts';
-import { issueKeyInBranch } from '../generate/tmux-status-sh.ts';
+import { issueKeyFor } from '../generate/tmux-status-sh.ts';
 import { currentBranch, lastCommit } from '../git.ts';
 import {
   prCacheIsStale,
@@ -12,6 +12,7 @@ import {
   takePrRefreshLock,
   type CachedPullRequest,
 } from '../pr-cache.ts';
+import { ticketBinding } from '../jira.ts';
 import { cloneLabel, note, table, truncate } from '../ui.ts';
 import { prPlan } from './pr.ts';
 import type { Hangar } from '../hangar.ts';
@@ -168,7 +169,7 @@ export const list = async (
       commit === undefined
         ? pc.dim('(no commits)')
         : `${pc.yellow(commit.sha)} ${pc.dim(commit.date)} ${pc.dim(truncate(commit.committer, 18))} ${truncate(commit.subject, 50)}`;
-    const key = issueKeyInBranch(hangar, branch);
+    const key = issueKeyFor(hangar, branch, ticketBinding(hangar, clone.path, branch));
     const pr: ListPr =
       plan.kind === 'no-forge' || plan.kind === 'detached' || plan.kind === 'default-branch'
         ? { kind: 'none' }

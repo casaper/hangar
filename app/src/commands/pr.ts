@@ -26,7 +26,7 @@ import {
   requireClone,
   type Clone,
 } from '../fleet.ts';
-import { inferTicket } from '../jira.ts';
+import { inferTicket, ticketKeyOf } from '../jira.ts';
 import {
   descriptionState,
   descriptionsIn,
@@ -603,7 +603,7 @@ const resolveBody = async (
     };
   }
 
-  const key = inferTicket(clone, branch)?.key;
+  const key = ticketKeyOf(inferTicket(clone, branch));
   /*
    * The CLONE's own `tmp/`, not the hangar's shared store, and that is the difference between
    * this working and not. Every entry under a clone's `tmp/` is a symlink into the store -- so

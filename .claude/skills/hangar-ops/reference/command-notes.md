@@ -213,8 +213,9 @@ tool is the separate `<thing>_preview`.
   merely stale. Typed by hand, the same command says what is wrong.
 
   Three things to know when a field is blank rather than wrong:
-  **the ticket key comes from the branch name** (a branch without one shows nothing, and there is
-  no fallback to commit subjects here — `hangar status` does that);
+  **the ticket key comes from the branch's ticket binding, then the branch name** (a branch with
+  neither shows nothing, one bound to `none` shows nothing on purpose, and there is no fallback to
+  commit subjects here — `hangar status` does that);
   **a bare `PR`** means either nobody has asked yet or the branch genuinely has none — either way
   it links to that branch's pull requests, so it is worth clicking;
   and **the bar refreshes every few seconds**, so a branch you have just switched — or a file you

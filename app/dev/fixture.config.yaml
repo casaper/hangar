@@ -32,6 +32,7 @@ tracker:
   kind: jira
   baseUrl: https://example.invalid
   keyPrefixes: [BE]
+  branchConfigKey: ticket
   cache:
     ttlMinutes: 5
     bypassEnvKey: FIXTURE_NO_CACHE

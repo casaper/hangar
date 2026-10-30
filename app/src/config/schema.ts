@@ -126,6 +126,24 @@ const trackerSchema = z.strictObject({
    * Present turns the open pattern into a whitelist, which is the better fix.
    */
   keyPrefixes: z.array(z.string().regex(/^[A-Z][A-Z0-9]+$/)).optional(),
+  /**
+   * The git config variable that binds a branch to its ticket, read as
+   * `git config branch.<branch>.<this>`: a key, or `none` for work that belongs to no ticket. It
+   * outranks the branch name everywhere a ticket is inferred, which is what a branch whose name
+   * carries no key needs.
+   *
+   * **Optional with no default, for `forge.prDescriptionPrompt`'s reason.** The convention and
+   * its variable name are the managed repo's, which sets the binding without knowing any hangar
+   * reads it; a default would put one repository's name into every other hangar. Absent means no
+   * binding is read.
+   */
+  branchConfigKey: z
+    .string()
+    .regex(
+      /^[A-Za-z][A-Za-z0-9-]*$/,
+      'must be a git config variable name: a letter, then letters, digits or -',
+    )
+    .optional(),
   cache: z
     .strictObject({
       ttlMinutes: z.int().min(0).default(60),

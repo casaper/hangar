@@ -111,6 +111,10 @@
             "pattern": "^[A-Z][A-Z0-9]+$"
           }
         },
+        "branchConfigKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9-]*$"
+        },
         "cache": {
           "default": {
             "ttlMinutes": 60,

@@ -9,6 +9,7 @@ set -u
 ROOT='%HANGAR%'
 PR_DIR='%HANGAR%/.hangar/pr'
 KEY_PATTERN='^(UI|PLAT)-[0-9]+'
+BIND_KEY=''
 DEFAULT_BRANCH='release'
 HANGAR='%HANGAR%/bin/hangar'
 GATE_DIR='%HANGAR%/.hangar/commit-gate'
@@ -143,11 +144,21 @@ EOF
   ;;
 ticket)
   [ -n "$branch" ] || exit 0
-  [ -n "$KEY_PATTERN" ] || exit 0
-  # `tr` first, so the match runs on words: `_` and `/` are separators in a branch name but
-  # word characters to grep, and `-` has to survive because it is inside the key.
-  key=$(printf '%s' "$branch" | tr -cs 'A-Za-z0-9-' '\n' | grep -oE "$KEY_PATTERN" |
-    head -1) || key=""
+  key=""
+  # The branch's ticket binding outranks its name, and `none` means no ticket on purpose. A
+  # value that is not a key is ignored, so a typo falls through to the name.
+  if [ -n "$BIND_KEY" ]; then
+    bound=$(git -C "$dir" config --get "branch.$branch.$BIND_KEY" 2>/dev/null) || bound=""
+    [ "$bound" = none ] && exit 0
+    printf '%s' "$bound" | grep -qE '^[A-Z][A-Z0-9]+-[0-9]+$' && key=$bound
+  fi
+  if [ -z "$key" ]; then
+    [ -n "$KEY_PATTERN" ] || exit 0
+    # `tr` first, so the match runs on words: `_` and `/` are separators in a branch name but
+    # word characters to grep, and `-` has to survive because it is inside the key.
+    key=$(printf '%s' "$branch" | tr -cs 'A-Za-z0-9-' '\n' | grep -oE "$KEY_PATTERN" |
+      head -1) || key=""
+  fi
   [ -n "$key" ] || exit 0
   printf ' %s ' "$key"
   ;;

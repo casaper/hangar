@@ -1,4 +1,5 @@
 import type { Hangar } from '../hangar.ts';
+import { NO_TICKET } from '../jira.ts';
 import { CI_COLOURS } from '../palette.ts';
 import { PR_LOCK_STALE_SECONDS, prCacheTtlSeconds } from '../pr-cache.ts';
 import { type Artifact, artifactHeader } from './index.ts';
@@ -97,6 +98,27 @@ export const issueKeyInBranch = (hangar: Hangar, branch: string): string => {
 };
 
 /**
+ * The git config variable the bar reads a branch's ticket binding from, or `''` when it reads
+ * none: no `tracker.branchConfigKey`, or no tracker to link to at all.
+ */
+export const ticketBindingName = (hangar: Hangar): string => {
+  const tracker = hangar.config.tracker;
+  return tracker.kind === 'none' ? '' : (tracker.branchConfigKey ?? '');
+};
+
+/**
+ * The key the bar and `hangar list` show for a branch, given its binding as `jira.ts`'s
+ * `ticketBinding` read it: the bound key, nothing for a branch bound to no ticket, and otherwise
+ * the key in the branch name. The same order as the shell's `ticket)` field and as
+ * `inferTicket`, so the field and a click on it cannot name different tickets.
+ */
+export const issueKeyFor = (hangar: Hangar, branch: string, bound: string | undefined): string => {
+  if (ticketBindingName(hangar) === '' || bound === undefined)
+    return issueKeyInBranch(hangar, branch);
+  return bound === NO_TICKET ? '' : bound;
+};
+
+/**
  * How much branch the footer will carry.
  *
  * Measured against this fleet's own branch names: `fixes/ABC-1323_i_can_close_the_browser_tab_even_changes_not_saved`
@@ -187,6 +209,7 @@ export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
     `ROOT=${sq(hangar.root)}`,
     `PR_DIR=${sq(hangar.paths.prCache)}`,
     `KEY_PATTERN=${sq(issueKeyPattern(hangar))}`,
+    `BIND_KEY=${sq(ticketBindingName(hangar))}`,
     `DEFAULT_BRANCH=${sq(hangar.config.forge.defaultBranch ?? '')}`,
     `HANGAR=${sq(hangar.paths.bin)}`,
     `GATE_DIR=${sq(hangar.paths.commitGateState)}`,
@@ -319,11 +342,21 @@ export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
     '  ;;',
     'ticket)',
     '  [ -n "$branch" ] || exit 0',
-    '  [ -n "$KEY_PATTERN" ] || exit 0',
-    '  # `tr` first, so the match runs on words: `_` and `/` are separators in a branch name but',
-    '  # word characters to grep, and `-` has to survive because it is inside the key.',
-    "  key=$(printf '%s' \"$branch\" | tr -cs 'A-Za-z0-9-' '\\n' | grep -oE \"$KEY_PATTERN\" |",
-    '    head -1) || key=""',
+    '  key=""',
+    "  # The branch's ticket binding outranks its name, and `none` means no ticket on purpose. A",
+    '  # value that is not a key is ignored, so a typo falls through to the name.',
+    '  if [ -n "$BIND_KEY" ]; then',
+    '    bound=$(git -C "$dir" config --get "branch.$branch.$BIND_KEY" 2>/dev/null) || bound=""',
+    `    [ "$bound" = ${NO_TICKET} ] && exit 0`,
+    "    printf '%s' \"$bound\" | grep -qE '^[A-Z][A-Z0-9]+-[0-9]+$' && key=$bound",
+    '  fi',
+    '  if [ -z "$key" ]; then',
+    '    [ -n "$KEY_PATTERN" ] || exit 0',
+    '    # `tr` first, so the match runs on words: `_` and `/` are separators in a branch name but',
+    '    # word characters to grep, and `-` has to survive because it is inside the key.',
+    "    key=$(printf '%s' \"$branch\" | tr -cs 'A-Za-z0-9-' '\\n' | grep -oE \"$KEY_PATTERN\" |",
+    '      head -1) || key=""',
+    '  fi',
     '  [ -n "$key" ] || exit 0',
     '  printf \' %s \' "$key"',
     '  ;;',

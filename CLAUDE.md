@@ -118,7 +118,13 @@ the hangar root** — among them `sync` (under any of its three names), `checkou
 **A commit gate can arm itself in your clone without you running anything.** `hangar jira-plan`
 starts a ticket's agent on the default branch with the gate ARMED for that ticket, and the gate
 locks the first branch naming the ticket that gets checked out — so the branch you cut is gated
-from your next Bash call on. `hangar-commit-gate status` says which state it is in.
+from your next Bash call on. `hangar-commit-gate status` says which state it is in, and a session
+that starts while the gate is armed is told the ticket.
+
+**Which ticket a branch belongs to is read, never stored by hangar.** `status`, `list`, `browse`
+and the bar take the branch's ticket binding first — the git config variable the hangar's
+`CLAUDE.local.md` names under "ticket binding", holding a key or `none` — then a key in the
+branch name, and `status` and `browse` then a key in this branch's commit subjects.
 
 **`hangar pr create` and `hangar pr update` write to the forge** — the only two commands that
 write anywhere outside this machine. They default to the clone you are in, which is what makes them

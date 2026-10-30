@@ -7,7 +7,7 @@ import { prSearchUrl, repoRef, usesBitbucket, type RepoRef } from '../bitbucket.
 import { CliError } from '../exec.ts';
 import { currentBranch, DETACHED } from '../git.ts';
 import { requireClone, type Clone } from '../fleet.ts';
-import { inferTicket, issueUrl, type TicketGuess } from '../jira.ts';
+import { inferTicket, issueUrl, NO_TICKET, type TicketInference } from '../jira.ts';
 import { platform } from '../platform/index.ts';
 import { readCachedPr, refreshPullRequest, type CachedPullRequest } from '../pr-cache.ts';
 import { note, ok, warn } from '../ui.ts';
@@ -56,11 +56,14 @@ export type Link =
  * Pure, and given its facts rather than reading them, so every one of the four answers can be
  * printed side by side in a test. The same shape `status`'s `issueRow` has, for the same reason.
  */
+const NO_TICKET_WHY = "this branch's ticket binding says it belongs to no ticket";
+
 export const ticketLink = (clone: Clone): Link => {
   if (clone.hangar.config.tracker.kind === 'none') {
     return { kind: 'none', why: 'this hangar has no tracker configured' };
   }
   const ticket = inferTicket(clone);
+  if (ticket === NO_TICKET) return { kind: 'none', why: NO_TICKET_WHY };
   if (ticket === undefined) {
     return {
       kind: 'none',
@@ -83,12 +86,13 @@ export const ticketLink = (clone: Clone): Link => {
  */
 export const tmpLink = (
   clone: Clone,
-  ticket: TicketGuess | undefined,
+  ticket: TicketInference,
   isDirectory: (path: string) => boolean,
 ): Link => {
   if (clone.hangar.config.tracker.kind === 'none') {
     return { kind: 'none', why: 'this hangar has no tracker configured' };
   }
+  if (ticket === NO_TICKET) return { kind: 'none', why: NO_TICKET_WHY };
   if (ticket === undefined) {
     return {
       kind: 'none',

@@ -17,6 +17,7 @@ which hangar this is, and every value in it comes from `hangar.config.yaml`.
 | shared plans         | `%HANGAR%/plans` |
 | shared tmp           | `%HANGAR%/tmp` |
 | issue keys           | `BE-…` |
+| ticket binding       | `git config branch.<branch>.ticket` — a key, or `none` |
 
 **Which clones exist is in no file, this one included.** They are whatever `wt-<NN>`
 directories are there; index gaps are normal, because `hangar remove-clone` never renumbers —
