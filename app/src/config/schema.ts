@@ -457,8 +457,9 @@ export const terminalSchema = z.strictObject({
     .enum(['auto', 'iterm2', 'apple-terminal', 'konsole', 'gnome-terminal', 'none'])
     .default('auto'),
   /**
-   * Where a clone's window goes: a `tab` in the emulator's current window, or a `window` of its
-   * own. `--tab` and `--window` override it for one run.
+   * Where a clone's window goes: a `tab` beside the terminal the command was run from (the
+   * emulator's current window where that cannot be told), or a `window` of its own. `--tab` and
+   * `--window` override it for one run.
    *
    * A tab by default because every emulator here can open one from a command or a script, so it
    * is a real default rather than a nicety on one platform -- and because a clone per tab is how

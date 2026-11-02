@@ -16,6 +16,7 @@ import { currentBranch } from '../git.ts';
 import {
   attachCommand,
   attachHint,
+  invokingTty,
   shellQuote,
   tmuxSessionName,
   tmuxServer,
@@ -442,9 +443,15 @@ export const describeAction = (action: OpenAction, done: boolean): string => {
  * The hue only when `terminal.colour.chrome` is on -- the switch the shell hook already obeys, so
  * turning the chrome layer off turns off the tab `open` creates too.
  */
-export const windowSpecFor = (clone: Clone, command: string, placement: Placement): WindowSpec => ({
+export const windowSpecFor = (
+  clone: Clone,
+  command: string,
+  placement: Placement,
+  originTty: string | undefined,
+): WindowSpec => ({
   command,
   placement,
+  originTty,
   // The same shortening tmux's `set-titles-string` uses, so the title an emulator is handed at
   // creation and the one tmux writes over it a moment later agree.
   title: `${cloneShortName(clone)} · ${clone.hangar.id}`,
@@ -464,7 +471,7 @@ const perform = (
     case 'create-window':
       return server.addWindow(clone, action.tab);
     case 'open-emulator': {
-      if (!driver.open(windowSpecFor(clone, action.command, action.placement))) {
+      if (!driver.open(windowSpecFor(clone, action.command, action.placement, invokingTty()))) {
         return false;
       }
       /*

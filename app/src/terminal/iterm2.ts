@@ -28,8 +28,10 @@ import {
  *   while the tab itself appears, which is what makes it look like the write was the problem.
  *   `tell current window to create tab …` returns a real tab and runs its command.
  *
- * So: `tell current window to create tab with default profile command …` for a tab, and
- * `create window with default profile command …` for a window. No `write text` anywhere.
+ * So: `tell <window> to create tab with default profile command …` for a tab -- the window
+ * hosting the terminal the command was run from, `current window` when there is none (see
+ * `iterm2OpenScript`) -- and `create window with default profile command …` for a window. No
+ * `write text` anywhere.
  *
  * **`command` is argv, not a shell line.** It starts the process directly, so a builtin like
  * `exec` starts nothing, and PATH is the application's rather than a login shell's -- which is
@@ -71,7 +73,18 @@ export const iterm2TabColourCommand = (command: string, rgb: string): string => 
   ].join(' ');
 };
 
-const openScript = (spec: WindowSpec): string => {
+/**
+ * The AppleScript that opens one tab or window. Pure and exported.
+ *
+ * **A tab goes into the window hosting `originTty` when there is one**, found the way `raiseByTty`
+ * finds a tab, and `tell <that window> to create tab …`. `current window` is only the fallback:
+ * it is whichever window iTerm2 last considered key, which is not reliably the one the command
+ * was typed into -- a clone's tab once landed in a stray second window holding one idle shell,
+ * while the hangar's own session and every other clone sat in the first. Measured on 3.6: the
+ * `tell <window>` form runs its command like the `current window` one, and returns
+ * `missing value` for the tab, so nothing here uses the returned tab.
+ */
+export const iterm2OpenScript = (spec: WindowSpec): string => {
   const command = asString(
     spec.tabColour === undefined
       ? spec.command
@@ -86,9 +99,25 @@ const openScript = (spec: WindowSpec): string => {
       'end tell',
     ].join('\n');
   }
+  const beside =
+    spec.originTty === undefined
+      ? []
+      : [
+          '  repeat with w in windows',
+          '    repeat with t in tabs of w',
+          '      repeat with s in sessions of t',
+          `        if tty of s is ${asString(devPath(spec.originTty))} then`,
+          `          tell w to create tab with default profile command ${command}`,
+          '          return "opened"',
+          '        end if',
+          '      end repeat',
+          '    end repeat',
+          '  end repeat',
+        ];
   return [
     'tell application "iTerm2"',
     '  activate',
+    ...beside,
     // No window to put a tab in -- which is also the case on a machine where iTerm2 was only just
     // launched, so this is what keeps `tab` a safe default rather than a first-run failure.
     '  if (count of windows) is 0 then',
@@ -133,7 +162,7 @@ const raiseByTty = (tty: string): boolean => {
  * makes the bar's clickable half look broken while every binding is correct. It cost a whole
  * investigation once; `terminal-and-sessions.md` has that story.
  *
- * **The DEFAULT profile is the right one to read, and that is not a guess**: `openScript` above
+ * **The DEFAULT profile is the right one to read, and that is not a guess**: `iterm2OpenScript` above
  * creates every tab and every window `with default profile`, so it is the profile every clone's
  * window runs under.
  *
@@ -228,7 +257,7 @@ export const iterm2Driver = (): EmulatorDriver => ({
   capabilities: { openTab: true, openWindow: true, raiseByTty: true },
   isAvailable: () => appIsRunning('iTerm2'),
   unavailableHint: () => 'Start iTerm2 first — this command drives it over AppleScript.',
-  open: (spec) => osascript(openScript(spec)).out === 'opened',
+  open: (spec) => osascript(iterm2OpenScript(spec)).out === 'opened',
   lastNote: () => undefined,
   raiseByTty,
   mouseReporting,

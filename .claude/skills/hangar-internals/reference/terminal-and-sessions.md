@@ -466,7 +466,7 @@ clone's window is open and not in front, and `open` prints the `attach` line tha
 job. Opening is the floor — a driver that cannot open a window is `none`, which is a mode rather
 than a failure.
 
-Five things about that table are decisions rather than gaps. iTerm2 is handed its command at
+Six things about that table are decisions rather than gaps. iTerm2 is handed its command at
 creation and never typed into afterwards, for the three measured reasons under **Exercised**
 below; nothing is typed at a raw tty, for the reason under the platform seam above; and:
 
@@ -477,6 +477,14 @@ below; nothing is typed at a raw tty, for the reason under the platform seam abo
   none of it. So a tab is attempted, the tab count is checked to have actually grown — System
   Events reports success for a key it delivered nowhere — and a refusal falls back to a window
   naming what to allow. The developer asked for their clone, not for a piece of window furniture.
+- **An iTerm2 tab opens beside the terminal it was asked from**, not in iTerm2's
+  `current window`. That is whichever window iTerm2 last considered key, and a clone's tab landed
+  in a stray second window holding one idle shell while the command had been run from the window
+  holding the hangar session and every other clone. `invokingTty` (`tmux.ts`) finds the origin:
+  the client tty of the pane `$TMUX_PANE` names, asked of whichever server `$TMUX` names, which
+  covers operator mode's tty-less tool calls too; outside tmux, the tty `ps` reports for the
+  process. `iterm2OpenScript` looks that tty up as `raiseByTty` does and creates the tab with
+  `tell <that window>`, falling back to `current window` when no window holds it.
 - **iTerm2's tab colour is sent by the tab itself, at creation.** The tab runs tmux as its own
   process, so no shell ever stands outside tmux there, and the shell hook's tmux arm only sets
   tmux's options — every clone tab stayed uncoloured in iTerm2's tab bar while its tmux bar was

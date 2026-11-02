@@ -40,7 +40,8 @@ export type EmulatorKind = 'iterm2' | 'apple-terminal' | 'konsole' | 'gnome-term
 
 export type EmulatorCapabilities = {
   /**
-   * Open a new tab in the emulator's current window.
+   * Open a new tab in the emulator's window -- the one hosting `WindowSpec.originTty` for a driver
+   * that can find it (iTerm2), the emulator's current window otherwise.
    *
    * The default placement, and available everywhere -- but not always free: Terminal.app's `tab`
    * element is read-only in AppleScript, so a tab can only be made by sending Cmd-T through
@@ -105,9 +106,19 @@ export type WindowSpec = {
    * colour has to be sent by the tab itself, once, before tmux owns the tty.
    */
   readonly tabColour?: string | undefined;
+  /**
+   * The tty of the emulator tab this command was run from, for the drivers that can put a new tab
+   * BESIDE it rather than in whatever window the emulator calls current. Absent when it could not
+   * be told -- a cron job, a hook, a tmux pane with no client -- and then the current window it is.
+   * `tmux.ts`'s `invokingTty` finds it.
+   */
+  readonly originTty?: string | undefined;
 };
 
-/** A tab in the current window, or a window of its own. `terminal.placement` picks the default. */
+/**
+ * A tab beside the terminal the command was run from (or in the emulator's current window, when
+ * that cannot be told), or a window of its own. `terminal.placement` picks the default.
+ */
 export type Placement = 'tab' | 'window';
 
 export type EmulatorDriver = {

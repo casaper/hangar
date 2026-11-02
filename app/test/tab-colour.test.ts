@@ -55,9 +55,9 @@ test('the wrapped command leaves the attach line as trailing argv, never quoted 
 test('a clone tab is handed its hue, and none when the chrome layer is off', () => {
   // Set both ways explicitly: `dev/fixture.config.yaml` has the chrome layer off.
   const on = cloneAt(withChrome(hangar, true), 1);
-  assert.equal(windowSpecFor(on, 'cmd', 'tab').tabColour, on.colour.mainTriple);
+  assert.equal(windowSpecFor(on, 'cmd', 'tab', undefined).tabColour, on.colour.mainTriple);
   const off = cloneAt(withChrome(hangar, false), 1);
-  assert.equal(windowSpecFor(off, 'cmd', 'tab').tabColour, undefined);
+  assert.equal(windowSpecFor(off, 'cmd', 'tab', undefined).tabColour, undefined);
 });
 
 test('up resets an iTerm2 tab, and sends nothing anywhere else', () => {

@@ -6,7 +6,7 @@ import { run } from './exec.ts';
 import type { Hangar } from './hangar.ts';
 import { barOptions, keyBindings, paneBorderFormat } from './generate/tmux-conf.ts';
 import { type CloneColour, colourByHex } from './palette.ts';
-import { orUndefined } from './terminal/types.ts';
+import { devPath, orUndefined } from './terminal/types.ts';
 
 /**
  * tmux -- every window `hangar open` creates, and the pane a `SYNC PAUSE` lands in.
@@ -229,6 +229,33 @@ export const attachCommand = (hangar: Hangar, clone: Clone): string =>
   ]
     .map(shellQuote)
     .join(' ');
+
+/**
+ * The tty of the emulator tab this process was run from, or undefined when it cannot be told.
+ *
+ * It is what lets an emulator put a clone's new tab beside the terminal the developer is looking
+ * at: iTerm2's own `current window` is whichever window it last considered key, and a clone tab
+ * went into a stray second window that way while the command had been run from the window that
+ * held every other clone.
+ *
+ * - **Inside a tmux**, this process's tty is a tmux pty that no emulator knows, so the answer is
+ *   the CLIENT's tty, asked of whichever server `$TMUX` names -- the developer's own, Hangar's
+ *   operator server, or a clone's -- with the environment left intact, never `tmuxArgv`'s socket.
+ *   That also covers operator mode, whose tool calls run with no tty at all but inside a pane.
+ *   This is not the "`$TMUX` is not a signal" rule in `terminal/index.ts`: that one is about
+ *   WHICH emulator, this one about which tab of it.
+ * - **Otherwise**, the controlling tty `ps` reports for this process, which is the shell's.
+ */
+export const invokingTty = (env: NodeJS.ProcessEnv = process.env): string | undefined => {
+  const pane = orUndefined(env['TMUX_PANE']);
+  if (orUndefined(env['TMUX']) !== undefined && pane !== undefined) {
+    const res = run(tmuxBinary(), ['display-message', '-p', '-t', pane, '#{client_tty}']);
+    return res.ok ? orUndefined(res.stdout.trim()) : undefined;
+  }
+  const res = run('ps', ['-o', 'tty=', '-p', String(process.pid)]);
+  const tty = res.ok ? res.stdout.trim() : '';
+  return tty === '' || tty.startsWith('?') ? undefined : devPath(tty);
+};
 
 /** The line to print for a developer who has to get back in by hand. */
 export const attachHint = (hangar: Hangar, clone: Clone): string =>

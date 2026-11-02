@@ -47,7 +47,7 @@ test('wheel reporting without clicks is its own state, and a missing key is not 
 });
 
 test('the DEFAULT profile is the one read, because that is the one every clone window runs under', () => {
-  // `openScript` creates every tab and window `with default profile`, so this is not a guess
+  // `iterm2OpenScript` creates every tab and window `with default profile`, so this is not a guess
   // about which of several profiles a developer's window uses.
   const others = [
     profile({ Guid: 'OTHER', 'Mouse Reporting': false }),

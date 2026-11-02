@@ -512,7 +512,7 @@ program
   .option('--no-claude', 'do not start Claude Code in any of the clone’s windows')
   .option('-r, --resume-last', "resume the clone's last Claude Code session instead of a fresh one")
   .option('-e, --editor', 'also open the clone in every configured editor')
-  .option('--tab', "a tab in the terminal's current window (the default)")
+  .option('--tab', 'a tab beside the terminal it was run from (the default)')
   .option('--window', 'a window of its own instead of a tab')
   .option('-c, --checkout', "fetch and check out the repo's default branch, up to date, first")
   .option('-b, --branch <name>', 'fetch and check out this branch first')
