@@ -69,7 +69,7 @@ a low-entropy pasted password that the second one catches (`hangar-internals/ref
 has the canary). Both also run in `app/.husky/pre-commit` and inside `hangar dev release`.
 
 **A dependency sweep is targeted, never a bare `pnpm update` of the manifest.** The
-`hangar-deps` skill runs one end to end, and `pnpm deps:survey` measures it. The floor is
+`hangar-updates` skill runs one end to end, and `pnpm deps:survey` measures it. The floor is
 `minimumReleaseAge` in `pnpm-workspace.yaml`, and what else a sweep has to know:
 
 - `pnpm add <pkg>@<ver>` per package; `savePrefix: ''` rewrites a caret to an exact pin, so put

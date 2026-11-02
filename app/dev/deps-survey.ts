@@ -19,7 +19,7 @@ import { parse as parseYaml } from 'yaml';
  * - TypeScript is capped by typescript-eslint's `typescript` peer, and pnpm installs across a
  *   violated peer with a warning only. The changelog preset is capped by the writer major
  *   release-notes-generator depends on, and the wrong one renders a malformed changelog rather
- *   than an error. `.claude/skills/hangar-deps/reference/holds.md` has why each hold exists.
+ *   than an error. `.claude/skills/hangar-updates/reference/holds.md` has why each hold exists.
  *
  * Everything below `gather` is pure and given its facts, so `test/deps-survey.test.ts` can
  * assert each of those without a network.

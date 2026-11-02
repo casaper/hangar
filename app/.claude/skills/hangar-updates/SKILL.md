@@ -1,5 +1,5 @@
 ---
-name: hangar-deps
+name: hangar-updates
 description: Runs a dependency sweep of the hangar CLI package (app/package.json, its lockfile and the pnpm pin) — measures with `pnpm deps:survey`, takes every update past the 14-day release floor inside its current line, runs every gate, and commits it as chore(deps) on main without pushing. Use whenever the user asks to update, bump or refresh the hangar's dependencies or packages, asks "any safe updates?", "can we take the undici fix yet?", "is TypeScript 7 possible now?", wants a `pnpm audit` finding fixed, or asks when a held or waiting package clears. Not for a clone's own (Angular) dependencies, and not for `git pull`-style updates of the hangar repo itself.
 ---
 
