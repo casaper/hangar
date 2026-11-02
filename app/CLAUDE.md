@@ -48,6 +48,8 @@ hangar root for the reason below.
 
 **There is no build step.** Node strips the types and runs `src/cli.ts` directly, so an edit is
 live the moment it is saved and there is nothing to rebuild before trying it.
+`node -e "import('./src/<file>.ts').then(m => console.log(m.<fn>()))"` runs one exported helper
+against the real environment — a read-only helper only.
 
 **The package manager is pnpm**, pinned by `packageManager: "pnpm@12.14.0"` in `app/package.json`,
 which is the single source of truth for both the shell and CI. Run the CLI's own checks **from
@@ -57,6 +59,7 @@ which is the single source of truth for both the shell and CI. Run the CLI's own
 cd app && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 # pnpm lint:fix and pnpm format write; format:check is what a commit gate wants
 # prettier never rewraps a comment and eslint has no max-len: wrap comments at 100 by hand
+# pnpm test summarises as `ℹ pass N` / `ℹ fail N`, not TAP's `# pass`: grep for that
 pnpm golden && git diff --exit-code dev/golden/gated   # the regression net; see below
 pnpm scan     # both hygiene gates; see **Nothing in here names one organisation**
 pnpm hooks    # ONCE per clone of this repo: installs the two git hooks. See Commit messages
@@ -111,6 +114,10 @@ and an unquoted glob that matches nothing is an error (`--include=*.ts`, `echo =
 `tmux -L hangar-<id>[-claude] list-clients -F '#{client_tty} #{client_pid} #{client_termtype}'`,
 then `ps -o ppid=` on the pid. A tab from `hangar open` runs tmux with no shell outside it;
 a `hangar up` tab runs it under the shell `up` was typed into.
+
+**Which iTerm2 window holds a tty is one read-only `osascript` away**: loop
+`windows` → `tabs of w` → `sessions of t` printing `id of w`, `tty of s`, and compare with
+`id of current window` — which is not reliably the window a command was typed into.
 
 **The exec guard matches `hangar exec` anywhere in a Bash command, heredoc text included** — an
 edit script that quotes it as an anchor is refused. Put such a script in a scratchpad file and run
