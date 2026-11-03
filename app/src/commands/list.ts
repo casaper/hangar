@@ -12,8 +12,8 @@ import {
   takePrRefreshLock,
   type CachedPullRequest,
 } from '../pr-cache.ts';
-import { ticketBinding } from '../jira.ts';
-import { cloneLabel, note, table, truncate } from '../ui.ts';
+import { issueUrl, ticketBinding } from '../jira.ts';
+import { cloneLabel, link, note, table, truncate } from '../ui.ts';
 import { prPlan } from './pr.ts';
 import type { Hangar } from '../hangar.ts';
 
@@ -85,6 +85,22 @@ export const listPrCells = (pr: ListPr): readonly [string, string, string] => {
           : pc.dim('no reviewers');
   return [prCell, build, review];
 };
+
+/** `2026-11-02` as `11-02`: the year never tells two clones apart. */
+export const commitDay = (isoDate: string): string => isoDate.slice(5);
+
+/** `Kaspar Vollenweider` as `KV`: who, in the width of a column rather than eighteen. */
+export const initials = (name: string): string => {
+  const letters = name
+    .split(/[\s-]+/)
+    .filter((word) => word !== '')
+    .map((word) => (word[0] ?? '').toUpperCase())
+    .join('')
+    .slice(0, 3);
+  return letters === '' ? '?' : letters;
+};
+
+export const LIST_HEADER = ['CLONE', 'ISSUE', 'PR', 'BRANCH', 'BUILD', 'REVIEW', 'LAST COMMIT'];
 
 /**
  * `hangar list` -- what clones exist, where each one is, and what each is working on.
@@ -158,17 +174,13 @@ export const list = async (
     clearTimeout(timer);
   }
 
-  const rows: string[][] = [
-    ['CLONE', 'COLOUR', 'BRANCH', 'ISSUE', 'PR', 'BUILD', 'REVIEW', 'LAST COMMIT'].map((h) =>
-      pc.dim(h),
-    ),
-  ];
+  const rows: string[][] = [LIST_HEADER.map((h) => pc.dim(h))];
   for (const { clone, branch, cached, plan } of facts) {
     const commit = lastCommit(clone.path);
     const commitCell =
       commit === undefined
         ? pc.dim('(no commits)')
-        : `${pc.yellow(commit.sha)} ${pc.dim(commit.date)} ${pc.dim(truncate(commit.committer, 18))} ${truncate(commit.subject, 50)}`;
+        : `${pc.yellow(commit.sha)} ${pc.dim(commitDay(commit.date))} ${pc.dim(initials(commit.committer))} ${truncate(commit.subject, 50)}`;
     const key = issueKeyFor(hangar, branch, ticketBinding(hangar, clone.path, branch));
     const pr: ListPr =
       plan.kind === 'no-forge' || plan.kind === 'detached' || plan.kind === 'default-branch'
@@ -176,12 +188,16 @@ export const list = async (
         : cached === undefined
           ? { kind: 'unknown' }
           : { kind: 'known', record: cached, stale: prCacheIsStale(cached, ttl) };
+    const [prCell, build, review] = listPrCells(pr);
+    // id 0 is the negative record, and its url is a search rather than a pull request.
+    const prUrl = pr.kind === 'known' && pr.record.id !== 0 ? pr.record.url : undefined;
     rows.push([
       cloneLabel(clone),
-      clone.colour.name,
+      key === '' ? dash : link(key, issueUrl(hangar, key)),
+      link(prCell, prUrl),
       truncate(branch, BRANCH_MAX),
-      key === '' ? dash : key,
-      ...listPrCells(pr),
+      build,
+      review,
       commitCell,
     ]);
   }

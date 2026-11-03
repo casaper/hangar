@@ -1064,7 +1064,7 @@ const reportTmux = (hangar: Hangar): readonly string[] => {
     return setting.match === 'contains' ? !live.includes(setting.value) : live !== setting.value;
   });
   if (behind.length > 0) {
-    const text = `the running tmux server is missing ${String(behind.length)} setting(s) Claude Code needs`;
+    const text = `the running tmux server is missing ${String(behind.length)} setting(s) its panes need`;
     problems.push(text);
     warn(text);
     for (const setting of behind) note(`${setting.name}: ${setting.why}`);

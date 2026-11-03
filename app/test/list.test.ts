@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { listPrCells } from '../src/commands/list.ts';
-import { visibleWidth } from '../src/ui.ts';
+import { commitDay, initials, LIST_HEADER, listPrCells } from '../src/commands/list.ts';
+import { hyperlink, visibleWidth } from '../src/ui.ts';
 import type { CachedPullRequest } from '../src/pr-cache.ts';
 
 /**
@@ -64,4 +64,25 @@ test('id 0 never renders as #0, and a stale record says so', () => {
     assert.deepEqual(plain(cells).slice(1), ['-', '-']);
     assert.ok(cells.every((c) => visibleWidth(c) > 0));
   }
+});
+
+test('the ticket and the pull request come straight after the clone, and no colour column', () => {
+  assert.deepEqual(LIST_HEADER.slice(0, 3), ['CLONE', 'ISSUE', 'PR']);
+  assert.ok(!LIST_HEADER.includes('COLOUR'));
+});
+
+test('the last commit carries month and day, and the committer as initials', () => {
+  assert.equal(commitDay('2026-11-02'), '11-02');
+  assert.equal(initials('Ada Lovelace'), 'AL');
+  assert.equal(initials('  jean-luc   picard '), 'JLP');
+  assert.equal(initials('Wolfgang Amadeus Theophilus Mozart').length, 3);
+  assert.equal(initials('dependabot'), 'D');
+  assert.equal(initials(''), '?');
+});
+
+test('a hyperlink carries its url and takes only its text in width', () => {
+  const cell = hyperlink('ABC-1323', 'https://example.invalid/browse/ABC-1323');
+  assert.ok(cell.includes('https://example.invalid/browse/ABC-1323'));
+  assert.equal(visibleWidth(cell), 'ABC-1323'.length);
+  assert.equal(visibleWidth(hyperlink('\x1b[2m#852\x1b[22m', 'https://example.invalid/pr/852')), 4);
 });

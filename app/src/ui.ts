@@ -111,10 +111,22 @@ const ELLIPSIS = '…';
  */
 export const cloneLabel = (clone: Clone): string => paint(clone.colour, `${BULLET} ${clone.index}`);
 
-const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
+const ESC = String.fromCharCode(27);
+const ANSI = new RegExp(`${ESC}\\[[0-9;]*m|${ESC}\\]8;[^${ESC}\\x07]*(?:${ESC}\\\\|\\x07)`, 'g');
 
-/** Column widths must ignore colour escapes, or every coloured cell misaligns. */
+/** Column widths must ignore colour and hyperlink escapes, or every such cell misaligns. */
 export const visibleWidth = (s: string): number => s.replace(ANSI, '').length;
+
+/** `text` as an OSC 8 hyperlink to `url`. Pure: whether to emit one is `link`'s decision. */
+export const hyperlink = (text: string, url: string): string =>
+  `${ESC}]8;;${url}${ESC}\\${text}${ESC}]8;;${ESC}\\`;
+
+/**
+ * `text`, clickable when stdout is a terminal. A pipe gets the bare text -- which is also what
+ * keeps the escapes out of an MCP tool's answer, since its child's stdout is a pipe.
+ */
+export const link = (text: string, url: string | undefined): string =>
+  url === undefined || !process.stdout.isTTY ? text : hyperlink(text, url);
 
 /** Render a table with left-aligned, padded columns. */
 export const table = (rows: readonly (readonly string[])[], gap = 2): void => {

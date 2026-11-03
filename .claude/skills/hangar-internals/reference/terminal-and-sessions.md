@@ -754,7 +754,8 @@ prefix taken off.
   literal sequence in `status-left` is drawn as visible text with the `ESC` stripped --
   `L[]8;;https://example.com/T-1\T-1]8;;\` -- with `capture-pane -H` finding no hyperlink at all.
   tmux supports OSC 8 in PANE content only (the `hyperlinks` terminal feature, `mouse_hyperlink`,
-  `capture-pane -H`). So a clickable region running a command is the mechanism here, not a
+  `capture-pane -H`) -- which is how `hangar list`'s ticket and pull request ARE links, and why
+  `TMUX_SETTINGS` carries that feature. So a clickable region running a command is the mechanism here, not a
   fallback for one.
 - **`#[range=user|X]` works in `status-format` and is silently ignored in `pane-border-format`.**
   Ranges are a status-line feature; the border accepts the style, renders nothing for it and
@@ -1231,8 +1232,12 @@ repainting a whole session one colour would discard it until the next `cd`. It i
 and `--check`, being the one thing in that command that touches state outside the artifacts.
 
 `doctor` gets **no** row for any of it. The conf byte-compare already goes red on a stale file, and
-`TMUX_SETTINGS` is documented as the four settings Claude Code needs -- growing it with a style
-would make `doctor` claim something it was not written to say.
+`TMUX_SETTINGS` is documented as what the terminal outside has to grant a pane -- growing it with
+a style would make `doctor` claim something it was not written to say. Its one entry that is not
+Claude Code's is the same kind of thing: `terminal-features` `xterm*:hyperlinks`, without which
+tmux drops the OSC 8 links `hangar list` prints for the ticket and the pull request. Like
+`extkeys`, it is negotiated when a client attaches, so a `reload` reaches it only once the tab is
+reopened.
 
 ### Exercised, unlike two of the four window-openers
 

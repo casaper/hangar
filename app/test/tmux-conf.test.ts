@@ -59,12 +59,14 @@ test('all four settings tmux needs for Claude Code are named, by name', () => {
   }
 });
 
+test('pane hyperlinks reach the terminal outside, or `hangar list` links die in a clone tab', () => {
+  const { content } = tmuxConfArtifact(syntheticHangar());
+  assert.match(content, /^set -as\s+terminal-features\s+'xterm\*:hyperlinks'/m);
+});
+
 test('terminal-features is the appended one, so it is compared as a substring', () => {
   const appended = TMUX_SETTINGS.filter((s) => s.set.includes('a'));
-  assert.deepEqual(
-    appended.map((s) => s.name),
-    ['terminal-features'],
-  );
+  assert.deepEqual([...new Set(appended.map((s) => s.name))], ['terminal-features']);
   // The pairing is the assertion, not the string: `-a` appends, so the live value is a superset
   // and an equality check would report a correctly configured server as wrong.
   for (const setting of appended) assert.equal(setting.match, 'contains');

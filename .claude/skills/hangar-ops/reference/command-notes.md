@@ -340,6 +340,11 @@ tool is the separate `<thing>_preview`.
   the table saying why. `--no-refresh` asks nothing. REVIEW is `no reviewers`, `pending a/n`
   (reviewers assigned, nobody has decided), `approved a/n` or `changes a/n`, with `changes`
   winning over any approval; a merged, declined or superseded pull request shows no build or review.
+  The columns run CLONE, ISSUE, PR, BRANCH, BUILD, REVIEW, LAST COMMIT, the last as
+  `sha MM-DD initials subject`. On a terminal the issue key and the pull request number are OSC 8
+  links to the ticket and the pull request (Cmd-click in iTerm2); piped, and through the MCP tool,
+  they are plain text. Inside a clone tab they need the tmux server to carry `terminal-features`
+  `xterm*:hyperlinks`, which `doctor` reports when it does not.
 - **`resume -n` is `--limit`.** Everywhere else `-n` is `--dry-run`.
 - **`-q, --quiet` on `plans collect` and `tmp merge` exists for the `SessionEnd` hooks.** They flush
   on opposite criteria — `plans collect` prints when something MOVED, `tmp merge` when something

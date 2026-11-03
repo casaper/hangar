@@ -68,7 +68,9 @@ export type TmuxSetting = {
 };
 
 /**
- * The four settings Claude Code documents for running inside tmux.
+ * The four settings Claude Code documents for running inside tmux, plus one more value of the
+ * fourth's `terminal-features`: `hyperlinks`, without which tmux drops the OSC 8 links a pane
+ * prints -- `hangar list`'s ticket and pull request -- before they reach the terminal outside.
  *
  * One table, two consumers -- rendered into the conf here, and read back off the live server by
  * `doctor`. Two copies of a four-entry table that must agree is the drift this repo keeps
@@ -94,6 +96,14 @@ export const TMUX_SETTINGS: readonly TmuxSetting[] = [
     value: 'xterm*:extkeys',
     match: 'contains',
     why: 'advertises extended keys to the terminal outside -- the other half of Shift+Enter',
+  },
+  {
+    set: '-as',
+    show: '-sv',
+    name: 'terminal-features',
+    value: 'xterm*:hyperlinks',
+    match: 'contains',
+    why: "passes OSC 8 links through to the terminal outside -- `hangar list`'s ticket and PR",
   },
   {
     set: '-g',
