@@ -74,6 +74,7 @@ Then the transitive sweep, which is also what lands audit fixes:
 pnpm update                     # bare: leaves the manifest alone; pnpm 12 rejects --depth
 pnpm peers check                # only the standing conventional-commits-parser line is expected
 git diff --stat                 # package.json and pnpm-lock.yaml, nothing else
+git diff pnpm-lock.yaml | grep -E '^[-+]  [@a-z]' | sort -u   # what moved, for the commit body
 ```
 
 A new unmet peer is a finding: undo the package that introduced it (step 4's recovery) and
