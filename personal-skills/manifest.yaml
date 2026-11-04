@@ -16,8 +16,9 @@
 #                personal copy at all over this: one that may not differ can only drift.
 #   standalone   no tracked counterpart anywhere, so there is nothing to compare.
 #
-# `mirrors` is a path inside the managed repo's own checkout, read from `forge.defaultBranch`
-# rather than from whatever branch a clone happens to have out.
+# `mirrors` is a path inside the managed repo's own checkout, read from `origin/` plus
+# `forge.defaultBranch` in the lowest-indexed clone -- never from whatever branch it has out, and
+# never from its local copy of the default branch, which moves only when that clone pulls.
 #
 # A skill adopted from a branch that has NOT MERGED yet is `intentional`, never `standalone`: its
 # counterpart exists, it is simply not on the default branch. `mirrors` names where it will be,
@@ -37,7 +38,7 @@ skills:
   - name: shorten-comment
     divergence: intentional
     mirrors: .claude/skills/shorten-comment/SKILL.md
-    basedOn: 79b66d9256c26e89d7993a3f4edb1d1e1499dc3a
+    basedOn: ca26ecf0586fe0ca49a4beeca60ccff6199882fb
     reason: >-
       Adds the "Reporting -- the edit is the verdict" contract (one line per changed block, no
       narrated justification) and judges every block in a file from a single read instead of one

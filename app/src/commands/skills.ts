@@ -276,13 +276,18 @@ export const classifyDrift = (entry: SkillEntry, facts: DriftFacts): DriftState 
  * somebody else is using; reading its current branch would make this answer depend on which
  * ticket that developer happens to be on, which is the underspecified-`string` failure this CLI
  * is built against.
+ *
+ * And from `origin/<branch>`, never the clone's local branch: that moves only when somebody pulls
+ * in that one clone, so a report against it lagged the forge by days and named a stale blob as
+ * the original. Any fetch in the clone moves the remote-tracking ref.
  */
 export const driftFor = (
   hangar: Hangar,
   entry: SkillEntry,
   repo: string | undefined,
 ): DriftState => {
-  const branch = hangar.config.forge.defaultBranch;
+  const configured = hangar.config.forge.defaultBranch;
+  const branch = configured === undefined ? undefined : `origin/${configured}`;
   const nothing = { branch, hasBranch: false, original: undefined, ours: undefined };
 
   if (repo === undefined || entry.mirrors === undefined) {
