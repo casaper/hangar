@@ -21,14 +21,14 @@ one script call and then this table only when it says out of scope.
 
 **Skip — do not trim — when the path matches any excluded pattern:**
 
-| Pattern                                   | Why excluded                                                                 |
-| ------------------------------------------ | ----------------------------------------------------------------------------- |
-| `**/*.spec.ts`                            | Jest + Playwright tests — comments describe test intent / arrange-act-assert |
-| `**/*.stories.ts`, `**/*.story.ts`        | Storybook stories — comments describe story setup                            |
-| `**/*.config.ts`, `**/.storybook/**`      | Tooling config                                                               |
-| `**/models/generated/**`                  | Generated OpenAPI models — regenerated on build                              |
-| `**/serviceworker/**` + MSW handler files | Mock infrastructure                                                          |
-| `**/*.md`, `**/*.mdx`                     | Docs / prose, not code comments                                              |
+| Pattern                                   | Why excluded                                                                          |
+| ----------------------------------------- | ------------------------------------------------------------------------------------- |
+| `**/*.spec.ts`                            | Unit (Vitest) + Playwright tests — comments describe test intent / arrange-act-assert |
+| `**/*.stories.ts`, `**/*.story.ts`        | Storybook stories — comments describe story setup                                     |
+| `**/*.config.ts`, `**/.storybook/**`      | Tooling config                                                                        |
+| `**/models/generated/**`                  | Generated OpenAPI models — regenerated on build                                       |
+| `**/serviceworker/**` + MSW handler files | Mock infrastructure                                                                   |
+| `**/*.md`, `**/*.mdx`                     | Docs / prose, not code comments                                                       |
 
 **In scope — proceed normally:** `*.component.ts`, `*.component.html`, `*.service.ts`, other `.ts` source outside `generated/`, `.scss`, and any other code that ships in the build.
 
@@ -107,7 +107,7 @@ If "no" or "maybe", it is a _what_ comment masquerading as a _why_. Remove it.
 TypeScript's type system makes some JSDoc tags redundant. Use this table to decide quickly:
 
 | Tag                                 | Value in TypeScript                                | Action                                                                                                    |
-| ------------------------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| ----------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | `@throws`                           | Types cannot express when/why errors occur         | **Keep** — document the condition and exception type                                                      |
 | `@example`                          | Types cannot show usage patterns or edge cases     | **Keep** — focus on non-obvious cases                                                                     |
 | `@deprecated`                       | Not in types                                       | **Keep** — must state _why_ deprecated and what to use instead                                            |
@@ -125,7 +125,7 @@ When in doubt, re-read the code. If a reader would understand the code without t
 ## Step 4: Decide
 
 | Outcome                                | Action                                  |
-| ---------------------------------------- | ------------------------------------------ |
+| -------------------------------------- | --------------------------------------- |
 | Comment exists because code is unclear | **Flag for refactoring** (Step 1)       |
 | Nothing survives the WHY test          | **Remove** the entire block             |
 | Some sentences survive                 | **Rewrite** with only those sentences   |
@@ -136,36 +136,36 @@ When in doubt, re-read the code. If a reader would understand the code without t
 **Redundant `@param` type vs. constraint that adds value:**
 
 ```ts
-// ❌ Remove — type is in the signature; description restates the name
-/** @param {string} userId - The user's ID */
+// Correct — documents a constraint the type cannot express
+/** @param userId - Must be non-empty; caller is responsible for validation */
 async getUser(userId: string): Promise<User>
 
-// ✅ Keep — documents a constraint the type cannot express
-/** @param userId - Must be non-empty; caller is responsible for validation */
+// Wrong — the type is in the signature; the description restates the name
+/** @param {string} userId - The user's ID */
 async getUser(userId: string): Promise<User>
 ```
 
 **What comment (will decay) vs. why comment (stays true):**
 
 ```ts
-// ❌ Remove — describes what the code does; will lie when the sort key changes
-// Sort items by creation date
+// Correct — explains the decision; stays true even if the sort key changes
+// Stable insertion order required — UI diffs are noisy if sort is non-deterministic
 items.sort(byCreatedAt);
 
-// ✅ Keep — explains the decision; stays true even if the sort key changes
-// Stable insertion order required — UI diffs are noisy if sort is non-deterministic
+// Wrong — describes what the code does; will lie when the sort key changes
+// Sort items by creation date
 items.sort(byCreatedAt);
 ```
 
 **Refactoring candidate — rename instead of trimming:**
 
 ```ts
-// ❌ Don't trim — the comment exists because the name is opaque; trim fixes nothing
+// Correct — renamed; no comment needed
+const retryBackoffMs = 250;
+
+// Wrong — the comment only exists because the name is opaque; trimming it fixes nothing
 // k = retry backoff multiplier in milliseconds
 const k = 250;
-
-// ✅ Rename; no comment needed
-const retryBackoffMs = 250;
 ```
 
 ## Aggressiveness: `low` | `medium` | `high`
@@ -175,7 +175,7 @@ modifiers _around_ that judgment, never edits to it — if a level seems to need
 tag table changed, the level is being read wrong.
 
 | Level              | What it changes                                                                                                                                                                                                                                                                                                             |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `low`              | **Never deletes a whole block.** Anything Step 4 would remove is instead rewritten to its shortest true form; if literally nothing survives, leave the block and report `would delete at medium`. The tag table still applies _inside_ the block, so redundant `{T}` types and name-restating `@param`s still go.           |
 | `medium` (default) | Steps 3 and 4, unmodified.                                                                                                                                                                                                                                                                                                  |
 | `high`             | Step 4 plus: delete any block that is not a constraint/invariant/side-effect, a bug or library workaround, or the intent behind an unusual choice. Drop `@example` and `@remarks` that only restate what the signature already shows. Collapse every surviving multi-line block to single-line wherever it fits ~100 chars. |
@@ -232,30 +232,30 @@ phrase gap. Never split a parenthetical, a `{@link}`, or a `code span` across th
 keeping it whole costs no extra line.
 
 ```ts
-// ❌ Margin-driven wrap — splits the parenthetical across two lines
-/**
- * Includes `formGroupsArray.statusChanges` so async-validator transitions (PENDING → VALID or
- * INVALID) refresh footer button state.
- */
-
-// ✅ Clause-driven wrap — the parenthetical stays intact
+// Correct — clause-driven wrap keeps the parenthetical intact
 /**
  * Includes `formGroupsArray.statusChanges` so async-validator transitions
  * (PENDING → VALID or INVALID) refresh footer button state.
  */
+
+// Wrong — margin-driven wrap splits the parenthetical across two lines
+/**
+ * Includes `formGroupsArray.statusChanges` so async-validator transitions (PENDING → VALID or
+ * INVALID) refresh footer button state.
+ */
 ```
 
 ```ts
-// ❌ Same two lines, but the break lands mid-clause
-/**
- * Drafts are stored in sessionStorage, which is isolated per tab, so opening the same form in
- * another tab starts fresh.
- */
-
-// ✅ Same two lines — break moved onto the comma boundary
+// Correct — same two lines, break moved onto the comma boundary
 /**
  * Drafts are stored in sessionStorage, which is isolated per tab,
  * so opening the same form in another tab starts fresh.
+ */
+
+// Wrong — same two lines, but the break lands mid-clause
+/**
+ * Drafts are stored in sessionStorage, which is isolated per tab, so opening the same form in
+ * another tab starts fresh.
  */
 ```
 
