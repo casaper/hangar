@@ -105,6 +105,8 @@ code-by-role table runs to ~14k characters, mostly spaces. Keep table cells shor
 **`hangar_use_gnu` puts GNU coreutils first on PATH, so `sed -i` takes no `''` argument.** The
 BSD spelling fails partway through a multi-file edit, and a half-edited `src/**` is live at once
 — every clone's `SessionEnd` hook runs this working tree.
+`ls` and `stat` are GNU too: for flags, xattrs or `stat -f` formats, call `/bin/ls -l@O` and
+`/usr/bin/stat -f '%i %l %Sp %N'` by absolute path.
 
 **Dev-mode Bash runs zsh:** `$VAR` holding `cmd -flag` is not word-split, so call
 `/opt/homebrew/bin/tmux -L hangar-<id> …` directly, `type -P` does not exist (use `command -v`),
@@ -125,6 +127,12 @@ edit script that quotes it as an anchor is refused. Put such a script in a scrat
 
 **Search a clone with `git -C <clone> grep`, never `grep -r`**: a clone carries `node_modules`
 and a multi-GB `tmp/`, and `grep -r` over one runs past the Bash timeout.
+
+**Every `SessionEnd` hook runs once per clone, and `reload`/`down` start them all at the same
+moment** — anything a hook runs must survive a twin over the same shared files. The locks that
+exist: `tmp-merge-lock.ts` (pid, waits; for work whose length grows), `withLock` in
+`editor/vscode-bookmarks-sync.ts` (mtime, skips), `takePrRefreshLock` in `pr-cache.ts` (mkdir,
+skips). Reuse one; the jira-cache reference has why a pid beats an age.
 
 **Probe in a scratchpad or a throwaway hangar, never the live fleet.** The recipes — git
 behaviour, Claude Code permissions, a command's file I/O, a generated script, an `advisory/` diff, a
