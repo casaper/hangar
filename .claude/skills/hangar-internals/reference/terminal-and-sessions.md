@@ -647,6 +647,25 @@ server (`isSessionLeak` is the list, `CLAUDE_PROJECT_DIR` included). A running C
 so a healed server still needs `hangar reload`. Diagnose with
 `tmux -L hangar-<id> show-environment -g`.
 
+**One `CLAUDE_CODE_` name is meant to be there: `CLAUDE_CODE_TMUX_TRUECOLOR=1`.** With `$TMUX`
+set, Claude Code drops its colour level from 24-bit to 256 unless that variable is set. The rule
+is `if (TMUX && level > 2) level = 2`, read out of the 2.1.318 binary, and it is not documented.
+Every hue in a clone's theme was rounded to the nearest xterm-256 colour, so magenta `#ff00cc`
+drew as index 163 on Claude Code's input border. Right beside it, the tmux footer and the shell
+`❯` drew the exact hue. That reads as "the wrong hue" on a clone whose generated files are all
+correct.
+
+- **Where the variable is set:** `CLAUDE_CODE_ENVIRONMENT` in `generate/tmux-conf.ts`, rendered
+  into both servers' confs by `claudeCodeSettingLines`. The conf reaches window 1 because tmux
+  reads `-f` before `new-session` spawns it (measured with `printenv` in that window).
+  `tmuxServer` also writes the variable onto a standing server, and `doctor` reads it back.
+- **The leak scrub exempts that name exactly**, never the prefix.
+- **It is safe on any outer terminal:** tmux rounds 24-bit down itself for a client without the
+  `RGB` feature.
+- **Re-measure on a Claude Code upgrade, since the name can change silently.** Run
+  `tmux -L hangar-<id> capture-pane -p -e -t clone_NN:1` on a freshly started session. `38;2;…`
+  means the variable still works; `38;5;…` means it has stopped working.
+
 ## The status bar had no background, and so had tmux's own green
 
 **The bug, because it is the reason half of the above reads the way it does.** `clone-tmux.conf`

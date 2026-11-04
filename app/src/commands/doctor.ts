@@ -108,7 +108,7 @@ import { describeCollision, portCollisions, portSummary, slotOf } from '../ports
 import { platform } from '../platform/index.ts';
 import { claudeSessionDiagnostic, claudeSessionsIn } from '../procs.ts';
 import { terminal, type EmulatorCapabilities, type MouseReporting } from '../terminal/index.ts';
-import { TMUX_SETTINGS, tmuxConfArtifact } from '../generate/tmux-conf.ts';
+import { CLAUDE_CODE_ENVIRONMENT, TMUX_SETTINGS, tmuxConfArtifact } from '../generate/tmux-conf.ts';
 import { tmuxStatusArtifact } from '../generate/tmux-status-sh.ts';
 import { tmuxServer, tmuxSessionName, tmuxSocketName, type TmuxSessionRow } from '../tmux.ts';
 import {
@@ -1055,6 +1055,19 @@ const reportTmux = (hangar: Hangar): readonly string[] => {
     warn(text);
     note(
       `Nothing kills it automatically -- it may hold a live agent. \`tmux -L ${socket} kill-session -t '=${row.name}:'\``,
+    );
+  }
+
+  // Unlike the settings below, these need no restart of the server: `colours sync` writes them on.
+  // A Claude Code already running keeps the colour level it started with all the same.
+  const unset = CLAUDE_CODE_ENVIRONMENT.filter((e) => server.environment(e.name) !== e.value);
+  if (unset.length > 0) {
+    const text = `the ${socket} server's environment is missing what Claude Code needs in its panes`;
+    problems.push(text);
+    warn(text);
+    for (const e of unset) note(`${e.name}=${e.value}: ${e.why}`);
+    note(
+      'Run `hangar colours sync`; it writes it onto the running server. A Claude Code session already open needs `hangar reload` to pick it up.',
     );
   }
 

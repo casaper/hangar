@@ -123,6 +123,36 @@ export const TMUX_SETTINGS: readonly TmuxSetting[] = [
   },
 ];
 
+/** One variable every pane on a hangar server starts with. */
+export type TmuxEnvironment = {
+  readonly name: string;
+  readonly value: string;
+  readonly why: string;
+};
+
+/**
+ * What Claude Code needs in its ENVIRONMENT inside tmux, as `TMUX_SETTINGS` is what it needs in
+ * tmux's options -- and with the same two consumers plus a third: the conf, `doctor`, and
+ * `tmuxServer`, which writes it onto a server that is already running.
+ *
+ * `CLAUDE_CODE_TMUX_TRUECOLOR`: with `$TMUX` set, Claude Code drops its colour level from 24-bit
+ * to 256 unless this is set -- read out of the 2.1.318 binary, where the rule is
+ * `if (TMUX && level > 2) level = 2`, and it is not documented. Every hue in a clone's theme was
+ * then rounded to the nearest xterm-256 colour (magenta `#ff00cc` drawn as index 163), right
+ * beside the tmux footer and the shell prompt, which draw the exact hue. Safe on any outer
+ * terminal: tmux itself rounds 24-bit down for a client without the `RGB` feature.
+ *
+ * In the conf because tmux reads `-f` before `new-session` spawns window 1 -- measured, a
+ * `printenv` in the first window sees it -- and that window is the one running Claude Code.
+ */
+export const CLAUDE_CODE_ENVIRONMENT: readonly TmuxEnvironment[] = [
+  {
+    name: 'CLAUDE_CODE_TMUX_TRUECOLOR',
+    value: '1',
+    why: "keeps Claude Code's theme in 24-bit colour; inside tmux it rounds to 256 otherwise",
+  },
+];
+
 /**
  * Single-quote a value that needs it, and leave a bare word bare.
  *
@@ -141,11 +171,18 @@ export const quoteTmuxValue = (value: string): string =>
  * there must only be one of.
  */
 export const claudeCodeSettingLines = (): string[] => {
-  const lhs = TMUX_SETTINGS.map(
-    (s) => `set ${s.set.padEnd(3)} ${s.name} ${quoteTmuxValue(s.value)}`,
-  );
-  const width = Math.max(...lhs.map((l) => l.length));
-  return TMUX_SETTINGS.map((s, i) => `${(lhs[i] ?? '').padEnd(width)}   # ${s.why}`);
+  const rows = [
+    ...TMUX_SETTINGS.map((s) => ({
+      lhs: `set ${s.set.padEnd(3)} ${s.name} ${quoteTmuxValue(s.value)}`,
+      why: s.why,
+    })),
+    ...CLAUDE_CODE_ENVIRONMENT.map((e) => ({
+      lhs: `set-environment -g ${e.name} ${quoteTmuxValue(e.value)}`,
+      why: e.why,
+    })),
+  ];
+  const width = Math.max(...rows.map((r) => r.lhs.length));
+  return rows.map((r) => `${r.lhs.padEnd(width)}   # ${r.why}`);
 };
 
 /**

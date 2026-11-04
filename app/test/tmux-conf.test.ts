@@ -3,6 +3,8 @@ import { test } from 'node:test';
 
 import {
   barOptions,
+  CLAUDE_CODE_ENVIRONMENT,
+  claudeCodeSettingLines,
   EDITOR_KEYS,
   editorKeyBinding,
   keyBindings,
@@ -12,7 +14,7 @@ import {
   TMUX_SETTINGS,
   tmuxConfArtifact,
 } from '../src/generate/tmux-conf.ts';
-import { leakedInEnvironment, pathWithNode, scrubbedEnv } from '../src/tmux.ts';
+import { isSessionLeak, leakedInEnvironment, pathWithNode, scrubbedEnv } from '../src/tmux.ts';
 import {
   claudeTmuxConfArtifact,
   KEY_BINDINGS as CLAUDE_KEY_BINDINGS,
@@ -403,6 +405,25 @@ test('a tmux server never inherits the session that started it', () => {
     leakedInEnvironment('NO_COLOR=1\nPATH=/usr/bin\n-CLAUDECODE\nHANGAR_MODE=ops\nCLAUDE_CODE_X=1'),
     ['NO_COLOR', 'HANGAR_MODE', 'CLAUDE_CODE_X'],
   );
+});
+
+test('what Claude Code needs in its environment survives the leak scrub, and only that', () => {
+  // The prefix rule still holds for every other name; the exemption is by exact name.
+  assert.ok(CLAUDE_CODE_ENVIRONMENT.length > 0);
+  for (const wanted of CLAUDE_CODE_ENVIRONMENT) {
+    assert.equal(isSessionLeak(wanted.name), false, wanted.name);
+    assert.ok(wanted.name.startsWith('CLAUDE_CODE_'), 'the exemption must be exercised');
+    assert.ok(
+      claudeCodeSettingLines().some((line) =>
+        line.startsWith(`set-environment -g ${wanted.name} ${wanted.value} `),
+      ),
+      `the conf block sets ${wanted.name}`,
+    );
+  }
+  assert.equal(isSessionLeak('CLAUDE_CODE_TMPDIR'), true);
+  assert.equal(isSessionLeak('CLAUDE_CODE_TMUX_TRUECOLORX'), true);
+  const shown = CLAUDE_CODE_ENVIRONMENT.map((e) => `${e.name}=${e.value}`).join('\n');
+  assert.deepEqual(leakedInEnvironment(`${shown}\nCLAUDE_CODE_X=1`), ['CLAUDE_CODE_X']);
 });
 
 test('the tmp-folder key takes no key tmux binds, and opens nothing on a view pane', () => {

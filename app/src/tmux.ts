@@ -4,7 +4,12 @@ import { dirname, join } from 'node:path';
 import { cloneShortName, paletteOf, type Clone } from './fleet.ts';
 import { run } from './exec.ts';
 import type { Hangar } from './hangar.ts';
-import { barOptions, keyBindings, paneBorderFormat } from './generate/tmux-conf.ts';
+import {
+  barOptions,
+  CLAUDE_CODE_ENVIRONMENT,
+  keyBindings,
+  paneBorderFormat,
+} from './generate/tmux-conf.ts';
 import { type CloneColour, colourByHex } from './palette.ts';
 import { devPath, orUndefined } from './terminal/types.ts';
 
@@ -404,6 +409,11 @@ export type TmuxServer = {
    */
   readonly nodeOnPath: () => boolean | undefined;
   /**
+   * One variable of the server's global environment, `undefined` when it is unset or the server
+   * cannot be asked. For `doctor`, against `CLAUDE_CODE_ENVIRONMENT`.
+   */
+  readonly environment: (name: string) => string | undefined;
+  /**
    * Re-execute `clone-tmux.conf` on a server that is already running.
    *
    * This is the half `restyle` cannot reach. `-f` is read once at start-up, so a live server is
@@ -477,13 +487,17 @@ export const pathWithNode = (base: string | undefined, nodeBin: string): string 
  * and every Claude Code session in that clone then rendered with no colour at all and believed it
  * was nested. A `NO_COLOR` the developer exports from their own profile is not lost: the pane's
  * login shell sets it again.
+ *
+ * `CLAUDE_CODE_ENVIRONMENT`'s names are the exception to the prefix, by exact name: the server is
+ * meant to carry them, and one that arrives from a calling session carries the value wanted.
  */
 export const isSessionLeak = (name: string): boolean =>
-  name === 'NO_COLOR' ||
-  name === 'CLAUDECODE' ||
-  name === 'CLAUDE_PROJECT_DIR' ||
-  name === 'HANGAR_MODE' ||
-  name.startsWith('CLAUDE_CODE_');
+  !CLAUDE_CODE_ENVIRONMENT.some((wanted) => wanted.name === name) &&
+  (name === 'NO_COLOR' ||
+    name === 'CLAUDECODE' ||
+    name === 'CLAUDE_PROJECT_DIR' ||
+    name === 'HANGAR_MODE' ||
+    name.startsWith('CLAUDE_CODE_'));
 
 /** `env` without what {@link isSessionLeak} names -- what a tmux child is spawned with. */
 export const scrubbedEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv =>
@@ -528,6 +542,17 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
     const shown = tmux(['show-environment', '-g']);
     if (!shown.ok) return;
     for (const name of leakedInEnvironment(shown.out)) tmux(['set-environment', '-g', '-u', name]);
+  };
+
+  /**
+   * Write `CLAUDE_CODE_ENVIRONMENT` onto a server that never read this conf -- one started before
+   * the line existed, or one the emulator's `new-session -A` made. A pane started afterwards gets
+   * it; a Claude Code already running keeps the colour level it started with until restarted.
+   */
+  const ensureClaudeEnvironment = (): void => {
+    for (const wanted of CLAUDE_CODE_ENVIRONMENT) {
+      tmux(['set-environment', '-g', wanted.name, wanted.value]);
+    }
   };
 
   const ensureNodeOnPath = (): void => {
@@ -701,6 +726,7 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
       // way now, which is the only moment this can be written.
       ensureNodeOnPath();
       dropLeakedEnvironment();
+      ensureClaudeEnvironment();
       const [, window] = created.out.split(SEP);
       if (window === undefined || window === '') return false;
       paintSession(clone);
@@ -766,6 +792,13 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
       return res.ok ? res.out : undefined;
     },
     ensureNodeOnPath,
+    environment: (name) => {
+      const shown = tmux(['show-environment', '-g', name]);
+      // `-NAME` is a removal and an unknown name fails outright: neither is a value.
+      return shown.ok && shown.out.startsWith(`${name}=`)
+        ? shown.out.slice(name.length + 1)
+        : undefined;
+    },
     nodeOnPath: () => {
       const value = serverPath();
       if (value === undefined) return undefined;
@@ -776,6 +809,7 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
       // Before the bar is written, because the bar is what starts things: a `#()` job spawned by
       // the very next redraw needs this already in place.
       ensureNodeOnPath();
+      ensureClaudeEnvironment();
       /*
        * The globals first, from the same table `clone-tmux.conf` is rendered from, and they are
        * worth writing even with no clone session on the socket: a window the developer made by
