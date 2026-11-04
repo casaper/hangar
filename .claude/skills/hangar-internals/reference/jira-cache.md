@@ -240,6 +240,24 @@ Four things follow:
   their own store: a 4 MB recording fetched under two relation paths is one file twice.
   **Install it (`brew install jdupes`) or the pass is skipped with a warning** — the rest of the
   merge is unaffected.
+
+  **Two `jdupes -L` runs over one store break each other, so a real `tmp merge` holds
+  `.hangar/tmp-merge.lock` for its whole length** (`tmp-merge-lock.ts`). jdupes links a duplicate
+  by renaming it aside, linking, and removing the aside copy, and before that it checks
+  `access(W_OK)` without reading errno, so a path the OTHER run has just renamed away is reported
+  as `link target is a read-only file`. Every clone's `SessionEnd` runs a merge, and `reload`,
+  `down` or closing several clones starts them together. That is how eight writable `0644`
+  screenshots were refused, and how the store was left with sets split into two linked inode
+  groups that were never linked to each other. The rest of the merge is no safer run twice, so
+  the lock covers all of it, not only jdupes.
+  - **The holder's pid is the lock**, and a dead pid is stale. A merge's length grows with the
+    store, so an age rule would either break a live lock or wait on a dead one. The one exception
+    is a file with no pid yet, which is taken as mid-creation for five seconds.
+  - **A held lock is waited for, never skipped**: the second run carries its own clone's new
+    entries, and the run in progress may have read that clone before they existed. The wait is
+    90s, inside the hook's 120s; past that it warns and merges nothing, which the next session
+    end repairs.
+  - **A dry run neither takes the lock nor waits for it.**
 - **Everything else about a ticket that differs under one canonical name** — `plan_<KEY>.md`,
   `pr_description_<KEY>.md` — still collapses onto the **freshest** copy, where freshest-wins is
   the whole of the right answer. Freshness is `fetched_at:` / `fetched:` frontmatter (Jira's

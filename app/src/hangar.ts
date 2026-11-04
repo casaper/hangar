@@ -132,6 +132,8 @@ export type HangarPaths = {
   readonly vscodeBookmarksState: string;
   /** Held for the length of one bookmarks sync: `open`, `close` and `down` can all start one. */
   readonly vscodeBookmarksLock: string;
+  /** Held for the length of one real `tmp merge`; `tmp-merge-lock.ts` has why. */
+  readonly tmpMergeLock: string;
   /**
    * One statusline script for every clone; it derives the hue from its stdin payload.
    *
@@ -223,6 +225,7 @@ export const pathsFor = (
     portPinsFile: join(root, '.hangar', 'port-pins.json'),
     vscodeBookmarksState: join(root, '.hangar', 'vscode-bookmarks.json'),
     vscodeBookmarksLock: join(root, '.hangar', 'vscode-bookmarks.lock'),
+    tmpMergeLock: join(root, '.hangar', 'tmp-merge.lock'),
     statuslineScript: join(claudeDir, `${id}-clone-statusline.sh`),
     memory: join(claudeDir, `${id}-memory`),
   });

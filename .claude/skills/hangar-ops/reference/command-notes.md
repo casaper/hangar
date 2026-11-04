@@ -349,6 +349,10 @@ tool is the separate `<thing>_preview`.
 - **`-q, --quiet` on `plans collect` and `tmp merge` exists for the `SessionEnd` hooks.** They flush
   on opposite criteria — `plans collect` prints when something MOVED, `tmp merge` when something
   WARNED — so silence from either is the normal outcome, not a failure.
+- **Only one real `tmp merge` runs at a time, hangar-wide.** A second one waits for the first
+  (up to 90s, then warns and merges nothing), so a `reload` that ends every session at once
+  queues their hooks rather than racing them. `-n` never waits. A jdupes "read-only" error names
+  a path that vanished mid-run, not a permission problem: run `tmp merge` again.
 
 ## `scrub` reads the drafts, not the code
 

@@ -35,6 +35,8 @@ import {
 } from '../jira-records.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, type Clone } from '../fleet.ts';
+import { isAlive } from '../procs.ts';
+import { tryTakeLock } from '../tmp-merge-lock.ts';
 
 import { tildify } from '../user-paths.ts';
 import {
@@ -354,17 +356,68 @@ const linkStoreEntries = (
 export const tmpMerge = (hangar: Hangar, opts: TmpMergeOptions): void => {
   const dryRun = opts.dryRun === true;
   if (opts.quiet !== true) {
-    runMerge(hangar, dryRun);
+    serialised(hangar, dryRun, () => {
+      runMerge(hangar, dryRun);
+    });
     return;
   }
   captureOutput();
   try {
-    runMerge(hangar, dryRun);
+    serialised(hangar, dryRun, () => {
+      runMerge(hangar, dryRun);
+    });
   } catch (error) {
     releaseCapture(true);
     throw error;
   }
   releaseCapture(capturedProblems() > 0);
+};
+
+/** Inside the `SessionEnd` hook's 120s, with room left for the merge that follows the wait. */
+const LOCK_WAIT_MS = 90_000;
+const LOCK_POLL_MS = 500;
+
+const sleepMs = (ms: number): void => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+};
+
+/**
+ * Run `body` holding the hangar's merge lock -- `tmp-merge-lock.ts` has why two at once break.
+ *
+ * A held lock is WAITED for, never skipped: the run that comes second carries its own clone's
+ * new entries, and the run in progress may have read that clone before they existed. A dry run
+ * changes nothing, so it neither takes the lock nor waits for it.
+ */
+const serialised = (hangar: Hangar, dryRun: boolean, body: () => void): void => {
+  if (dryRun) {
+    body();
+    return;
+  }
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  let announced = false;
+  for (;;) {
+    const attempt = tryTakeLock(hangar.paths.tmpMergeLock, process.pid, isAlive);
+    if (attempt.taken) {
+      try {
+        body();
+      } finally {
+        attempt.release();
+      }
+      return;
+    }
+    if (Date.now() >= deadline) {
+      warn(`another tmp merge (pid ${attempt.holder || '?'}) still holds the store — not merged`);
+      note(
+        `Run \`hangar tmp merge\` again once it has finished; the lock is ${tildify(hangar.paths.tmpMergeLock)}.`,
+      );
+      return;
+    }
+    if (!announced) {
+      note(pc.dim(`waiting for another tmp merge (pid ${attempt.holder || '?'}) to finish`));
+      announced = true;
+    }
+    sleepMs(LOCK_POLL_MS);
+  }
 };
 
 const runMerge = (hangar: Hangar, dryRun: boolean): void => {
@@ -532,7 +585,16 @@ const dedupeStore = (hangar: Hangar, dryRun: boolean): void => {
       } else {
         const res = hardLinkDuplicates(hangar.paths.tmp);
         if (res.ok) ok(`hard-linked ${what}, freeing ${kb(hangar, bytes)}`);
-        else warn(`jdupes could not link them: ${res.error || 'unknown error'}`);
+        else {
+          warn(`jdupes could not link them: ${res.error || 'unknown error'}`);
+          if (res.error.includes('read-only')) {
+            note(
+              'jdupes calls any path it cannot write "read-only", a path that vanished mid-run ' +
+                'included -- so this is usually something else rewriting the store at the same ' +
+                'time. Run `hangar tmp merge` again to link what is left.',
+            );
+          }
+        }
       }
     }
   }
