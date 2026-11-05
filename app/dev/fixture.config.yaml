@@ -23,7 +23,7 @@ clones:
 
 forge:
   kind: bitbucketCloud
-  originUrl: git@bitbucket.org:example/warehouse_sql.git
+  originUrl: git@ssh.bitbucket.org:example/warehouse_sql.git
   # Set explicitly so no capture ever asks git or the network for it.
   defaultBranch: trunk
   tokenEnvKey: FIXTURE_FORGE_TOKEN

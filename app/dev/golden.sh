@@ -122,7 +122,7 @@ for preset in generic node-web sql-postgrest; do
   # `--id` is what makes this byte-stable: without it the id is derived from the directory
   # basename, which `mktemp -d` randomises, and the capture changed on every regeneration.
   NO_COLOR=1 "$bin" setup --yes --force -n --id goldensetup \
-    --origin 'git@bitbucket.org:acme/warehouse_sql.git' --preset "$preset" \
+    --origin 'git@ssh.bitbucket.org:acme/warehouse_sql.git' --preset "$preset" \
     --hangar "$setupdir" 2>&1 |
     sed -e "s|$setupdir|%SETUP%|g" | normalise > "$out/gated/commands/setup-dry-$preset.txt" || true
 done

@@ -125,7 +125,7 @@ forge:
   # kind: none
 
   # REQUIRED, and the one field with no sensible default: it is what `add-clone` clones from.
-  originUrl: git@bitbucket.org:acme/storefront_ui.git
+  originUrl: git@ssh.bitbucket.org:acme/storefront_ui.git
   # originUrl: https://github.com/acme/widgets.git
 
   # Web base for repo and PR links. The adapter derives it from `originUrl` when absent, so set

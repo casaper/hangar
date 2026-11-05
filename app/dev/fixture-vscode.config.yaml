@@ -37,7 +37,7 @@ clones:
 
 forge:
   kind: bitbucketCloud
-  originUrl: git@bitbucket.org:example/storefront_ui.git
+  originUrl: git@ssh.bitbucket.org:example/storefront_ui.git
   # Set explicitly rather than derived from originUrl, which is the branch the other fixture
   # leaves uncovered.
   webBaseUrl: https://bitbucket.example.invalid/example/storefront_ui

@@ -9,7 +9,7 @@ which hangar this is, and every value in it comes from `hangar.config.yaml`.
 | -------------------- | --- |
 | hangar root          | %HANGAR% |
 | hangar id            | wt |
-| repo                 | git@bitbucket.org:example/warehouse_sql.git |
+| repo                 | git@ssh.bitbucket.org:example/warehouse_sql.git |
 | default branch       | trunk |
 | clone directories    | `wt-<NN>`, at least 3 digits — e.g. `wt-001` |
 | app subdirectory     | _none — the repo builds at its root_ |

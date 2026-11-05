@@ -65,7 +65,7 @@ clones:
 
 forge:
   kind: bitbucketCloud
-  originUrl: git@bitbucket.org:acme/warehouse_sql.git
+  originUrl: git@ssh.bitbucket.org:acme/warehouse_sql.git
   # defaultBranch is left blank on purpose: the first command that needs it detects it from
   # git and writes the line here itself. Nothing guesses `master` -- undetectable aborts.
   # The variable in the secrets file holding an API token. Without it `sync` cannot ask which

@@ -9,7 +9,7 @@ which hangar this is, and every value in it comes from `hangar.config.yaml`.
 | -------------------- | --- |
 | hangar root          | %HANGAR% |
 | hangar id            | vsfix |
-| repo                 | git@bitbucket.org:example/storefront_ui.git |
+| repo                 | git@ssh.bitbucket.org:example/storefront_ui.git |
 | default branch       | release |
 | clone directories    | `checkout_<NN>`, at least 4 digits — e.g. `checkout_0001` |
 | app subdirectory     | `web/` |
