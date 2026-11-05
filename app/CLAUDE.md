@@ -275,8 +275,8 @@ shim, `release` being `hangar dev release`, and also the scope semantic-release 
 **not** enforced — a `scope-enum` rule goes red the first time somebody adds a subsystem, and this
 repo already knows what a check that is red in normal operation is worth.
 
-**commitlint differs from `config-conventional` twice**: `header-max-length` is 120 and
-`subject-case` is off, because the defaults reject this repo's own Sentence-case history.
+**commitlint (`app/.commitlintrc.json`) differs from `config-conventional` twice**:
+`header-max-length` is 120 and `subject-case` is off, because the defaults reject this repo's own Sentence-case history.
 `body-max-line-length` stays at the default 100 and `footer-leading-blank` is left warning.
 A body line that starts with `word:` is parsed as a footer and trips that warning — rewrap so no
 line begins with a lone word and a colon.

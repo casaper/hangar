@@ -71,12 +71,9 @@ here is repeated there: the identity, the `SYNC PAUSE` protocol from the receivi
 `tmp/` is shared out from under it, and that `hangar sync <its own index>` would stash the tree it
 is working in.
 
-**One builder renders it, and `doctor` holds every clone to it.** `add-clone`, `doctor --fix` and
-`colours change` all write `claudeLocalMdContent(clone)`, and `doctor` compares each file against
-that same render, so the four cannot drift apart. The file is excluded via the clone's
-`.git/info/exclude`, which lives inside `.git/`: **a re-clone loses both the identity file and its
-exclusion** — recreate the pair together, or it gets committed into every branch. Why the builder
-takes the clone and nothing else is in the `hangar-internals` skill.
+**It is generated — `doctor --fix` rewrites it — and excluded via the clone's
+`.git/info/exclude`**, which lives inside `.git/`: **a re-clone loses both the identity file and
+its exclusion** — recreate the pair together, or it gets committed into every branch.
 
 The clones are **interchangeable and equal in rank** — none is a primary. Each has whatever branch
 it has checked out at the moment; never infer a clone's branch, task or freshness from its number
