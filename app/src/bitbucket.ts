@@ -26,8 +26,15 @@ import type { Hangar } from './hangar.ts';
  */
 export type RepoRef = { readonly workspace: string; readonly repo: string };
 
-const parseRemote = (url: string): RepoRef | undefined => {
-  const ssh = /^git@bitbucket\.org:([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
+/**
+ * Takes `git@[ssh.]bitbucket.org:ws/repo[.git]`, `ssh://git@[ssh.]bitbucket.org[:port]/ws/repo`
+ * and `https://…bitbucket.org/ws/repo`. Bitbucket serves SSH on both hosts, so a clone on either
+ * names the same repository; the clone-side agent scripts' parser takes the same SSH forms.
+ */
+export const parseRemote = (url: string): RepoRef | undefined => {
+  const ssh =
+    /^git@(?:ssh\.)?bitbucket\.org:([^/]+)\/(.+?)(?:\.git)?$/.exec(url) ??
+    /^ssh:\/\/git@(?:ssh\.)?bitbucket\.org(?::\d+)?\/([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
   if (ssh?.[1] && ssh[2]) return { workspace: ssh[1], repo: ssh[2] };
   const https = /^https:\/\/[^@]*bitbucket\.org\/([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
   if (https?.[1] && https[2]) return { workspace: https[1], repo: https[2] };
