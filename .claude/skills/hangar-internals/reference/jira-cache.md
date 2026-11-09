@@ -117,6 +117,26 @@ symlink"). A clone's link to a store entry the predicate refuses is removed by
 the clone pass, since pass 2b never makes it and nothing else would. `test/tmp-entries.test.ts`
 holds the two sides to the same answer.
 
+**The store carries a `.git` FILE that points nowhere, and git stops there.** The store is the
+hangar's own `tmp/`, inside the hangar's own repository, and git resolves a working directory
+physically: `git rev-parse --show-toplevel` run from a clone's `tmp/<name>` link answered the
+HANGAR root. GitLens asks exactly that for every open file and adopts what it gets, so a clone's
+Search & Compare ran in the hangar root against a `master` it does not have, and reported "0
+commits, no files changed" on a branch five commits ahead — its **GitLens (Git)** output channel
+names each call's directory, which is where that showed. `storeGitFencePath` /
+`STORE_GIT_FENCE_CONTENT` in `hangar-files.ts` is the fix: `gitdir: /dev/null/…` cannot resolve
+(`/dev/null` is a file), so discovery ends in a `fatal:` at the store instead of walking up, and
+GitLens treats that as "no repository". The hangar repo is untouched — `/tmp/*` ignores the file,
+`tmp/.gitkeep` stays tracked — and a dotfile is never shared, so no clone gets a fenced `tmp/`.
+`tmp merge` writes it at every session end, `doctor` reports it missing and `--fix` writes it,
+and `test/store-git-fence.test.ts` runs real git through a link both ways.
+
+Two editor-side fixes were tried first and are wrong. `git.ignoredRepositories` is not read by
+GitLens at all (its only `ignoredRepositories` key is Launchpad's). `git.autoRepositoryDetection:
+subFolders` made it worse: GitLens then adds the found repo CLOSED rather than not at all, and its
+no-editor fallback (`highlander`) checks that one repo is open but returns the FIRST in its path
+trie — where the hangar root, a parent of every clone, always sorts first.
+
 **`additionalDirectories` is what keeps the links from prompting.** Claude Code checks a write
 against the resolved path, so creating `tmp/<KEY>/notes.md` through the link is a write outside
 the project, asked about even in `acceptEdits`. Measured with `claude -p --permission-mode

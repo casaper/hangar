@@ -35,6 +35,7 @@ import {
 } from '../jira-records.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, type Clone } from '../fleet.ts';
+import { STORE_GIT_FENCE_CONTENT, storeGitFencePath } from '../hangar-files.ts';
 import { isAlive } from '../procs.ts';
 import { tryTakeLock } from '../tmp-merge-lock.ts';
 
@@ -429,6 +430,19 @@ const runMerge = (hangar: Hangar, dryRun: boolean): void => {
   );
   note('PID files stay in the clone that wrote them — they are never moved, linked or read.');
   if (!dryRun) mkdirSync(hangar.paths.tmp, { recursive: true });
+  // Keeps git from naming the hangar repo from inside a clone's `tmp/<name>` link
+  // (`storeGitFencePath`). Every `SessionEnd` runs this, so a store is never long without it, and
+  // twins racing here write the same bytes.
+  const fence = storeGitFencePath(hangar.paths.tmp);
+  const fenceNow = existsSync(fence) ? readFileSync(fence, 'utf8') : undefined;
+  if (fenceNow !== STORE_GIT_FENCE_CONTENT) {
+    note(
+      pc.dim(
+        `${tildify(fence)}: ${fenceNow === undefined ? 'writing' : 'rewriting'} the git fence`,
+      ),
+    );
+    if (!dryRun) writeFileSync(fence, STORE_GIT_FENCE_CONTENT);
+  }
   // The clone pass removes its own; the store's is nobody's, so nothing else ever would.
   const storeJunk = join(hangar.paths.tmp, '.DS_Store');
   if (existsSync(storeJunk)) {

@@ -242,7 +242,10 @@ winner as `<name>.from-<clone>`, so run it again rather than forcing it.
 clone to start a server block the others and let a kill reach into a sibling. **`tmp merge` never
 moves, links or even reads a PID file**, so a running dev server is no obstacle to sharing.
 Dotfiles and Claude Code's own temp roots (`claude-<uid>/`, `cc-socks/`) are never shared either:
-Claude Code refuses to start where one of those has become a symlink.
+Claude Code refuses to start where one of those has become a symlink. **git run inside a
+`tmp/<name>` link fails with "gitfile does not point to a valid repository" by design** — the
+store carries a `.git` file pointing nowhere, so git does not find the hangar's repo behind the
+link. Run git from your clone's root.
 
 **Writing through those links does not prompt.** Claude Code checks a write against the path the
 link resolves to, which is outside the clone, so each clone's generated

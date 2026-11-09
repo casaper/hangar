@@ -239,3 +239,22 @@ the only answer, and \`git -C ${example} branch --show-current\` the only answer
 
 ${ports}${extras.length === 0 ? '' : `\n${extras.join('\n')}`}`;
 };
+
+/**
+ * The shared store's `.git` FILE, which makes git refuse to find a repository from inside it.
+ *
+ * The store lives in the hangar's own `tmp/`, inside the hangar's own git repository, and every
+ * clone reaches it through `tmp/<name>` symlinks. Git resolves the working directory physically,
+ * so `git rev-parse --show-toplevel` run from inside one of those links answered the HANGAR root,
+ * and anything that asks git which repository an open file belongs to adopted it: GitLens ran a
+ * clone's Search & Compare in the hangar root, against a `master` the hangar does not have, and
+ * reported "0 commits, no files changed" on a branch five commits ahead.
+ *
+ * A gitfile that points nowhere stops discovery right here, with a `fatal:` -- it does not walk
+ * on up to the hangar. `/dev/null` is a file, so nothing can ever exist beneath it, and the line
+ * names no machine. The hangar repository itself is unaffected: `/tmp/*` already ignores this
+ * file, `tmp/.gitkeep` stays tracked, and `tmp merge` never shares a dot-named entry.
+ */
+export const storeGitFencePath = (tmpDir: string): string => join(tmpDir, '.git');
+
+export const STORE_GIT_FENCE_CONTENT = 'gitdir: /dev/null/hangar-shared-tmp-is-not-a-repository\n';

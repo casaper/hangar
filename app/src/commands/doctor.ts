@@ -116,6 +116,8 @@ import {
   hangarClaudeLocalMdPath,
   hangarSettingsContent,
   hangarSettingsPath,
+  STORE_GIT_FENCE_CONTENT,
+  storeGitFencePath,
 } from '../hangar-files.ts';
 import { inspectEnvironment, installHint } from '../environment.ts';
 import { installChecks } from '../install.ts';
@@ -1658,6 +1660,22 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
           : `${tildify(settingsFile)} differs from what the generator produces`,
       );
       note('`hangar doctor --fix` writes it. Claude Code fails silently on all three values.');
+    }
+  }
+
+  // The store's git fence (`storeGitFencePath`). `tmp merge` writes it at every session end, so a
+  // missing one means no session has ended since the store was made, or someone removed it.
+  const fenceFile = storeGitFencePath(hangar.paths.tmp);
+  const haveFence = existsSync(fenceFile) ? readFileSync(fenceFile, 'utf8') : undefined;
+  if (existsSync(hangar.paths.tmp) && haveFence !== STORE_GIT_FENCE_CONTENT) {
+    if (opts.fix === true) {
+      writeFile(fenceFile, STORE_GIT_FENCE_CONTENT);
+      ok(`wrote ${tildify(fenceFile)}`);
+    } else {
+      problem(
+        `${tildify(fenceFile)} is ${haveFence === undefined ? 'missing' : 'not the git fence'} — git run inside a clone's tmp/<name> link finds the hangar repo`,
+      );
+      note('`hangar doctor --fix` or the next `hangar tmp merge` writes it.');
     }
   }
 

@@ -36,6 +36,8 @@ import {
   hangarClaudeLocalMdPath,
   hangarSettingsContent,
   hangarSettingsPath,
+  STORE_GIT_FENCE_CONTENT,
+  storeGitFencePath,
 } from '../hangar-files.ts';
 import { installPlanLines } from '../install.ts';
 import { cloneAt, discoverClones, type Clone } from '../fleet.ts';
@@ -301,6 +303,7 @@ export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
       hangarSettingsContent(hangar.root, hangar.paths.memory),
     ],
     ['CLAUDE.local.md', hangarClaudeLocalMdPath(hangar.root), hangarClaudeLocalMdContent(hangar)],
+    ['tmp.git', storeGitFencePath(hangar.paths.tmp), STORE_GIT_FENCE_CONTENT],
   ] as const) {
     write(hangar, out, join('hangar-root', name), content);
     manifest.push(`hangar-root ${name.padEnd(19)} -> ${path}`);
