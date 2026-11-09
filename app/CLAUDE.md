@@ -128,6 +128,10 @@ edit script that quotes it as an anchor is refused. Put such a script in a scrat
 **Search a clone with `git -C <clone> grep`, never `grep -r`**: a clone carries `node_modules`
 and a multi-GB `tmp/`, and `grep -r` over one runs past the Bash timeout.
 
+**`hangar scrub` scans `tmp/` only; hangar text in a clone's tracked agent files is one grep away**:
+`git -C <clone> grep -n -i -E 'hangar|sibling clone' -- CLAUDE.md AGENTS.md '.claude/**'`.
+Report what it finds; fixing it is clone work, on a branch.
+
 **Every `SessionEnd` hook runs once per clone, and `reload`/`down` start them all at the same
 moment** — anything a hook runs must survive a twin over the same shared files. The locks that
 exist: `tmp-merge-lock.ts` (pid, waits; for work whose length grows), `withLock` in
@@ -204,6 +208,10 @@ The two nets:
   `makeClone` reads `.hangar/colour-assignments.json` under the hangar root and caches it per
   root, so a test aimed at this hangar would read one developer's own `colours change` history.
   `namesNoMachinePath` in `test/fixture.ts` is the standing guard.
+
+  **Some `builders.test.ts` assertions match across the builder's hard wraps**
+  (`/personal\ntool\./`): re-wrapping identity-file prose without changing a word fails them.
+  Fix the pattern, not the wrap.
 
 ## Nothing in here names one organisation
 
