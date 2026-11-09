@@ -54,8 +54,9 @@ hangar-commit-gate status 2>/dev/null         # a locked gate means no commits, 
   whether that was `none` or unknown.
 - **Which clone this is**, from `CLAUDE.local.md`, if there is one. That gives the index the
   `hangar` commands below take.
-- **The pull request.** Run `hangar list` and read this clone's row: the number, draft, build and
-  review, with reviewers and approvals. If the row is stale, run `hangar pr refresh <index>` first.
+- **The pull request.** Run `hangar list` and read this clone's row: the number, build and review,
+  with reviewers and approvals. If the row is stale, run `hangar pr refresh <index>` first.
+  `hangar list` does not show whether the PR is a draft; report it as unknown unless the forge says.
   Outside a hangar, use the repo's forge CLI if it has one, or record "PR state unknown".
 
 ## Step 2 — the objectives
