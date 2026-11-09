@@ -513,11 +513,6 @@ export const workspaceSettings = (clone: Clone): Record<string, unknown> => {
     // them. `editor/vscode-bookmarks.ts` is what keeps the file in step. Inert without the
     // extension installed.
     'bookmarks.saveBookmarksInProject': true,
-    // Keeps the hangar root out of GitLens. Every `tmp/<name>` entry is a symlink into the hangar,
-    // so `git rev-parse --show-toplevel` run from one answers the HANGAR repo, and GitLens adds it
-    // -- opened when this is `true`, closed under `subFolders`. Two opened repos stop GitLens
-    // defaulting to the clone, and a compare ran in the hangar root against a `master` it lacks.
-    'git.autoRepositoryDetection': 'subFolders',
   };
 };
 
