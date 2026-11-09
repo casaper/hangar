@@ -105,6 +105,17 @@ test('the identity file keeps the fleet out of the repo, as scope and not as sec
   assert.match(text, /`tmp\/`/);
   assert.match(text, /reproduction case/);
 
+  /*
+   * The repo's own agent instructions, named surface by surface, and why. Clone agents improving
+   * the repo's skills wrote "a sibling clone's ref" and a hangar hook's name into them: text every
+   * contributor's agent then follows in a checkout with no fleet and no hangar at all.
+   */
+  for (const surface of ['`CLAUDE.md`', '`AGENTS.md`', 'skills, agents, commands']) {
+    assert.ok(text.includes(surface), `the rule does not name ${surface}`);
+  }
+  assert.match(text, /personal\ntool\. No other contributor has it/);
+  assert.match(text, /belongs in the hangar, not the\nrepo/);
+
   assert.match(text, /scope rather than secrecy/);
   assert.match(text, /if the user asks you how you work, tell them/);
 

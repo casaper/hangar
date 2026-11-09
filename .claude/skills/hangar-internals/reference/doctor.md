@@ -109,6 +109,19 @@ tracker as written. Untracked is the opposite of safe here — `tmp/` is shared 
 design, and issue text drafted in it goes out as it stands, so the files furthest from git are
 the ones published hardest.
 
+**The repo's agent instructions get a paragraph of their own, with the reason spelled out.** The
+managed repo's tracked skills carry hangar knowledge that clone agents wrote while improving them:
+a test-guide skill reasoning about "a sibling clone's ref", and a cache script whose comment says
+a `hangar` hook shells out to it. A line covering "this clone's tracked `.claude/`" did not stop
+that, because to an agent improving a skill, the fleet it is standing in looks like the setting
+the skill runs in. So the paragraph names each surface (`CLAUDE.md`, `AGENTS.md`, skills, agents,
+commands, hooks, settings, and the scripts inside a skill) and gives the fact that settles it:
+hangar is one developer's personal tool, and every other contributor's agent runs those skills
+in a plain checkout with none of it. It also gives the two ways out: an interface hangar relies
+on is described as one "external tooling" depends on, and fleet-only knowledge goes to the user
+as hangar material. The leaks already on the repo's default branch are clone work, fixed by a
+clone agent on a branch.
+
 The reproduction case is the sharper half of that, and the rule names it: text that merely
 mentions a clone is noise, whereas STEPS written around this clone cannot be followed at all in
 the plain checkout the reader has. So the instruction is not only "do not mention it" but "write
