@@ -213,6 +213,10 @@ The two nets:
   (`/personal\ntool\./`): re-wrapping identity-file prose without changing a word fails them.
   Fix the pattern, not the wrap.
 
+  **A test that spawns real git drops every inherited `GIT_*` variable from its env**, never sets
+  one to `''`. Run from a git hook, `GIT_DIR` would answer for every directory, and an empty one
+  makes `git init` fail. `test/store-git-fence.test.ts` is the pattern.
+
 ## Nothing in here names one organisation
 
 Hangar manages any repo, but it was built in one, and a tool built inside a company tends to name

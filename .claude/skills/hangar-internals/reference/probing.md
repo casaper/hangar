@@ -37,3 +37,8 @@ of `git diff -U3 -- <file>` in a scratchpad script and pipe them to `git apply -
 (`s.find(…)`), because `grep -oE` refuses a `{0,300}` context. Its workspace-scoped state is SQLite
 at `~/Library/Application Support/Code/User/workspaceStorage/<hash>/state.vscdb`
 (`workspace.json` beside it names the workspace); open it with `sqlite3 'file:…?mode=ro'`.
+**Read its runtime log before guessing**:
+`~/Library/Application Support/Code/logs/<session>/window<N>/exthost/<publisher.name>/*.log`
+says which repositories it opened (GitLens: `Repository found in`) and the folder every git call
+ran in. Read the newest session's log, and compare its timestamps with the change and the reload.
+GitLens also restores saved Search & Compare entries with the folder each was created in.
