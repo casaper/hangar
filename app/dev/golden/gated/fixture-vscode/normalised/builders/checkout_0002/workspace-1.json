@@ -12,7 +12,8 @@
       "activityBar.inactiveForeground": "#ffffff",
       "activityBar.activeBorder": "#ffffff"
     },
-    "bookmarks.saveBookmarksInProject": true
+    "bookmarks.saveBookmarksInProject": true,
+    "git.autoRepositoryDetection": "subFolders"
   },
   "folders": [
     {

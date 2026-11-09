@@ -92,6 +92,24 @@ driver header says so, and `hangar doctor` prints a row per configured editor wi
 actually be launched — a `code` command never installed into PATH and a Toolbox that generated no
 shell scripts both mean `hangar open` silently opens no editor at all.
 
+## `git.autoRepositoryDetection: subFolders` keeps the hangar root out of GitLens
+
+Every `tmp/<name>` entry is a symlink into the hangar's own `tmp/`, so `git rev-parse
+--show-toplevel` run from inside one answers the **hangar root**, not the clone. GitLens (18.2.0,
+read from its bundle) runs exactly that for an open file in `getOrAddRepository`, and adds the
+repository it finds as **opened** when `git.autoRepositoryDetection` is `true` or `openEditors` —
+without it ever appearing in VS Code's Source Control view. With two opened repositories
+`getBestRepository` no longer falls back to the only one, and a Search & Compare of the working
+tree against `master` ran in the hangar root, where `master` does not exist: every git call
+failed, and GitLens showed "0 commits, no files changed". Its **GitLens (Git)** output channel
+names the directory of each call, and is where that showed.
+
+`subFolders` makes GitLens add such a repository closed, and still detects the clone, because
+the workspace folder is itself scanned. GitLens does not read `git.ignoredRepositories` (its
+only `ignoredRepositories` key is Launchpad's), and `gitlens.advanced.resolveSymlinks` defaults
+off and is not the path this takes. A file opened by its REAL path under the hangar root still
+resolves there; no setting changes that.
+
 ## The Bookmarks extension's file is a three-way merge
 
 `.vscode/bookmarks.json` is the one VS Code file that is neither copied nor an `EditorArtifact`.

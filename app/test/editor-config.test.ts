@@ -138,6 +138,17 @@ test('every generated workspace file keeps bookmarks in the project, and a sync 
   assert.ok(arrived.includes(setting));
 });
 
+/*
+ * A `tmp/` symlink makes git name the hangar root as the repo, and GitLens opens what it finds
+ * under the default `true` -- after which a compare can run in the hangar instead of the clone.
+ */
+test('every generated workspace file keeps repos found through open editors closed', () => {
+  const hangar = syntheticHangar({ configText: fixtureVscodeConfigText() });
+  assert.ok(
+    workspaceContent(cloneAt(hangar, 1)).includes('"git.autoRepositoryDetection": "subFolders"'),
+  );
+});
+
 test('round-tripping a clone through itself changes nothing', () => {
   const hangar = syntheticHangar({ configText: fixtureVscodeConfigText() });
   const clone = cloneAt(hangar, 2);
