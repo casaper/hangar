@@ -128,6 +128,20 @@ test('nothing else in the per-ticket cache is a record', () => {
     ['jira-tickets', 'ABC-1.from-clone_02.md'],
     // The store record itself is never a copy to be re-pointed -- it is read separately.
     ['jira-tickets', 'ABC-1.md'],
+    // What the repo's newer skills leave beside the records: a per-PR backlog, a fixer's prompt,
+    // the two testing guides, and drafts of tickets that have no key yet.
+    ['ABC-1', 'jira-tasks.md'],
+    ['ABC-1', 'review_fix_prompt_ABC-1.md'],
+    ['ABC-1', 'functional_testing_guide.md'],
+    ['ABC-1', 'technical_testing_guide.md'],
+    ['2026-11-10_-_close_the_tab', 'close_the_tab_draft.md'],
+    // `ticket_comments/` starts with `ticket_`, the trap the repo's own collector had to
+    // special-case. A file inside it is a comment draft, even one whose name carries a key, and
+    // `ticket.md` there is not a record because the directory is not named for a ticket.
+    ['ticket_comments', '2026-11-10_scope.md'],
+    ['ticket_comments', '2026-11-10_ABC-2_scope.md'],
+    ['ticket_comments', 'ticket.md'],
+    ['ABC-1', 'ticket_comments'],
   ];
   for (const [dir, name] of notRecords) {
     assert.equal(ticketNameOf(dir, name), undefined, `${dir}/${name} classified as a record`);

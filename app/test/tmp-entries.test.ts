@@ -43,6 +43,8 @@ test('ordinary cache and scratch stay shared, near-misses of the private names i
   const names = [
     'ABC-1349',
     'jira-tickets',
+    // The repo's drafts of tickets not filed yet: one directory per summary, shared like the rest.
+    'new_tickets',
     'author-aliases.md',
     'run1.txt',
     'claude-notes',
