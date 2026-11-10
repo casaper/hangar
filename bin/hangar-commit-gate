@@ -142,9 +142,16 @@ const unlockable = (root, branch) => {
  */
 const KEY_IN_TEXT_RE = /(?<![A-Za-z0-9])[A-Z][A-Z0-9]+-\d+(?![A-Za-z0-9])/;
 
-/** The ticket as a whole token of the branch name: `ABC-12` is not in `ABC-123_x`. */
+/**
+ * The ticket as a whole token of the branch name: `ABC-12` is not in `ABC-123_x`.
+ *
+ * In either case, `feature/abc-12_x` included: the CLI reads that branch as ABC-12 under a
+ * declared prefix, and so does the managed repo's own resolver, so a gate that ignored it would
+ * stay armed on the very branch every other reader calls the ticket's. Safe without the prefix
+ * list the CLI needs, because the armed ticket is one specific key rather than any key-shape.
+ */
 const namesTicket = (branch, ticket) =>
-  new RegExp(`(?:^|[^A-Za-z0-9])${ticket}(?![0-9])`).test(branch);
+  new RegExp(`(?:^|[^A-Za-z0-9])${ticket}(?![0-9])`, 'i').test(branch);
 
 /**
  * Turn an armed gate into the lock, once HEAD is on a lockable branch naming its ticket. Returns
