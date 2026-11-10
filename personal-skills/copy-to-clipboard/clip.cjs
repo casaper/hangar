@@ -10,6 +10,29 @@ const os = require('os');
 const args = new Set(process.argv.slice(2));
 const PASTE = args.has('--paste');
 const KEEP_NEWLINE = args.has('--keep-newline');
+const KEEP_FRONTMATTER = args.has('--keep-frontmatter');
+
+/**
+ * `text` without a leading `---` ... `---` block and without that block's closing line break only:
+ * blank lines the body opens with are its own. A lone `---` rule with no closing line, or a block
+ * not on line 1, is not frontmatter and stays. Same pattern as the managed repo's own clip script,
+ * so a file written for agents pastes into a tracker or a pull request as its body alone.
+ */
+const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
+const withoutFrontmatter = (text) => text.replace(FRONTMATTER, '');
+
+/** What reaches the clipboard, given stdin and the two flags. Pure, so it can be tested. */
+const clipboardText = (input, keepFrontmatter, keepNewline) => {
+  let content = keepFrontmatter ? input : withoutFrontmatter(input);
+  // A heredoc always ends in a newline, and a pasted trailing newline sends a chat message early.
+  if (!keepNewline) content = content.replace(/\r?\n$/, '');
+  return content;
+};
+
+if (require.main !== module) {
+  module.exports = { withoutFrontmatter, clipboardText };
+  return;
+}
 
 const has = (bin) => spawnSync('which', [bin], { stdio: 'ignore' }).status === 0;
 
@@ -48,8 +71,16 @@ function fail(message) {
   process.exit(1);
 }
 
+// Windows' clip reads UTF-8 as the console's code page and garbles umlauts and guillemets;
+// UTF-16LE after a byte-order mark is the encoding it takes as Unicode.
+const encodedFor = (name, text) =>
+  name === 'clip' || name === 'clip.exe'
+    ? Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, 'utf16le')])
+    : text;
+
 function run(cmd, input) {
-  const result = spawnSync(cmd[0], cmd.slice(1), { input, maxBuffer: 64 * 1024 * 1024 });
+  const stdin = input === undefined ? undefined : encodedFor(cmd[0], input);
+  const result = spawnSync(cmd[0], cmd.slice(1), { input: stdin, maxBuffer: 64 * 1024 * 1024 });
   if (result.error) fail(`${cmd[0]} could not start: ${result.error.message}`);
   if (result.status !== 0) fail(`${cmd[0]} failed: ${result.stderr?.toString().trim() ?? ''}`);
   return result.stdout.toString('utf8');
@@ -69,9 +100,7 @@ if (PASTE) {
 
 if (!copyCmd) fail(NO_TOOL);
 
-let content = readFileSync(0, 'utf8');
-// A heredoc always ends in a newline, and a pasted trailing newline sends a chat message early.
-if (!KEEP_NEWLINE) content = content.replace(/\r?\n$/, '');
+const content = clipboardText(readFileSync(0, 'utf8'), KEEP_FRONTMATTER, KEEP_NEWLINE);
 
 run(copyCmd, content);
 

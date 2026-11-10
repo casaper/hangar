@@ -36,6 +36,9 @@ clipboard that holds almost the right text is worse than an error, because nobod
 - The script drops the one trailing newline every heredoc adds, because a pasted trailing newline
   sends a chat message early. Add `--keep-newline` when the content is a file whose final newline
   matters.
+- The script drops a leading `---` … `---` frontmatter block, so a file written for agents pastes
+  into a tracker or a pull request as its body alone. A `---` rule anywhere else stays. Add
+  `--keep-frontmatter` when the block is part of what the user wants, a SKILL.md for instance.
 - The script reads the clipboard back and compares. `copied N chars` on stdout means it
   verified; on a non-zero exit, relay stderr — it names the missing utility or the mismatch.
 
