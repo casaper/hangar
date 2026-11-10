@@ -22,8 +22,10 @@ test('a stale registration is red and names the prune for that clone', () => {
       'prunable gitdir file points to non-existent location\n\n' +
       'worktree /t/live\nHEAD dddd\ndetached\n',
   );
-  assert.equal(extras[0]?.what, 'feature/ABC-1323_x');
-  assert.ok(extras[0]?.prunable?.includes('non-existent'));
+  const gone = extras[0];
+  assert.ok(gone !== undefined);
+  assert.equal(gone.what, 'feature/ABC-1323_x');
+  assert.ok(gone.prunable?.includes('non-existent'));
   const row = worktreeRow('/h/clone_01', extras);
   assert.equal(row?.ok, false);
   assert.ok(row.detail.includes('git -C /h/clone_01 worktree prune'));

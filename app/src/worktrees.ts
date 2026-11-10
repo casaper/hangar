@@ -61,7 +61,7 @@ export const worktreeRow = (
       detail:
         `stale worktree registration${stale.length === 1 ? '' : 's'}: ${paths} -- a review that ` +
         `did not clean up; \`git -C ${tildify(clonePath)} worktree prune\` drops ` +
-        `${stale.length === 1 ? 'it' : 'them'}`,
+        (stale.length === 1 ? 'it' : 'them'),
     };
   }
   const live = extras.map((w) => `${tildify(w.path)} (${w.what})`).join(', ');
