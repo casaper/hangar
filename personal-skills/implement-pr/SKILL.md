@@ -1,7 +1,8 @@
 ---
 name: implement-pr
 description: >
-  Implements the current branch's PR plan to completion, unattended. Works every open plan item,
+  Takes the current branch's pull request as far as an agent can, unattended, and never sits
+  idle while doable work remains. Works every open plan item,
   adds the issues it finds and is sure how to fix to the plan and fixes them too, runs
   pr-readiness at checkpoints and feeds what it finds back into the plan, and never stops on a
   question while other work remains — questions are recorded in the plan and asked together at
@@ -11,6 +12,11 @@ disable-model-invocation: true
 ---
 
 # /implement-pr — work the plan until only your decisions are left
+
+**The goal is to take the pull request as far as an agent can.** Going idle while there is still
+work this run could do is the failure this skill exists to prevent. A question, a long test run
+or a locked commit gate is a reason to switch to other work, never a reason to wait. The run is
+finished only when the next step needs the user, for everything that is left.
 
 The plan file is the state of this run. Keep it current after every item, so that a compacted
 or resumed session can carry on from the plan alone.
@@ -93,8 +99,14 @@ your recommended answer. Then move on.
 - anything the repo's rules say needs the user.
 
 **Never stop on a question.** A question gets recorded, and then you take the next open item
-that does not depend on it. While a long run is going (a test suite, a build, a subagent), work
-an independent item instead of waiting.
+that does not depend on it. While a long run is going (a test suite, a build, a subagent), start
+it in the background and work an independent item instead of waiting.
+
+**A blocked item is rarely blocked whole.** Do every part of it that does not depend on the
+answer. Then prepare the rest so that the user's answer, or their action, costs one step:
+- the code for the recommended answer, sketched in the plan;
+- the commit messages, written out;
+- the exact command for the user to run.
 
 ## 4. pr-readiness checkpoints
 
@@ -116,14 +128,29 @@ Take each ❌, ⚠️ or ❓ row and each missing objective it reports:
   `pr-readiness pass N`, and go back to the work loop.
 - **It fails the test:** add it under **Blocked on you**.
 
-**Stop the checkpoints** after the first pass that adds nothing resolvable, or after three
-passes, whichever comes first. If you stop at three while it still finds things, say so in the
-report.
+**Within this run, a finding that passes the test is fixed**, failing tests included. That
+overrides pr-readiness's "do not fix without asking": you were asked, by `/implement-pr`.
+
+**Stop the checkpoints** after the first pass that adds nothing new you can fix. A finding
+already recorded under **Blocked on you** does not count as new. There is no fixed number of
+passes, but a pass that repeats the previous pass's findings is the last one.
 
 ## 5. The end
 
 The run ends only when every open item is under **Blocked on you**, or there are no open items
-at all. Then:
+at all. Before you treat it as over, do the **idle check**. Each line that fails is work, so do
+it, and come back here afterwards:
+
+- every check in the plan's Verification section, and the repo's typecheck, lint and format,
+  ran after the last edit to the files it covers;
+- the repo's documentation and comment rules are met for every changed path (use its skills for
+  that, such as a comment sweep);
+- the PR description has been regenerated locally if the repo has a skill for it. Uploading it
+  stays the user's;
+- every **Blocked on you** item has had its independent part done and the rest prepared (step 3);
+- the last pr-readiness pass ran after the last code change.
+
+Then:
 
 1. **Re-check the plan file.** Every tick has its evidence, and the hard link is intact.
 2. **Report:**
