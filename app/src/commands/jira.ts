@@ -62,7 +62,7 @@ type HookPayload = {
 const KEY_RE = /^[A-Z][A-Z0-9]+-\d+$/;
 
 /** The skill's own accepted flags. Anything else and `sync.mjs` would refuse the run itself. */
-const KNOWN_FLAGS = ['--no-relations', '--no-assets', '--quiet', '--json'];
+const KNOWN_FLAGS = ['--no-relations', '--no-assets', '--no-siblings', '--quiet', '--json'];
 
 /*
  * The four `tracker.*` keys this hook runs on, read from the config rather than spelt here.
@@ -106,6 +106,12 @@ const SHELL_META = /[|&;<>(){}$`\n]/;
 export type Invocation = {
   readonly keys: readonly string[];
   readonly relations: boolean;
+  /**
+   * Whether the run would also write the parent's other children. The skill fetches them under
+   * the relations umbrella, so `--no-relations` implies none; `--no-siblings` is the flag agents
+   * are told to pass on a wide epic, and an unknown flag declines, so it has to be known here.
+   */
+  readonly siblings: boolean;
   readonly assets: boolean;
 };
 
@@ -149,6 +155,7 @@ export const parseSyncCommand = (
   return {
     keys,
     relations: !flags.includes('--no-relations'),
+    siblings: !flags.includes('--no-relations') && !flags.includes('--no-siblings'),
     assets: !flags.includes('--no-assets'),
   };
 };
@@ -183,7 +190,11 @@ type Wanted = { readonly key: string; readonly relation?: string };
  * ABSENT, not empty, and reading absent as "no neighbours" would turn a full sync into one
  * linked file. So a record that does not carry the keys at all is declined.
  */
-export const wantedFiles = (trunk: FreshRecord, relations: boolean): Wanted[] | undefined => {
+export const wantedFiles = (
+  trunk: FreshRecord,
+  relations: boolean,
+  siblings: boolean,
+): Wanted[] | undefined => {
   const wanted: Wanted[] = [{ key: trunk.key }];
   if (!relations) return wanted;
 
@@ -200,6 +211,19 @@ export const wantedFiles = (trunk: FreshRecord, relations: boolean): Wanted[] | 
   for (const entry of blockEntries(frontmatter, 'subtasks')) {
     if (entry['id'] === undefined) return undefined;
     wanted.push({ key: entry['id'], relation: 'subtask' });
+  }
+  /*
+   * The parent's other children, which a full run writes as `ticket_sibling_<KEY>.md` -- and
+   * which this list once left out, so a cached full sync handed over a neighbourhood with the
+   * siblings missing and called it complete. Required as a key when they are wanted, for the
+   * same floor as `parent:`: absent is not "none".
+   */
+  if (siblings) {
+    if (!hasTopLevelKey(frontmatter, 'siblings')) return undefined;
+    for (const entry of blockEntries(frontmatter, 'siblings')) {
+      if (entry['id'] === undefined) return undefined;
+      wanted.push({ key: entry['id'], relation: 'sibling' });
+    }
   }
   for (const entry of blockEntries(frontmatter, 'relations')) {
     // The label is what the filename's relation segment is slugged from, so a relation entry
@@ -323,11 +347,11 @@ export const planLinks = (
     const trunk = freshRecord(hangar, trunkKey, ttlMs);
     if (trunk === undefined)
       return decline(hangar, `${trunkKey} is not in the store, or is older than the TTL`);
-    const wanted = wantedFiles(trunk, invocation.relations);
+    const wanted = wantedFiles(trunk, invocation.relations, invocation.siblings);
     if (wanted === undefined) {
       return decline(
         hangar,
-        `${trunkKey}'s record does not state its neighbourhood (no \`relations:\`/\`parent:\` ` +
+        `${trunkKey}'s record does not state its neighbourhood (no \`relations:\`/\`parent:\`/\`siblings:\` ` +
           'keys, or an entry without an id) — only the newer sync contract does',
       );
     }

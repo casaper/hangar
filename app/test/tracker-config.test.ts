@@ -12,7 +12,7 @@ import {
   type HookMatcher,
   type SettingsJson,
 } from '../src/clone-config.ts';
-import { parseSyncCommand, scriptTail } from '../src/commands/jira.ts';
+import { parseSyncCommand, scriptTail, wantedFiles } from '../src/commands/jira.ts';
 import { issueRow } from '../src/commands/status.ts';
 import { cloneAt } from '../src/fleet.ts';
 import { fixtureConfigText, fixtureVscodeConfigText, syntheticHangar } from './fixture.ts';
@@ -282,4 +282,52 @@ test('an enabled hangar still links the key, and still reports a branch with non
     'https://example.invalid/browse/BE-7',
   );
   assert.match(issueRow(clone, undefined), /none inferred/);
+});
+
+test('--no-siblings is a known flag, and --no-relations implies it', () => {
+  const tracker = vscodeHangar().config.tracker;
+  const syncScript = tracker.syncScript;
+  assert.ok(syncScript !== undefined);
+  const declared = { syncScript, bypassEnvKey: tracker.cache.bypassEnvKey };
+
+  const full = parseSyncCommand(`node ${syncScript} UI-42`, declared);
+  assert.equal(full?.siblings, true);
+  const narrow = parseSyncCommand(`node ${syncScript} UI-42 --no-siblings`, declared);
+  assert.ok(narrow !== undefined, 'an unknown flag would have declined the whole call');
+  assert.equal(narrow.relations, true);
+  assert.equal(narrow.siblings, false);
+  assert.equal(
+    parseSyncCommand(`node ${syncScript} UI-42 --no-relations`, declared)?.siblings,
+    false,
+  );
+});
+
+const trunkWith = (frontmatter: string) => ({
+  key: 'UI-42',
+  at: Date.now(),
+  content: `---\nid: UI-42\nfetched_at: 2026-01-01T00:00:00+0000\n${frontmatter}---\n# UI-42\n`,
+});
+
+test('a full sync wants the siblings the record names, and --no-siblings wants none', () => {
+  const trunk = trunkWith(
+    'parent:\n  id: UI-40\nsubtasks: []\nsiblings:\n  - id: UI-41\n  - id: UI-43\nrelations: []\n',
+  );
+  const full = wantedFiles(trunk, true, true);
+  assert.deepEqual(
+    full?.filter((w) => w.relation === 'sibling').map((w) => w.key),
+    ['UI-41', 'UI-43'],
+  );
+  const narrow = wantedFiles(trunk, true, false);
+  assert.ok(narrow !== undefined);
+  assert.equal(
+    narrow.some((w) => w.relation === 'sibling'),
+    false,
+  );
+  assert.ok(narrow.some((w) => w.relation === 'parent'));
+});
+
+test('a record that does not state its siblings is declined only when they are wanted', () => {
+  const trunk = trunkWith('parent: {}\nsubtasks: []\nrelations: []\n');
+  assert.equal(wantedFiles(trunk, true, true), undefined);
+  assert.deepEqual(wantedFiles(trunk, true, false), [{ key: 'UI-42' }]);
 });

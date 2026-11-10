@@ -319,6 +319,13 @@ it got instead. Five properties are the whole design:
   must also be in the store and fresh. An OLD-format record has those keys absent rather than
   empty, and absent is declined — reading it as "no neighbours" would turn a full sync into one
   linked file.
+- **Siblings are part of that neighbourhood, and the list once left them out.** A full run also
+  writes the parent's other children as `ticket_sibling_<KEY>.md`, and `wantedFiles` read only
+  `parent:`, `subtasks:` and `relations:` — so a cached full sync handed over a neighbourhood
+  missing every sibling and called it complete. `siblings:` is now required like the others when
+  siblings are wanted. `--no-siblings` (which the repo tells agents to pass on a wide epic) and
+  `--no-relations` both mean none are; before `--no-siblings` was a known flag, that call
+  declined outright and the fetch went to the tracker.
 - **It never reimplements the naming.** Where each file belongs comes from that clone's own
   `tracker.namerScript`, one subprocess per file. In the hangar this was built in, that is a
   `name` subcommand of the repo's own cache script, whose path module calls itself the single
@@ -382,7 +389,8 @@ key was told one name by `hangar config show` and obeyed another — a denial wi
 Two things stay fixed on purpose:
 
 - **The ARGV CONTRACT.** Whatever `syncScript` names is still invoked `<script> <KEY>… [flags]`
-  with `--no-relations`/`--no-assets`/`--quiet`/`--json` the only flags recognised, and whatever
+  with `--no-relations`/`--no-siblings`/`--no-assets`/`--quiet`/`--json` the only flags
+  recognised, and whatever
   `namerScript` names is still asked `name <TRUNK> [relation] [KEY]` and expected to print one
   path. These keys make the PATHS configurable, not the interface. A script that answers
   differently is not a plug-in replacement.
