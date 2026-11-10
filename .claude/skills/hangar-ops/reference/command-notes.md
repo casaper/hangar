@@ -357,6 +357,11 @@ tool is the separate `<thing>_preview`.
 - **`-q, --quiet` on `plans collect` and `tmp merge` exists for the `SessionEnd` hooks.** They flush
   on opposite criteria — `plans collect` prints when something MOVED, `tmp merge` when something
   WARNED — so silence from either is the normal outcome, not a failure.
+- **More `.from-<clone>` copies are expected once a repo's agents stamp their files.** A
+  frontmatter block naming the branch, the commit and the date (`branch:`, `head:`,
+  `generated:`) makes two clones' "same" generated guide or description differ by bytes, so it no
+  longer collapses as identical and is kept beside the winner as designed. Review the pair and
+  delete the loser; it is not a `tmp merge` bug.
 - **Only one real `tmp merge` runs at a time, hangar-wide.** A second one waits for the first
   (up to 90s, then warns and merges nothing), so a `reload` that ends every session at once
   queues their hooks rather than racing them. `-n` never waits. A jdupes "read-only" error names

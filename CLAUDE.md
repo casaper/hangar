@@ -198,6 +198,12 @@ another agent's live working directory.
   a bare relative path is the most common way this gets confused.
 - If a task genuinely needs work done in another clone, **tell the user which clone it belongs in**
   and let the agent there do it. Do not reach across.
+- **A repo skill may reach another checkout on its own** — find a branch through the sibling
+  remotes and start an agent or open a window there, or check a branch out as a temporary
+  `git worktree`. Every sibling clone is such a checkout. Run one only when the user asked for
+  that review or fix, say which clone it will touch before it does, and have the user check
+  `hangar list` for a live session there first: two agents in one clone is the failure this fleet
+  is built to prevent. A worktree left behind by a crashed run is a red `doctor` row.
 
 ## Environment & secrets
 

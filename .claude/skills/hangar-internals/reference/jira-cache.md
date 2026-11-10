@@ -106,6 +106,12 @@ and dotfiles — a **blocklist**, so a file a skill starts caching tomorrow is s
 anyone editing a table. `-n` previews, and names any entry two clones both offer, since which of
 the two wins is decided from what is on disk and a dry run has moved nothing.
 
+**A frontmatter stamp turns one document into several.** The managed repo's agents open their
+generated files (testing guides, PR descriptions, plans) with a block naming `branch:`, `head:`
+and `generated:`, so two clones writing the "same" guide differ by those lines and no longer
+collapse as byte-identical. More `.from-<clone>` copies follow, and that is the rule working:
+which stamp is right is a judgement about two branches, not something a merge can decide.
+
 **What is never shared is one name-only predicate, `isNeverSharedName`, asked on both sides** —
 when a clone's entry would be adopted and when a store entry would be linked out. Dotfiles, PID
 files, `_<clone>/` PID directories and Claude Code's own temp roots (`claude-<uid>/`,
