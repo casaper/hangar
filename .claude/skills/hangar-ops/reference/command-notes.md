@@ -137,6 +137,10 @@ tool is the separate `<thing>_preview`.
   needs this. `hangar_<id>_allow` is generated into `clone-terminal.sh`, which the developer's
   `~/.zshrc` sources, and it names `bin/hangar` by absolute path. Tell the user that name rather
   than a path; it takes the same arguments the command does, and it reaches a NEW shell only.
+- **A red `worktrees` row is a review that did not clean up.** A repo's review skill may check
+  a branch out as a temporary `git worktree`; a crashed run leaves the registration, and git then
+  refuses that branch elsewhere in the clone. The row names `git -C <clone> worktree prune`, which
+  is the user's to run; `--fix` never does. A green row naming a worktree is one in use: leave it.
 - **`doctor` prints two machine-level rows before the clones, and both are diagnostics rather
   than passes.** `platform` names the OS and what it can do for Hangar, with a note per capability
   it lacks; `claude sessions` says how many live sessions the detector found and how many

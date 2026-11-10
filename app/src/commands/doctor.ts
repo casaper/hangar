@@ -81,6 +81,7 @@ import { applyArtifact, type Artifact } from '../generate/index.ts';
 import { themeArtifact, themeName, themePath } from '../generate/theme-json.ts';
 import {
   defaultBranchFromGit,
+  gitTry,
   FLEET_GIT_CONFIG,
   isGitRepo,
   remotes,
@@ -121,6 +122,7 @@ import {
 } from '../hangar-files.ts';
 import { inspectEnvironment, installHint } from '../environment.ts';
 import { installChecks } from '../install.ts';
+import { extraWorktrees, worktreeRow } from '../worktrees.ts';
 import { secretsFileContent } from './setup.ts';
 import { cloneLabel, fail, heading, note, ok, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
@@ -379,6 +381,13 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
       unverified: item.unverifiable,
     });
   }
+
+  // --- extra worktrees ------------------------------------------------------------------
+  // Read-only. Nothing is pruned here: see `src/worktrees.ts`.
+  const worktreeList = gitTry(clone.path, ['worktree', 'list', '--porcelain']);
+  const worktrees =
+    worktreeList === undefined ? undefined : worktreeRow(clone.path, extraWorktrees(worktreeList));
+  if (worktrees !== undefined) checks.push({ name: 'worktrees', ...worktrees });
 
   // --- identity ----------------------------------------------------------------------
   // Content, not just existence. This file is generated, says so, and tells its reader not to

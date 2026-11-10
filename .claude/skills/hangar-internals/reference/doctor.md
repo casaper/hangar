@@ -627,6 +627,20 @@ stream), so an fnm-only machine pays nothing for it. If you have nvm, `hangar in
 will not tell you -- the dry run never spawns -- so the thing to check is that a real
 `hangar install` reports the app's pinned version and not the hangar's.
 
+## The `worktrees` row reports what a crashed review left, and never prunes
+
+The fleet is full clones, never worktrees, but a managed repo's own review skill may check the
+branch under review out as a detached `git worktree` in a temp directory, run its checks there
+and remove it. A review that dies part-way leaves the registration under `.git/worktrees/`
+pointing at a directory that is gone, and git then refuses to check that branch out anywhere else
+in the clone with "is already checked out at" a path nobody can find.
+
+`worktreeRow` in `src/worktrees.ts` reads `git worktree list --porcelain`. No extra worktree is
+the normal state and gets **no row at all**, by the tally rule above; one in use is a green row
+naming it; a registration git itself marks `prunable` is red and names
+`git -C <clone> worktree prune`. `doctor --fix` does not run that: a registration whose directory
+is on an unmounted volume is also "prunable", and dropping it is the user's call.
+
 ## The plan archive, and why sharing it is a command rather than a setting
 
 **Plans cannot be shared by a setting.** Claude Code resolves `plansDirectory` against the project
