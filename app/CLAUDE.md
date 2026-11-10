@@ -280,7 +280,8 @@ docs(test):  Say the suite exists, and say exactly what it does not cover
 
 **Types** are `@commitlint/config-conventional`'s. What they mean here — `feat` adds a command, a
 flag, a seam, a driver or a generated artifact; `fix` corrects behaviour that was wrong; `docs` is `CLAUDE.md`,
-the README or the skills and nothing else.
+the README or the skills and nothing else. A `personal-skills/*/SKILL.md`, new or changed, is
+`docs(skills)` too. `feat`/`fix(skills)` is for code: a skill's script, or `hangar skills` itself.
 
 **Scopes** are the subsystem: `sync` `checkout-default` `doctor` `open` `close` `reload` `edit`
 `browse` `tmp` `plans` `pr` `jira` `jira-plan` `colours` `config` `editor` `terminal` `platform`
