@@ -28,6 +28,12 @@
 # itself the day the branch lands, green if the skill arrived unchanged and naming the move if it
 # did not. Drop `adoptedFrom` then; it does nothing once there is something to compare against.
 #
+# supersedes stages a NEW version of an original that is already on the default branch, ahead of
+# the branch that changes it: `basedOn` is the blob on `adoptedFrom`, `supersedes` the one the
+# default branch has now. The row reads `pending` while the default branch still has exactly
+# `supersedes`, `ok` once it has `basedOn`, and red for anything else -- a branch amended before
+# merging, or the default branch moving again meanwhile. Drop both fields once the row reads `ok`.
+#
 # retireOnMerge: true marks a copy that exists only until the project's own lands. While the
 # original is absent it changes nothing -- the row reads `pending` as above. Once the original is
 # on the default branch the row reads `retire` and `hangar doctor` fails it, whatever the blob

@@ -76,6 +76,14 @@ rather than `hangar` subcommands, what each refuses, and how `personal-skills/` 
   **A new skill there also needs a row in `personal-skills/manifest.yaml`** — `name`, a
   `divergence` (`standalone` when no tracked skill carries its name) and a `reason` — then
   `hangar skills sync -n`, `sync` and `list` to link it.
+  **A new version of an original already on the default branch is staged with `supersedes:`.**
+  `adoptedFrom` alone covers an original that is absent; when it is present and the branch
+  CHANGES it, setting `basedOn` to the new blob is red until the merge and keeping the old one is
+  red after. `supersedes` names the blob the default branch has now, so the row is `pending`
+  while that is still what it has, `ok` once it has `basedOn`, and red otherwise. Anything wider
+  -- every difference reading `pending` while `adoptedFrom` is set -- was rejected: an amended
+  branch would merge a blob nobody had read, and a leftover `adoptedFrom` would mask every later
+  move.
   **A copy meant to last only until the project's own merges sets `retireOnMerge: true`.**
   Without it, a skill that lands exactly as adopted turns its row from `pending` to `ok` and
   goes on shadowing the project skill with nothing to say so. With it, the row reads `retire`

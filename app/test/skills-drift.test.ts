@@ -82,6 +82,26 @@ test('waiting costs no detection, which is the whole reason it is not a failure'
   assert.match(changed.detail, /the original moved/);
 });
 
+test('a row staged ahead of a merge waits only while the default branch has the blob it replaces', () => {
+  const staged = entry({ basedOn: MOVED, supersedes: ORIGINAL, adoptedFrom: 'feature/moves-it' });
+
+  const waiting = classifyDrift(staged, facts({ original: ORIGINAL }));
+  assert.equal(waiting.kind, 'pending');
+  assert.match(waiting.detail, /feature\/moves-it/);
+
+  // Merged as staged: green with nothing to do but drop the two staging fields.
+  assert.equal(classifyDrift(staged, facts({ original: MOVED })).kind, 'ok');
+
+  // Amended before merging, or the default branch moved again meanwhile: neither is waiting.
+  const amended = classifyDrift(staged, facts({ original: 'c'.repeat(40) }));
+  assert.equal(amended.kind, 'drifted');
+  assert.match(amended.detail, /the original moved/);
+
+  // Without `supersedes`, a moved original stays a finding even with `adoptedFrom` set.
+  const unstaged = entry({ basedOn: MOVED, adoptedFrom: 'feature/moves-it' });
+  assert.equal(classifyDrift(unstaged, facts({ original: ORIGINAL })).kind, 'drifted');
+});
+
 test('a clone that could not be read is never mistaken for an answer', () => {
   // Four different ways of knowing nothing, and not one of them is a failure: going red on a
   // shallow clone would make the check red in normal operation for anyone who has one.
@@ -146,6 +166,24 @@ test('the manifest refuses retireOnMerge on a skill that has nothing to merge', 
     assert.throws(
       () => readManifest(syntheticHangar({ root })),
       (error: unknown) => error instanceof CliError && (error.hint ?? '').includes('retireOnMerge'),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the manifest refuses supersedes without the adoptedFrom branch it is staged from', () => {
+  const root = mkdtempSync(join(tmpdir(), 'hangar-skills-'));
+  try {
+    mkdirSync(join(root, 'personal-skills'));
+    writeFileSync(
+      join(root, 'personal-skills', 'manifest.yaml'),
+      'skills:\n  - name: staged\n    divergence: intentional\n    mirrors: a/SKILL.md\n' +
+        `    basedOn: '${MOVED}'\n    supersedes: '${ORIGINAL}'\n`,
+    );
+    assert.throws(
+      () => readManifest(syntheticHangar({ root })),
+      (error: unknown) => error instanceof CliError && (error.hint ?? '').includes('supersedes'),
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

@@ -73,6 +73,17 @@ export type SkillEntry = {
    */
   readonly adoptedFrom?: string | undefined;
   /**
+   * The default branch's blob a STAGED `basedOn` replaces, when the original is already there and
+   * its next version is on the unmerged `adoptedFrom` branch.
+   *
+   * Without it there is no way to take the new version ahead of its merge: setting `basedOn` to it
+   * is red until the merge, and keeping the old one is red after. With it, the row is `pending`
+   * while the default branch still has exactly this blob, `ok` once it has `basedOn`, and red for
+   * anything else -- so a branch amended before merging, or the default branch moving again in
+   * the meantime, still goes red. Drop it with `adoptedFrom` once the row reads `ok`.
+   */
+  readonly supersedes?: string | undefined;
+  /**
    * The personal copy exists only until the project's own lands on the default branch, and is then
    * removed rather than kept as an override.
    *
@@ -111,6 +122,7 @@ const entrySchema = z
     mirrors: z.string().min(1).optional(),
     basedOn: z.string().min(1).optional(),
     adoptedFrom: z.string().min(1).optional(),
+    supersedes: z.string().min(1).optional(),
     retireOnMerge: z.boolean().optional(),
     reason: z.string().optional(),
   })
@@ -131,6 +143,15 @@ const entrySchema = z
       ctx.addIssue({
         code: 'custom',
         message: `\`${entry.name}\` is \`standalone\` but sets \`retireOnMerge:\`, and a skill with no tracked counterpart has nothing that could merge`,
+      });
+    }
+    if (
+      entry.supersedes !== undefined &&
+      (entry.divergence !== 'intentional' || entry.adoptedFrom === undefined)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `\`${entry.name}\` sets \`supersedes:\`, which only means anything on an \`intentional\` row that names the \`adoptedFrom:\` branch its \`basedOn\` comes from`,
       });
     }
     if (entry.divergence === 'intentional' && entry.basedOn === undefined) {
@@ -256,8 +277,18 @@ export const classifyDrift = (entry: SkillEntry, facts: DriftFacts): DriftState 
     if (entry.basedOn === undefined) {
       return { kind: 'not-compared', detail: 'records no `basedOn:` to compare against' };
     }
-    return facts.original === entry.basedOn
-      ? { kind: 'ok', detail: `diverges on purpose from ${facts.original.slice(0, 9)}` }
+    if (facts.original === entry.basedOn) {
+      return { kind: 'ok', detail: `diverges on purpose from ${facts.original.slice(0, 9)}` };
+    }
+    // Staged ahead of a merge: waiting is expected only while the default branch still has
+    // EXACTLY the blob this replaces. Anything else is a move nobody has looked at.
+    return entry.supersedes !== undefined && facts.original === entry.supersedes
+      ? {
+          kind: 'pending',
+          detail:
+            `${facts.branch} still has ${facts.original.slice(0, 9)} -- this copy follows ` +
+            `${entry.basedOn.slice(0, 9)} from ${entry.adoptedFrom ?? 'an unmerged branch'}`,
+        }
       : {
           kind: 'drifted',
           detail: `the original moved: ${entry.basedOn.slice(0, 9)} -> ${facts.original.slice(0, 9)}`,
