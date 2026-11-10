@@ -60,6 +60,7 @@ cd app && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 # pnpm lint:fix and pnpm format write; format:check is what a commit gate wants
 # prettier never rewraps a comment and eslint has no max-len: wrap comments at 100 by hand
 # pnpm test summarises as `ℹ pass N` / `ℹ fail N`, not TAP's `# pass`: grep for that
+# never pipe a gate into `tail`/`grep` in a commit chain: the pipe's exit is tail's, so red passes
 pnpm golden && git diff --exit-code dev/golden/gated   # the regression net; see below
 pnpm scan     # both hygiene gates; see **Nothing in here names one organisation**
 pnpm hooks    # ONCE per clone of this repo: installs the two git hooks. See Commit messages
@@ -124,6 +125,10 @@ a `hangar up` tab runs it under the shell `up` was typed into.
 **The exec guard matches `hangar exec` anywhere in a Bash command, heredoc text included** — an
 edit script that quotes it as an anchor is refused. Put such a script in a scratchpad file and run
 `python3 -I <file>`.
+
+**The publish guard judges the whole Bash line**: `hangar pr create --help` is refused, and so is
+any chain where one `pr create|update` lacks `-n` — heredoc text included. Run the dry run on its
+own line, and put an edit script that quotes the command in a scratchpad file.
 
 **Search a clone with `git -C <clone> grep`, never `grep -r`**: a clone carries `node_modules`
 and a multi-GB `tmp/`, and `grep -r` over one runs past the Bash timeout.
@@ -352,6 +357,8 @@ The layout under `src/` is what `ls` shows; only what a listing cannot say is ke
   `pr-description.ts` FINDS the description the repo's own agent wrote, never writes one.
 - **`jira.ts`** — issue keys, URLs and inferring a branch's ticket; `jira-records.ts` — the
   shared record store and its names. The hook itself is `commands/jira.ts`.
+  Three readers of a branch's ticket move together: `trackedKeyIn`, the bar
+  (`generate/tmux-status-sh.ts` and its shell pipeline) and `bin/hangar-commit-gate`'s `namesTicket`.
 - **`procs.ts`** — live Claude Code processes and dev-server listeners; `sessions.ts` — which
   plan files a live agent holds; `claude-sessions.ts` — the transcripts `resume` picks from.
 - **`bookmarks/`** — the browser bookmark drivers behind `bookmarks sync`; **`release/`** — commit
@@ -601,6 +608,8 @@ More root files are hand-maintained and belong to this package rather than to th
   `hangar-internals/reference/root-tools.md` has what each refuses and why,
   including `hangar-rewrite`'s published-commit rule, the `personal-skills/` manifest row a new
   skill needs, and how to test any of them.
+  A `personal-skills/*.cjs` script is tested by exporting its pure half when
+  `require.main !== module` and loading it with `createRequire` (`test/clip-frontmatter.test.ts`).
 - **`.nvmrc` and `app/.nvmrc`** are a pair, both `24`. Move them together.
 - **`.claude/skills/**` is tracked, and both skills are artifacts of this package.** A command
   whose flags change is a `hangar-ops/reference/commands.md` edit (the tables and tool map; the
