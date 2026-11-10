@@ -1,3 +1,5 @@
+import { posix } from 'node:path';
+
 import { z } from 'zod';
 import { TOKENS, unknownTokens } from '../template.ts';
 
@@ -177,6 +179,22 @@ const trackerSchema = z.strictObject({
 });
 
 /**
+ * Whether `nodeVersionFile`, resolved against the step's `dir`, lands outside the clone.
+ *
+ * Judged against `dir` alone. When `dir` is absent the step runs in `repo.appDir`, which this
+ * schema cannot see from inside one step, so the check is made as if from the clone root: it
+ * may refuse a climb that `appDir` would have absorbed, and never accepts one that escapes.
+ */
+export const nodeVersionFileEscapes = (
+  dir: string | undefined,
+  file: string | undefined,
+): boolean => {
+  if (file === undefined) return false;
+  const resolved = posix.normalize(posix.join(dir ?? '.', file));
+  return resolved === '..' || resolved.startsWith('../');
+};
+
+/**
  * One install step. Generic on purpose: any package manager, Node or not.
  *
  * Give either a known `manager` (whose canonical install command is built in) or an explicit
@@ -206,8 +224,21 @@ const installStepSchema = z
       .optional(),
     /** Overrides `manager`'s canonical command. argv form, never a shell string. */
     command: z.array(z.string().min(1)).min(1).optional(),
-    /** When present, the step runs under the Node version this file names. */
-    nodeVersionFile: containedPath('repo.install[].nodeVersionFile').optional(),
+    /**
+     * When present, the step runs under the Node version this file names.
+     *
+     * Relative to the step's `dir`, and the one path here allowed to climb out of it: a package
+     * nested beside the app (`dir: tools`, `nodeVersionFile: ../web/.nvmrc`) shares the app's
+     * pin rather than keeping a second copy of it. It may never climb out of the CLONE -- see
+     * `nodeVersionFileEscapes`.
+     */
+    nodeVersionFile: z
+      .string()
+      .min(1)
+      .refine((p) => !p.startsWith('/'), {
+        message: 'repo.install[].nodeVersionFile must be relative, not absolute',
+      })
+      .optional(),
     /** A failure is reported and the run continues. */
     optional: z.boolean().default(false),
     /**
@@ -223,6 +254,10 @@ const installStepSchema = z
   })
   .refine((s) => (s.manager === undefined) !== (s.command === undefined), {
     message: 'give exactly one of `manager` or `command`',
+  })
+  .refine((s) => !nodeVersionFileEscapes(s.dir, s.nodeVersionFile), {
+    message: 'repo.install[].nodeVersionFile must not climb out of the clone (resolved from `dir`)',
+    path: ['nodeVersionFile'],
   });
 
 /** The canonical install command per known manager. `command` overrides these. */

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { after, test } from 'node:test';
 
 import { cloneAt, type Clone } from '../src/fleet.ts';
+import { nodeVersionFileEscapes } from '../src/config/schema.ts';
 import { installChecks, lockfileMismatchLine, plannedSteps, runInstall } from '../src/install.ts';
 import { capturedProblems, captureOutput, releaseCapture } from '../src/ui.ts';
 import { first, fixtureVscodeConfigText, syntheticHangar } from './fixture.ts';
@@ -103,4 +104,75 @@ test('a dry run refuses the mismatch instead of planning the step', () => {
   const clean = capturedProblems();
   releaseCapture(false);
   assert.equal(clean, 0);
+});
+
+test('nodeVersionFile may climb out of its step dir, never out of the clone', () => {
+  assert.equal(nodeVersionFileEscapes('tools', '../web/.nvmrc'), false);
+  assert.equal(nodeVersionFileEscapes('a/b', '../../.nvmrc'), false);
+  assert.equal(nodeVersionFileEscapes('tools', '.nvmrc'), false);
+  assert.equal(nodeVersionFileEscapes(undefined, 'web/.nvmrc'), false);
+  assert.equal(nodeVersionFileEscapes('tools', '../../.nvmrc'), true);
+  assert.equal(nodeVersionFileEscapes('tools', '..'), false);
+  assert.equal(nodeVersionFileEscapes('tools', '../..'), true);
+  // `dir` absent is judged from the clone root, so any climb is refused there.
+  assert.equal(nodeVersionFileEscapes(undefined, '../.nvmrc'), true);
+  assert.equal(nodeVersionFileEscapes('.', '../.nvmrc'), true);
+});
+
+/**
+ * An optional package that only some branches carry: green where the branch lacks it, red where
+ * it is there and was never installed, and its Node pin read from beside the app.
+ */
+const cloneWithTools = (files: readonly string[]): Clone => {
+  const root = mkdtempSync(join(tmpdir(), 'hangar-install-'));
+  roots.push(root);
+  const configText = fixtureVscodeConfigText().replace(
+    '  # Omitted by the other fixture,',
+    [
+      '    - dir: tools',
+      '      manager: pnpm',
+      '      nodeVersionFile: ../web/.nvmrc',
+      '      optional: true',
+      '      why: the tools package only some branches carry',
+      '  # Omitted by the other fixture,',
+    ].join('\n'),
+  );
+  const clone = cloneAt(syntheticHangar({ root, configText }), 1);
+  mkdirSync(join(clone.path, 'web'), { recursive: true });
+  writeFileSync(join(clone.path, 'web', '.nvmrc'), '24.1.0\n');
+  for (const file of files) {
+    mkdirSync(join(clone.path, file, '..'), { recursive: true });
+    writeFileSync(join(clone.path, file), '');
+  }
+  return clone;
+};
+
+const toolsCheck = (clone: Clone) => {
+  const check = installChecks(clone).find((c) => c.name === 'install tools');
+  assert.ok(check !== undefined, 'no tools install check');
+  return check;
+};
+
+test('an optional step on a branch without its dir is green', () => {
+  const check = toolsCheck(cloneWithTools([]));
+  assert.equal(check.ok, true);
+  assert.ok(check.detail.includes('does not exist'));
+});
+
+test('an optional step whose dir is there but not installed is red and names the command', () => {
+  const clone = cloneWithTools(['tools/pnpm-lock.yaml']);
+  const check = toolsCheck(clone);
+  assert.equal(check.ok, false);
+  assert.ok(check.detail.includes(`hangar install ${clone.name}`));
+  assert.equal(
+    toolsCheck(cloneWithTools(['tools/pnpm-lock.yaml', 'tools/node_modules/.modules.yaml'])).ok,
+    true,
+  );
+});
+
+test('a climbing nodeVersionFile is read from beside the app', () => {
+  const planned = plannedSteps(cloneWithTools(['tools/pnpm-lock.yaml'])).find(
+    (p) => p.relDir === 'tools',
+  );
+  assert.equal(planned?.nodeVersion, '24.1.0');
 });

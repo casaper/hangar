@@ -320,7 +320,8 @@ repo:
       dir: angular
       manager: pnpm
       # Run the step under the Node version this file names (fnm, else nvm). Omit it and the
-      # step is not treated as a Node step at all.
+      # step is not treated as a Node step at all. Relative to `dir`; it may climb with `..`
+      # (a nested package sharing the app's pin) but never out of the clone.
       nodeVersionFile: .nvmrc
       # Default false. True reports a failure and lets the run continue.
       # optional: false
@@ -329,6 +330,17 @@ repo:
       why: >-
         each clone needs its OWN node_modules -- its own dev server, Storybook and Playwright
         run, which is the whole reason the fleet is full clones and not git worktrees
+    - dir: .claude-src
+      manager: pnpm
+      # Resolved from `dir`; may climb, never out of the clone. The package has no pin of its own
+      # and its engines floor is the app's Node.
+      nodeVersionFile: ../angular/.nvmrc
+      # Optional because a branch cut before the package existed has no `.claude-src/`: doctor
+      # stays green there and is red only where the directory is present and not installed.
+      optional: true
+      why: >-
+        the agent scripts' own TypeScript package -- its tests and the pre-commit build check
+        need its toolchain; the built scripts under .claude/ run without it
     # An explicit command instead of a manager -- the escape hatch for anything not listed:
     # - dir: .
     #   command: [make, bootstrap]

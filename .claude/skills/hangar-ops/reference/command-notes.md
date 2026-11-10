@@ -114,12 +114,15 @@ tool is the separate `<thing>_preview`.
 - **`add-clone --no-install` leaves the clone unusable** until someone runs `hangar install
   <clone>`. It prints the exact steps it skipped, from `repo.install[]`, each with its `why`.
 - **`hangar install` is the user's command, and `-n` first is not optional courtesy.** What it
-  runs comes from `repo.install[]`, and this repo's step is `pnpm install --frozen-lockfile` —
+  runs comes from `repo.install[]`, and each of this repo's steps is `pnpm install --frozen-lockfile` —
   which rewrites `node_modules` in place, so a clone with a dev server running loses packages
   mid-request. `hangar install <clone> -n` prints every step without spawning anything, and
   prints the refusal when the checkout's lockfile belongs to another manager (a branch older
   than the repo's switch): integrate the default branch first. A red *mixed install* row in
   `doctor` means pnpm was run over npm's tree — remove that `node_modules`, then install.
+  An `optional` step names a directory only some branches carry: where it is missing the row is
+  green and the step is skipped; where it is present and uninstalled the row is red like any
+  other, so a clone goes red the day it pulls the package, until someone installs.
 - **`hangar allow` is how a clone direnv has blocked gets un-blocked**, and a repo usually has
   more than one `.envrc` — this one has three, all TRACKED, so any `git pull` or `hangar sync`
   blocks the lot at once. The command runs `direnv allow` in each directory that has one,

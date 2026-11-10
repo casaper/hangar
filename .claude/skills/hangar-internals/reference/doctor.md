@@ -596,6 +596,20 @@ whatever Node is there, because a missing version manager is a worse reason to r
 than a version mismatch is. It now warns first, which is the whole change: the fallback was
 always defensible, and being silent about it was not.
 
+**`nodeVersionFile` may climb out of its step's `dir`, never out of the clone.** The second
+step this fleet declares is a package nested at the clone root with no version file of its own:
+its engines floor is the app's Node, and a copy of the app's pin beside it would be a second file
+to keep in step. So the path is resolved against `dir` and `nodeVersionFileEscapes` in
+`config/schema.ts` refuses only a result that leaves the clone. Absent `dir` is judged from the
+clone root, because one step's schema cannot see `repo.appDir`: that refuses a climb `appDir`
+would have absorbed and never accepts one that escapes.
+
+**A step for a directory only some branches carry is `optional: true`, and that is what keeps
+`doctor` green on the others.** `installChecks` treats a missing directory as ok for an optional
+step and red otherwise, while a directory that IS there and has no marker is red either way and
+names `hangar install <clone>`. So the day a package lands on the default branch, the clones that
+have pulled it go red until installed, and the ones that have not stay green.
+
 **A step whose command is a shebang-less script is retried through `sh`, and only that.** pnpm
 12 ships `pnpm` as a shebang-less `sh` placeholder that its install script swaps for the native
 binary, so a global pnpm installed under `ignore-scripts` keeps the placeholder. Typed at a prompt
