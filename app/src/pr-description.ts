@@ -126,6 +126,18 @@ export const descriptionsIn = (tmpDir: string, key: string | undefined): Descrip
   return [...top, ...inTicketDir];
 };
 
+/**
+ * A leading YAML frontmatter block, which the repo's agent may put above the heading.
+ *
+ * Stripped before the heading is looked for rather than skipped by luck: a block whose lines
+ * happen not to match `# ` is passed over by the search below, but a YAML comment line inside one
+ * (`# written on ...`) is a `# ` heading to it, and would have become the published title. Only
+ * a block on line 1 with a closing `---` counts; a `---` rule in the body stays.
+ */
+const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
+
+export const withoutFrontmatter = (content: string): string => content.replace(FRONTMATTER, '');
+
 export type PrText = {
   /** The first `# ` heading, minus the marker. `''` when the file has none. */
   readonly title: string;
@@ -145,7 +157,7 @@ export type PrText = {
  * field of a pull request nobody can avoid reading.
  */
 export const splitDescription = (content: string): PrText => {
-  const lines = content.split('\n');
+  const lines = withoutFrontmatter(content).split('\n');
   const at = lines.findIndex((line) => /^#\s+\S/.test(line));
   if (at === -1) return { title: '', body: content.trim() };
   return {

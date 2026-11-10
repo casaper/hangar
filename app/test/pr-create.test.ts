@@ -307,3 +307,29 @@ test('an account uuid compares the same with braces and without', () => {
   assert.equal(bareUuid('{9d0c-1}'), bareUuid('9d0c-1'));
   assert.equal(bareUuid(''), '');
 });
+
+test('a frontmatter block above the heading is never published, even one holding a `# ` line', () => {
+  const described = [
+    '---',
+    'kind: pr-description',
+    'ticket: ABC-1323',
+    '# written by the repo agent, a YAML comment',
+    'head: 4648cebba',
+    '---',
+    '# ABC-1323: Close the tab',
+    'Why it exists.',
+    '',
+  ].join('\n');
+  const split = splitDescription(described);
+  assert.equal(split.title, 'ABC-1323: Close the tab');
+  assert.equal(split.body, 'Why it exists.');
+  assert.ok(!split.body.includes('kind:'));
+
+  // CRLF, and no block at all, read as before.
+  assert.equal(
+    splitDescription('---\r\nkind: x\r\n---\r\n# CRLF title\r\nbody').title,
+    'CRLF title',
+  );
+  // A `---` rule that is not a block on line 1 stays body.
+  assert.equal(splitDescription('# T\n---\nk: v\n---\nb').body, '---\nk: v\n---\nb');
+});
