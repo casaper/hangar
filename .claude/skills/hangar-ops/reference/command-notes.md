@@ -216,8 +216,9 @@ tool is the separate `<thing>_preview`.
   merely stale. Typed by hand, the same command says what is wrong.
 
   Three things to know when a field is blank rather than wrong:
-  **the ticket key comes from the branch's ticket binding, then the branch name** (a branch with
-  neither shows nothing, one bound to `none` shows nothing on purpose, and there is no fallback to
+  **the ticket key comes from the branch's ticket binding, then the branch name** (a name's key
+  counts in either case, `feature/abc-12_x` too, but only under a `tracker.keyPrefixes` entry; a
+  branch with neither shows nothing, one bound to `none` shows nothing on purpose, and there is no fallback to
   commit subjects here — `hangar status` does that);
   **a bare `PR`** means either nobody has asked yet or the branch genuinely has none — either way
   it links to that branch's pull requests, so it is worth clicking;

@@ -58,11 +58,11 @@ export type DescriptionCandidate = {
 };
 
 /**
- * `pr…<KEY>….md`, case-insensitively on the fixed parts and exactly on the key.
+ * `pr…<KEY>….md`, case-insensitively throughout, the key included.
  *
- * The key is exact because it is the only part of the name that makes the file this branch's:
- * matching `abc-1323` against `ABC-1323` would be a kindness with no upside, since `inferTicket`
- * reads the key out of the branch with a case-sensitive pattern in the first place.
+ * The key is what makes the file this branch's, and `inferTicket` always hands it over
+ * upper-cased -- a lower-case key in a branch name is read under a declared prefix and
+ * upper-cased on the way out -- so the flag only ever widens the fixed parts in practice.
  */
 export const descriptionNameRe = (key: string): RegExp =>
   new RegExp(`^pr.*${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*\\.md$`, 'i');

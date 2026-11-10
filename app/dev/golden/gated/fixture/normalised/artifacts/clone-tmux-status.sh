@@ -155,9 +155,10 @@ ticket)
   if [ -z "$key" ]; then
     [ -n "$KEY_PATTERN" ] || exit 0
     # `tr` first, so the match runs on words: `_` and `/` are separators in a branch name but
-    # word characters to grep, and `-` has to survive because it is inside the key.
-    key=$(printf '%s' "$branch" | tr -cs 'A-Za-z0-9-' '\n' | grep -oE "$KEY_PATTERN" |
-      head -1) || key=""
+    # word characters to grep, and `-` has to survive because it is inside the key. Upper-cased
+    # before the match, as `jira.ts` reads a lower-case key under a declared prefix.
+    key=$(printf '%s' "$branch" | tr -cs 'A-Za-z0-9-' '\n' | tr 'a-z' 'A-Z' |
+      grep -oE "$KEY_PATTERN" | head -1) || key=""
   fi
   [ -n "$key" ] || exit 0
   printf ' %s ' "$key"

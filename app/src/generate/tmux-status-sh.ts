@@ -83,16 +83,18 @@ export const issueKeyPattern = (hangar: Hangar): string => {
 /**
  * The issue key the bar's `key` field draws for `branch`, or `''`.
  *
- * The same steps as the shell's `tr | grep -o | head -1`, in the same order, so `hangar list`
- * and the bar cannot name different tickets for one branch: split on everything but word
- * characters and `-`, and take the first token the anchored pattern matches.
+ * The same steps as the shell's `tr | tr | grep -o | head -1`, in the same order, so
+ * `hangar list` and the bar cannot name different tickets for one branch: split on everything
+ * but word characters and `-`, upper-case, and take the first token the anchored pattern matches.
+ * The upper-casing is safe here because the pattern only ever names declared prefixes, the same
+ * condition under which `jira.ts`'s `trackedKeyIn` accepts a lower-case key.
  */
 export const issueKeyInBranch = (hangar: Hangar, branch: string): string => {
   const pattern = issueKeyPattern(hangar);
   if (pattern === '') return '';
   const re = new RegExp(pattern);
   for (const token of branch.split(/[^A-Za-z0-9-]+/)) {
-    const match = re.exec(token);
+    const match = re.exec(token.toUpperCase());
     if (match !== null) return match[0];
   }
   return '';
@@ -354,9 +356,10 @@ export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
     '  if [ -z "$key" ]; then',
     '    [ -n "$KEY_PATTERN" ] || exit 0',
     '    # `tr` first, so the match runs on words: `_` and `/` are separators in a branch name but',
-    '    # word characters to grep, and `-` has to survive because it is inside the key.',
-    "    key=$(printf '%s' \"$branch\" | tr -cs 'A-Za-z0-9-' '\\n' | grep -oE \"$KEY_PATTERN\" |",
-    '      head -1) || key=""',
+    '    # word characters to grep, and `-` has to survive because it is inside the key. Upper-cased',
+    '    # before the match, as `jira.ts` reads a lower-case key under a declared prefix.',
+    "    key=$(printf '%s' \"$branch\" | tr -cs 'A-Za-z0-9-' '\\n' | tr 'a-z' 'A-Z' |",
+    '      grep -oE "$KEY_PATTERN" | head -1) || key=""',
     '  fi',
     '  [ -n "$key" ] || exit 0',
     '  printf \' %s \' "$key"',

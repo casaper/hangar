@@ -26,6 +26,9 @@ export const KEY_RE = /^[A-Z][A-Z0-9]+-\d+$/;
  */
 export const KEY_IN_TEXT_RE = /(?<![A-Za-z0-9])[A-Z][A-Z0-9]+-\d+(?![A-Za-z0-9])/g;
 
+/** {@link KEY_IN_TEXT_RE} in either case; only `trackedKeyIn` may use it, under its rule. */
+const KEY_IN_TEXT_ANY_CASE_RE = /(?<![A-Za-z0-9])[A-Za-z][A-Za-z0-9]+-\d+(?![A-Za-z0-9])/g;
+
 /**
  * Prefixes that look exactly like an issue key but never are. Without this, `UTF-8`,
  * `SHA-256` or `ISO-8601` in a commit subject produces a confident link to a ticket that
@@ -72,11 +75,26 @@ export const issueKeysIn = (text: string): { key: string; start: number; end: nu
  * whitelist, and the bar has always honoured them -- so without this, `browse ticket` could open
  * a ticket for a branch whose bar field was blank.
  */
-const firstTrackedKey = (hangar: Hangar, text: string): string | undefined => {
-  const prefixes = hangar.config.tracker.keyPrefixes ?? [];
-  return issueKeysIn(text).find(
-    ({ key }) => prefixes.length === 0 || prefixes.includes(key.split('-')[0] ?? ''),
-  )?.key;
+const firstTrackedKey = (hangar: Hangar, text: string): string | undefined =>
+  trackedKeyIn(hangar.config.tracker.keyPrefixes ?? [], text);
+
+/**
+ * The first key in `text` under `prefixes` (any prefix when empty), upper-cased.
+ *
+ * A LOWER-CASE key counts only under a declared prefix. The repo's own resolver reads
+ * `feature/abc-77_x` as ABC-77, and a branch whose ticket two tools disagree on is worse than
+ * either answer -- but without a whitelist every `fix-2` and `step-3` in a branch name would be a
+ * key, so where nothing names the prefixes the old upper-case-only reading stands.
+ */
+export const trackedKeyIn = (prefixes: readonly string[], text: string): string | undefined => {
+  for (const match of text.matchAll(KEY_IN_TEXT_ANY_CASE_RE)) {
+    const key = match[0].toUpperCase();
+    const prefix = key.split('-')[0] ?? '';
+    if (NOT_ISSUE_PREFIXES.has(prefix)) continue;
+    const exact = match[0] === key;
+    if (prefixes.length === 0 ? exact : prefixes.includes(prefix)) return key;
+  }
+  return undefined;
 };
 
 /**
@@ -127,6 +145,8 @@ export const bindingMeaning = (value: string | undefined): string | undefined =>
   const trimmed = value?.trim();
   if (trimmed === undefined) return undefined;
   if (trimmed === NO_TICKET) return NO_TICKET;
+  // Exact, not upper-cased: the repo's own bind script upper-cases on the way in and its reader
+  // ignores a value that is not already a key, so a hand-set `abc-77` is ignored by both.
   return KEY_RE.test(trimmed) ? trimmed : undefined;
 };
 

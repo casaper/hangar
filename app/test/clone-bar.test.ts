@@ -57,10 +57,12 @@ test('`hangar list` names the same ticket for a branch as the bar does', () => {
     'BE-7',
     'chore/bump_BE_deps',
     'fixes/storefront_ui-BE-12-and-BE-13',
+    'feature/be-77_lower_case',
     'master',
   ];
   assert.equal(issueKeyInBranch(h, branches[0] ?? ''), 'BE-1323');
   assert.equal(issueKeyInBranch(h, 'feature/XBE-99_x'), '', 'the anchor holds per token');
+  assert.equal(issueKeyInBranch(h, 'feature/be-77_lower_case'), 'BE-77');
   /*
    * The bar's own pipeline, verbatim from the generated script, over the same branches. Two
    * implementations of one rule are only safe while something runs both.
@@ -71,7 +73,7 @@ test('`hangar list` names the same ticket for a branch as the bar does', () => {
       'sh',
       [
         '-c',
-        `printf '%s' "$1" | tr -cs 'A-Za-z0-9-' '\\n' | grep -oE "$2" | head -1 || true`,
+        `printf '%s' "$1" | tr -cs 'A-Za-z0-9-' '\\n' | tr 'a-z' 'A-Z' | grep -oE "$2" | head -1 || true`,
         'sh',
         branch,
         pattern,

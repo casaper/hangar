@@ -8,7 +8,13 @@ import { test } from 'node:test';
 import { issueRow } from '../src/commands/status.ts';
 import { cloneAt } from '../src/fleet.ts';
 import { issueKeyFor, tmuxStatusArtifact } from '../src/generate/tmux-status-sh.ts';
-import { bindingMeaning, inferTicket, KEY_IN_TEXT_RE, NO_TICKET } from '../src/jira.ts';
+import {
+  bindingMeaning,
+  inferTicket,
+  KEY_IN_TEXT_RE,
+  NO_TICKET,
+  trackedKeyIn,
+} from '../src/jira.ts';
 import { fixtureConfigText, syntheticHangar } from './fixture.ts';
 
 /**
@@ -207,4 +213,36 @@ test('a session starting under an ARMED gate is told its ticket', () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+/**
+ * One table of branch names, read by every hangar reader of a branch's ticket. The managed repo's
+ * own resolver reads its key case-insensitively and upper-cases it, so a lower-case branch name
+ * has to give the same ticket here -- but only under a declared prefix, or `fix-2` becomes one.
+ */
+test('every reader agrees on a branch name in either case, under a declared prefix only', () => {
+  const h = syntheticHangar();
+  const cases: readonly [branch: string, expected: string | undefined][] = [
+    ['feature/BE-77_x', 'BE-77'],
+    ['feature/be-77_x', 'BE-77'],
+    ['be-77', 'BE-77'],
+    ['Be-77-and-BE-78', 'BE-77'],
+    ['feature/xbe-77_x', undefined],
+    ['fix-2', undefined],
+    ['feature/UTF-8_names', undefined],
+  ];
+  for (const [branch, expected] of cases) {
+    assert.equal(trackedKeyIn(['BE'], branch), expected, `trackedKeyIn ${branch}`);
+    assert.equal(issueKeyFor(h, branch, undefined), expected ?? '', `the bar ${branch}`);
+  }
+
+  // No prefixes declared: upper case only, as before, so `fix-2` is still not a ticket.
+  assert.equal(trackedKeyIn([], 'feature/BE-77_x'), 'BE-77');
+  assert.equal(trackedKeyIn([], 'feature/be-77_x'), undefined);
+  assert.equal(trackedKeyIn([], 'fix-2'), undefined);
+
+  // A BINDING stays exact, as the repo's reader keeps it: its bind script upper-cases on store.
+  assert.equal(bindingMeaning('be-77'), undefined);
+  assert.equal(bindingMeaning('none'), NO_TICKET);
+  assert.equal(bindingMeaning('not a key'), undefined);
 });
