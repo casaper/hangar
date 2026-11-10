@@ -3,7 +3,7 @@
   "version": "0.33.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@12.15.0",
+  "packageManager": "pnpm@12.16.0",
   "description": "Hangar -- orchestrates a fleet of full clones of one repo for parallel Claude Code sessions.",
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -52,7 +52,7 @@
     "prettier": "^3.9.10",
     "semantic-release": "25.0.9",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.72.0",
+    "typescript-eslint": "8.72.1",
     "typescript-language-server": "6.0.2"
   }
 }
