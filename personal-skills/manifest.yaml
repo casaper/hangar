@@ -173,3 +173,9 @@ skills:
       No tracked counterpart: a wrapper that runs the personal shorten-all-comments in a
       background subagent, so the sweep's transcript stays out of the calling session's context.
       The subagent cannot ask, so at the large-file level question it keeps the level given.
+
+  - name: implement-pr
+    divergence: standalone
+    reason: >-
+      No tracked counterpart: works an existing PR plan to completion unattended, growing the
+      plan with what implementation and pr-readiness turn up, and batching every question.
