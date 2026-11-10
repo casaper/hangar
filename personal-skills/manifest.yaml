@@ -54,7 +54,10 @@ skills:
   - name: shorten-changed-comments
     divergence: intentional
     mirrors: .claude/skills/shorten-changed-comments/SKILL.md
-    basedOn: f221fc77b02c174a0a6d340f99a7fa01ee9e57b8
+    basedOn: 903ef4a101f7711703670f7cc6d74644a200273b
+    # Staged ahead of the branch below; drop both lines once the row reads `ok`.
+    supersedes: f221fc77b02c174a0a6d340f99a7fa01ee9e57b8
+    adoptedFrom: feature/<ticket>_Tested_TypeScript_sources_for_the_agent_scripts_and_per-lane_testing_guides
     reason: >-
       Honours shorten-comment's reporting contract; keeps the Step 1b selection question. Its
       description also points side-task and background requests at bg-shorten-changed-comments.
@@ -62,7 +65,10 @@ skills:
   - name: shorten-all-comments
     divergence: intentional
     mirrors: .claude/skills/shorten-all-comments/SKILL.md
-    basedOn: 6df88f3131ef327ec11fdfe79c40bcad6f4ef4be
+    basedOn: 600f8294c82f60cf6c609c68dbc9873c0b3d8479
+    # Staged ahead of the branch below; drop both lines once the row reads `ok`.
+    supersedes: 6df88f3131ef327ec11fdfe79c40bcad6f4ef4be
+    adoptedFrom: feature/<ticket>_Tested_TypeScript_sources_for_the_agent_scripts_and_per-lane_testing_guides
     reason: >-
       Honours shorten-comment's reporting contract; keeps the Step 2 snapshot/covers checks. Its
       description also points side-task and background requests at bg-shorten-all-comments.
@@ -101,17 +107,17 @@ skills:
   - name: pr-readiness
     divergence: intentional
     mirrors: .claude/skills/pr-readiness/SKILL.md
-    basedOn: feb26fab3b5523065c592b779bdd630de78684f1
+    basedOn: 657a58cfc39b359d722faa26b3547a65d0bfa338
     # The real branch name carries a ticket key, which no tracked file may; the suffix finds it.
-    adoptedFrom: feature/<ticket>_test_guide_lane_routing
-    # Kept only until the project copy merges; it then takes over, review state and all.
-    retireOnMerge: true
+    adoptedFrom: feature/<ticket>_Tested_TypeScript_sources_for_the_agent_scripts_and_per-lane_testing_guides
     reason: >-
-      The tracked copy is for a checkout with no hangar: it only reports how far the branch is from
-      its target, and reads the pull request through a read-only forge script of its own. This
-      one keeps the hangar's answers -- `hangar list` for review state, `hangar sync -n` for the
-      target and strategy -- and integrates: through `hangar-rewrite rebase` where the repo's rules
-      deny `git rebase`, and by merging otherwise.
+      Kept after the project copy lands, not retired: the two do different jobs. The tracked copy
+      is for a checkout with no hangar and only reports how far the branch is from its target,
+      reading the pull request through a read-only forge script of its own. This one keeps the
+      hangar's answers -- `hangar list` for review state, `hangar sync -n` for the target and
+      strategy -- and integrates: through `hangar-rewrite rebase` where the repo's rules deny `git
+      rebase`, and by merging otherwise. Its Jira-backlog step is guarded, because the command it
+      asks is not on the default branch until that copy lands.
 
   - name: copy-to-clipboard
     divergence: intentional
@@ -123,7 +129,10 @@ skills:
       is called through the `~/.claude/skills` link, so it works from any directory. It also adds
       `--paste` (deutsch-korrektur's clipboard mode reads through it), drops the one trailing
       newline a heredoc adds unless `--keep-newline`, verifies the copy by reading it back, and
-      drops `model: haiku`, because another skill now invokes it mid-turn.
+      drops `model: haiku`, because another skill now invokes it mid-turn. Like the tracked
+      script it drops a leading frontmatter block (unless `--keep-frontmatter`) and writes
+      UTF-16LE to Windows' clip -- ported by hand, since the tracked SKILL.md did not move and
+      `basedOn` cannot flag a change made only in the script beside it.
 
   - name: deutsch-korrektur
     divergence: standalone

@@ -57,7 +57,8 @@ attached to, and a `not unique` flag when the comment text alone appears more th
 It already handles the parts that are easy to get wrong:
 
 - **File scope** — test, story, config, generated, mock-infrastructure, Playwright and doc files
-  are filtered out. The list lives in `.claude/skills/shorten-comment/comment-lexer.mjs`, beside
+  are filtered out. The list lives in `.claude/skills/shorten-comment/comment-lexer.mjs` (built
+  from `.claude-src/skills/shorten-comment/comment-lexer.ts` where the checkout has one), beside
   the Step 0 prose of `shorten-comment/SKILL.md` that it mirrors.
 - **Directive comments** — `eslint-disable`, `prettier-ignore`, `@ts-expect-error`,
   `istanbul ignore`, `#region` and friends are reported separately and marked
@@ -100,8 +101,11 @@ second gate, and never silently process a subset.
 This skill edits without asking per comment, so the snapshot is what makes that safe. Take it
 **before the first Edit**, and only proceed once every file you are about to touch is covered.
 
+The guard file sits in this checkout's git directory and is named for the session, so two
+sweeps running at once, in one checkout or in two, never read each other's.
+
 ```bash
-git status --porcelain > /tmp/sweep-before.txt   # for the guard in Step 5
+git status --porcelain > "$(git rev-parse --git-dir)/comment-sweep-before-${CLAUDE_CODE_SESSION_ID:-manual}.txt"   # for the guard in Step 5
 hangar-waypoint save "pre comment-sweep snapshot"
 ```
 
@@ -109,8 +113,8 @@ A waypoint records the whole tree — **untracked files included** — as a comm
 `refs/hangar-waypoints/<branch>`, without touching the working tree or the index. It is not a stash:
 nothing appears in `git stash list`, and no stray `git stash pop` can consume it.
 
-Verify non-mutation rather than assuming it: re-run `git status --porcelain` and confirm it is
-identical to `/tmp/sweep-before.txt`. If the working tree changed, stop immediately and report it —
+Verify non-mutation rather than assuming it: `git status --porcelain | diff - "$(git rev-parse --git-dir)/comment-sweep-before-${CLAUDE_CODE_SESSION_ID:-manual}.txt"` must
+print nothing. If the working tree changed, stop immediately and report it —
 the snapshot step must never disturb in-flight work.
 
 Coverage needs no manual backup step here, and the reason is worth keeping so nobody re-adds one. A
@@ -171,7 +175,7 @@ Confirm the working tree only changed in the ways you intended. **Say nothing ab
 differs:**
 
 ```bash
-git status --porcelain    # should differ from /tmp/sweep-before.txt only in files you edited
+git status --porcelain    # should differ from that guard file only in files you edited
 ```
 
 Then report in the form `shorten-comment`'s **Reporting** section defines — one line per changed

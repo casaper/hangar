@@ -49,8 +49,11 @@ This skill edits without asking per comment, so the snapshot is what makes that 
 **before the first Edit and before dispatching any subagent** — a worker that starts editing while
 the parent is still setting up its safety net has none.
 
+The guard file sits in this checkout's git directory and is named for the session, so two
+sweeps running at once, in one checkout or in two, never read each other's.
+
 ```bash
-git status --porcelain > /tmp/all-sweep-before.txt
+git status --porcelain > "$(git rev-parse --git-dir)/comment-sweep-before-${CLAUDE_CODE_SESSION_ID:-manual}.txt"
 hangar-waypoint save "pre whole-file comment-sweep snapshot"
 hangar-waypoint covers <every file you are about to edit>
 ```
@@ -61,8 +64,8 @@ nothing appears in `git stash list`, and no stray `git stash pop` can consume it
 
 Then verify two things rather than assuming them:
 
-1. **Non-mutation.** Re-run `git status --porcelain`; it must match `/tmp/all-sweep-before.txt`
-   exactly. If not, stop and report — the snapshot step must never disturb in-flight work.
+1. **Non-mutation.** `git status --porcelain | diff - "$(git rev-parse --git-dir)/comment-sweep-before-${CLAUDE_CODE_SESSION_ID:-manual}.txt"` must print nothing. If not,
+   stop and report — the snapshot step must never disturb in-flight work.
 2. **Coverage.** `covers` exits non-zero and names any file the snapshot does not hold. **This
    check is not a formality in this skill**: a waypoint is built with `git add -A`, which honours
    `.gitignore`, and naming a file explicitly is the documented scope override here — so this skill,
@@ -135,7 +138,7 @@ vanish from the report — that reads as "clean".
 ## Step 6: Report, and commit it alone
 
 ```bash
-git status --porcelain   # should differ from /tmp/all-sweep-before.txt only in files you swept
+git status --porcelain   # should differ from that guard file only in files you swept
 ```
 
 In the form `shorten-comment`'s **Reporting** section defines — one line per changed block, no

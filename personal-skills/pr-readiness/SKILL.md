@@ -202,6 +202,15 @@ rules. Check each rule against the changed paths. Typical rules:
 Report each rule as met or missing, **by path**. Do not write the documentation unless the user
 asks.
 
+**The Jira backlog.** Where the repo keeps a per-PR backlog of tracker items, it names the file:
+`node .claude/skills/jira-scope/jira-cache.mjs tasks <KEY>` prints its path. A checkout whose
+`jira-cache.mjs` is missing or does not know `tasks` (it fails or prints usage) has no backlog:
+report "no backlog" and move on, never guess a path. When the file exists, every item not yet
+`verified` or `dropped` is work the pull request still owes, and so is every follow-up of a
+verified item not yet done in the branch (a spec header or requirement doc that should cite the
+new key). List them by key and title. Do not hand them over from here: that is the repo's
+`jira-handoff` walk.
+
 ## Step 6 — the PR description
 
 Find where the repo's pr-description skill writes its file (usually `tmp/<KEY>/`). Re-run that
@@ -235,10 +244,12 @@ One table first:
 | storybook       |         |                                                            |
 | end-to-end      |         | per spec, or "declined, would run: …"                      |
 | documentation   |         | rules met / missing, by path                               |
+| Jira backlog    |         | open items by key and title, or "none" / "no backlog"      |
 | PR description  |         | current, or regenerated (path)                             |
 | review state    |         | draft or not, reviewers, approvals, build                  |
 
 Then the objective list with its verdicts, then **"Left for you"**: the push (with the exact
 line, `git push` or, after a rebase of a branch never pushed, `git push -u origin <branch>`),
-uploading the description, a declined end-to-end run, any rule that needs a decision. End with
+uploading the description, a declined end-to-end run, the open Jira backlog items, any rule
+that needs a decision. End with
 one sentence: ready for review, or not, and the single biggest reason why not.
