@@ -61,6 +61,26 @@ browser test run — that isolation is the entire reason the fleet exists.
    $
    clone_01 · src/app · ✚✱⇡2 · fixes/ABC-1323_i_can_close_the_browser_tab…
   ```
+
+  The same keys in the clone's VS Code window, macOS only, come from the hangar keys extension
+  that `hangar ide vscode sync` and `hangar doctor --fix` install. VS Code lists them in Keyboard
+  Shortcuts under `@ext:hangar.hangar-keys`, and the Command Palette under `Hangar:`. A window
+  open before an install needs **Developer: Reload Window**.
+
+  | Chord           | Does                                                                     |
+  | --------------- | ------------------------------------------------------------------------ |
+  | `ctrl+b ctrl+t` | pick a file of the ticket's `tmp/<KEY>/`, or show the folder             |
+  | `ctrl+b ctrl+p` | open the clone's plan, or pick one                                       |
+  | `ctrl+b ctrl+n` | run a script in its own tmux window, or toggle a dev server              |
+  | `ctrl+b a`      | `git fetch origin`                                                       |
+  | `ctrl+b ctrl+a` | `git fetch --all`                                                        |
+  | `ctrl+b ctrl+g` | toggle the commit gate                                                   |
+  | `ctrl+b ctrl+s` | paste `keys.selectionCommand` with the selection's reference filled in   |
+  | `ctrl+k ctrl+k` | paste `@<file>#<lines>` of the selection, or of the files selected in the Explorer |
+
+  Both pastes go into the clone's Claude Code in tmux and never press Enter. In the editor they
+  take two macOS keys away: `ctrl+b` no longer moves the cursor left, and `ctrl+k` no longer
+  deletes to the end of the line.
 - **Closing and reloading a clone.** `hangar close 1` takes the whole working set down — the
   editor window, the Claude Code session, the clone's tmux session — and collects the plans a
   killed session cannot collect for itself. `hangar reload 1` is the other one: it re-reads the
