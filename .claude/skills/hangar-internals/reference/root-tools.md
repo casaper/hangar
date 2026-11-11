@@ -14,10 +14,13 @@ rather than `hangar` subcommands, what each refuses, and how `personal-skills/` 
   a restore records an undo snapshot before it writes, AND it refuses any path resolving to the
   repo root. The gate is pre-approved only as `status`; `lock`, `release` and `unlock` prompt,
   because an agent that can release its own gate has no gate. The hook does nothing while the
-  gate is neither locked nor armed; under a lock it refuses `release`, `unlock` and any command
-  naming its own state file, because a permission rule matches only the START of a command string
-  and `hangar-commit-gate status && … release` sails straight past one. `lock` itself is refused
-  only while armed, below.
+  gate is neither locked nor armed; under a lock it refuses `release`, `unlock`, `toggle`,
+  `hangar key gate` (which runs `toggle`) and any command naming its own state file, because a
+  permission rule matches only the START of a command string and
+  `hangar-commit-gate status && … release` sails straight past one. `releasesGate` is the one
+  test for every releasing spelling, and the script exports it with `toggleDecision` when it is
+  required rather than run, so `test/personal-tools.test.ts` holds the hook's own patterns rather
+  than a copy. `lock` itself is refused only while armed, below.
   **`arm --ticket <KEY>` is a lock for a branch that does not exist yet**, and it exists for
   `hangar jira-plan`, which starts a planning agent on the default branch -- unlockable -- that
   cuts the ticket's branch minutes later. The PreToolUse hook PROMOTES an armed gate to the
@@ -40,7 +43,19 @@ rather than `hangar` subcommands, what each refuses, and how `personal-skills/` 
   `.git/hooks` beside the repo's own and fires on every checkout), a `lock` line in the repo's
   planning skill (hangar tooling in the team's tracked repo, and a step an agent can skip), and a
   `PostToolUse` registration (a change to every clone's generated settings to close a one-call
-  window the skill never uses). **Edit it as a scratch copy and `mv` it in**: the gate runs before
+  window the skill never uses).
+  **`arm` with no ticket locks the next lockable branch, whatever it names**, and that is what
+  `toggle` arms on the default branch -- `C-b C-g` in a clone's tmux window -- because a key press
+  names no ticket. The lock it becomes takes its ticket from the branch name, if there is one.
+  The cost is accepted: checking out a colleague's branch to read it locks THAT branch, and one
+  more press releases it. **`toggle`'s table has an answer for every state**: on the default
+  branch it disarms an armed gate, arms one that is off, and REFUSES while a lock on another
+  branch is in force, because arming over it would drop the lock quietly. On a release branch or
+  a detached HEAD it refuses with `unlockable`'s reason. On a lockable branch it releases a lock
+  that is here, and otherwise locks here, which MOVES a lock from another branch or replaces an
+  arm and says which. It promotes first, so an armed gate already on its branch is released by
+  one press rather than locked twice. `hangar jira-plan` arming for a ticket over a ticketless
+  arm re-points it, as `arm` over any arm does. **Edit it as a scratch copy and `mv` it in**: the gate runs before
   every Bash call in every clone, and the probe that tests it copies it into a temp hangar root,
   because `statePath` is resolved from the script's own location.
 - **`bin/hangar-rewrite`** — amend, fixup, autosquash, rebase and reset, for history that has

@@ -110,7 +110,8 @@ EOF
   # The commit gate, from the state file `hangar-commit-gate` writes one key per line. Locked
   # counts only on the branch the lock names -- the same rule as the gate's own activeLock,
   # so a lock left on another branch is not shown as blocking this one. Armed names its
-  # ticket, because an armed clone sits on the default branch, which does not.
+  # ticket, because an armed clone sits on the default branch, which does not -- and an arm
+  # with no ticket (`C-b C-g` on the default branch) shows the mark alone.
   gate="" g_locked="" g_armed="" g_branch="" g_ticket=""
   if [ -f "$GATE_DIR/$clone.json" ]; then
     while IFS= read -r line; do
@@ -123,8 +124,8 @@ EOF
     done <"$GATE_DIR/$clone.json"
     if [ -n "$g_locked" ]; then
       [ -n "$branch" ] && [ "$g_branch" = "$branch" ] && gate='⊠gate'
-    elif [ -n "$g_armed" ] && [ -n "$g_ticket" ]; then
-      gate="⊡gate $g_ticket"
+    elif [ -n "$g_armed" ]; then
+      gate="⊡gate${g_ticket:+ $g_ticket}"
     fi
   fi
 

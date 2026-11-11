@@ -172,7 +172,9 @@ tool is the separate `<thing>_preview`.
   belongs to, and `C-b C-k` lists them**: `C-b C-e` opens its editor (`hangar edit`); `C-b C-f`
   opens its ticket's `tmp/<KEY>` folder in Finder (`hangar browse tmp`) — refused, with a message
   on the bar, on the default branch or before the ticket has been fetched; `C-b a` fetches origin
-  and `C-b C-a` every remote, each saying on the bar how it went. They run the hidden
+  and `C-b C-a` every remote, each saying on the bar how it went; `C-b C-g` toggles the commit gate
+  (`hangar-commit-gate toggle`): arm or disarm on the default branch — armed, it locks the next
+  branch checked out — and lock or release on any other. They run the hidden
   `hangar key …`, which a person can also type. **A click only arrives if the terminal emulator reports
   button presses, and that is not the same setting as the wheel** — iTerm2 has one for each, so a
   bar where scrolling works and nothing is clickable is the emulator rather than tmux. `doctor`'s

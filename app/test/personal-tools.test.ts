@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +22,26 @@ import { syntheticHangar, THIS_REPOS_TICKET_PREFIX } from './fixture.ts';
 const binDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'bin');
 
 const script = (name: string): string => readFileSync(join(binDir, name), 'utf8');
+
+type GateState = {
+  locked?: boolean;
+  armed?: boolean;
+  branch?: string;
+  ticket?: string | null;
+} | null;
+type Decision = { op: string; why?: string; replaces?: string };
+
+/** The gate's pure half -- it exports it when required rather than run. */
+const gate = createRequire(import.meta.url)(join(binDir, 'hangar-commit-gate')) as {
+  GATE_STATE: RegExp;
+  releasesGate: (command: string) => boolean;
+  toggleDecision: (facts: {
+    branch: string;
+    isDefault: boolean;
+    unlockableWhy: string | null;
+    state: GateState;
+  }) => Decision;
+};
 
 /**
  * Literals belonging to the repository this hangar happens to manage.
@@ -85,28 +106,62 @@ test('the gate guards its own release, because a permission rule cannot', () => 
   assert.match(text, /GATE_RELEASE/);
   assert.match(text, /GATE_STATE/);
 
-  // The patterns themselves, applied the way the hook applies them.
-  const release = /hangar-commit-gate\s+(?:--\S+\s+)*(?:release|unlock)\b/;
-  // The state guard is a plain substring in the hook too — matched on the DIRECTORY name rather
-  // than a resolved path, so a relative spelling, a glob or a `$HOME` form is caught as well.
-  const state = '.hangar/commit-gate';
+  // The patterns themselves, exactly as the hook applies them. The state guard is matched on the
+  // DIRECTORY name rather than a resolved path, so a relative spelling, a glob or a `$HOME` form
+  // is caught as well. `toggle` and `hangar key gate` (`C-b C-g`) release a lock as surely as
+  // `release` does, under names the first pattern never saw.
   for (const line of [
     'hangar-commit-gate status && hangar-commit-gate release',
     'hangar-commit-gate release',
     'hangar-commit-gate unlock',
+    'hangar-commit-gate toggle',
+    'hangar key gate 2',
+    'hangar --hangar /some/root key gate clone_02',
+    '/abs/bin/hangar key gate 2',
   ]) {
-    assert.ok(release.test(line), `a release escape is not caught: ${line}`);
+    assert.ok(gate.releasesGate(line), `a release escape is not caught: ${line}`);
   }
   for (const line of [
     'rm -rf .hangar/commit-gate',
     'echo x > $HOME/h/.hangar/commit-gate/c.json',
   ]) {
-    assert.ok(line.includes(state), `a state-file escape is not caught: ${line}`);
+    assert.ok(gate.GATE_STATE.test(line), `a state-file escape is not caught: ${line}`);
   }
   // Reading is not escaping, and ordinary work must stay untouched on the hot path.
-  for (const line of ['hangar-commit-gate status', 'git status', 'npm test']) {
-    assert.ok(!release.test(line) && !line.includes(state), `wrongly caught: ${line}`);
+  for (const line of [
+    'hangar-commit-gate status',
+    'git status',
+    'npm test',
+    'hangar key fetch 2',
+    'hangar status 2',
+  ]) {
+    assert.ok(!gate.releasesGate(line) && !gate.GATE_STATE.test(line), `wrongly caught: ${line}`);
   }
+});
+
+test('the gate toggle has an answer for every state, and never drops a lock silently', () => {
+  const on = (branch: string, isDefault: boolean, state: GateState, why: string | null = null) =>
+    gate.toggleDecision({ branch, isDefault, unlockableWhy: why, state });
+  // The default branch arms and disarms; a lock elsewhere is never dropped from there.
+  assert.equal(on('main', true, null).op, 'arm');
+  assert.equal(on('main', true, { armed: true, ticket: null }).op, 'disarm');
+  assert.equal(on('main', true, { armed: true, ticket: 'ABC-1' }).op, 'disarm');
+  const refused = on('main', true, { locked: true, branch: 'feature/x' });
+  assert.equal(refused.op, 'refuse');
+  assert.match(refused.why ?? '', /feature\/x/);
+  // A branch that cannot carry a lock is refused with the gate's own reason.
+  assert.deepEqual(on('release/1', false, null, 'release/1 -- protected'), {
+    op: 'refuse',
+    why: 'release/1 -- protected',
+  });
+  // A lockable branch: release here, lock otherwise -- and say what a lock replaces.
+  assert.equal(on('feature/x', false, { locked: true, branch: 'feature/x' }).op, 'release');
+  assert.equal(on('feature/x', false, null).op, 'lock');
+  assert.match(
+    on('feature/y', false, { locked: true, branch: 'feature/x' }).replaces ?? '',
+    /lock on feature\/x/,
+  );
+  assert.match(on('feature/y', false, { armed: true, ticket: 'ABC-1' }).replaces ?? '', /ABC-1/);
 });
 
 test('restore is pre-approved whole, and the gate only to be read', () => {

@@ -1,4 +1,5 @@
 import { readSync } from 'node:fs';
+import { join } from 'node:path';
 import { requireClone, type Clone } from '../fleet.ts';
 import { run } from '../exec.ts';
 import { git } from '../git.ts';
@@ -67,6 +68,33 @@ export const keyFetch = (
   const all = opts.all === true;
   const result = git(clone.path, ['fetch', all ? '--all' : 'origin']);
   say(hangar, clone, fetchReport(clone.name, all, result));
+};
+
+/**
+ * What a gate press reports: the gate's own first line, or its refusal. PURE.
+ *
+ * The gate prints what it did on stdout and why it refused on stderr; either way its FIRST line is
+ * the sentence, and the rest is detail a bar has no room for.
+ */
+export const gateReport = (
+  clone: string,
+  result: { readonly ok: boolean; readonly stdout: string; readonly stderr: string },
+): string => `${clone}: ${firstLine(result.ok ? result.stdout : result.stderr || result.stdout)}`;
+
+/**
+ * `C-b C-g`: `hangar-commit-gate toggle`, run IN the clone -- the gate finds its repository from
+ * its working directory, and a key runs in whichever directory the pane is in.
+ *
+ * The script and not a reimplementation: the gate's state file has three readers already (the
+ * hook, the bar, `status`), and only the script writes it. `toggle` is guarded by the gate's own
+ * hook under this command's name too, so an agent cannot release its gate through the key.
+ */
+export const keyGate = (hangar: Hangar, ref: string): void => {
+  const clone = requireClone(hangar, ref);
+  const result = run(join(hangar.root, 'bin', 'hangar-commit-gate'), ['toggle'], {
+    cwd: clone.path,
+  });
+  say(hangar, clone, gateReport(clone.name, result));
 };
 
 /**

@@ -27,7 +27,7 @@ import {
 } from '../src/palette.ts';
 import { cloneAt } from '../src/fleet.ts';
 import { KEY_TABLE, RETIRED_KEYS, keyHelpLines } from '../src/keys.ts';
-import { fetchReport } from '../src/commands/key.ts';
+import { fetchReport, gateReport } from '../src/commands/key.ts';
 import { namesNoMachinePath, syntheticHangar } from './fixture.ts';
 
 /**
@@ -493,4 +493,19 @@ test('what Claude Code needs in its environment survives the leak scrub, and onl
   assert.equal(isSessionLeak('CLAUDE_CODE_TMUX_TRUECOLORX'), true);
   const shown = CLAUDE_CODE_ENVIRONMENT.map((e) => `${e.name}=${e.value}`).join('\n');
   assert.deepEqual(leakedInEnvironment(`${shown}\nCLAUDE_CODE_X=1`), ['CLAUDE_CODE_X']);
+});
+
+test('a gate press reports the gate’s own first line, or its refusal', () => {
+  assert.equal(
+    gateReport('clone_02', {
+      ok: true,
+      stdout: 'Commit gate LOCKED on feature/x.\nCommits are denied.',
+      stderr: '',
+    }),
+    'clone_02: Commit gate LOCKED on feature/x.',
+  );
+  assert.equal(
+    gateReport('clone_02', { ok: false, stdout: '', stderr: 'Commit gate unchanged: why.\n' }),
+    'clone_02: Commit gate unchanged: why.',
+  );
 });

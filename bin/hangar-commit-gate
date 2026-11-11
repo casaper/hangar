@@ -6,6 +6,8 @@
  *   hangar-commit-gate status              # what the gate is doing here
  *   hangar-commit-gate lock [--ticket X]   # deny commits on the checked-out branch
  *   hangar-commit-gate arm --ticket X      # lock the branch for X as soon as one is checked out
+ *   hangar-commit-gate arm                 # lock the next lockable branch that is checked out
+ *   hangar-commit-gate toggle              # what `C-b C-g` runs: arm/disarm, or lock/release
  *   hangar-commit-gate release --note "…"  # release, recording why
  *   hangar-commit-gate unlock              # release without a note
  *
@@ -21,6 +23,11 @@
  * branch. A git `post-checkout` hook would catch the same moment without that one-call lag, but it
  * would live in each clone's `.git/hooks`, beside whatever the repo installs there, and fire on
  * every checkout anyone makes.
+ *
+ * **Arming with no ticket locks the next lockable branch, whatever it names.** That is what
+ * `toggle` arms on the default branch, because a person pressing a key there has named no ticket.
+ * The cost is stated rather than hidden: checking out a colleague's branch to look at it locks
+ * THAT branch, and `toggle` on it releases it again.
  *
  * **Silent and inert unless this clone's state file says the checked-out branch is locked**, so a
  * clone whose developer never locks anything sees no behavioural change at all. That is what
@@ -70,7 +77,17 @@ const GIT_COMMIT = /(?:^|&&|\|\||;|\n)\s*git\s+(?:-C\s+\S+\s+|-c\s+\S+\s+|--\S+\
  * whole command line is visible. The person at the terminal is unaffected: a PreToolUse hook sees
  * an agent's tool calls and nothing they type themselves.
  */
-const GATE_RELEASE = /hangar-commit-gate\s+(?:--\S+\s+)*(?:release|unlock)\b/;
+const GATE_RELEASE = /hangar-commit-gate\s+(?:--\S+\s+)*(?:release|unlock|toggle)\b/;
+
+/**
+ * `hangar key gate`, which is `C-b C-g` and runs `toggle` -- so it releases a lock exactly as
+ * `release` does, under a name the pattern above never sees. Global flags may come first, and
+ * `--hangar` takes a value.
+ */
+const GATE_KEY = /\bhangar(?:\s+--\S+(?:\s+(?!-)\S+)?)*\s+key\s+gate\b/;
+
+/** Any spelling that releases or disarms the gate. */
+const releasesGate = (command) => GATE_RELEASE.test(command) || GATE_KEY.test(command);
 
 /**
  * Re-pointing an ARMED gate, which turns it off without releasing anything: `arm` for a ticket no
@@ -160,13 +177,15 @@ const namesTicket = (branch, ticket) =>
  */
 const promote = (root) => {
   const state = readState(root);
-  if (!state || !state.armed || !state.ticket) return null;
+  if (!state || !state.armed) return null;
   const branch = currentBranch(root);
-  if (unlockable(root, branch) !== null || !namesTicket(branch, state.ticket)) return null;
+  if (unlockable(root, branch) !== null) return null;
+  // Armed for a ticket: only its branch. Armed for none: the next lockable branch, whatever it is.
+  if (state.ticket && !namesTicket(branch, state.ticket)) return null;
   const lock = {
     locked: true,
     branch,
-    ticket: state.ticket,
+    ticket: state.ticket ?? (branch.match(KEY_IN_TEXT_RE) ?? [])[0] ?? null,
     locked_at: new Date().toISOString(),
     armed_at: state.armed_at,
   };
@@ -205,13 +224,20 @@ const banner = (lock) =>
  */
 const armedBanner = (state) =>
   [
-    `Commit gate ARMED for ${state.ticket}: this session's work is ${state.ticket}.`,
+    state.ticket
+      ? `Commit gate ARMED for ${state.ticket}: this session's work is ${state.ticket}.`
+      : 'Commit gate ARMED for the next branch.',
     '',
-    `The first branch naming ${state.ticket} that is checked out here is locked against commits.`,
+    state.ticket
+      ? `The first branch naming ${state.ticket} that is checked out here is locked against commits.`
+      : 'The next branch checked out here, other than the default branch, is locked against commits.',
     "Commits are allowed until then. Disarming the gate is the user's.",
     '',
     'Gate state: `hangar-commit-gate status`',
   ].join('\n');
+
+/** `for ABC-12`, or `for the next branch` when armed with no ticket. */
+const armedFor = (state) => (state.ticket ? `for ${state.ticket}` : 'for the next branch');
 
 /** Goes in `permissionDecisionReason` -- that is the field a deny's text reaches the agent by. */
 const denial = (lock) =>
@@ -238,8 +264,8 @@ const escape = (lock) =>
   [
     `**Releasing the commit gate is the user's, and this is blocked.**`,
     '',
-    `The gate is ACTIVE on ${describe(lock)}. Releasing it -- with \`release\`, with \`unlock\`,`,
-    'or by deleting its state file -- is the one thing you may not do on this branch, because a',
+    `The gate is ACTIVE on ${describe(lock)}. Releasing it -- with \`release\`, \`unlock\` or`,
+    '`toggle`, or by deleting its state file -- is the one thing you may not do on this branch, because a',
     'gate you can turn off yourself is not a gate.',
     '',
     'If the work is ready, say so and stop. The user runs the release.',
@@ -304,9 +330,9 @@ const lock = (args) => {
  */
 const arm = (args) => {
   const root = repoRoot();
-  const ticket = valueFor(args, '--ticket');
-  if (!ticket || !/^[A-Z][A-Z0-9]+-\d+$/.test(ticket)) {
-    fail('arm needs --ticket <KEY>, e.g. --ticket ABC-123.');
+  const ticket = valueFor(args, '--ticket') ?? null;
+  if (args.includes('--ticket') && (!ticket || !/^[A-Z][A-Z0-9]+-\d+$/.test(ticket))) {
+    fail('arm --ticket needs a key, e.g. --ticket ABC-123.');
   }
   const active = activeLock(root);
   if (active) fail(`Refusing to arm -- the gate is already ACTIVE on ${describe(active)}.`);
@@ -317,8 +343,58 @@ const arm = (args) => {
     console.log(`Commit gate LOCKED on ${describe(promoted)} -- the branch already exists.`);
     return;
   }
-  console.log(`Commit gate ARMED for ${ticket} (${basename(root)}).`);
-  console.log(`It locks the first branch naming ${ticket} that is checked out here.`);
+  console.log(`Commit gate ARMED ${armedFor({ ticket })} (${basename(root)}).`);
+  console.log(
+    ticket
+      ? `It locks the first branch naming ${ticket} that is checked out here.`
+      : 'It locks the next branch checked out here, other than the default branch.',
+  );
+};
+
+/**
+ * What `toggle` does, from the facts. PURE, and exported for the tests.
+ *
+ * One state file holds one state, so every combination has an answer rather than a fall-through:
+ *
+ * - On the default branch: disarm an armed gate, arm one that is off, and refuse while a lock on
+ *   another branch is in force -- arming over it would quietly drop it.
+ * - On a branch that cannot be locked (a release branch, a detached HEAD): refuse.
+ * - On a lockable branch: release a lock that is here; otherwise lock here, which MOVES a lock that
+ *   was on another branch and replaces an arm, and says so.
+ */
+const toggleDecision = ({ branch, isDefault, unlockableWhy, state }) => {
+  const locked = state && state.locked ? state : null;
+  const armed = state && state.armed && !state.locked ? state : null;
+  if (isDefault) {
+    if (locked) return { op: 'refuse', why: `the gate is locked on ${locked.branch} -- toggle it there` };
+    if (armed) return { op: 'disarm' };
+    return { op: 'arm' };
+  }
+  if (unlockableWhy !== null) return { op: 'refuse', why: unlockableWhy };
+  if (locked && locked.branch === branch) return { op: 'release' };
+  if (locked) return { op: 'lock', replaces: `the lock on ${locked.branch}` };
+  if (armed) return { op: 'lock', replaces: `the arm ${armedFor(armed)}` };
+  return { op: 'lock' };
+};
+
+const toggle = () => {
+  const root = repoRoot();
+  // An armed gate whose branch is already here becomes the lock first, as the hook would make it.
+  promote(root);
+  const branch = currentBranch(root);
+  const decision = toggleDecision({
+    branch,
+    isDefault: branch === defaultBranch(root),
+    unlockableWhy: branch === defaultBranch(root) ? null : unlockable(root, branch),
+    state: readState(root),
+  });
+  if (decision.op === 'refuse') fail(`Commit gate unchanged: ${decision.why}.`);
+  if (decision.op === 'disarm') return clear('disarmed');
+  if (decision.op === 'release') return clear('released', 'toggled off');
+  if (decision.op === 'arm') return arm([]);
+  rmSync(statePath(root), { force: true });
+  lock([]);
+  if (decision.replaces) console.log(`  This replaces ${decision.replaces}.`);
 };
 
 const clear = (event, detail) => {
@@ -331,7 +407,7 @@ const clear = (event, detail) => {
   }
 
   rmSync(statePath(root), { force: true });
-  const what = state.locked ? `on ${state.branch}` : `(armed for ${state.ticket})`;
+  const what = state.locked ? `on ${state.branch}` : `(armed ${armedFor(state)})`;
   console.log(`Commit gate ${event} ${what}. Commits are allowed again.`);
   if (detail) console.log(`  ${detail}`);
 };
@@ -342,8 +418,12 @@ const status = () => {
   const branch = currentBranch(root);
 
   if (state && state.armed && !state.locked) {
-    console.log(`Commit gate: ARMED for ${state.ticket} since ${String(state.armed_at).slice(0, 10)}.`);
-    console.log(`  It locks the first branch naming ${state.ticket}; ${branch} is checked out.`);
+    console.log(`Commit gate: ARMED ${armedFor(state)} since ${String(state.armed_at).slice(0, 10)}.`);
+    console.log(
+      state.ticket
+        ? `  It locks the first branch naming ${state.ticket}; ${branch} is checked out.`
+        : `  It locks the next lockable branch; ${branch} is checked out.`,
+    );
     return;
   }
 
@@ -372,24 +452,23 @@ const guardArmed = (root, payload) => {
   if (!state || !state.armed || state.locked) return;
   if ((payload.hook_event_name ?? '') !== 'PreToolUse' || payload.tool_name !== 'Bash') return;
   const command = payload.tool_input?.command ?? '';
-  if (!GATE_RELEASE.test(command) && !GATE_STATE.test(command) && !GATE_REPOINT.test(command))
-    return;
+  if (!releasesGate(command) && !GATE_STATE.test(command) && !GATE_REPOINT.test(command)) return;
   process.stdout.write(
     JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
         permissionDecisionReason: [
-          `**The commit gate is armed for ${state.ticket}, and disarming it is the user's.**`,
+          `**The commit gate is armed ${armedFor(state)}, and disarming it is the user's.**`,
           '',
-          `It locks the branch for ${state.ticket} as soon as that branch is checked out. Turning`,
-          'it off -- with `release` or `unlock`, by re-arming or locking something else, or by',
+          'It locks that branch as soon as it is checked out. Turning it off -- with `release`,',
+          '`unlock` or `toggle`, by re-arming or locking something else, or by',
           'deleting its state file -- is not yours.',
           '',
           'Reading the state is fine: `hangar-commit-gate status`.',
         ].join('\n'),
       },
-      systemMessage: `Commit gate armed for ${state.ticket} -- disarming it is the user's.`,
+      systemMessage: `Commit gate armed ${armedFor(state)} -- disarming it is the user's.`,
     }),
   );
 };
@@ -435,7 +514,7 @@ const hook = () => {
   const command = payload.tool_input?.command ?? '';
   if (payload.tool_name !== 'Bash') return;
 
-  const escaping = GATE_RELEASE.test(command) || GATE_STATE.test(command);
+  const escaping = releasesGate(command) || GATE_STATE.test(command);
   if (!escaping && !GIT_COMMIT.test(command)) return;
 
   process.stdout.write(
@@ -458,7 +537,8 @@ const usage = () => {
       'Usage:',
       '  hangar-commit-gate status',
       '  hangar-commit-gate lock [--ticket <KEY>]',
-      '  hangar-commit-gate arm --ticket <KEY>',
+      '  hangar-commit-gate arm [--ticket <KEY>]',
+      '  hangar-commit-gate toggle',
       '  hangar-commit-gate release --note "<summary>"',
       '  hangar-commit-gate unlock',
       '',
@@ -476,6 +556,7 @@ const main = () => {
   if (command === 'status') return status();
   if (command === 'release') return clear('released', valueFor(rest, '--note') ?? 'checklist passed');
   if (command === 'unlock') return clear('unlocked');
+  if (command === 'toggle') return toggle();
 
   usage();
   process.exit(command === '--help' ? 0 : 1);
@@ -488,11 +569,15 @@ const main = () => {
  * exit non-zero -- Claude Code reads that as a blocked tool call, which is the one thing a
  * broken gate must not do.
  */
-try {
-  main();
-} catch (error) {
-  process.stderr.write(`[commit-gate] ${error.message}\n`);
-  if (process.argv[2] !== undefined) process.exit(1);
+if (require.main === module) {
+  try {
+    main();
+  } catch (error) {
+    process.stderr.write(`[commit-gate] ${error.message}\n`);
+    if (process.argv[2] !== undefined) process.exit(1);
+  }
+  process.exit(0);
+} else {
+  // The pure half, for the tests: the patterns the hook applies and the toggle's decision table.
+  module.exports = { GATE_RELEASE, GATE_KEY, GATE_STATE, releasesGate, toggleDecision };
 }
-
-process.exit(0);

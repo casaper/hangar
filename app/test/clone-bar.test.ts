@@ -238,6 +238,9 @@ test('the footer shows the commit gate exactly when the gate itself would act', 
     );
     const armed = footer({ armed: true, ticket: 'BE-1323', armed_at: '2026-01-01T00:00:00.000Z' });
     assert.ok(armed.includes(' · ⊡gate BE-1323 · '), armed);
+    // `C-b C-g` on the default branch arms with no ticket; the mark still shows, alone.
+    const anyBranch = footer({ armed: true, ticket: null, armed_at: '2026-01-01T00:00:00.000Z' });
+    assert.ok(anyBranch.includes(' · ⊡gate · '), anyBranch);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

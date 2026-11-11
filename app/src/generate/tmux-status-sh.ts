@@ -147,9 +147,9 @@ const PATH_MAX = 36;
  * reads as one character rather than as an empty gap that could equally be a broken script.
  *
  * The two gate marks are not git state and so get their own segment: `⊠` is a lock in force on
- * this branch, `⊡` a gate armed for a ticket whose branch is not cut yet. Single-width BMP symbols
- * rather than a padlock emoji, because tmux and the emulator disagree on an emoji's width and the
- * rest of the line then lands a column off.
+ * this branch, `⊡` a gate armed for a ticket whose branch is not cut yet, or for no ticket.
+ * Single-width BMP symbols rather than a padlock emoji, because tmux and the emulator disagree on
+ * an emoji's width and the rest of the line then lands a column off.
  */
 const GLYPHS = {
   clean: '✔',
@@ -311,7 +311,8 @@ export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
     '  # The commit gate, from the state file `hangar-commit-gate` writes one key per line. Locked',
     "  # counts only on the branch the lock names -- the same rule as the gate's own activeLock,",
     '  # so a lock left on another branch is not shown as blocking this one. Armed names its',
-    '  # ticket, because an armed clone sits on the default branch, which does not.',
+    '  # ticket, because an armed clone sits on the default branch, which does not -- and an arm',
+    '  # with no ticket (`C-b C-g` on the default branch) shows the mark alone.',
     '  gate="" g_locked="" g_armed="" g_branch="" g_ticket=""',
     '  if [ -f "$GATE_DIR/$clone.json" ]; then',
     '    while IFS= read -r line; do',
@@ -324,8 +325,8 @@ export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
     '    done <"$GATE_DIR/$clone.json"',
     '    if [ -n "$g_locked" ]; then',
     `      [ -n "$branch" ] && [ "$g_branch" = "$branch" ] && gate=${sq(`${GLYPHS.gateLocked}gate`)}`,
-    '    elif [ -n "$g_armed" ] && [ -n "$g_ticket" ]; then',
-    `      gate="${GLYPHS.gateArmed}gate $g_ticket"`,
+    '    elif [ -n "$g_armed" ]; then',
+    `      gate="${GLYPHS.gateArmed}gate\${g_ticket:+ $g_ticket}"`,
     '    fi',
     '  fi',
     '',

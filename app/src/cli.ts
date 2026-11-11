@@ -16,7 +16,7 @@ import { configSchema, configShow, configValidate } from './commands/config.ts';
 import { doctor } from './commands/doctor.ts';
 import { edit, type EditOptions } from './commands/edit.ts';
 import { jiraHook } from './commands/jira.ts';
-import { keyFetch, keyHelp } from './commands/key.ts';
+import { keyFetch, keyGate, keyHelp } from './commands/key.ts';
 import { jiraPlan } from './commands/jira-plan.ts';
 import { golden } from './commands/dev.ts';
 import { release } from './commands/release.ts';
@@ -1166,6 +1166,14 @@ key
   .option('--all', 'fetch every remote: origin and every sibling clone (C-b C-a)')
   .action((clone: string, options: { all?: boolean }) => {
     keyFetch(requireHangar(), clone, options);
+  });
+
+key
+  .command('gate')
+  .description("Toggle a clone's commit gate, and say what it did on its bar (C-b C-g)")
+  .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
+  .action((clone: string) => {
+    keyGate(requireHangar(), clone);
   });
 
 key
