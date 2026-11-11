@@ -132,18 +132,20 @@ Invoke the `pr-readiness` skill at these points:
 - **Each later pass:** after you finish the items the previous pass added, and only if code
   changed since that pass.
 
-**Within this run, pr-readiness asks nothing.** Where it would ask the user (a dirty tree before
-integrating, an end-to-end run, a decision about a rule), add the question to the backlog and let
-it carry on with the rest. It already refuses to integrate on a dirty tree or a locked gate, so a
-mid-run pass stays safe. Never publish anything that pass names.
+**Within this run, pr-readiness asks nothing.** Where it would ask the user (an end-to-end run, a
+decision about a rule), add the question to the backlog and let it carry on with the rest. It
+reports and never integrates, so a mid-run pass changes no branch. **A branch behind its target is
+a backlog item, not a fix**: bringing the target in is the repo's `/sync-branch` and the user's
+call, never this run's. Never publish anything that pass names.
 
 Take each ❌, ⚠️ or ❓ row and each missing objective it reports:
 - **It passes the three-part test:** add it under **Added during implementation**, tagged
   `pr-readiness pass N`, and go back to the work loop.
 - **It fails the test:** add it to the question backlog.
 
-**Within this run, a finding that passes the test is fixed**, failing tests included. That
-overrides pr-readiness's "do not fix without asking": you were asked, by `/implement-pr`.
+**Within this run, a finding that passes the test is fixed**, failing tests included.
+pr-readiness only reports what is missing; fixing it is what you were asked for, by
+`/implement-pr`.
 
 **Stop the checkpoints** after the first pass that adds nothing new you can fix. A finding
 already in the backlog does not count as new. There is no fixed number of passes, but a pass that

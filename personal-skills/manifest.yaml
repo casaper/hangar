@@ -98,19 +98,6 @@ skills:
     divergence: standalone
     reason: No tracked counterpart in any managed repo -- this one exists only at user level.
 
-  - name: pr-readiness
-    divergence: intentional
-    mirrors: .claude/skills/pr-readiness/SKILL.md
-    basedOn: 657a58cfc39b359d722faa26b3547a65d0bfa338
-    reason: >-
-      Kept beside the project copy, not retired: the two do different jobs. The tracked copy
-      is for a checkout with no hangar and only reports how far the branch is from its target,
-      reading the pull request through a read-only forge script of its own. This one keeps the
-      hangar's answers -- `hangar list` for review state, `hangar sync -n` for the target and
-      strategy -- and integrates: through `hangar-rewrite rebase` where the repo's rules deny `git
-      rebase`, and by merging otherwise. Its Jira-backlog step is guarded, because a branch cut
-      before that copy landed has no command to ask.
-
   - name: copy-to-clipboard
     divergence: intentional
     mirrors: .claude/skills/copy-to-clipboard/SKILL.md
