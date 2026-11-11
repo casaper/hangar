@@ -1006,6 +1006,37 @@ closes without a message.
   environment, which for a server the emulator started has no Homebrew in it. PATH first, then
   `$HOMEBREW_PREFIX`, `/opt/homebrew`, `/usr/local` and `/usr/bin`.
 
+#### The runner: `C-b C-n`
+
+`runner` in the config is a list of rows, and every name and line in it is the managed repo's, so
+the CLI knows how to run a line and never which lines a repo has. `runnerAction` in `src/runner.ts`
+decides what one press does from the windows that are open, as a value, so the whole table is a
+test with no tmux server. Three rules decide it:
+
+- **A server row (`role:`) toggles through `servers start`, never beside it.** A start is
+  `startPlan` and `addWindow`, exactly what `hangar servers start --role` runs, so the port prefix,
+  the pid file and `servers list` keep agreeing about what is running. A stop is `C-c` in the role
+  window, a wait of up to 15 seconds for the pane to be back at a shell, and then the window
+  closed, because `startPlan` refuses while the role has a window -- the next press would
+  otherwise be refused. A server that does not stop in time keeps its window and the bar says so.
+- **A busy role window means running, whether or not anything listens yet.** A dev server
+  compiling for a minute has not bound its port, and a port-only check would start a second one
+  into the same pid file. A port held with NO window is running too, but somewhere a key cannot
+  stop cleanly -- a server started by hand -- so that press is refused and names
+  `hangar servers kill`.
+- **A command row never stops anything.** Pressed while its window is busy it is ignored, with a
+  line on the bar, rather than killing the run the developer is waiting on. `window: reuse` types
+  the line again into the finished window; `new` opens another and leaves finished ones to be
+  read. A window is found by `@hangar_role` = `run:<name>`, never by its name or number, the same
+  rule as every role window. `closeOnSuccess` is `&& exit` on the typed line: the shell leaves
+  only when the line succeeded, and tmux closes a window whose last pane is gone, so a failure
+  stays on screen.
+
+`pick` lists files with git (`ls-files -co --exclude-standard` and a `:(glob)` pathspec under
+the row's `dir`), so `node_modules` never appears. The first row is `(all)`, and picking it, or
+nothing but it, runs the script with no file arguments. Each picked path is shell-quoted into
+the row's `arg`.
+
 #### `C-b C-e`'s `(workspace)` row opens the clone's editors, and that is why `hangar edit` exists
 
 **`hangar edit` is a command rather than a flag on `open` BECAUSE of this key.** A key press has

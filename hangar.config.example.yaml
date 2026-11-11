@@ -669,3 +669,39 @@ secrets:
 #   # Index rotation, so a second hangar's clone 1 does not get the same hue as this one's.
 #   # Applied on READ, which is what preserves the append-only property above. Default 0.
 #   rotate: 0
+
+# --------------------------------------------------------------------------------------------
+# Runner -- what C-b C-n offers in a clone's tmux window
+# --------------------------------------------------------------------------------------------
+# The repo's own scripts, so every name and line is config. `window: reuse` (the default) runs
+# one at a time in one window; `new` opens another each time. `closeOnSuccess` closes the window
+# when the line exits 0. Omit the section and the key says there is nothing to run.
+runner:
+  # A `role` row toggles that port role's dev server: started when it is not running, stopped
+  # with C-c and its window closed when it is.
+  - name: start
+    role: ng
+  - name: storybook
+    role: storybook
+  # `pick` asks for files first; each one picked adds `arg` with {file} filled in, and the
+  # first row, (all), adds nothing.
+  - name: storybook:test
+    command: pnpm run storybook:test
+    dir: angular
+    window: new
+    pick:
+      glob: 'src/**/*.stories.ts'
+  - name: build
+    command: pnpm run build
+    dir: angular
+    closeOnSuccess: true
+  - name: test
+    command: pnpm run test --watch=false
+    dir: angular
+    window: new
+    pick:
+      glob: 'src/**/*.spec.ts'
+      arg: '--include={file}'
+  - name: format
+    command: pnpm run format
+    dir: angular

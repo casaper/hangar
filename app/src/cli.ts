@@ -16,7 +16,7 @@ import { configSchema, configShow, configValidate } from './commands/config.ts';
 import { doctor } from './commands/doctor.ts';
 import { edit, type EditOptions } from './commands/edit.ts';
 import { jiraHook } from './commands/jira.ts';
-import { keyEdit, keyFetch, keyGate, keyHelp, keyPlan, keyTicket } from './commands/key.ts';
+import { keyEdit, keyFetch, keyGate, keyHelp, keyPlan, keyRun, keyTicket } from './commands/key.ts';
 import { jiraPlan } from './commands/jira-plan.ts';
 import { golden } from './commands/dev.ts';
 import { release } from './commands/release.ts';
@@ -1198,6 +1198,14 @@ key
   .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
   .action((clone: string) => {
     keyPlan(requireHangar(), clone);
+  });
+
+key
+  .command('run')
+  .description("Run one of the config's `runner` rows in a clone, or toggle its server (C-b C-n)")
+  .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
+  .action((clone: string) => {
+    keyRun(requireHangar(), clone);
   });
 
 key

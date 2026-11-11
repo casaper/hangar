@@ -654,6 +654,7 @@ export const NOT_EXPOSED: readonly string[] = [
   'key gate',
   'key help',
   'key plan',
+  'key run',
   'key ticket',
   'mcp',
 ];

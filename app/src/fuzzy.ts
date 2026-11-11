@@ -34,6 +34,8 @@ export type PickOptions = {
   readonly prompt: string;
   /** One line above the list saying what Enter does. */
   readonly header: string;
+  /** Tab marks rows; Enter returns the marked ones, or the highlighted one when none is marked. */
+  readonly multi?: boolean;
 };
 
 /**
@@ -44,7 +46,11 @@ export type PickOptions = {
  * input order, and `--tiebreak=index` keeps that order among equal matches, so a first row
  * standing for "the whole thing" is what Enter picks before anything is typed.
  */
-export const pick = (rows: readonly string[], opts: PickOptions): string | undefined => {
+export const pick = (rows: readonly string[], opts: PickOptions): string | undefined =>
+  pickMany(rows, { ...opts, multi: false })[0];
+
+/** `pick` with `multi`: every chosen row, or none when the picker was left with Esc. */
+export const pickMany = (rows: readonly string[], opts: PickOptions): string[] => {
   const fzf = fzfBinary();
   if (fzf === undefined) {
     throw new CliError(
@@ -57,14 +63,13 @@ export const pick = (rows: readonly string[], opts: PickOptions): string | undef
     [
       '--layout=reverse',
       '--tiebreak=index',
-      '--no-multi',
+      opts.multi === true ? '--multi' : '--no-multi',
       `--prompt=${opts.prompt}`,
       `--header=${opts.header}`,
     ],
     { input: `${rows.join('\n')}\n` },
   );
   // 1 is "no match", 130 is Esc or C-c: both are a person changing their mind, not a failure.
-  if (!res.ok) return undefined;
-  const chosen = res.stdout.trim();
-  return chosen === '' ? undefined : chosen;
+  if (!res.ok) return [];
+  return res.stdout.split('\n').filter((row) => row !== '');
 };

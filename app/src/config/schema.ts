@@ -675,6 +675,42 @@ const paletteSchema = z.strictObject({
   rotate: z.int().min(0).default(0),
 });
 
+/**
+ * One row of `C-b C-n`'s picker: a dev server to toggle, or a command to run in its own window.
+ *
+ * Every name and every line is config, because they are the managed repo's scripts: the runner
+ * knows how to run a line, never which lines a repo has.
+ *
+ * - `role` names a port role whose `start` is the server. The row toggles it -- `hangar servers
+ *   start` when it is not running, `C-c` and the window closed when it is -- so the port, the pid
+ *   file and `servers list` keep agreeing about what runs.
+ * - `command` is a shell line run in `dir` (relative to the clone root) in a window of its own.
+ *   `window: reuse` keeps one window and runs one at a time; `new` opens another each time, and
+ *   still refuses while the previous one is running. `closeOnSuccess` closes the window when the
+ *   line exits 0, and leaves it open on a failure to be read.
+ * - `pick` asks for files first, matched by `glob` under `dir`, and adds `arg` once per file
+ *   picked with `{file}` filled in. Picking the first row, `(all)`, adds nothing.
+ */
+const runnerEntrySchema = z.union([
+  z.strictObject({
+    name: z.string().min(1),
+    role: z.string().min(1),
+  }),
+  z.strictObject({
+    name: z.string().min(1),
+    command: z.string().min(1),
+    dir: z.string().default(''),
+    window: z.enum(['new', 'reuse']).default('reuse'),
+    closeOnSuccess: z.boolean().default(false),
+    pick: z
+      .strictObject({
+        glob: z.string().min(1),
+        arg: z.string().includes('{file}').default('{file}'),
+      })
+      .optional(),
+  }),
+]);
+
 export const hangarConfigSchema = z
   .strictObject({
     /** Editor completion only; never read at runtime. */
@@ -695,9 +731,36 @@ export const hangarConfigSchema = z
     editor: editorSchema.prefault({}),
     secrets: secretsSchema.prefault({}),
     palette: paletteSchema.prefault({}),
+    /** What `C-b C-n` offers. Empty means the key says there is nothing configured. */
+    runner: z.array(runnerEntrySchema).default([]),
   })
   .superRefine((cfg, ctx) => {
     const { ports, tracker, editor } = cfg;
+
+    // A runner row is found by its name, and a role row toggles a server only `start` can begin.
+    const runnerNames = new Set<string>();
+    cfg.runner.forEach((entry, i) => {
+      if (runnerNames.has(entry.name)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['runner', i, 'name'],
+          message: `duplicate runner name "${entry.name}"`,
+        });
+      }
+      runnerNames.add(entry.name);
+      if (!('role' in entry)) return;
+      const role = ports.roles.find((r) => r.id === entry.role);
+      if (role?.start === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['runner', i, 'role'],
+          message:
+            role === undefined
+              ? `no port role "${entry.role}"`
+              : `port role "${entry.role}" has no \`start\`, so there is nothing to toggle`,
+        });
+      }
+    });
 
     /*
      * Every templated value, checked for tokens the renderer does not know.

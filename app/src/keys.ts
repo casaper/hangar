@@ -70,6 +70,12 @@ export const KEY_TABLE: readonly HangarKey[] = [
     argv: ['key', 'plan'],
     run: 'popup',
   },
+  {
+    key: 'C-n',
+    does: 'run a script in its own window, or toggle a dev server (`runner` in the config)',
+    argv: ['key', 'run'],
+    run: 'popup',
+  },
   { key: 'a', does: 'git fetch origin', argv: ['key', 'fetch'], run: 'report' },
   {
     key: 'C-a',

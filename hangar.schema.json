@@ -709,6 +709,85 @@
         }
       },
       "additionalProperties": false
+    },
+    "runner": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "role": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "name",
+              "role"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "command": {
+                "type": "string",
+                "minLength": 1
+              },
+              "dir": {
+                "default": "",
+                "type": "string"
+              },
+              "window": {
+                "default": "reuse",
+                "type": "string",
+                "enum": [
+                  "new",
+                  "reuse"
+                ]
+              },
+              "closeOnSuccess": {
+                "default": false,
+                "type": "boolean"
+              },
+              "pick": {
+                "type": "object",
+                "properties": {
+                  "glob": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "arg": {
+                    "default": "{file}",
+                    "type": "string",
+                    "format": "includes",
+                    "pattern": "\\{file\\}"
+                  }
+                },
+                "required": [
+                  "glob"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "name",
+              "command"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
     }
   },
   "required": [

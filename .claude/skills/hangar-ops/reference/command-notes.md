@@ -172,7 +172,9 @@ tool is the separate `<thing>_preview`.
   belongs to, and `C-b C-k` lists them**: `C-b C-e` opens a fuzzy picker over the clone's files —
   a file opens in its VS Code window, a directory in Finder, and the first row, `(workspace)`, is
   `hangar edit`; `C-b C-t` is the same picker over the ticket's `tmp/<KEY>/`, its first row the
-  folder; `C-b C-p` opens the clone's plan, or picks between several; `C-b C-f`
+  folder; `C-b C-p` opens the clone's plan, or picks between several; `C-b C-n` runs one of the
+  config's `runner` rows — a script in a window of its own, files picked first where the row says
+  so, or a dev server toggled through `servers start` and stopped with `C-c`; `C-b C-f`
   opens its ticket's `tmp/<KEY>` folder in Finder (`hangar browse tmp`) — refused, with a message
   on the bar, on the default branch or before the ticket has been fetched; `C-b a` fetches origin
   and `C-b C-a` every remote, each saying on the bar how it went; `C-b C-g` toggles the commit gate

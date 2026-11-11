@@ -443,6 +443,10 @@ export type TmuxServer = {
    * that already exists. False when tmux refused either half.
    */
   readonly typeInPane: (paneId: string, line: string) => boolean;
+  /** One key, as tmux names it (`C-c`), into one pane -- not typed text, so nothing is quoted. */
+  readonly sendKey: (paneId: string, key: string) => boolean;
+  /** Close one window, whatever is running in it. The runner closes only what it made idle. */
+  readonly killWindow: (windowId: string) => boolean;
   readonly killSession: (clone: Clone) => boolean;
 };
 
@@ -914,6 +918,8 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
     typeInPane: (paneId, line) =>
       tmux(['send-keys', '-t', paneId, '-l', '--', line]).ok &&
       tmux(['send-keys', '-t', paneId, 'Enter']).ok,
+    sendKey: (paneId, key) => tmux(['send-keys', '-t', paneId, key]).ok,
+    killWindow: (windowId) => tmux(['kill-window', '-t', windowId]).ok,
     respawnPane: (paneId, cwd, command) =>
       tmux([
         'respawn-pane',

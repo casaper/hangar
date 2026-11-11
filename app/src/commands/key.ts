@@ -2,13 +2,30 @@ import { existsSync, readdirSync, readSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { requireClone, type Clone } from '../fleet.ts';
 import { CliError, run } from '../exec.ts';
-import { pick } from '../fuzzy.ts';
+import { pick, pickMany } from '../fuzzy.ts';
 import { git } from '../git.ts';
 import type { Hangar } from '../hangar.ts';
 import { inferTicket, ticketKeyOf } from '../jira.ts';
 import { KEY_TABLE, keyHelpLines } from '../keys.ts';
 import { platform } from '../platform/index.ts';
-import { scrubbedEnv, tmuxArgv, tmuxBinary, tmuxTarget } from '../tmux.ts';
+import {
+  ALL_ROW,
+  isServerRow,
+  runnerAction,
+  runnerRole,
+  type RunnerEntry,
+  type RunnerPane,
+} from '../runner.ts';
+import {
+  scrubbedEnv,
+  tmuxArgv,
+  tmuxBinary,
+  tmuxServer,
+  tmuxTarget,
+  type TmuxServer,
+} from '../tmux.ts';
+import { SHELL_COMMANDS } from './reload.ts';
+import { scanFleet, startPlan } from './servers.ts';
 import { editorsToOpen, openEditors } from './open.ts';
 
 /**
@@ -287,4 +304,145 @@ export const keyPlan = (hangar: Hangar, ref: string): void => {
       ? rows[0]
       : pick(rows, { prompt: `${clone.name} plan > `, header: 'Enter opens it · Esc cancels' });
   if (chosen !== undefined) say(hangar, clone, openPicked(hangar, clone, chosen));
+};
+
+// ---- the runner: C-b C-n --------------------------------------------------------------------
+
+/** The panes of the windows a runner row owns, and whether each is idle. */
+const runnerPanes = (server: TmuxServer, clone: Clone, entry: RunnerEntry): RunnerPane[] => {
+  const role = isServerRow(entry) ? entry.role : runnerRole(entry.name);
+  return server
+    .panes(clone)
+    .filter((pane) => pane.role === role)
+    .map((pane) => ({
+      paneId: pane.id,
+      windowId: pane.windowId,
+      idle: SHELL_COMMANDS.includes(pane.command),
+    }));
+};
+
+/** The files a row's `pick` matches, relative to its `dir`: git's list, so nothing ignored. */
+const pickableFiles = (dir: string, glob: string): string[] => {
+  const listed = git(dir, ['ls-files', '-co', '--exclude-standard', '--', `:(glob)${glob}`]);
+  return listed.ok ? listed.stdout.split('\n').filter((line) => line !== '') : [];
+};
+
+/** A synchronous pause, which Node offers no other way to take. */
+const sleepMs = (ms: number): void => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+};
+
+/**
+ * Stop a server the way a person would: `C-c`, then wait for the shell to come back, then close
+ * the window -- so the next press goes through `servers start`, which refuses while the role has
+ * a window. A server that does not stop within the wait is left with its window, and the bar
+ * says so rather than killing a window something is still running in.
+ */
+const stopServer = (
+  server: TmuxServer,
+  clone: Clone,
+  entry: RunnerEntry,
+  paneId: string,
+): string => {
+  server.sendKey(paneId, 'C-c');
+  for (let waited = 0; waited < 15_000; waited += 250) {
+    sleepMs(250);
+    const pane = runnerPanes(server, clone, entry).find((p) => p.paneId === paneId);
+    if (pane === undefined) return `${clone.name}: stopped ${entry.name}`;
+    if (pane.idle) {
+      server.killWindow(pane.windowId);
+      return `${clone.name}: stopped ${entry.name}`;
+    }
+  }
+  return `${clone.name}: ${entry.name} is still stopping -- its window is left open`;
+};
+
+const startServer = (server: TmuxServer, clone: Clone, role: string): string => {
+  const plan = startPlan([clone], scanFleet([clone]).records, (c) => server.roles(c), [role]);
+  const action = plan.start[0];
+  if (action === undefined) {
+    return `${clone.name}: not started -- ${plan.skip[0]?.why ?? 'nothing to start'}`;
+  }
+  const added = server.addWindow(clone, {
+    cwd: action.cwd,
+    command: action.command,
+    clone: clone.name,
+    role: action.role,
+  });
+  return added
+    ? `${clone.name}: ${action.label} starting on ${String(action.port)}`
+    : `${clone.name}: could not add a window for ${role}`;
+};
+
+/** `C-b C-n`: pick a runner row, maybe files for it, and do what a press of it means now. */
+export const keyRun = (hangar: Hangar, ref: string): void => {
+  const clone = requireClone(hangar, ref);
+  const entries = hangar.config.runner;
+  if (entries.length === 0) {
+    say(
+      hangar,
+      clone,
+      `${clone.name}: nothing to run -- \`runner\` in hangar.config.yaml is empty`,
+    );
+    return;
+  }
+  const server = tmuxServer(hangar);
+  const name = pick(
+    entries.map((e) => e.name),
+    { prompt: `${clone.name} run > `, header: 'Enter runs it · a server toggles · Esc cancels' },
+  );
+  const entry = entries.find((e) => e.name === name);
+  if (entry === undefined) return;
+
+  let files: string[] = [];
+  if (!isServerRow(entry) && entry.pick !== undefined) {
+    const dir = join(clone.path, entry.dir);
+    const chosen = pickMany([ALL_ROW, ...pickableFiles(dir, entry.pick.glob)], {
+      prompt: `${entry.name} > `,
+      header: 'Tab marks files · Enter runs them · (all) runs everything · Esc cancels',
+      multi: true,
+    });
+    if (chosen.length === 0) return;
+    files = chosen.includes(ALL_ROW) ? [] : chosen;
+  }
+
+  const serving = isServerRow(entry)
+    ? scanFleet([clone]).records.find((r) => r.role === entry.role)?.port
+    : undefined;
+  const action = runnerAction(entry, runnerPanes(server, clone, entry), serving, files);
+  switch (action.do) {
+    case 'refuse':
+      say(hangar, clone, `${clone.name}: ${action.why}`);
+      return;
+    case 'stop-server':
+      say(hangar, clone, stopServer(server, clone, entry, action.paneId));
+      return;
+    case 'replace-idle-window':
+      server.killWindow(action.windowId);
+      say(hangar, clone, startServer(server, clone, action.role));
+      return;
+    case 'start-server':
+      say(hangar, clone, startServer(server, clone, action.role));
+      return;
+    case 'type-in':
+      server.typeInPane(action.paneId, action.line);
+      say(hangar, clone, `${clone.name}: ${entry.name} running again in its window`);
+      return;
+    case 'new-window': {
+      const dir = isServerRow(entry) ? clone.path : join(clone.path, entry.dir);
+      const added = server.addWindow(clone, {
+        cwd: dir,
+        command: action.line,
+        clone: clone.name,
+        role: runnerRole(entry.name),
+      });
+      say(
+        hangar,
+        clone,
+        added
+          ? `${clone.name}: ${entry.name} running in its own window`
+          : `${clone.name}: could not add a window for ${entry.name}`,
+      );
+    }
+  }
 };
