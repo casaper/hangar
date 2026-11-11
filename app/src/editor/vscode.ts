@@ -483,6 +483,23 @@ export const vscodeDriver = (
       `the \`${binary}\` command is not on PATH — in ${label}, run “Shell Command: Install '${binary}' command in PATH”.`,
     launch: (clone) => launchVscode(binary, label, stateDir, clone),
     /*
+     * Raise the clone's window the way `launch` does, then `-r -g <file>`: `-r` opens the file in
+     * the window that was active last, which is the one just raised. A FILE only -- `-r` with a
+     * folder would replace that window's workspace with the folder.
+     */
+    openFile: (clone, path) => {
+      const raised = launchVscode(binary, label, stateDir, clone);
+      if (raised === undefined || raised.note !== undefined) return raised;
+      const res = run(binary, ['-r', '-g', path]);
+      return res.ok
+        ? { target: path, reused: raised.reused }
+        : {
+            target: path,
+            reused: raised.reused,
+            note: `could not open ${path}: ${res.stderr.trim()}`,
+          };
+    },
+    /*
      * By the clone's NAME, because the generated workspace file puts it at the front of
      * `window.title` -- so a window can be named from outside without asking the editor
      * anything. The window-state file could name the workspace path instead, and does not help:

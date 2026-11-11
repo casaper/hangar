@@ -46,11 +46,9 @@ export type HangarKey = {
 export const KEY_TABLE: readonly HangarKey[] = [
   {
     key: 'C-e',
-    does: 'open this clone in its editor',
-    argv: ['edit'],
-    run: 'report',
-    ok: 'opened #{@hangar_clone} in its editor',
-    fail: 'hangar edit failed for #{@hangar_clone} -- run it in a shell to see why',
+    does: 'pick a file to open in the editor, a directory for Finder, or the whole clone',
+    argv: ['key', 'edit'],
+    run: 'popup',
   },
   {
     key: 'C-f',
@@ -59,6 +57,18 @@ export const KEY_TABLE: readonly HangarKey[] = [
     run: 'report',
     ok: 'opened the ticket folder for #{@hangar_clone}',
     fail: 'no ticket folder for #{@hangar_clone} -- run hangar browse tmp in a shell to see why',
+  },
+  {
+    key: 'C-t',
+    does: "pick a file of the ticket's tmp/<KEY>/ to open, or the folder itself",
+    argv: ['key', 'ticket'],
+    run: 'popup',
+  },
+  {
+    key: 'C-p',
+    does: "open this clone's plan, or pick one when there are several",
+    argv: ['key', 'plan'],
+    run: 'popup',
   },
   { key: 'a', does: 'git fetch origin', argv: ['key', 'fetch'], run: 'report' },
   {

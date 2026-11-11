@@ -127,6 +127,13 @@ export type EditorDriver = {
    */
   readonly launch: (clone: Clone) => LaunchResult | undefined;
   /**
+   * Open one FILE of the clone in the window that has the clone, raising it. Absent when the
+   * editor cannot be told which window -- a key that picked a file then says so rather than
+   * opening it somewhere else. Never handed a directory: a folder argument means "open this as a
+   * workspace" to every launcher that takes one.
+   */
+  readonly openFile?: ((clone: Clone, path: string) => LaunchResult | undefined) | undefined;
+  /**
    * Close the window this clone is open in. Only called when `capabilities.closeWindow`.
    *
    * Returns the platform's own outcome unchanged, because every arm of it has something

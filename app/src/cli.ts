@@ -16,7 +16,7 @@ import { configSchema, configShow, configValidate } from './commands/config.ts';
 import { doctor } from './commands/doctor.ts';
 import { edit, type EditOptions } from './commands/edit.ts';
 import { jiraHook } from './commands/jira.ts';
-import { keyFetch, keyGate, keyHelp } from './commands/key.ts';
+import { keyEdit, keyFetch, keyGate, keyHelp, keyPlan, keyTicket } from './commands/key.ts';
 import { jiraPlan } from './commands/jira-plan.ts';
 import { golden } from './commands/dev.ts';
 import { release } from './commands/release.ts';
@@ -545,7 +545,7 @@ program
   .description(
     [
       'Open each clone in every editor `editor.kinds` lists. It is the editor half of `hangar open` on its own: no branch is fetched or checked out, no tmux session is created and no terminal window is opened.',
-      "That is also what makes it safe to bind to a key: `C-b C-e` inside a clone's tmux window opens that clone's editors, without naming an index. `C-b C-k` lists every hangar key.",
+      "That is also what makes it safe to bind to a key: `C-b C-e` inside a clone's tmux window opens a picker over the clone's files whose first row, `(workspace)`, is this command for that clone, without naming an index. `C-b C-k` lists every hangar key.",
       'An editor that lives inside a terminal — `vim` with no GUI build — is the one kind this cannot open, because it needs a tmux window to live in. It is named and skipped; `hangar open <clone> -e` is what puts it there.',
     ].join('\n\n'),
   )
@@ -1174,6 +1174,30 @@ key
   .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
   .action((clone: string) => {
     keyGate(requireHangar(), clone);
+  });
+
+key
+  .command('edit')
+  .description('Pick a file or directory of a clone and open it, or the clone itself (C-b C-e)')
+  .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
+  .action((clone: string) => {
+    keyEdit(requireHangar(), clone);
+  });
+
+key
+  .command('ticket')
+  .description("Pick a file of a clone's ticket folder and open it, or the folder (C-b C-t)")
+  .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
+  .action((clone: string) => {
+    keyTicket(requireHangar(), clone);
+  });
+
+key
+  .command('plan')
+  .description("Open a clone's plan, or pick one when there are several (C-b C-p)")
+  .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
+  .action((clone: string) => {
+    keyPlan(requireHangar(), clone);
   });
 
 key

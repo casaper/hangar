@@ -979,7 +979,34 @@ whole degradation; there is no second `if-shell` testing for the option first.
 an operator, and it is not an MCP tool (`NOT_EXPOSED`), since it reports onto the bar of whoever is
 attached and its popups wait on a terminal.
 
-#### `C-b C-e` opens the clone's editors, and that is why `hangar edit` exists
+#### The pickers: `C-b C-e`, `C-b C-t`, `C-b C-p`
+
+Each is a `popup` key running fzf over a list of rows, built by a pure function in
+`commands/key.ts` so every list can be checked without a clone. **The first row is the whole
+thing**, because Enter with nothing typed picks it: `(workspace)` for `C-b C-e`, which is exactly
+`hangar edit` below, and `tmp/<KEY>/` for `C-b C-t`. Esc leaves the popup with exit 0, so it
+closes without a message.
+
+- **`C-b C-e`'s rows are git's**, `ls-files -co --exclude-standard`, plus each parent directory
+  once with a trailing `/` -- the slash is how a row says it is a directory. A clone carries
+  `node_modules` and a multi-GB `tmp/`; git's list leaves both out, and runs to some 17,000 rows
+  here, which fzf takes without pausing.
+- **`C-b C-p` lists `<clone>/.claude/plans/`, newest first, then `tmp/<KEY>/plan_<KEY>.md`.**
+  That directory holds only the plans of sessions still alive in the clone, because
+  `plans collect` moves a plan out at its session's end, so its newest file is the plan in work
+  however long ago it was written. `planFilesInUse` was the other candidate and is not used: it
+  reads transcripts fleet-wide on every press and looks back 30 minutes, so a quiet session's
+  plan would be missing. One row opens directly and no rows is a line on the bar.
+- **A file goes to the editor and a directory never does.** `EditorDriver.openFile` raises the
+  clone's window the way `launch` does and then runs `code -r -g <file>`; `-r` targets the window
+  that was active last, which is the one just raised. A folder handed to `code -r` would REPLACE
+  that window's workspace, so a directory goes to the platform opener -- Finder -- instead. An
+  editor with no `openFile` is named, never substituted.
+- **fzf is found without trusting PATH** (`src/fuzzy.ts`): a popup inherits the tmux server's
+  environment, which for a server the emulator started has no Homebrew in it. PATH first, then
+  `$HOMEBREW_PREFIX`, `/opt/homebrew`, `/usr/local` and `/usr/bin`.
+
+#### `C-b C-e`'s `(workspace)` row opens the clone's editors, and that is why `hangar edit` exists
 
 **`hangar edit` is a command rather than a flag on `open` BECAUSE of this key.** A key press has
 to cost only what it says: `hangar open --editor` would create tmux windows on every press — and

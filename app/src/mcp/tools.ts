@@ -649,9 +649,12 @@ export const NOT_EXPOSED: readonly string[] = [
   'dev golden',
   'dev release',
   'jira hook',
+  'key edit',
   'key fetch',
   'key gate',
   'key help',
+  'key plan',
+  'key ticket',
   'mcp',
 ];
 

@@ -51,8 +51,8 @@ browser test run — that isolation is the entire reason the fleet exists.
   key and pull request its branch is working on; a footer along the bottom, in the clone's own
   hue, names the clone, where in it you are standing, its git state, whether its commit gate is
   on, and its branch. Click the key or the pull request to open it in the browser — clicking a
-  tab still switches to it. `C-b C-e` opens the clone in its editor, `C-b C-f` opens its
-  ticket's folder in Finder, and `C-b C-k` lists every hangar key.
+  tab still switches to it. `C-b C-e` fuzzy-finds a file to open in the clone's editor,
+  `C-b C-t` a file of its ticket, `C-b C-p` opens its plan, and `C-b C-k` lists every hangar key.
 
   ```
    1 claude  2 shell                              ABC-1323  PR#1204  14:20

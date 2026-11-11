@@ -246,10 +246,14 @@ caveat:
   and `doctor` then isolate each driver again around `isAvailable`/`launch`, so `[zed, vscode]`
   cannot lose VS Code to Zed's launcher — listing order alone would have decided that.
 - **It is called only where an editor was ASKED for**, through `editorsToOpen` in `open.ts`:
-  `hangar open -e`, and `hangar edit`, which is the whole editor half on its own and is what
-  `C-b C-e` runs. `open` opens no editor without `-e`, so building the drivers unconditionally
-  would put "this driver would not build" in front of a developer who wanted a terminal window and
-  can do nothing with the warning.
+  `hangar open -e`, `hangar edit`, which is the whole editor half on its own, and the `C-b C-e`,
+  `C-b C-t` and `C-b C-p` pickers in a clone's tmux window. `open` opens no editor without `-e`,
+  so building the drivers unconditionally would put "this driver would not build" in front of a
+  developer who wanted a terminal window and can do nothing with the warning.
+- **`openFile` is optional, and only the VS Code family has it.** A picker that chose one file
+  takes the first configured driver offering it; with none, the key says so rather than opening
+  the file in some other window. It is handed files only: a folder given to `code -r` replaces the
+  window's workspace (`terminal-and-sessions.md`, the pickers).
 - **`editorFor(kind)` builds only the kind asked for and does NOT catch.** Picking from
   `editors()` would make `hangar ide vscode sync` construct every other configured driver first
   and depend on all of them. And an editor the developer named by running
