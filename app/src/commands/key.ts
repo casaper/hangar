@@ -16,7 +16,8 @@ import { git } from '../git.ts';
 import type { Hangar } from '../hangar.ts';
 import { inferTicket, ticketKeyOf } from '../jira.ts';
 import { KEY_TABLE, keyHelpLines } from '../keys.ts';
-import { platform } from '../platform/index.ts';
+import { defaultExtensionsDir, keysExtensionState } from '../editor/keys-extension.ts';
+import { home } from '../user-paths.ts';
 import {
   ALL_ROW,
   isServerRow,
@@ -248,41 +249,61 @@ const ideWindowOpen = (clone: Clone): boolean => {
 export const IDE_MAILBOX = '.hangar-ide';
 
 /**
- * Open what a picker chose: in the clone's VS Code window when the extension is there, otherwise
- * a file through the editor's launcher and a directory in the file manager.
+ * Hand a path to the clone's VS Code window through its mailbox.
  *
- * **Through the mailbox, never `code -r` or a `vscode://` URI, when a window can answer it.** Both
- * of those reach whichever VS Code window was active last -- possibly another clone's. A request
- * written into THIS clone's `tmp/.hangar-ide/` is read only by the window open on this clone, and
- * then the window is raised the way `hangar edit` raises it. It is also the only way to reveal a
- * directory in the Explorer from outside.
+ * Written under another name and renamed, so the watcher never reads half a request. `at` lets
+ * the extension drop a request nobody was there to read: one written while VS Code never came up
+ * must not reveal a stale path the next time somebody opens the window.
+ */
+const postIdeRequest = (clone: Clone, path: string): void => {
+  const mailbox = join(clone.path, 'tmp', IDE_MAILBOX);
+  mkdirSync(mailbox, { recursive: true });
+  const pending = join(mailbox, `request.${String(process.pid)}.json`);
+  writeFileSync(pending, `${JSON.stringify({ path, at: Date.now() })}\n`);
+  renameSync(pending, join(mailbox, 'request.json'));
+};
+
+/**
+ * Open what a picker chose in the clone's VS Code window: a file as an editor tab, a directory
+ * revealed in its Explorer. Never in the file manager -- `C-b C-f` is the key for Finder.
  *
- * Without the extension, a directory is never handed to the editor's launcher: a folder there
- * means "open this as a workspace" and would replace the clone's window.
+ * **Through the mailbox, never `code -r` or a `vscode://` URI.** Both of those reach whichever
+ * VS Code window was active last -- possibly another clone's. A request written into THIS clone's
+ * `tmp/.hangar-ide/` is read only by a window open on this clone, and it is the only way to reveal
+ * a directory in the Explorer from outside. **The request goes in whether or not a window is
+ * open**, and then the window is raised or started the way `hangar edit` does it: a window that
+ * is starting reads the pending request the moment the extension activates.
+ *
+ * Without the extension installed, a file still opens through the editor's launcher (`code -r -g`
+ * needs nothing installed), and a directory opens the workspace only and says what reveals it. A
+ * directory is never handed to the launcher itself: a folder there means "open this as a
+ * workspace" and would replace the clone's window.
  */
 const openPicked = (hangar: Hangar, clone: Clone, path: string): string => {
   const driver = editorsToOpen(hangar).find((d) => d.openFile !== undefined);
-  if (driver !== undefined && ideWindowOpen(clone)) {
-    const mailbox = join(clone.path, 'tmp', IDE_MAILBOX);
-    mkdirSync(mailbox, { recursive: true });
-    // Written beside and renamed, so the watcher never reads half a request.
-    const pending = join(mailbox, `request.${String(process.pid)}.json`);
-    writeFileSync(pending, `${JSON.stringify({ path })}\n`);
-    renameSync(pending, join(mailbox, 'request.json'));
-    driver.launch(clone);
-    return `${clone.name}: ${path.endsWith('/') ? 'revealed' : 'opened'} ${path} in ${driver.label}`;
-  }
-  const abs = join(clone.path, path);
-  if (path.endsWith('/')) {
-    if (!platform().capabilities.openExternally || !platform().openExternally(abs)) {
-      throw new CliError(`could not open ${path}`);
-    }
-    return `${clone.name}: opened ${path}`;
-  }
   if (driver?.openFile === undefined) {
     throw new CliError(`no configured editor can open a single file of ${clone.name}`);
   }
-  const result = driver.openFile(clone, abs);
+  const isDir = path.endsWith('/');
+  const withExtension = keysExtensionState(hangar, defaultExtensionsDir(home)).installed.length > 0;
+
+  if (withExtension) {
+    const open = ideWindowOpen(clone);
+    postIdeRequest(clone, path);
+    const raised = driver.launch(clone);
+    if (raised?.note !== undefined) throw new CliError(raised.note);
+    const did = isDir ? 'revealed' : 'opened';
+    return open
+      ? `${clone.name}: ${did} ${path} in ${driver.label}`
+      : `${clone.name}: starting ${driver.label} -- it ${isDir ? 'reveals' : 'opens'} ${path} once it is up`;
+  }
+
+  if (isDir) {
+    const raised = driver.launch(clone);
+    if (raised?.note !== undefined) throw new CliError(raised.note);
+    return `${clone.name}: opened the workspace -- \`hangar doctor --fix\` installs the extension that reveals ${path}`;
+  }
+  const result = driver.openFile(clone, join(clone.path, path));
   if (result?.note !== undefined) throw new CliError(result.note);
   return `${clone.name}: opened ${path} in ${driver.label}`;
 };
@@ -323,7 +344,7 @@ export const keyEdit = (hangar: Hangar, ref: string): void => {
   const files = listed.stdout.split('\n').filter((line) => line !== '');
   const chosen = pick(editRows(files), {
     prompt: `${clone.name} > `,
-    header: 'Enter opens it · a directory opens in the file manager · Esc cancels',
+    header: 'Enter opens it in VS Code · a directory shows in its Explorer · Esc cancels',
   });
   if (chosen === undefined) return;
   if (chosen === WORKSPACE_ROW) {
@@ -354,7 +375,7 @@ export const keyTicket = (
   listOrPick(hangar, clone, ticketRowsOf(clone), opts, (rows) =>
     pick(rows, {
       prompt: `${clone.name} ticket > `,
-      header: 'Enter opens it · the first row opens the folder · Esc cancels',
+      header: 'Enter opens it in VS Code · the first row shows the folder · Esc cancels',
     }),
   );
 };

@@ -126,6 +126,13 @@ const refsFrom = (clicked, selected) => {
 
 const mailbox = (where) => path.join(where.clonePath, 'tmp', '.hangar-ide');
 
+/**
+ * How old a request may be and still be answered. The tmux side writes one and then raises or
+ * STARTS this window, so a fresh one is answered at activation; one older than this was written
+ * while no window came up, and revealing it now would answer a question nobody is asking.
+ */
+const REQUEST_TTL_MS = 2 * 60 * 1000;
+
 const answerRequest = async (where) => {
   const file = path.join(mailbox(where), 'request.json');
   let request;
@@ -135,7 +142,8 @@ const answerRequest = async (where) => {
   } catch {
     return; // not there, or half-written: the next change event brings the whole file
   }
-  if (typeof request?.path === 'string') await openHere(where, request.path);
+  if (typeof request?.at !== 'number' || Date.now() - request.at > REQUEST_TTL_MS) return;
+  if (typeof request.path === 'string') await openHere(where, request.path);
 };
 
 /** Say a window is open on the clone, and read the requests written for it. */

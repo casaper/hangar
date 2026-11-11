@@ -51,7 +51,7 @@ export type HangarKey = {
 export const KEY_TABLE: readonly HangarKey[] = [
   {
     key: 'C-e',
-    does: 'pick a file to open in the editor, a directory for Finder, or the whole clone',
+    does: 'pick a file to open in VS Code, a directory to show in its Explorer, or the clone',
     argv: ['key', 'edit'],
     run: 'popup',
   },
@@ -65,7 +65,7 @@ export const KEY_TABLE: readonly HangarKey[] = [
   },
   {
     key: 'C-t',
-    does: "pick a file of the ticket's tmp/<KEY>/ to open, or the folder itself",
+    does: "pick a file of the ticket's tmp/<KEY>/ to open in VS Code, or show the folder",
     argv: ['key', 'ticket'],
     run: 'popup',
     vscode: 'hangar.ticket',

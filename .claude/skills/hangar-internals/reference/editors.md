@@ -266,8 +266,10 @@ caveat:
   `hangar.config.yaml`, so it names no path, and two hangars share it.
 - **`openFile` is optional, and only the VS Code family has it.** A picker that chose one file
   takes the first configured driver offering it; with none, the key says so rather than opening
-  the file in some other window. It is handed files only: a folder given to `code -r` replaces the
-  window's workspace (`terminal-and-sessions.md`, the pickers).
+  the file in some other window. It is the fallback for a machine without the hangar keys
+  extension -- with it, a pick goes through the clone's mailbox -- and it is handed files only: a
+  folder given to `code -r` replaces the window's workspace (`terminal-and-sessions.md`, the
+  pickers).
 - **`editorFor(kind)` builds only the kind asked for and does NOT catch.** Picking from
   `editors()` would make `hangar ide vscode sync` construct every other configured driver first
   and depend on all of them. And an editor the developer named by running

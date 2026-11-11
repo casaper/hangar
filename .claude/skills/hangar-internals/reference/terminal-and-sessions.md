@@ -997,11 +997,15 @@ closes without a message.
   however long ago it was written. `planFilesInUse` was the other candidate and is not used: it
   reads transcripts fleet-wide on every press and looks back 30 minutes, so a quiet session's
   plan would be missing. One row opens directly and no rows is a line on the bar.
-- **A file goes to the editor and a directory never does.** `EditorDriver.openFile` raises the
-  clone's window the way `launch` does and then runs `code -r -g <file>`; `-r` targets the window
-  that was active last, which is the one just raised. A folder handed to `code -r` would REPLACE
-  that window's workspace, so a directory goes to the platform opener -- Finder -- instead. An
-  editor with no `openFile` is named, never substituted.
+- **Everything a picker chose opens in VS Code, never in Finder** -- `C-b C-f` is the Finder key.
+  A file opens as a tab and a directory is revealed in VS Code's Explorer, through the mailbox
+  below, and a clone whose window is not open gets one started -- VS Code not running at all is
+  the ordinary case, not an error to fall back from. **A directory is never handed to the
+  editor's launcher**: a folder given to
+  `code -r` REPLACES that window's workspace. Without the extension installed, a file still opens
+  through `EditorDriver.openFile` (`code -r -g`, which raises the clone's window first and needs
+  nothing installed), and a directory opens the workspace only and names `hangar doctor --fix`.
+  An editor with no `openFile` is named, never substituted.
 - **fzf is found without trusting PATH** (`src/fuzzy.ts`): a popup inherits the tmux server's
   environment, which for a server the emulator started has no Homebrew in it. PATH first, then
   `$HOMEBREW_PREFIX`, `/opt/homebrew`, `/usr/local` and `/usr/bin`.
@@ -1024,12 +1028,14 @@ revealed in THAT window.
 **The tmux side reaches the window through a mailbox, never through `code -r` or a `vscode://`
 URI**, both of which go to whichever window was active last -- possibly another clone's. The
 extension writes `<clone>/tmp/.hangar-ide/window.json` with its pid when it activates (at startup,
-since requests arrive before anything is pressed in it). A tmux picker that finds that pid alive
-writes `request.json` beside it -- written under another name and renamed, so the watcher never
-reads half of one -- and raises the window as `hangar edit` does; only the window open on that
-clone reads it, and a directory is revealed in the Explorer. With no live window it falls back to
-`code -r -g` for a file and Finder for a directory. The mailbox is a dotfile under the clone's own
-`tmp/`, which `tmp merge` never shares.
+since requests arrive before anything is pressed in it). A tmux picker writes `request.json`
+beside it -- under another name and renamed, so the watcher never reads half of one -- **whether
+or not a window is open**, and then raises or starts the clone's window as `hangar edit` does. A
+window already open answers at once; one starting answers the moment the extension activates,
+because activation reads the pending request before it starts watching. The presence file only
+chooses the bar's message. **A request carries `at`, and one older than two minutes is dropped**:
+one written while VS Code never came up must not reveal a stale path the next time the window
+opens. The mailbox is a dotfile under the clone's own `tmp/`, which `tmp merge` never shares.
 
 **`ctrl+k ctrl+k` and `ctrl+b ctrl+s` paste, and never press Enter** (`hangar key paste`). The
 reference is `@<absolute path>#<first>-<last>` -- the shape the official extension writes --
