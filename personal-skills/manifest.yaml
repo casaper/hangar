@@ -55,9 +55,6 @@ skills:
     divergence: intentional
     mirrors: .claude/skills/shorten-changed-comments/SKILL.md
     basedOn: 903ef4a101f7711703670f7cc6d74644a200273b
-    # Staged ahead of the branch below; drop both lines once the row reads `ok`.
-    supersedes: f221fc77b02c174a0a6d340f99a7fa01ee9e57b8
-    adoptedFrom: feature/<ticket>_Tested_TypeScript_sources_for_the_agent_scripts_and_per-lane_testing_guides
     reason: >-
       Honours shorten-comment's reporting contract; keeps the Step 1b selection question. Its
       description also points side-task and background requests at bg-shorten-changed-comments.
@@ -66,9 +63,6 @@ skills:
     divergence: intentional
     mirrors: .claude/skills/shorten-all-comments/SKILL.md
     basedOn: 600f8294c82f60cf6c609c68dbc9873c0b3d8479
-    # Staged ahead of the branch below; drop both lines once the row reads `ok`.
-    supersedes: 6df88f3131ef327ec11fdfe79c40bcad6f4ef4be
-    adoptedFrom: feature/<ticket>_Tested_TypeScript_sources_for_the_agent_scripts_and_per-lane_testing_guides
     reason: >-
       Honours shorten-comment's reporting contract; keeps the Step 2 snapshot/covers checks. Its
       description also points side-task and background requests at bg-shorten-all-comments.
@@ -108,16 +102,14 @@ skills:
     divergence: intentional
     mirrors: .claude/skills/pr-readiness/SKILL.md
     basedOn: 657a58cfc39b359d722faa26b3547a65d0bfa338
-    # The real branch name carries a ticket key, which no tracked file may; the suffix finds it.
-    adoptedFrom: feature/<ticket>_Tested_TypeScript_sources_for_the_agent_scripts_and_per-lane_testing_guides
     reason: >-
-      Kept after the project copy lands, not retired: the two do different jobs. The tracked copy
+      Kept beside the project copy, not retired: the two do different jobs. The tracked copy
       is for a checkout with no hangar and only reports how far the branch is from its target,
       reading the pull request through a read-only forge script of its own. This one keeps the
       hangar's answers -- `hangar list` for review state, `hangar sync -n` for the target and
       strategy -- and integrates: through `hangar-rewrite rebase` where the repo's rules deny `git
-      rebase`, and by merging otherwise. Its Jira-backlog step is guarded, because the command it
-      asks is not on the default branch until that copy lands.
+      rebase`, and by merging otherwise. Its Jira-backlog step is guarded, because a branch cut
+      before that copy landed has no command to ask.
 
   - name: copy-to-clipboard
     divergence: intentional
