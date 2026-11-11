@@ -210,6 +210,8 @@ error: jetbrains is not one of this hangar's editors
 ```
 
 This hangar lists `['vscode']`, so `hangar ide vscode sync` is the only one that will run here.
+It also installs the hangar keys extension into VS Code when it is missing or stale, which a
+window already open loads on its next reload.
 The other nine kinds (`cursor`, `windsurf`, `vscodium`, `code-insiders`, `positron`, `trae`,
 `vim`, `xcode`, `eclipse`) have no `sync` subcommand at all — there is nothing shareable to sync.
 

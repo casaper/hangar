@@ -40,6 +40,11 @@ export type HangarKey = {
   readonly ok?: string;
   /** The bar's line on failure, for a `report` command that does not report by itself. */
   readonly fail?: string;
+  /**
+   * The VS Code extension's command for the same key, when VS Code gets it. Its chord there is
+   * the tmux one, `ctrl+b` and the same second key, so a hand that knows one knows the other.
+   */
+  readonly vscode?: string;
 };
 
 /** Every hangar key, in the order the help table lists them. */
@@ -63,31 +68,42 @@ export const KEY_TABLE: readonly HangarKey[] = [
     does: "pick a file of the ticket's tmp/<KEY>/ to open, or the folder itself",
     argv: ['key', 'ticket'],
     run: 'popup',
+    vscode: 'hangar.ticket',
   },
   {
     key: 'C-p',
     does: "open this clone's plan, or pick one when there are several",
     argv: ['key', 'plan'],
     run: 'popup',
+    vscode: 'hangar.plan',
   },
   {
     key: 'C-n',
     does: 'run a script in its own window, or toggle a dev server (`runner` in the config)',
     argv: ['key', 'run'],
     run: 'popup',
+    vscode: 'hangar.run',
   },
-  { key: 'a', does: 'git fetch origin', argv: ['key', 'fetch'], run: 'report' },
+  {
+    key: 'a',
+    does: 'git fetch origin',
+    argv: ['key', 'fetch'],
+    run: 'report',
+    vscode: 'hangar.fetch',
+  },
   {
     key: 'C-a',
     does: 'git fetch --all: origin and every sibling clone',
     argv: ['key', 'fetch', '--all'],
     run: 'report',
+    vscode: 'hangar.fetchAll',
   },
   {
     key: 'C-g',
     does: 'commit gate: arm or disarm on the default branch, lock or release on a branch',
     argv: ['key', 'gate'],
     run: 'report',
+    vscode: 'hangar.gate',
   },
   { key: 'C-k', does: 'show this table', argv: ['key', 'help'], run: 'popup' },
 ];
@@ -116,3 +132,67 @@ export const keyHelpLines = (table: readonly HangarKey[]): string[] => {
     "tmux's own keys stay where they are: C-b ? lists them.",
   ];
 };
+
+// ---- the same keys in VS Code (macOS) -------------------------------------------------------
+
+/**
+ * A key the VS Code extension binds that tmux has no counterpart for: both hand a file reference
+ * to the clone's Claude Code, which only an editor has to give.
+ */
+export type VscodeOnlyKey = {
+  readonly chord: string;
+  readonly command: string;
+  readonly when: string;
+  readonly does: string;
+};
+
+export const VSCODE_ONLY_KEYS: readonly VscodeOnlyKey[] = [
+  {
+    chord: 'ctrl+k ctrl+k',
+    command: 'hangar.ref',
+    when: 'editorTextFocus',
+    does: "paste @<file>#<lines> of the selection into the clone's Claude Code",
+  },
+  {
+    chord: 'ctrl+k ctrl+k',
+    command: 'hangar.refExplorer',
+    when: 'filesExplorerFocus && !inputFocus',
+    does: "paste @<file> of each selected file into the clone's Claude Code",
+  },
+  {
+    chord: 'ctrl+b ctrl+s',
+    command: 'hangar.selectionCommand',
+    when: 'editorTextFocus',
+    does: "paste `keys.selectionCommand` with the selection's @<file>#<lines> filled in",
+  },
+];
+
+/** tmux's `C-g` as VS Code's `ctrl+g`; a plain letter is the same in both. PURE. */
+export const vscodeKeyName = (tmuxKey: string): string =>
+  tmuxKey.startsWith('C-') ? `ctrl+${tmuxKey.slice(2)}` : tmuxKey;
+
+export type VscodeKeybinding = {
+  readonly command: string;
+  readonly key: string;
+  readonly when: string;
+};
+
+/**
+ * The extension manifest's `keybindings`, from the table. PURE.
+ *
+ * **macOS only, by `isMac` in every `when`**, which leaves the chords inert anywhere else. On
+ * macOS VS Code binds `ctrl+b` (cursor left, as a second key beside the arrow) and `ctrl+k`
+ * (delete to the end of the line) while text has focus -- read from VS Code 1.145's own bundle --
+ * and both chords take those away in the editor. That was decided, not missed.
+ */
+export const vscodeKeybindings = (
+  table: readonly HangarKey[],
+  only: readonly VscodeOnlyKey[],
+): VscodeKeybinding[] => [
+  ...table.flatMap((entry) =>
+    entry.vscode === undefined
+      ? []
+      : [{ command: entry.vscode, key: `ctrl+b ${vscodeKeyName(entry.key)}`, when: 'isMac' }],
+  ),
+  ...only.map((k) => ({ command: k.command, key: k.chord, when: `isMac && ${k.when}` })),
+];

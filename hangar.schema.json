@@ -788,6 +788,18 @@
           }
         ]
       }
+    },
+    "keys": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "selectionCommand": {
+          "type": "string",
+          "format": "includes",
+          "pattern": "\\{ref\\}"
+        }
+      },
+      "additionalProperties": false
     }
   },
   "required": [

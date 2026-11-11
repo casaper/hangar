@@ -74,6 +74,12 @@ import {
 } from '../colour-assignments.ts';
 import { usesBitbucket } from '../bitbucket.ts';
 import { editors, type EditorDriver } from '../editor/index.ts';
+import {
+  defaultExtensionsDir,
+  installKeysExtension,
+  keysExtensionProblem,
+  keysExtensionState,
+} from '../editor/keys-extension.ts';
 import { CliError } from '../exec.ts';
 import { skillDriftRows } from './skills.ts';
 import { discoverClones, paletteOf, requireClone, type Clone } from '../fleet.ts';
@@ -1725,6 +1731,28 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
       note(
         `VS Code bookmarks: ${touchedClones(bookmarkPlan).join(', ')} behind the merge — they get it when \`hangar close\` closes their window, or at \`hangar ide vscode sync\``,
       );
+    }
+  }
+
+  /*
+   * The hangar keys' VS Code extension, when VS Code is one of this hangar's editors. Stale is a
+   * real state: its version is a hash of the key table and the script, so a key added to the
+   * table is a stale install until something reinstalls it. `--fix` does, through the same
+   * installer `ide vscode sync` uses.
+   */
+  if (editors(hangar).drivers.some((driver) => driver.kind === 'vscode')) {
+    const keysProblem = keysExtensionProblem(
+      keysExtensionState(hangar, defaultExtensionsDir(home)),
+    );
+    if (keysProblem !== undefined) {
+      if (opts.fix === true) {
+        const failed = installKeysExtension(hangar, 'code');
+        if (failed === undefined) ok('installed the hangar keys extension in VS Code');
+        else problem(failed);
+      } else {
+        problem(keysProblem);
+        note('`hangar doctor --fix` or `hangar ide vscode sync` installs it.');
+      }
     }
   }
 

@@ -1006,6 +1006,42 @@ closes without a message.
   environment, which for a server the emulator started has no Homebrew in it. PATH first, then
   `$HOMEBREW_PREFIX`, `/opt/homebrew`, `/usr/local` and `/usr/bin`.
 
+#### The same keys in VS Code, and the mailbox
+
+On macOS a `KEY_TABLE` row with a `vscode` command is bound in the hangar keys extension as
+`ctrl+b` plus the tmux row's second key, scoped `isMac` (`editors.md` has how it is built and
+installed). **It was decided with the cost measured**: VS Code 1.145's own bundle binds `ctrl+b`
+as a second key for `cursorLeft` and `ctrl+k` as `deleteAllRight`, both under `textInputFocus`, and
+a chord prefix takes each away in the editor. `cmd+b` was the alternative and costs more -- it is
+Toggle Primary Side Bar, everywhere.
+
+**An action is the same command at both ends.** Every chord runs
+`bin/hangar --hangar <root> key <action> <clone>`. What is native in VS Code is only the asking
+and the opening: a QuickPick instead of fzf, fed by `key ticket|plan --list` and
+`key run --list` / `--list-files <name>` / `--entry <name> --file …`, and a picked path opened or
+revealed in THAT window.
+
+**The tmux side reaches the window through a mailbox, never through `code -r` or a `vscode://`
+URI**, both of which go to whichever window was active last -- possibly another clone's. The
+extension writes `<clone>/tmp/.hangar-ide/window.json` with its pid when it activates (at startup,
+since requests arrive before anything is pressed in it). A tmux picker that finds that pid alive
+writes `request.json` beside it -- written under another name and renamed, so the watcher never
+reads half of one -- and raises the window as `hangar edit` does; only the window open on that
+clone reads it, and a directory is revealed in the Explorer. With no live window it falls back to
+`code -r -g` for a file and Finder for a directory. The mailbox is a dotfile under the clone's own
+`tmp/`, which `tmp merge` never shares.
+
+**`ctrl+k ctrl+k` and `ctrl+b ctrl+s` paste, and never press Enter** (`hangar key paste`). The
+reference is `@<absolute path>#<first>-<last>` -- the shape the official extension writes --
+because the session may not stand in the clone root. A selection ending at column 0 does not
+include that line. The Explorer case reads its selection through `copyFilePath` and puts the
+clipboard back, because a keybinding hands a command no arguments. The text goes in as a
+BRACKETED paste (`paste-buffer -p`, measured: the pane receives `ESC[200~…ESC[201~` and no
+newline): a permission dialog Claude Code may be showing answers to single keys, and a `1` inside
+a line reference would pick an option, while a paste is not a key. It goes only into a pane whose
+foreground process is `claude`, so a bare shell never receives a line to run. `--command` wraps it
+in `keys.selectionCommand`, which has no default because it names a skill.
+
 #### The runner: `C-b C-n`
 
 `runner` in the config is a list of rows, and every name and line in it is the managed repo's, so

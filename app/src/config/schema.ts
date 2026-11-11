@@ -711,6 +711,17 @@ const runnerEntrySchema = z.union([
   }),
 ]);
 
+/**
+ * The hangar keys' own settings.
+ *
+ * `selectionCommand` is what `C-b C-s` in VS Code hands the clone's Claude Code: a line with
+ * `{ref}` where the selection's `@path#lines` goes. Optional with NO default, because the line
+ * names a skill and a skill's name is one repo's business -- absent, the key says which key to set.
+ */
+const keysSchema = z.strictObject({
+  selectionCommand: z.string().includes('{ref}').optional(),
+});
+
 export const hangarConfigSchema = z
   .strictObject({
     /** Editor completion only; never read at runtime. */
@@ -733,6 +744,7 @@ export const hangarConfigSchema = z
     palette: paletteSchema.prefault({}),
     /** What `C-b C-n` offers. Empty means the key says there is nothing configured. */
     runner: z.array(runnerEntrySchema).default([]),
+    keys: keysSchema.prefault({}),
   })
   .superRefine((cfg, ctx) => {
     const { ports, tracker, editor } = cfg;

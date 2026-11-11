@@ -447,6 +447,12 @@ export type TmuxServer = {
   readonly sendKey: (paneId: string, key: string) => boolean;
   /** Close one window, whatever is running in it. The runner closes only what it made idle. */
   readonly killWindow: (windowId: string) => boolean;
+  /**
+   * `text` into one pane as a BRACKETED paste, and no Enter. A program that understands bracketed
+   * paste takes it as one paste rather than as keys, so a single-key prompt it is showing is not
+   * answered by a character inside it.
+   */
+  readonly pasteInto: (paneId: string, text: string) => boolean;
   readonly killSession: (clone: Clone) => boolean;
 };
 
@@ -920,6 +926,9 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
       tmux(['send-keys', '-t', paneId, 'Enter']).ok,
     sendKey: (paneId, key) => tmux(['send-keys', '-t', paneId, key]).ok,
     killWindow: (windowId) => tmux(['kill-window', '-t', windowId]).ok,
+    pasteInto: (paneId, text) =>
+      tmux(['set-buffer', '-b', 'hangar-paste', '--', text]).ok &&
+      tmux(['paste-buffer', '-p', '-d', '-b', 'hangar-paste', '-t', paneId]).ok,
     respawnPane: (paneId, cwd, command) =>
       tmux([
         'respawn-pane',

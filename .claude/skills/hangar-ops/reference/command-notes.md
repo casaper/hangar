@@ -179,7 +179,15 @@ tool is the separate `<thing>_preview`.
   on the bar, on the default branch or before the ticket has been fetched; `C-b a` fetches origin
   and `C-b C-a` every remote, each saying on the bar how it went; `C-b C-g` toggles the commit gate
   (`hangar-commit-gate toggle`): arm or disarm on the default branch — armed, it locks the next
-  branch checked out — and lock or release on any other. They run the hidden
+  branch checked out — and lock or release on any other.
+  **The same chords work in the clone's VS Code window on macOS** — `ctrl+b ctrl+g`, `ctrl+b a`,
+  `ctrl+b ctrl+a`, `ctrl+b ctrl+t`, `ctrl+b ctrl+p`, `ctrl+b ctrl+n`, with VS Code's own pickers —
+  through the hangar keys extension, which `ide vscode sync` and `doctor --fix` install and
+  `doctor` reports when it is missing or stale. Two are VS Code's alone: `ctrl+k ctrl+k` pastes
+  `@<absolute path>#<lines>` of the editor selection, or `@<path>` of each file selected in the
+  Explorer, into the clone's tmux Claude Code; `ctrl+b ctrl+s` pastes `keys.selectionCommand` with
+  that reference filled in. **Neither presses Enter.** Both cost the editor a key on macOS:
+  `ctrl+b` is no longer cursor-left and `ctrl+k` no longer deletes to the end of the line. They run the hidden
   `hangar key …`, which a person can also type. **A click only arrives if the terminal emulator reports
   button presses, and that is not the same setting as the wheel** — iTerm2 has one for each, so a
   bar where scrolling works and nothing is clickable is the emulator rather than tmux. `doctor`'s

@@ -16,7 +16,17 @@ import { configSchema, configShow, configValidate } from './commands/config.ts';
 import { doctor } from './commands/doctor.ts';
 import { edit, type EditOptions } from './commands/edit.ts';
 import { jiraHook } from './commands/jira.ts';
-import { keyEdit, keyFetch, keyGate, keyHelp, keyPlan, keyRun, keyTicket } from './commands/key.ts';
+import {
+  keyEdit,
+  keyFetch,
+  keyGate,
+  keyHelp,
+  keyPaste,
+  keyPlan,
+  keyRun,
+  keyTicket,
+  type KeyRunOptions,
+} from './commands/key.ts';
 import { jiraPlan } from './commands/jira-plan.ts';
 import { golden } from './commands/dev.ts';
 import { release } from './commands/release.ts';
@@ -1188,24 +1198,42 @@ key
   .command('ticket')
   .description("Pick a file of a clone's ticket folder and open it, or the folder (C-b C-t)")
   .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
-  .action((clone: string) => {
-    keyTicket(requireHangar(), clone);
+  .option('--list', 'print the rows as JSON instead of asking (for the VS Code extension)')
+  .action((clone: string, options: { list?: boolean }) => {
+    keyTicket(requireHangar(), clone, options);
   });
 
 key
   .command('plan')
   .description("Open a clone's plan, or pick one when there are several (C-b C-p)")
   .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
-  .action((clone: string) => {
-    keyPlan(requireHangar(), clone);
+  .option('--list', 'print the rows as JSON instead of asking (for the VS Code extension)')
+  .action((clone: string, options: { list?: boolean }) => {
+    keyPlan(requireHangar(), clone, options);
   });
 
 key
   .command('run')
   .description("Run one of the config's `runner` rows in a clone, or toggle its server (C-b C-n)")
   .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
-  .action((clone: string) => {
-    keyRun(requireHangar(), clone);
+  .option('--list', 'print the row names as JSON instead of asking')
+  .option('--list-files <name>', "print (all) and that row's pickable files as JSON")
+  .option('--entry <name>', 'run this row without asking')
+  .option('--file <path...>', 'with --entry: the picked files, relative to the row’s dir')
+  .action((clone: string, options: KeyRunOptions) => {
+    keyRun(requireHangar(), clone, options);
+  });
+
+key
+  .command('paste')
+  .description(
+    "Paste text into a clone's tmux Claude Code prompt, never pressing Enter (VS Code C-k C-k)",
+  )
+  .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
+  .argument('<text>', 'what to paste, e.g. @/abs/path/file.ts#36-44')
+  .option('--command', 'wrap it in `keys.selectionCommand` first (VS Code C-b C-s)')
+  .action((clone: string, text: string, options: { command?: boolean }) => {
+    keyPaste(requireHangar(), clone, text, options);
   });
 
 key

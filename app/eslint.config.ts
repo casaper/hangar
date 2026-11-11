@@ -74,5 +74,27 @@ export default defineConfig([
     files: ['test/**/*.ts'],
     rules: { '@typescript-eslint/no-floating-promises': 'off' },
   },
+  {
+    /*
+     * The VS Code extension's script: CommonJS run by VS Code's own Node, outside the tsconfig,
+     * and requiring `vscode`, a module VS Code injects and nothing here installs. So it is linted
+     * as plain JavaScript -- the type-checked rules need a project it is not part of.
+     */
+    files: ['vscode-extension/**/*.cjs'],
+    extends: [tseslint.configs.disableTypeChecked],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: {
+        require: 'readonly',
+        module: 'writable',
+        process: 'readonly',
+        console: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      'n/no-missing-require': ['error', { allowModules: ['vscode'] }],
+    },
+  },
   prettierConfig,
 ]);

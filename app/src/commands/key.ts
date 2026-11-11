@@ -1,4 +1,13 @@
-import { existsSync, readdirSync, readSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { join, relative } from 'node:path';
 import { requireClone, type Clone } from '../fleet.ts';
 import { CliError, run } from '../exec.ts';
@@ -216,12 +225,53 @@ const filesUnder = (dir: string, depth = 4): string[] => {
 };
 
 /**
- * Open what a picker chose: a file in the clone's editor window, a directory in the file manager.
+ * A VS Code window with the hangar extension open on the clone, or undefined.
  *
- * A directory is never handed to the editor's launcher, because a folder there means "open this
- * as a workspace" -- it would replace the clone's window rather than show a folder in it.
+ * The extension writes `<clone>/tmp/.hangar-ide/window.json` with its pid when it activates and
+ * removes it when it goes. A pid that is gone means a window that crashed without cleaning up,
+ * which is the same answer as no window.
+ */
+const ideWindowOpen = (clone: Clone): boolean => {
+  try {
+    const { pid } = JSON.parse(
+      readFileSync(join(clone.path, 'tmp', IDE_MAILBOX, 'window.json'), 'utf8'),
+    ) as { pid?: unknown };
+    if (typeof pid !== 'number') return false;
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Where the extension reads requests: per clone, and a dotfile, which `tmp merge` never shares. */
+export const IDE_MAILBOX = '.hangar-ide';
+
+/**
+ * Open what a picker chose: in the clone's VS Code window when the extension is there, otherwise
+ * a file through the editor's launcher and a directory in the file manager.
+ *
+ * **Through the mailbox, never `code -r` or a `vscode://` URI, when a window can answer it.** Both
+ * of those reach whichever VS Code window was active last -- possibly another clone's. A request
+ * written into THIS clone's `tmp/.hangar-ide/` is read only by the window open on this clone, and
+ * then the window is raised the way `hangar edit` raises it. It is also the only way to reveal a
+ * directory in the Explorer from outside.
+ *
+ * Without the extension, a directory is never handed to the editor's launcher: a folder there
+ * means "open this as a workspace" and would replace the clone's window.
  */
 const openPicked = (hangar: Hangar, clone: Clone, path: string): string => {
+  const driver = editorsToOpen(hangar).find((d) => d.openFile !== undefined);
+  if (driver !== undefined && ideWindowOpen(clone)) {
+    const mailbox = join(clone.path, 'tmp', IDE_MAILBOX);
+    mkdirSync(mailbox, { recursive: true });
+    // Written beside and renamed, so the watcher never reads half a request.
+    const pending = join(mailbox, `request.${String(process.pid)}.json`);
+    writeFileSync(pending, `${JSON.stringify({ path })}\n`);
+    renameSync(pending, join(mailbox, 'request.json'));
+    driver.launch(clone);
+    return `${clone.name}: ${path.endsWith('/') ? 'revealed' : 'opened'} ${path} in ${driver.label}`;
+  }
   const abs = join(clone.path, path);
   if (path.endsWith('/')) {
     if (!platform().capabilities.openExternally || !platform().openExternally(abs)) {
@@ -229,13 +279,40 @@ const openPicked = (hangar: Hangar, clone: Clone, path: string): string => {
     }
     return `${clone.name}: opened ${path}`;
   }
-  const driver = editorsToOpen(hangar).find((d) => d.openFile !== undefined);
   if (driver?.openFile === undefined) {
     throw new CliError(`no configured editor can open a single file of ${clone.name}`);
   }
   const result = driver.openFile(clone, abs);
   if (result?.note !== undefined) throw new CliError(result.note);
   return `${clone.name}: opened ${path} in ${driver.label}`;
+};
+
+/** The rows a picker offers, or the sentence that says why there are none. */
+type Rows = { readonly rows: string[] } | { readonly none: string };
+
+/**
+ * `--list`: the rows as JSON on stdout, for the VS Code extension's QuickPick, or the refusal as
+ * an error. The extension shows the rows and opens the choice in its own window; nothing here
+ * runs fzf.
+ */
+const listOrPick = (
+  hangar: Hangar,
+  clone: Clone,
+  found: Rows,
+  opts: { readonly list?: boolean | undefined },
+  choose: (rows: string[]) => string | undefined,
+): void => {
+  if ('none' in found) {
+    if (opts.list === true) throw new CliError(found.none);
+    say(hangar, clone, found.none);
+    return;
+  }
+  if (opts.list === true) {
+    console.log(JSON.stringify(found.rows));
+    return;
+  }
+  const chosen = choose(found.rows);
+  if (chosen !== undefined) say(hangar, clone, openPicked(hangar, clone, chosen));
 };
 
 /** `C-b C-e`: pick a file or directory of the clone, or the clone itself. */
@@ -257,29 +334,32 @@ export const keyEdit = (hangar: Hangar, ref: string): void => {
   say(hangar, clone, openPicked(hangar, clone, chosen));
 };
 
-/** `C-b C-t`: pick a file of the ticket's `tmp/<KEY>/`, or the folder itself. */
-export const keyTicket = (hangar: Hangar, ref: string): void => {
-  const clone = requireClone(hangar, ref);
+const ticketRowsOf = (clone: Clone): Rows => {
   const key = ticketKeyOf(inferTicket(clone));
-  if (key === undefined) {
-    say(hangar, clone, `${clone.name}: this branch names no ticket`);
-    return;
-  }
+  if (key === undefined) return { none: `${clone.name}: this branch names no ticket` };
   const dir = join(clone.path, 'tmp', key);
   if (!existsSync(dir)) {
-    say(hangar, clone, `${clone.name}: there is no tmp/${key} -- the ticket has not been fetched`);
-    return;
+    return { none: `${clone.name}: there is no tmp/${key} -- the ticket has not been fetched` };
   }
-  const chosen = pick(ticketRows(key, filesUnder(dir)), {
-    prompt: `${key} > `,
-    header: 'Enter opens it · the first row opens the folder · Esc cancels',
-  });
-  if (chosen !== undefined) say(hangar, clone, openPicked(hangar, clone, chosen));
+  return { rows: ticketRows(key, filesUnder(dir)) };
 };
 
-/** `C-b C-p`: open the plan, or pick one when there are several. */
-export const keyPlan = (hangar: Hangar, ref: string): void => {
+/** `C-b C-t`: pick a file of the ticket's `tmp/<KEY>/`, or the folder itself. */
+export const keyTicket = (
+  hangar: Hangar,
+  ref: string,
+  opts: { readonly list?: boolean | undefined } = {},
+): void => {
   const clone = requireClone(hangar, ref);
+  listOrPick(hangar, clone, ticketRowsOf(clone), opts, (rows) =>
+    pick(rows, {
+      prompt: `${clone.name} ticket > `,
+      header: 'Enter opens it · the first row opens the folder · Esc cancels',
+    }),
+  );
+};
+
+const planRowsOf = (clone: Clone): Rows => {
   const plansDir = join(clone.path, '.claude', 'plans');
   const plans = existsSync(plansDir)
     ? readdirSync(plansDir)
@@ -295,15 +375,23 @@ export const keyPlan = (hangar: Hangar, ref: string): void => {
       ? `tmp/${key}/plan_${key}.md`
       : undefined;
   const rows = planRows(plans, ticketPlan);
-  if (rows.length === 0) {
-    say(hangar, clone, `${clone.name}: no plan here -- none in .claude/plans, none for the ticket`);
-    return;
-  }
-  const chosen =
+  return rows.length === 0
+    ? { none: `${clone.name}: no plan here -- none in .claude/plans, none for the ticket` }
+    : { rows };
+};
+
+/** `C-b C-p`: open the plan, or pick one when there are several. */
+export const keyPlan = (
+  hangar: Hangar,
+  ref: string,
+  opts: { readonly list?: boolean | undefined } = {},
+): void => {
+  const clone = requireClone(hangar, ref);
+  listOrPick(hangar, clone, planRowsOf(clone), opts, (rows) =>
     rows.length === 1
       ? rows[0]
-      : pick(rows, { prompt: `${clone.name} plan > `, header: 'Enter opens it · Esc cancels' });
-  if (chosen !== undefined) say(hangar, clone, openPicked(hangar, clone, chosen));
+      : pick(rows, { prompt: `${clone.name} plan > `, header: 'Enter opens it · Esc cancels' }),
+  );
 };
 
 // ---- the runner: C-b C-n --------------------------------------------------------------------
@@ -374,38 +462,9 @@ const startServer = (server: TmuxServer, clone: Clone, role: string): string => 
     : `${clone.name}: could not add a window for ${role}`;
 };
 
-/** `C-b C-n`: pick a runner row, maybe files for it, and do what a press of it means now. */
-export const keyRun = (hangar: Hangar, ref: string): void => {
-  const clone = requireClone(hangar, ref);
-  const entries = hangar.config.runner;
-  if (entries.length === 0) {
-    say(
-      hangar,
-      clone,
-      `${clone.name}: nothing to run -- \`runner\` in hangar.config.yaml is empty`,
-    );
-    return;
-  }
+/** Do what one press of `entry` means now, with these files picked. */
+const runEntry = (hangar: Hangar, clone: Clone, entry: RunnerEntry, files: string[]): void => {
   const server = tmuxServer(hangar);
-  const name = pick(
-    entries.map((e) => e.name),
-    { prompt: `${clone.name} run > `, header: 'Enter runs it · a server toggles · Esc cancels' },
-  );
-  const entry = entries.find((e) => e.name === name);
-  if (entry === undefined) return;
-
-  let files: string[] = [];
-  if (!isServerRow(entry) && entry.pick !== undefined) {
-    const dir = join(clone.path, entry.dir);
-    const chosen = pickMany([ALL_ROW, ...pickableFiles(dir, entry.pick.glob)], {
-      prompt: `${entry.name} > `,
-      header: 'Tab marks files · Enter runs them · (all) runs everything · Esc cancels',
-      multi: true,
-    });
-    if (chosen.length === 0) return;
-    files = chosen.includes(ALL_ROW) ? [] : chosen;
-  }
-
   const serving = isServerRow(entry)
     ? scanFleet([clone]).records.find((r) => r.role === entry.role)?.port
     : undefined;
@@ -445,4 +504,127 @@ export const keyRun = (hangar: Hangar, ref: string): void => {
       );
     }
   }
+};
+
+export type KeyRunOptions = {
+  /** Print the row names as JSON, for the VS Code QuickPick. */
+  readonly list?: boolean | undefined;
+  /** Print `(all)` and the row's pickable files as JSON -- `[]` when it picks none. */
+  readonly listFiles?: string | undefined;
+  /** Run this row, with `file` as the picked files, and ask nothing. */
+  readonly entry?: string | undefined;
+  readonly file?: string[] | undefined;
+};
+
+/**
+ * `C-b C-n`: pick a runner row, maybe files for it, and do what a press of it means now.
+ *
+ * In tmux it asks with fzf. The VS Code extension asks with its QuickPick instead, through
+ * `--list`, `--list-files <name>` and then `--entry <name> --file …`, so both ends run the same
+ * `runEntry`.
+ */
+export const keyRun = (hangar: Hangar, ref: string, opts: KeyRunOptions = {}): void => {
+  const clone = requireClone(hangar, ref);
+  const entries = hangar.config.runner;
+  if (entries.length === 0) {
+    const none = `${clone.name}: nothing to run -- \`runner\` in hangar.config.yaml is empty`;
+    if (opts.list === true) throw new CliError(none);
+    say(hangar, clone, none);
+    return;
+  }
+  const byName = (name: string | undefined): RunnerEntry | undefined =>
+    entries.find((e) => e.name === name);
+  const filesOf = (entry: RunnerEntry): string[] =>
+    isServerRow(entry) || entry.pick === undefined
+      ? []
+      : [ALL_ROW, ...pickableFiles(join(clone.path, entry.dir), entry.pick.glob)];
+
+  if (opts.list === true) {
+    console.log(JSON.stringify(entries.map((e) => e.name)));
+    return;
+  }
+  if (opts.listFiles !== undefined) {
+    const entry = byName(opts.listFiles);
+    if (entry === undefined) throw new CliError(`no runner row "${opts.listFiles}"`);
+    console.log(JSON.stringify(filesOf(entry)));
+    return;
+  }
+  if (opts.entry !== undefined) {
+    const entry = byName(opts.entry);
+    if (entry === undefined) throw new CliError(`no runner row "${opts.entry}"`);
+    runEntry(hangar, clone, entry, opts.file ?? []);
+    return;
+  }
+
+  const entry = byName(
+    pick(
+      entries.map((e) => e.name),
+      { prompt: `${clone.name} run > `, header: 'Enter runs it · a server toggles · Esc cancels' },
+    ),
+  );
+  if (entry === undefined) return;
+  const pickable = filesOf(entry);
+  let files: string[] = [];
+  if (pickable.length > 0) {
+    const chosen = pickMany(pickable, {
+      prompt: `${entry.name} > `,
+      header: 'Tab marks files · Enter runs them · (all) runs everything · Esc cancels',
+      multi: true,
+    });
+    if (chosen.length === 0) return;
+    files = chosen.includes(ALL_ROW) ? [] : chosen;
+  }
+  runEntry(hangar, clone, entry, files);
+};
+
+// ---- handing a reference to the clone's Claude Code -------------------------------------------
+
+/**
+ * What `key paste --command` types: `keys.selectionCommand` with `{ref}` filled in. PURE.
+ *
+ * The template is config with no default, because it names a skill, and a skill's name is one
+ * repo's business (the same rule as `tracker.planPrompt`).
+ */
+export const selectionCommandText = (template: string | undefined, refs: string): string => {
+  if (template === undefined) {
+    throw new CliError(
+      'this hangar has no `keys.selectionCommand`',
+      'Set it in hangar.config.yaml, e.g. `selectionCommand: /some-skill {ref}`.',
+    );
+  }
+  return template.replaceAll('{ref}', refs);
+};
+
+/**
+ * `C-k C-k` and `C-b C-s` in VS Code: put text into the prompt of the Claude Code running in the
+ * clone's tmux session, and NEVER press Enter.
+ *
+ * **A bracketed paste rather than typed keys.** Claude Code may be showing a permission dialog when
+ * the text arrives, and a dialog answers to single keys -- a `1` or `2` inside a line reference
+ * would choose an option. `paste-buffer -p` hands the whole text over as one paste, which is not
+ * a keystroke. Enter is left to the person, who can see what state the session is in.
+ *
+ * **Only into a pane running Claude Code** -- its foreground process is `claude` -- so a bare
+ * shell never receives a line it would run.
+ */
+export const keyPaste = (
+  hangar: Hangar,
+  ref: string,
+  text: string,
+  opts: { readonly command?: boolean | undefined } = {},
+): void => {
+  const clone = requireClone(hangar, ref);
+  const typed =
+    opts.command === true ? selectionCommandText(hangar.config.keys.selectionCommand, text) : text;
+  const server = tmuxServer(hangar);
+  const pane = server.hasSession(clone)
+    ? server.panes(clone).find((p) => p.command === 'claude')
+    : undefined;
+  if (pane === undefined) {
+    throw new CliError(`no Claude Code is running in ${clone.name}'s tmux session`);
+  }
+  if (!server.pasteInto(pane.id, `${typed} `)) {
+    throw new CliError(`could not paste into ${clone.name}'s Claude Code`);
+  }
+  say(hangar, clone, `${clone.name}: handed to Claude Code -- Enter is yours`);
 };

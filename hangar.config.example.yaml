@@ -705,3 +705,11 @@ runner:
   - name: format
     command: pnpm run format
     dir: angular
+
+# --------------------------------------------------------------------------------------------
+# Keys -- the hangar keys' own settings
+# --------------------------------------------------------------------------------------------
+keys:
+  # What C-b C-s in VS Code pastes into the clone's Claude Code; {ref} is the selection's
+  # @<file>#<lines>. No default: it names a skill.
+  selectionCommand: /bg-shorten-comment {ref}

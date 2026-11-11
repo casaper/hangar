@@ -250,6 +250,20 @@ caveat:
   `C-b C-t` and `C-b C-p` pickers in a clone's tmux window. `open` opens no editor without `-e`,
   so building the drivers unconditionally would put "this driver would not build" in front of a
   developer who wanted a terminal window and can do nothing with the warning.
+- **The hangar keys extension is VS Code's alone** (`editor/keys-extension.ts`,
+  `app/vscode-extension/extension.cjs`). `ide vscode sync` and `doctor --fix` install it with
+  `code`; a fork's launcher installs into the fork's own extension directory, which nothing here
+  has measured, so forks get none. **It is a `.vsix` written with `zip`, never a linked folder**:
+  VS Code keeps the installed set in `~/.vscode/extensions/extensions.json` and a folder it does
+  not list is not a supported install, while a `.vsix` is a zip holding the extension beside two
+  XML files -- measured on 1.145: `code --install-extension` accepts it and
+  `--list-extensions --show-versions` names it. No packaging tool, so no dependency to keep past
+  the floor. **The manifest is generated from `KEY_TABLE`** and never tracked, so the VS Code
+  chords cannot drift from tmux's, and `test/keys-vscode.test.ts` holds the manifest's commands
+  equal to the ones the script registers. **Its version is a hash of what it ships**, so `doctor`
+  calls an install stale the moment a key or the script changes, without asking VS Code. **One
+  extension per machine**: the script finds its hangar by walking up from the workspace to
+  `hangar.config.yaml`, so it names no path, and two hangars share it.
 - **`openFile` is optional, and only the VS Code family has it.** A picker that chose one file
   takes the first configured driver offering it; with none, the key says so rather than opening
   the file in some other window. It is handed files only: a folder given to `code -r` replaces the

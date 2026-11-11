@@ -7,7 +7,13 @@ import { CONFIG_FILENAME } from '../config/load.ts';
 import { CliError } from '../exec.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import { currentBranch } from '../git.ts';
-import { tildify } from '../user-paths.ts';
+import { home, tildify } from '../user-paths.ts';
+import {
+  defaultExtensionsDir,
+  installKeysExtension,
+  keysExtensionProblem,
+  keysExtensionState,
+} from '../editor/keys-extension.ts';
 import { cloneLabel, heading, note, ok, table, warn } from '../ui.ts';
 import {
   editorFor,
@@ -277,6 +283,24 @@ export const editorSync = (hangar: Hangar, driver: EditorDriver, opts: EditorSyn
       note('bookmarks are merged from every clone — --from does not apply');
     changed += syncVscodeBookmarks(hangar, { dryRun: opts.dryRun, verbose: true, write: 'all' });
     if (clones.some((clone) => existsSync(bookmarksPath(clone)))) present += 1;
+  }
+  /*
+   * The hangar keys' extension, for VS Code itself: it is installed with `code`, and a fork's own
+   * launcher installs into the fork's own extension directory, which nothing here has measured.
+   */
+  if (driver.kind === 'vscode') {
+    const problem = keysExtensionProblem(keysExtensionState(hangar, defaultExtensionsDir(home)));
+    if (problem === undefined) ok('the hangar keys extension is installed and current');
+    else if (opts.dryRun === true) warn(`${problem} -- this would install it`);
+    else {
+      const failed = installKeysExtension(hangar, 'code');
+      if (failed === undefined) {
+        ok(
+          'installed the hangar keys extension -- a window already open loads it on its next reload',
+        );
+        changed += 1;
+      } else warn(failed);
+    }
   }
 
   console.log();
