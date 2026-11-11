@@ -95,7 +95,7 @@ tool is the separate `<thing>_preview`.
   `--no-claude` still narrows what the real run does; `-n` is how you see it first.
 - **`open` opens no editor unless `-e` is passed**, and `hangar edit <clone>` is that half on its
   own — the editors, and nothing else: no fetch, no branch, no session, no window. The clone's own
-  tmux windows bind `C-b C-e` and `C-b v` to it, so a developer sitting in a clone can open it in VS Code
+  tmux windows bind `C-b C-e` to it, so a developer sitting in a clone can open it in VS Code
   without naming an index. `close --no-editor` and `reload --no-editor` are the other direction
   and are unchanged: `close` shuts a window that is open, and `reload --no-editor` is about
   rewriting the editors' per-clone files rather than about launching anything.
@@ -168,10 +168,12 @@ tool is the separate `<thing>_preview`.
   clone, where in it the pane is standing, its git state and its branch. A click on the key or on
   `PR#1234` opens it in the browser; a click on a tab still switches to that window, and a click
   on a pane border still marks the pane. What a click runs is `hangar browse ticket|pr <clone>`,
-  which is also worth typing directly. **Three prefix keys act on the clone the window belongs
-  to**: `C-b C-e` and `C-b v` open its editor (`hangar edit`), and `C-b C-f` opens its ticket's
-  `tmp/<KEY>` folder in Finder (`hangar browse tmp`) — refused, with a message on the bar, on the
-  default branch or before the ticket has been fetched. **A click only arrives if the terminal emulator reports
+  which is also worth typing directly. **The hangar's prefix keys act on the clone the window
+  belongs to, and `C-b C-k` lists them**: `C-b C-e` opens its editor (`hangar edit`); `C-b C-f`
+  opens its ticket's `tmp/<KEY>` folder in Finder (`hangar browse tmp`) — refused, with a message
+  on the bar, on the default branch or before the ticket has been fetched; `C-b a` fetches origin
+  and `C-b C-a` every remote, each saying on the bar how it went. They run the hidden
+  `hangar key …`, which a person can also type. **A click only arrives if the terminal emulator reports
   button presses, and that is not the same setting as the wheel** — iTerm2 has one for each, so a
   bar where scrolling works and nothing is clickable is the emulator rather than tmux. `doctor`'s
   `emulator` row appends `clicks not reported` and names the setting to change; it never changes

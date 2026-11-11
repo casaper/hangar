@@ -5,10 +5,9 @@ import {
   barOptions,
   CLAUDE_CODE_ENVIRONMENT,
   claudeCodeSettingLines,
-  EDITOR_KEYS,
-  editorKeyBinding,
+  keyBinding,
   keyBindings,
-  tmpKeyBinding,
+  retiredKeyUnbindings,
   paneBorderFormat,
   statusClickBinding,
   TMUX_SETTINGS,
@@ -27,6 +26,8 @@ import {
   STATUS_BAR_FG,
 } from '../src/palette.ts';
 import { cloneAt } from '../src/fleet.ts';
+import { KEY_TABLE, RETIRED_KEYS, keyHelpLines } from '../src/keys.ts';
+import { fetchReport } from '../src/commands/key.ts';
 import { namesNoMachinePath, syntheticHangar } from './fixture.ts';
 
 /**
@@ -317,9 +318,23 @@ test('both the jobs and the click name their program by absolute path', () => {
     );
   }
   assert.ok(
-    statusClickBinding(hangar).some((word) => word.includes(`${hangar.paths.bin} browse `)),
-    'the click must name bin/hangar by path',
+    statusClickBinding(hangar).some((word) =>
+      word.includes(`${hangar.paths.bin} --hangar ${hangar.root} browse `),
+    ),
+    'the click must name bin/hangar by path, and its hangar',
   );
+});
+
+test('every binding names its hangar, so a pane cd-ed anywhere still reaches this one', () => {
+  // A binding runs in the directory of the pane it was pressed over, and the CLI's walk up from
+  // there finds no hangar -- or, from a pane in another hangar, the wrong one. Measured on 3.8.
+  const hangar = syntheticHangar();
+  for (const binding of keyBindings(hangar)) {
+    assert.ok(
+      binding.some((word) => word.includes(`${hangar.paths.bin} --hangar ${hangar.root} `)),
+      `${String(binding[3])} does not pass --hangar`,
+    );
+  }
 });
 
 test('every key binding is rendered into the conf, from the one list', () => {
@@ -346,21 +361,75 @@ test('every key binding is rendered into the conf, from the one list', () => {
   }
 });
 
-test('the editor keys take no key tmux already binds, and never open a view pane', () => {
-  // Measured on 3.7c and 3.8: the prefix table binds C-b, C-o, C-z and the four C-arrows, leaves
-  // `v` unbound, and this conf does not move the prefix. So these bindings take nothing away --
-  // and `i` and `f`, the other obvious letters, are tmux's own display-message and find-window.
-  assert.deepEqual([...EDITOR_KEYS], ['C-e', 'v']);
-  for (const key of EDITOR_KEYS) {
-    assert.deepEqual(editorKeyBinding(syntheticHangar(), key).slice(1, 4), ['-T', 'prefix', key]);
+test('the hangar keys take no key tmux binds, and none a terminal cannot tell apart', () => {
+  // Measured on 3.7c and 3.8: the prefix table binds C-b, C-o and C-z among the Ctrl letters, and
+  // these plain letters. C-h, C-i, C-j and C-m are Backspace, Tab, line feed and Enter on the wire.
+  const tmuxOwn = ['C-b', 'C-o', 'C-z', 'c', 'd', 'f', 'g', 'i', 'l', 'm', 'n', 'o', 'p', 'q'];
+  const ambiguous = ['C-h', 'C-i', 'C-j', 'C-m', 'C-?'];
+  for (const entry of KEY_TABLE) {
+    assert.ok(!tmuxOwn.includes(entry.key), `${entry.key} is tmux's own`);
+    assert.ok(!ambiguous.includes(entry.key), `${entry.key} is a control byte in disguise`);
+    assert.ok(!RETIRED_KEYS.includes(entry.key), `${entry.key} is both bound and retired`);
   }
-  const binding = editorKeyBinding(syntheticHangar(), 'v');
-  // `if-shell`, not `run-shell`: tmux displays a run-shell's stdout in view mode in the current
-  // pane, which for a command that reports what it opened means a scratch view over whatever the
-  // developer was looking at, on every press. Both streams are redirected for the same reason.
-  assert.equal(binding[4], 'if-shell');
-  assert.ok(binding.some((word) => word.includes('>/dev/null 2>&1')));
-  assert.ok(binding.filter((word) => word.startsWith('display-message ')).length === 2);
+  const keys = keyBindings(syntheticHangar()).map((b) => `${String(b[2])} ${String(b[3])}`);
+  assert.equal(new Set(keys).size, keys.length, 'two bindings claim one key');
+});
+
+test('a report key never opens a view pane, and a popup key hands the popup its clone', () => {
+  const hangar = syntheticHangar();
+  for (const entry of KEY_TABLE) {
+    const binding = keyBinding(hangar, entry);
+    assert.deepEqual(binding.slice(1, 4), ['-T', 'prefix', entry.key]);
+    if (entry.run === 'report') {
+      // `if-shell`, not `run-shell`: tmux displays a run-shell's stdout in view mode in the
+      // current pane, over whatever the developer was looking at. Both streams are redirected.
+      assert.equal(binding[4], 'if-shell');
+      assert.ok(binding.some((word) => word.includes('"#{@hangar_clone}" >/dev/null 2>&1')));
+      // A command that does not report by itself names its success line; one that does leaves
+      // the branch empty so its own line is not covered by a fixed one.
+      assert.equal(binding[7] === '', entry.ok === undefined, `${entry.key}'s success branch`);
+    } else {
+      // A popup expands no formats (measured on 3.8); `run-shell -C` expands the line first.
+      assert.deepEqual(binding.slice(4, 6), ['run-shell', '-C']);
+      assert.match(binding[6] ?? '', /^display-popup -EE .* #\{@hangar_clone\}"$/);
+    }
+    // `quoteTmuxValue` wraps in single quotes and cannot escape one.
+    assert.ok(!binding.some((word) => word.includes("'")), `${entry.key} carries a single quote`);
+  }
+});
+
+test('a retired key is unbound on a running server, and never written to the conf', () => {
+  const unbindings = retiredKeyUnbindings();
+  assert.deepEqual(
+    unbindings.map((u) => u.at(-1)),
+    [...RETIRED_KEYS],
+  );
+  const { content } = tmuxConfArtifact(syntheticHangar());
+  for (const key of RETIRED_KEYS) {
+    assert.ok(!content.includes(`-T prefix ${key} `), `${key} is still in the conf`);
+  }
+});
+
+test('the help table names every key, and the key that shows it', () => {
+  const help = keyHelpLines(KEY_TABLE).join('\n');
+  for (const entry of KEY_TABLE) assert.ok(help.includes(`C-b ${entry.key} `), entry.key);
+  assert.ok(KEY_TABLE.some((entry) => entry.argv.join(' ') === 'key help'));
+  // tmux's own help key stays tmux's, and the table says where it is.
+  assert.match(help, /C-b \?/);
+});
+
+test('a fetch press says which clone, which remotes and what git said', () => {
+  assert.equal(
+    fetchReport('clone_02', false, { ok: true, stderr: '' }),
+    'clone_02: fetched origin',
+  );
+  assert.equal(
+    fetchReport('clone_02', true, {
+      ok: false,
+      stderr: '\nfatal: could not read from remote\nmore',
+    }),
+    'clone_02: fetch from every remote failed -- fatal: could not read from remote',
+  );
 });
 
 test('node is prepended to the server PATH, once, and never replaces what is there', () => {
@@ -424,16 +493,4 @@ test('what Claude Code needs in its environment survives the leak scrub, and onl
   assert.equal(isSessionLeak('CLAUDE_CODE_TMUX_TRUECOLORX'), true);
   const shown = CLAUDE_CODE_ENVIRONMENT.map((e) => `${e.name}=${e.value}`).join('\n');
   assert.deepEqual(leakedInEnvironment(`${shown}\nCLAUDE_CODE_X=1`), ['CLAUDE_CODE_X']);
-});
-
-test('the tmp-folder key takes no key tmux binds, and opens nothing on a view pane', () => {
-  // `f` is tmux's find-window, so the folder key is `C-f`, free on 3.7c and 3.8.
-  const binding = tmpKeyBinding(syntheticHangar());
-  assert.deepEqual(binding.slice(1, 4), ['-T', 'prefix', 'C-f']);
-  assert.equal(binding[4], 'if-shell');
-  assert.ok(
-    binding.some((word) => word.includes(' browse tmp "#{@hangar_clone}" >/dev/null 2>&1')),
-  );
-  const keys = keyBindings(syntheticHangar()).map((b) => `${String(b[2])} ${String(b[3])}`);
-  assert.equal(new Set(keys).size, keys.length, 'two bindings claim one key');
 });

@@ -8,6 +8,7 @@ import {
   barOptions,
   CLAUDE_CODE_ENVIRONMENT,
   keyBindings,
+  retiredKeyUnbindings,
   paneBorderFormat,
 } from './generate/tmux-conf.ts';
 import { type CloneColour, colourByHex } from './palette.ts';
@@ -823,11 +824,14 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
        */
       for (const option of barOptions(hangar)) tmux(['set', '-g', option.name, option.value]);
       /*
-       * And the keys -- the click on the bar, and `C-b C-e` / `C-b v` for the clone's editors -- which are
-       * the parts of this layer that are not options: a key binding is a command, so there is
-       * nothing for `set` to carry it. Applied here rather than left to the conf for exactly the
-       * same reason as the options above.
+       * And the keys -- the click on the bar, and every row of `KEY_TABLE` -- which are the parts
+       * of this layer that are not options: a key binding is a command, so there is nothing for
+       * `set` to carry it. Applied here rather than left to the conf for exactly the same reason
+       * as the options above. The retired keys come off first: nothing else ever removes a
+       * binding from a running server, and a conf that no longer binds a key says nothing to a
+       * server that read an older one.
        */
+      for (const unbinding of retiredKeyUnbindings()) tmux(unbinding);
       for (const binding of keyBindings(hangar)) tmux(binding);
 
       const byTag = new Map(clones.map((clone) => [clone.name, clone]));

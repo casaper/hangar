@@ -16,6 +16,7 @@ import { configSchema, configShow, configValidate } from './commands/config.ts';
 import { doctor } from './commands/doctor.ts';
 import { edit, type EditOptions } from './commands/edit.ts';
 import { jiraHook } from './commands/jira.ts';
+import { keyFetch, keyHelp } from './commands/key.ts';
 import { jiraPlan } from './commands/jira-plan.ts';
 import { golden } from './commands/dev.ts';
 import { release } from './commands/release.ts';
@@ -544,7 +545,7 @@ program
   .description(
     [
       'Open each clone in every editor `editor.kinds` lists. It is the editor half of `hangar open` on its own: no branch is fetched or checked out, no tmux session is created and no terminal window is opened.',
-      "That is also what makes it safe to bind to a key, and `clone-tmux.conf` binds two: `C-b C-e` or `C-b v` inside a clone's tmux window opens that clone's editors, without naming an index.",
+      "That is also what makes it safe to bind to a key: `C-b C-e` inside a clone's tmux window opens that clone's editors, without naming an index. `C-b C-k` lists every hangar key.",
       'An editor that lives inside a terminal — `vim` with no GUI build — is the one kind this cannot open, because it needs a tmux window to live in. It is named and skipped; `hangar open <clone> -e` is what puts it there.',
     ].join('\n\n'),
   )
@@ -1147,6 +1148,32 @@ dev
   .option('-y, --yes', 'do not ask before releasing, for a run with no terminal to ask at')
   .action((options) => {
     release(requireHangar(), options);
+  });
+
+/**
+ * `key` is HIDDEN for the reason `dev` is: it is the far end of the hangar's tmux keys
+ * (`KEY_TABLE` in `src/keys.ts`), and a key is how it is meant to be reached. Nothing about it is
+ * promised to an operator, and it has no row in `hangar-ops/reference/commands.md`.
+ */
+const key = program
+  .command('key', { hidden: true })
+  .description("What the hangar's keys in a clone's tmux session run");
+
+key
+  .command('fetch')
+  .description('git fetch origin in a clone, and say how it went on its bar (C-b a)')
+  .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
+  .option('--all', 'fetch every remote: origin and every sibling clone (C-b C-a)')
+  .action((clone: string, options: { all?: boolean }) => {
+    keyFetch(requireHangar(), clone, options);
+  });
+
+key
+  .command('help')
+  .description("Print the hangar's keys, and wait for a key when on a terminal (C-b C-k)")
+  .argument('[clone]', 'accepted so every key runs the same way, and unused')
+  .action(() => {
+    keyHelp();
   });
 
 /**

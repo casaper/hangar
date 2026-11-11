@@ -14,6 +14,8 @@
       "Bash(hangar exec:*)"
     ],
     "ask": [
+      "Bash(hangar key)",
+      "Bash(hangar key:*)",
       "Bash(hangar sync)",
       "Bash(hangar sync:*)",
       "Bash(hangar merge-default)",

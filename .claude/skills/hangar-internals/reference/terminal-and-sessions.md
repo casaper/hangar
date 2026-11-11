@@ -536,8 +536,8 @@ sessions deep, with the two clones nobody reopened left holding a single `zsh` w
 Nothing then says so. The footer job is `#(clone-tmux-status.sh footer "#{@hangar_clone}" …)` and
 every failure in that script is a deliberate silent `exit 0`, so an empty tag renders an empty
 footer; `set-titles-string` reads `@hangar_clone_label` and drops the clone out of the window
-title; the click binding, `C-b C-e`/`C-b v` and `C-b C-f` hand `hangar browse`, `hangar edit` and
-`hangar browse tmp` an empty argument. Three symptoms, one missing `set`, and no error anywhere.
+title; the click binding and the hangar keys hand `hangar browse`, `hangar edit` and
+every `hangar key` action an empty argument. Three symptoms, one missing `set`, and no error anywhere.
 
 The repair had the same hole in it. `paintSession` ran only from `createSession`, and `restyle`
 identified a session by the very tag that was missing -- so `hangar colours sync`, the one command
@@ -876,9 +876,9 @@ every server.** One `hangar open` starts inherits direnv's PATH. One the EMULATO
 `attachCommand` is `new-session -A`, so a restored tab with the server gone makes the server
 itself -- inherits launchd's `/usr/bin:/bin:/usr/sbin:/sbin`, which has no `node` in it. An
 absolute `bin/hangar` still reaches the script; the script then cannot find Node and answers with
-its own bootstrap error. FIVE things run that way and every one of them is dead without `node`:
-`hangar browse` on a click, `hangar edit` on `C-b C-e` and on `C-b v`, `hangar browse tmp` on
-`C-b C-f`, and `clone-tmux-status.sh`'s detached `hangar pr refresh`. The refresh fails in total
+its own bootstrap error. Everything that runs that way is dead without `node`: `hangar browse`
+on a click, every hangar key in `KEY_TABLE`, and `clone-tmux-status.sh`'s detached
+`hangar pr refresh`. The refresh fails in total
 silence; the bindings say only that the command failed. Measured here: every pull-request record was 8236 seconds old against a 90-second TTL with five sessions
 drawing their bars, and every attached clone refreshed within three seconds of `node`'s directory
 being put on the server's global PATH.
@@ -915,22 +915,71 @@ person, once. Measured on this machine, `bin/hangar --version` costs 0.24-0.28s 
 for shell plus git -- so everything the bar REFRESHES is a generated script, and in exchange the
 URLs come from `issueUrl` and `prSearchUrl` rather than being spelled a second time in shell.
 
-### `C-b C-e` and `C-b v` open the clone's editors, and that is why `hangar edit` exists
+### The hangar keys are one table, `KEY_TABLE`, and `C-b C-k` shows it
 
-The second binding, issued once per key in `EDITOR_KEYS`:
+Every hangar key is a row of `KEY_TABLE` in `src/keys.ts`: the key after the prefix, what it does,
+the `hangar` words it runs and how it runs them. `keyBinding` in `generate/tmux-conf.ts` turns a
+row into a `bind-key -T prefix`, and `hangar key help` -- `C-b C-k` -- prints the same rows, so the
+help cannot name a key the conf does not bind. One `report` row, as rendered:
 
 ```
-bind-key -T prefix C-e if-shell -b '<hangar>/bin/hangar edit "#{@hangar_clone}" >/dev/null 2>&1' \
+bind-key -T prefix C-e if-shell -b '<hangar>/bin/hangar --hangar <hangar> edit "#{@hangar_clone}" >/dev/null 2>&1' \
   'display-message "opened #{@hangar_clone} in its editor"' \
   'display-message "hangar edit failed for #{@hangar_clone} -- run it in a shell to see why"'
 ```
 
-`C-e` for "editor" and `v` for VS Code, and both are free: on tmux 3.7c and 3.8 the prefix table
-binds `C-b`, `C-o`, `C-z` and the four `C-arrow`s and no other Ctrl key, and leaves `v` unbound,
-and this conf does not move the prefix -- so neither key takes anything away, the same rule the
-click above is built on. `i` and `f` were the other candidates and are not free: tmux binds them
-to `display-message` and `find-window`. `list-keys -T prefix` is how that
-was checked and is how the next one should be.
+**Which keys are free was measured, not assumed.** On tmux 3.7c and 3.8 the prefix table binds
+`C-b`, `C-o`, `C-z` and the four `C-arrow`s and no other Ctrl key, and this conf does not move the
+prefix -- so a `C-<letter>` takes nothing away, the same rule the click above is built on. Four Ctrl
+letters are never used even so: `C-h`, `C-i`, `C-j` and `C-m` are the Backspace, Tab, line-feed and
+Enter bytes on the wire, and tmux cannot tell the key from the byte. `C-?` is the Backspace byte
+too, which is why help is `C-k` and tmux's own `C-b ?` stays tmux's. `a` is the one plain letter
+in the table, and it is unbound. `list-keys -T prefix` is how that was checked and is how the next
+one should be; `tmux-conf.test.ts` holds the table to it.
+
+**A key that leaves the table is UNBOUND on a running server, from `RETIRED_KEYS`.** `restyle`
+writes bindings onto a live server, and nothing else ever removes one: a key dropped from the
+table alone would keep running its old command on every server until `kill-server`, which ends
+every live agent. So `restyle` issues `unbind-key` for each retired key before binding the table.
+The conf does not carry them -- a server starting from it never had the key. Unbinding a key that is
+not bound is a no-op on 3.8. `v` is on that list: the table gives each action one key.
+
+**Every binding passes `--hangar <root>`, because a key runs in the PANE's directory.** The CLI
+finds its hangar by walking up from the working directory. Measured on 3.8: a popup over a pane
+standing in a scratch directory answered "no hangar.config.yaml here or in any parent directory".
+A pane `cd`'d into another hangar would be worse, because the walk would find that one. The flag
+outranks the walk, so a key acts on the hangar whose conf bound it, from any pane. The click binding
+goes through the same helper, `boundHangar`.
+
+**Two ways to run, and each is the only one that works for its job:**
+
+- **`report` is `if-shell -b`, not `run-shell`.** From tmux's own documentation for `run-shell`:
+  "If -C is not given, any output to stdout is displayed in view mode (in the pane specified by -t
+  or the current pane)". `hangar edit` reports what it opened, so `run-shell` would throw whatever
+  the developer is looking at -- Claude Code, a dev server -- into a scratch view on every press.
+  `if-shell` branches on the EXIT STATUS instead, both streams are redirected for the same reason,
+  and the answer is one `display-message` line on the status bar either way. **A `hangar key`
+  action puts its own line on the bar** (`display-message -t` on the clone's session, and the same
+  line on stdout), because an answer like "fetch failed -- <what git said>" is not one of two fixed
+  lines. Its success branch is empty, which 3.8 accepts, and its failure branch is reached only when
+  the command could not run at all.
+- **`popup` is `run-shell -C 'display-popup …'`, because a popup expands no formats.** Measured on
+  3.8: `display-popup`'s command, its `-e` values and the same line bound directly to a key all
+  arrive with `#{@hangar_clone}` unexpanded. `run-shell -C` expands the line and then runs it as a
+  tmux command, so the popup is handed the clone's name. `-EE` closes the popup only on success, so
+  a failure stays on screen to be read. A popup is for anything that waits on a person -- the help
+  table waits for a key.
+
+The clone comes from `@hangar_clone`, the session option, so a key needs no argument and cannot be
+pressed for the wrong clone -- and a session made by hand on this socket, which has no such
+option, expands to an empty argument, exits non-zero and gets the failure message. That is the
+whole degradation; there is no second `if-shell` testing for the option first.
+
+**`hangar key` is hidden**, like `dev`: it is the far end of a key, nothing about it is promised to
+an operator, and it is not an MCP tool (`NOT_EXPOSED`), since it reports onto the bar of whoever is
+attached and its popups wait on a terminal.
+
+#### `C-b C-e` opens the clone's editors, and that is why `hangar edit` exists
 
 **`hangar edit` is a command rather than a flag on `open` BECAUSE of this key.** A key press has
 to cost only what it says: `hangar open --editor` would create tmux windows on every press — and
@@ -948,8 +997,10 @@ be pressed for the wrong clone -- and a session made by hand on this socket, whi
 option, expands to an empty argument, exits non-zero and gets the failure message. That is the
 whole degradation; there is no second `if-shell` testing for the option first.
 
-`C-b C-f` is the third key and the same shape: `hangar browse tmp "#{@hangar_clone}"`, which hands
-`<clone>/tmp/<KEY>` to the platform opener -- Finder. `C-f` because `f` is tmux's `find-window`.
+#### `C-b C-f` opens the ticket's folder
+
+`hangar browse tmp "#{@hangar_clone}"`, which hands `<clone>/tmp/<KEY>` to the platform opener --
+Finder. `C-f` because `f` is tmux's `find-window`.
 **`browse` exits 1 when there is nothing to open**, for all three of its targets, because every
 caller of it here branches on the exit status: exiting 0 after a warning would have this key and
 the bar's click report "opened" for a press that opened nothing. The folder is refused rather than

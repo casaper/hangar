@@ -102,13 +102,14 @@ const ideExposures: readonly Exposure[] = IDE_KINDS.flatMap((kind) => [
 /**
  * The whole tool surface.
  *
- * **Six commands are deliberately absent, and the Bash denials stay in force beside them:**
+ * **These commands are deliberately absent, and the Bash denials stay in force beside them:**
  * `claude` is operator mode's escalation boundary -- `ops.settings.json` denies it and the
  * command itself refuses when `$CLAUDECODE` is set; `dev golden` and `dev release` are hidden
  * maintainer commands whose whole interface contract is that nothing about them is promised to
  * an operator; `jira hook` is a `PreToolUse` hook rather than a command, with a fail-open
- * contract a tool call would defeat; `mcp` is this server; and `exec` takes a shell snippet no
- * schema could constrain. `setup` IS exposed, as a preview and an acting tool.
+ * contract a tool call would defeat; `key` is the far end of a tmux key; `mcp` is this server;
+ * and `exec` takes a shell snippet no schema could constrain. `setup` IS exposed, as a preview and
+ * an acting tool.
  */
 export const EXPOSURES: readonly Exposure[] = [
   // ---- reports ----------------------------------------------------------------------------
@@ -635,6 +636,11 @@ export const argvFor = (
  * reaches every clone's working tree at once. The Bash path is denied too, by a hook.
  *
  * `mcp` is this server, which has no business calling itself.
+ *
+ * - **`key …`** is the far end of a tmux key in a clone's session: it reports onto the bar of
+ *   whoever is attached there, and its pickers and help wait on a terminal a tool call does not
+ *   have. Each action is also a command a tool already covers or a person types, so a tool would
+ *   add a second name for it and nothing else.
  */
 export const NOT_EXPOSED: readonly string[] = [
   'up',
@@ -643,6 +649,8 @@ export const NOT_EXPOSED: readonly string[] = [
   'dev golden',
   'dev release',
   'jira hook',
+  'key fetch',
+  'key help',
   'mcp',
 ];
 

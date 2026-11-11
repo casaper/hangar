@@ -1,5 +1,6 @@
 import type { Hangar } from '../hangar.ts';
 import { type CloneColour, STATUS_BAR_BG, STATUS_BAR_DIM, STATUS_BAR_FG } from '../palette.ts';
+import { type HangarKey, KEY_TABLE, RETIRED_KEYS } from '../keys.ts';
 import { type Artifact, artifactHeader } from './index.ts';
 
 /**
@@ -386,6 +387,18 @@ const statusJob =
       .join('')})`;
 
 /**
+ * `bin/hangar --hangar <root>`: how every binding here starts the CLI.
+ *
+ * **`--hangar`, because the command runs wherever the PANE is.** The CLI finds its hangar by
+ * walking up from the working directory, and a key or a click runs in the directory of the pane
+ * it was pressed over -- measured on 3.8, a popup over a pane in a scratch directory got "no
+ * hangar.config.yaml here or in any parent directory". A pane `cd`'d into another hangar would be
+ * worse: the walk would find THAT one. The flag outranks the walk, so the key acts on the hangar
+ * whose conf bound it, from any pane.
+ */
+const boundHangar = (hangar: Hangar): string => `${hangar.paths.bin} --hangar ${hangar.root}`;
+
+/**
  * `bind-key -T root MouseDown1Status …` -- one binding, as argv, for the conf and for `restyle`.
  *
  * A key binding is not an option, so it is the one part of the bar the live-apply pass has to
@@ -416,7 +429,7 @@ const statusJob =
  * That environment is also why `TmuxServer.ensureNodeOnPath` exists: an absolute path reaches
  * `bin/hangar`, and `bin/hangar` still has to find `node`.
  *
- * **`if-shell -b`, and not `run-shell`**, for the reason `editorKeyBinding` below spells out and
+ * **`if-shell -b`, and not `run-shell`**, for the reason `keyBinding` below spells out and
  * this binding learned the hard way: run-shell puts a command's stdout in view mode, so every
  * click threw `hangar browse`'s own two lines of output over whatever the developer was looking
  * at -- Claude Code, a dev server -- and a failure arrived the same way. Both streams are
@@ -430,7 +443,7 @@ export const statusClickBinding = (hangar: Hangar): readonly string[] => {
   const browse = [
     'if-shell',
     '-b',
-    `"${hangar.paths.bin} browse ${what} #{@hangar_clone} >/dev/null 2>&1"`,
+    `"${boundHangar(hangar)} browse ${what} #{@hangar_clone} >/dev/null 2>&1"`,
     `"display-message \\"opened ${what} for #{@hangar_clone}\\""`,
     `"display-message \\"hangar browse ${what} failed for #{@hangar_clone} -- run it in a shell to see why\\""`,
   ].join(' ');
@@ -448,67 +461,58 @@ export const statusClickBinding = (hangar: Hangar): readonly string[] => {
 };
 
 /**
- * The prefix-table keys that open the current clone's editors: `C-b C-e` and `C-b v`.
+ * `bind-key -T prefix <key>` for one row of `KEY_TABLE`.
  *
- * `C-e` for "editor" and `v` for VS Code, and both are free: on tmux 3.7c and 3.8 the prefix
- * table binds `C-b`, `C-o`, `C-z` and the four `C-arrow`s and no other Ctrl key, and leaves `v`
- * unbound, and this conf does not move the prefix. So neither takes anything away, which is the
- * same rule the click binding below is built on. `list-keys -T prefix` is how that was checked.
- */
-export const EDITOR_KEYS = ['C-e', 'v'] as const;
-
-/**
- * `bind-key -T prefix <key>` -- open the current clone's editors, without naming it.
+ * **`report` is `if-shell -b`, and not `run-shell -b`.** From tmux's own documentation for
+ * `run-shell`: "If -C is not given, any output to stdout is displayed in view mode (in the pane
+ * specified by -t or the current pane)". `hangar edit` reports what it opened, so `run-shell` would
+ * throw whatever the developer is looking at -- Claude Code, a dev server -- into a scratch view
+ * on every press. `if-shell` branches on the EXIT STATUS instead, both streams are redirected for
+ * the same reason, and the answer is one `display-message` line on the status bar either way. A
+ * `hangar key` action puts its own line on the bar, so its success branch is empty -- accepted by
+ * 3.8 -- and only a command that could not run at all reaches the failure branch.
  *
- * **`if-shell -b`, and not `run-shell -b`.** From tmux's own documentation for `run-shell`: "If
- * -C is not given, any output to stdout is displayed in view mode (in the pane specified by -t or
- * the current pane)". `hangar edit` reports what it opened, so `run-shell` would throw whatever
- * the developer is looking at -- Claude Code, a dev server -- into a scratch view on every press.
- * `if-shell` branches on the EXIT STATUS instead, both streams are redirected for the same
- * reason, and the answer is one `display-message` line on the status bar either way.
+ * **`popup` is `run-shell -C 'display-popup …'`, because a popup expands no formats.** Measured on
+ * 3.8: `display-popup`'s command, its `-e` values and the same line bound to a key all arrive
+ * with `#{@hangar_clone}` unexpanded. `run-shell -C` expands the line and then runs it as a tmux
+ * command, so the popup is handed the clone's name. `-EE` closes the popup only on success, so a
+ * failure stays on screen to be read.
  *
  * A session with no `@hangar_clone` -- one made by hand on this socket -- expands to an empty
- * argument, `hangar edit ""` exits non-zero, and the failure branch is what appears. That is why
- * there is no second `if-shell` testing for the option first.
+ * argument and the command fails, which is the whole degradation; there is no second `if-shell`
+ * testing for the option first.
  *
  * `bin/hangar` by ABSOLUTE path, for the same reason as the click: the shell tmux runs here
  * inherits the SERVER's environment, which need not have direnv's PATH.
  */
-export const editorKeyBinding = (
-  hangar: Hangar,
-  key: (typeof EDITOR_KEYS)[number] = 'C-e',
-): readonly string[] => [
-  'bind-key',
-  '-T',
-  'prefix',
-  key,
-  'if-shell',
-  '-b',
-  `${hangar.paths.bin} edit "#{@hangar_clone}" >/dev/null 2>&1`,
-  'display-message "opened #{@hangar_clone} in its editor"',
-  'display-message "hangar edit failed for #{@hangar_clone} -- run it in a shell to see why"',
-];
-
-/**
- * `bind-key -T prefix C-f` -- reveal the current clone's ticket directory, `tmp/<KEY>`, in the
- * file manager (Finder, on macOS), through `hangar browse tmp`.
- *
- * `C-f` rather than `f`: `f` is tmux's own `find-window`, and this conf takes no key tmux already
- * binds. `C-f` is free on 3.7c and 3.8 for the reason `EDITOR_KEYS` gives. The same `if-shell -b`
- * shape for the same reason, and the failure message is the useful one here: on the default
- * branch, or before the ticket has been fetched, `browse tmp` refuses and exits non-zero.
- */
-export const tmpKeyBinding = (hangar: Hangar): readonly string[] => [
-  'bind-key',
-  '-T',
-  'prefix',
-  'C-f',
-  'if-shell',
-  '-b',
-  `${hangar.paths.bin} browse tmp "#{@hangar_clone}" >/dev/null 2>&1`,
-  'display-message "opened the ticket folder for #{@hangar_clone}"',
-  'display-message "no ticket folder for #{@hangar_clone} -- run hangar browse tmp in a shell to see why"',
-];
+export const keyBinding = (hangar: Hangar, entry: HangarKey): readonly string[] => {
+  const command = [boundHangar(hangar), ...entry.argv].join(' ');
+  if (entry.run === 'popup') {
+    return [
+      'bind-key',
+      '-T',
+      'prefix',
+      entry.key,
+      'run-shell',
+      '-C',
+      `display-popup -EE -w 80% -h 70% -T " hangar " "${command} #{@hangar_clone}"`,
+    ];
+  }
+  const fail =
+    entry.fail ??
+    `hangar ${entry.argv.join(' ')} failed for #{@hangar_clone} -- run it in a shell to see why`;
+  return [
+    'bind-key',
+    '-T',
+    'prefix',
+    entry.key,
+    'if-shell',
+    '-b',
+    `${command} "#{@hangar_clone}" >/dev/null 2>&1`,
+    entry.ok === undefined ? '' : `display-message "${entry.ok}"`,
+    `display-message "${fail}"`,
+  ];
+};
 
 /**
  * Every key this conf binds, in one list -- the shape `barOptions` has, and for the same reason.
@@ -519,9 +523,12 @@ export const tmpKeyBinding = (hangar: Hangar): readonly string[] => [
  */
 export const keyBindings = (hangar: Hangar): readonly (readonly string[])[] => [
   statusClickBinding(hangar),
-  ...EDITOR_KEYS.map((key) => editorKeyBinding(hangar, key)),
-  tmpKeyBinding(hangar),
+  ...KEY_TABLE.map((entry) => keyBinding(hangar, entry)),
 ];
+
+/** `unbind-key` for each of `RETIRED_KEYS`, issued by `restyle` and never written to the conf. */
+export const retiredKeyUnbindings = (): readonly (readonly string[])[] =>
+  RETIRED_KEYS.map((key) => ['unbind-key', '-T', 'prefix', key]);
 
 /**
  * One `bind-key` argv as a line of conf, quoting each word the way `set` values are quoted.
@@ -583,8 +590,7 @@ export const tmuxConfArtifact = (hangar: Hangar): Artifact => {
       '# A click on the ticket or the pull request opens it; a click anywhere else on the bar',
       '# switches to that window -- which tmux does NOT do by default, since its own binding for',
       '# this key changes the session and selects no window. See `statusClickBinding`.',
-      '# `C-b C-e` and `C-b v` open the editors of whichever clone the session belongs to, and',
-      '# `C-b C-f` its ticket folder under tmp/.',
+      '# The prefix keys are `KEY_TABLE` in src/keys.ts, and `C-b C-k` shows them.',
       ...keyBindings(hangar).map(renderBinding),
       '',
       '# ---- the rest ---------------------------------------------------------------------',
