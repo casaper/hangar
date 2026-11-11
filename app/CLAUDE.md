@@ -283,6 +283,9 @@ flag, a seam, a driver or a generated artifact; `fix` corrects behaviour that wa
 the README or the skills and nothing else. A `personal-skills/*/SKILL.md`, new or changed, is
 `docs(skills)` too. `feat`/`fix(skills)` is for code: a skill's script, or `hangar skills` itself.
 
+**Run `hangar-rewrite status` before proposing to amend or reword.** The user pushes between
+turns, so the session's opening git snapshot says nothing about what is still unpublished.
+
 **Scopes** are the subsystem: `sync` `checkout-default` `doctor` `open` `close` `reload` `edit`
 `browse` `tmp` `plans` `pr` `jira` `jira-plan` `colours` `config` `editor` `terminal` `platform`
 `setup` `add-clone` `remove-clone` `install` `resume` `ide` `status` `list` `golden` `cli` `fleet`
