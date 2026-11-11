@@ -143,6 +143,12 @@ exist: `tmp-merge-lock.ts` (pid, waits; for work whose length grows), `withLock`
 `editor/vscode-bookmarks-sync.ts` (mtime, skips), `takePrRefreshLock` in `pr-cache.ts` (mkdir,
 skips). Reuse one; the jira-cache reference has why a pid beats an age.
 
+**A hangar key is a `KEY_TABLE` row (`src/keys.ts`) plus a hidden `hangar key <action>` in
+`cli.ts` and a `'key <action>'` entry in `NOT_EXPOSED`.** `hangar colours sync` puts a changed
+binding on the live server; a change to a row's `vscode` command or to
+`vscode-extension/extension.cjs` changes the extension's hash version, and `doctor --fix`
+reinstalls it.
+
 **Probe in a scratchpad or a throwaway hangar, never the live fleet.** The recipes — git
 behaviour, Claude Code permissions, a command's file I/O, a generated script, an `advisory/` diff, a
 `scrub-check.sh` canary, partial staging, a VS Code extension — are in

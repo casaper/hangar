@@ -32,6 +32,26 @@ working tree, so an untracked file is never scanned: back the file up, append th
 **Stage part of a file without `git add -p`** (interactive, unsupported here): filter the hunks
 of `git diff -U3 -- <file>` in a scratchpad script and pipe them to `git apply --cached --recount -`.
 
+**Press a tmux key without a terminal**: give a scratch server a client from a second one
+(`tmux -L pA new -d "tmux -L pB attach"`), then `tmux -L pB send-keys -K -c <client> C-b <key>`
+and read the result with `tmux -L pA capture-pane -p`. Background the `send-keys` when the key
+opens a popup: it blocks until the popup closes.
+
+**A git fixture that needs `origin/HEAD`**: `git update-ref refs/remotes/origin/<b> HEAD` and
+`git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/<b>`, never a push (the publish
+guard refuses even a scratch bare remote). Put the probe in a script file taking a fresh directory
+as its argument, with no `rm`: an `rm -rf $VAR` inside `sh -c` is refused by Claude Code's own
+safety check.
+
+**VS Code's built-in keybindings**: grep
+`/Applications/Visual Studio Code.app/Contents/Resources/app/out/vs/workbench/workbench.desktop.main.js`
+for `mac:{primary:<n>` or `secondary:[<n>]`. `n` is the key code OR'd with the modifier:
+WinCtrl 256, CtrlCmd 2048, KeyA 31 (so `ctrl+b` is 288 and `cmd+b` 2080).
+
+**Install a VS Code extension without touching your own**:
+`code --extensions-dir <scratch> --install-extension <x.vsix>`, then `--list-extensions
+--show-versions` with the same flag.
+
 **Measure a VS Code extension from its bundle**,
 `~/.vscode/extensions/<publisher.name>-<ver>/dist/*.js`: slice around a match with `python3 -I`
 (`s.find(…)`), because `grep -oE` refuses a `{0,300}` context. Its workspace-scoped state is SQLite
