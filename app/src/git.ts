@@ -67,6 +67,8 @@ export type GitOptions = {
    * git's own state.
    */
   readonly inherit?: boolean;
+  /** Text for the child's stdin, e.g. `update-ref --stdin` instructions. */
+  readonly input?: string;
 };
 
 /**
@@ -78,6 +80,7 @@ export const git = (repo: string, args: readonly string[], opts: GitOptions = {}
   run('git', ['-C', repo, ...args], {
     env: hangarGitEnv(process.env),
     inherit: opts.inherit === true,
+    ...(opts.input === undefined ? {} : { input: opts.input }),
   });
 
 export const gitOut = (repo: string, args: readonly string[]): string =>
@@ -167,8 +170,9 @@ export const isDirty = (repo: string): boolean => {
  *
  * Not `syncState().ahead`, which compares with `@{upstream}` and answers 0 when there is none:
  * a branch never pushed, or one whose source branch the forge deleted on merge, would read as
- * having nothing to lose. Every sibling clone is a remote here, so a commit fetched from a
- * sibling counts as safe, which it is.
+ * having nothing to lose. A sibling clone's refs count too, but only a sibling fetched BY NAME
+ * has any: `fetch --all` skips them (`SIBLING_REMOTE_CONFIG`), so an unfetched sibling reads as
+ * absent, which is the safe direction.
  */
 export const unpushedCommits = (repo: string): number => {
   const count = gitTry(repo, ['rev-list', '--count', 'HEAD', '--not', '--remotes']);
@@ -210,16 +214,85 @@ export const remotes = (repo: string): Map<string, string> => {
  * Git config a clone needs BECAUSE it is in the fleet, and that a re-clone loses.
  *
  * `checkout.defaultRemote=origin` is the whole list. Every clone carries every sibling as a
- * remote, so a branch that exists on more than one of them makes `git checkout <branch>`
- * ambiguous -- git refuses with "matched multiple (N) remote tracking branches" rather than
- * picking one, and the more clones the fleet has the more often that is any branch worth
- * checking out. Naming `origin` restores the single-remote behaviour without giving up the
- * sibling remotes that cherry-picking needs.
+ * remote, so a branch that exists on origin and on a sibling fetched by name makes
+ * `git checkout <branch>` ambiguous -- git refuses with "matched multiple (N) remote tracking
+ * branches" rather than picking one. Naming `origin` restores the single-remote behaviour
+ * without giving up the sibling remotes that cherry-picking needs.
  *
  * Set LOCAL, in the clone's own `.git/config`: it is a consequence of this directory being a
  * fleet clone, and `--global` would apply it to every repo on the machine.
  */
 export const FLEET_GIT_CONFIG = [['checkout.defaultRemote', 'origin']] as const;
+
+/**
+ * Config every SIBLING remote carries, as `remote.<sibling>.<key>`.
+ *
+ * `skipFetchAll` makes `git fetch --all`, `git remote update` and the maintenance prefetch skip
+ * the remote, while `git fetch <sibling>` still fetches it. Without it, every `fetch --all` in a
+ * 16-clone fleet walks 16 remotes, and the siblings' refs are about half of a clone's
+ * remote-tracking refs, filling every branch picker. Fetching a sibling is occasional, so it is
+ * done by naming one: `git fetch <clone>`, or the fetch key's `--all`, which names each of them.
+ */
+export const SIBLING_REMOTE_CONFIG = [['skipFetchAll', 'true']] as const;
+
+/**
+ * The argv of a pruning fetch from exactly these remotes, in order. PURE.
+ *
+ * Remotes are always NAMED, never `--all`: `--all` skips every sibling, so it would quietly
+ * drop one that a caller asked for.
+ */
+export const fetchArgs = (remoteNames: readonly [string, ...string[]]): string[] =>
+  remoteNames.length === 1
+    ? ['fetch', '--prune', remoteNames[0]]
+    : ['fetch', '--prune', '--multiple', ...remoteNames];
+
+/** The sibling remotes this repo HAS that are missing a `SIBLING_REMOTE_CONFIG` value. */
+export const loudSiblingRemotes = (repo: string, siblingNames: readonly string[]): string[] => {
+  const present = remotes(repo);
+  return siblingNames.filter(
+    (name) =>
+      present.has(name) &&
+      SIBLING_REMOTE_CONFIG.some(
+        ([key, want]) => gitConfig(repo, `remote.${name}.${key}`) !== want,
+      ),
+  );
+};
+
+/**
+ * Write `SIBLING_REMOTE_CONFIG` for one sibling remote, and drop that remote's tracking refs.
+ *
+ * The refs are dropped because nothing refreshes or prunes them once `fetch --all` skips the
+ * remote, and three safety checks (`unpushedCommits`, `remove-clone`'s unpushed check,
+ * `hangar-rewrite`'s published check) read any remote-tracking ref as proof that a commit is
+ * safe. A ref left stale says that after the sibling has dropped the commit. A later
+ * `git fetch <sibling>` brings fresh ones back.
+ *
+ * `--no-deref`: the remote's `HEAD` symref and the branch it points at would otherwise be two
+ * updates of one ref, which `update-ref --stdin` refuses as a whole.
+ */
+export const quietSiblingRemote = (
+  repo: string,
+  name: string,
+): { set: string[]; dropped: number; failed: string[] } => {
+  const set: string[] = [];
+  const failed: string[] = [];
+  for (const [key, value] of SIBLING_REMOTE_CONFIG) {
+    const full = `remote.${name}.${key}`;
+    if (git(repo, ['config', '--local', full, value]).ok) set.push(`${full}=${value}`);
+    else failed.push(full);
+  }
+  const refs = (
+    gitTry(repo, ['for-each-ref', '--format=%(refname)', `refs/remotes/${name}/`]) ?? ''
+  )
+    .split('\n')
+    .filter((ref) => ref !== '');
+  if (refs.length === 0) return { set, dropped: 0, failed };
+  const deleted = git(repo, ['update-ref', '--no-deref', '--stdin'], {
+    input: refs.map((ref) => `delete ${ref}\n`).join(''),
+  });
+  if (!deleted.ok) failed.push(`refs/remotes/${name}/*`);
+  return { set, dropped: deleted.ok ? refs.length : 0, failed };
+};
 
 /** The effective value, whichever scope it comes from, or undefined when unset. */
 export const gitConfig = (repo: string, key: string): string | undefined =>

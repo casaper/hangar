@@ -25,9 +25,10 @@ any other port in those families belongs to a sibling — never test against it,
 it, never kill it.
 
 Your siblings are the other `wt-<NN>/` directories beside this one, each also a git remote of
-that same name for cherry-picking (`hangar list`, or `git remote`). Their working trees are
-off limits for writes. Which clones exist is deliberately not written down anywhere, this file
-included — the fleet adds and removes them without bookkeeping.
+that same name for cherry-picking (`hangar list`, or `git remote`). `git fetch --all` skips
+them: fetch one by name (`git fetch <clone>`) before reading its branches. Their working trees
+are off limits for writes. Which clones exist is deliberately not written down anywhere, this
+file included — the fleet adds and removes them without bookkeeping.
 
 See `../CLAUDE.md` for the fleet rules; this clone's own `CLAUDE.md` and `AGENTS.md` are
 authoritative for everything about the project itself.

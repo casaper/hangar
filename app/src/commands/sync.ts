@@ -8,6 +8,7 @@ import {
   conflictedFiles,
   currentBranch,
   DETACHED,
+  fetchArgs,
   git,
   gitTry,
   inProgressOperation,
@@ -225,6 +226,29 @@ const stripRemote = (clone: Clone, ref: string): string => {
   if (slash === -1) return ref;
   return remotes(clone.path).has(ref.slice(0, slash)) ? ref.slice(slash + 1) : ref;
 };
+
+/**
+ * The remotes a sync fetches: origin, plus the sibling a `--onto <clone>/<branch>` names. PURE.
+ *
+ * Never `--all`, which skips the siblings (`SIBLING_REMOTE_CONFIG`) -- so a target on one would
+ * be read from a stale ref, or refused as missing "even after fetching".
+ */
+export const fetchRemotesFor = (
+  targetRef: string,
+  siblingNames: readonly string[],
+): [string, ...string[]] => {
+  const slash = targetRef.indexOf('/');
+  const remote = slash === -1 ? undefined : targetRef.slice(0, slash);
+  return remote !== undefined && remote !== 'origin' && siblingNames.includes(remote)
+    ? ['origin', remote]
+    : ['origin'];
+};
+
+/** The sibling clones' names, as the remote names they have in `clone`. */
+const siblingNamesOf = (hangar: Hangar, clone: Clone): string[] =>
+  discoverClones(hangar)
+    .filter((other) => other.name !== clone.name)
+    .map((other) => other.name);
 
 /** The target line, printed for every sync so the base is never implicit. */
 const describeTarget = (hangar: Hangar, clone: Clone, target: Target): void => {
@@ -728,6 +752,9 @@ const syncOne = async (hangar: Hangar, clone: Clone, opts: SyncOptions): Promise
     note(`branch:   ${branch}`);
     note(`strategy: ${strategyBefore.kind} onto ${target.ref}`);
     if (strategyBefore.kind !== 'up-to-date') note(`because:  ${strategyBefore.reason}`);
+    note(
+      `fetch:    git ${fetchArgs(fetchRemotesFor(target.ref, siblingNamesOf(hangar, clone))).join(' ')}`,
+    );
     if (!refExists(clone.path, target.ref)) {
       note(`missing:  ${target.ref} is not in this clone yet — the fetch would have to bring it`);
     }
@@ -803,8 +830,9 @@ const integrate = async (
   }
 
   // 3. fetch
-  step('git fetch --all --prune');
-  const fetched = git(clone.path, ['fetch', '--all', '--prune']);
+  const fetchArgv = fetchArgs(fetchRemotesFor(target.ref, siblingNamesOf(hangar, clone)));
+  step(`git ${fetchArgv.join(' ')}`);
+  const fetched = git(clone.path, fetchArgv);
   if (!fetched.ok) {
     if (stashed) git(clone.path, ['stash', 'pop']);
     throw new CliError(`fetch failed in ${clone.name}`, fetched.stderr.trim());

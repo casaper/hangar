@@ -89,6 +89,8 @@ import {
   defaultBranchFromGit,
   gitTry,
   FLEET_GIT_CONFIG,
+  loudSiblingRemotes,
+  quietSiblingRemote,
   isGitRepo,
   remotes,
   setFleetGitConfig,
@@ -749,6 +751,27 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
           ]
             .filter((x) => x !== undefined)
             .join('; '),
+  });
+
+  /*
+   * A sibling is fetched by NAME only. Without `skipFetchAll`, every `git fetch --all` -- a
+   * person's, an editor's -- walks every clone in the fleet, and the refs it leaves are half of
+   * this clone's remote-tracking refs. The repair also drops the refs a remote already has:
+   * nothing refreshes them afterwards, and the unpushed and published checks trust any of them.
+   */
+  const siblingNames = siblings.filter((s) => s.index !== clone.index).map((s) => s.name);
+  const loud = loudSiblingRemotes(clone.path, siblingNames);
+  checks.push({
+    name: 'sibling fetch',
+    ok: loud.length === 0,
+    detail:
+      loud.length === 0
+        ? 'fetch --all skips the siblings; fetch one by name'
+        : `fetch --all also fetches ${loud.length > 3 ? `${String(loud.length)} siblings` : loud.join(', ')} (a repair also drops their stale refs)`,
+    repair: () => {
+      const failed = loud.flatMap((name) => quietSiblingRemote(clone.path, name).failed);
+      if (failed.length > 0) throw new CliError(`could not write ${failed.join(', ')}`);
+    },
   });
 
   // The config those remotes make necessary. It lives in `.git/config`, so a re-clone loses

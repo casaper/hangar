@@ -1173,7 +1173,7 @@ key
   .command('fetch')
   .description('git fetch origin in a clone, and say how it went on its bar (C-b a)')
   .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
-  .option('--all', 'fetch every remote: origin and every sibling clone (C-b C-a)')
+  .option('--all', 'fetch origin and every sibling clone, each by name (C-b C-a)')
   .action((clone: string, options: { all?: boolean }) => {
     keyFetch(requireHangar(), clone, options);
   });

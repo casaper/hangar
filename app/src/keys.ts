@@ -93,7 +93,7 @@ export const KEY_TABLE: readonly HangarKey[] = [
   },
   {
     key: 'C-a',
-    does: 'git fetch --all: origin and every sibling clone',
+    does: 'git fetch origin and every sibling clone, each by name',
     argv: ['key', 'fetch', '--all'],
     run: 'report',
     vscode: 'hangar.fetchAll',

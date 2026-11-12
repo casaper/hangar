@@ -9,10 +9,10 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join, relative } from 'node:path';
-import { requireClone, type Clone } from '../fleet.ts';
+import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import { CliError, run } from '../exec.ts';
 import { pick, pickMany } from '../fuzzy.ts';
-import { git } from '../git.ts';
+import { fetchArgs, git, remotes } from '../git.ts';
 import type { Hangar } from '../hangar.ts';
 import { inferTicket, ticketKeyOf } from '../jira.ts';
 import { KEY_TABLE, keyHelpLines } from '../keys.ts';
@@ -74,17 +74,27 @@ const firstLine = (text: string): string =>
     .find((line) => line !== '') ?? 'no output';
 
 /**
+ * The remotes a fetch press fetches, in order. PURE.
+ *
+ * `--all` names each sibling clone as well as origin, explicitly: a sibling remote carries
+ * `skipFetchAll` (`SIBLING_REMOTE_CONFIG`), so git's own `--all` would mean origin alone.
+ */
+export const fetchKeyRemotes = (
+  all: boolean,
+  siblingRemotes: readonly string[],
+): [string, ...string[]] => (all ? ['origin', ...siblingRemotes] : ['origin']);
+
+/**
  * What a fetch press reports. PURE.
  *
- * `--all` names every sibling clone as well as origin, because each one is a remote of every
- * other: the failure that matters there is usually a sibling, and the line says which.
+ * With siblings, the failure that matters is usually one of them, and git's first line says which.
  */
 export const fetchReport = (
   clone: string,
-  all: boolean,
+  siblings: number,
   result: { readonly ok: boolean; readonly stderr: string },
 ): string => {
-  const what = all ? 'every remote' : 'origin';
+  const what = siblings === 0 ? 'origin' : `origin and ${String(siblings)} sibling(s)`;
   return result.ok
     ? `${clone}: fetched ${what}`
     : `${clone}: fetch from ${what} failed -- ${firstLine(result.stderr)}`;
@@ -96,9 +106,17 @@ export const keyFetch = (
   opts: { all?: boolean | undefined },
 ): void => {
   const clone = requireClone(hangar, ref);
-  const all = opts.all === true;
-  const result = git(clone.path, ['fetch', all ? '--all' : 'origin']);
-  say(hangar, clone, fetchReport(clone.name, all, result));
+  // Only the siblings this clone has as a remote: a missing one is `doctor`'s row, not a reason
+  // for the whole press to fail.
+  const wired = remotes(clone.path);
+  const siblings =
+    opts.all === true
+      ? discoverClones(hangar)
+          .map((other) => other.name)
+          .filter((name) => name !== clone.name && wired.has(name))
+      : [];
+  const result = git(clone.path, fetchArgs(fetchKeyRemotes(opts.all === true, siblings)));
+  say(hangar, clone, fetchReport(clone.name, siblings.length, result));
 };
 
 /**

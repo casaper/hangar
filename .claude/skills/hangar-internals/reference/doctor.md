@@ -37,6 +37,14 @@ restored by a pull. Per clone:
   is silently ignored.
 - `sibling remotes` in both directions, and the `checkout.defaultRemote=origin` (`git config`)
   those remotes make necessary.
+- `sibling fetch`: `remote.<sibling>.skipFetchAll=true` on every sibling remote, so a
+  `git fetch --all` reaches `origin` alone. Without the key, a 16-clone fleet's `--all` walks 16
+  remotes, and the siblings' refs are about half of a clone's remote-tracking refs. **The repair also drops the
+  refs a sibling remote already has**, because nothing refreshes or prunes them after that, and
+  `unpushedCommits`, `remove-clone`'s unpushed check and `hangar-rewrite`'s published check all
+  read any remote-tracking ref as proof that a commit is safe. A stale one says so after the
+  sibling has dropped the commit. Only the remotes that exist get the key: a config section for
+  a missing one would show up in `git remote`.
 - That `tmp/` is the clone's own directory, the `*.code-workspace` pair, and one declaration-only
   row per `repo.install[]` step.
 

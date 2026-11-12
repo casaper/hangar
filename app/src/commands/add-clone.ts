@@ -28,7 +28,7 @@ import { CliError, run } from '../exec.ts';
 import { cloneAt, discoverClones, nextFreeIndex, type Clone } from '../fleet.ts';
 import { clearPortPin } from '../port-pins.ts';
 import { installPlanLines, runInstall } from '../install.ts';
-import { FLEET_GIT_CONFIG, git, setFleetGitConfig } from '../git.ts';
+import { FLEET_GIT_CONFIG, git, quietSiblingRemote, setFleetGitConfig } from '../git.ts';
 import { tildify } from '../user-paths.ts';
 import { cloneTmpPath, linkStoreEntriesInto } from '../tmp.ts';
 import { cloneLabel, heading, note, ok, step, warn } from '../ui.ts';
@@ -143,11 +143,24 @@ export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
 
   // 2. sibling remotes, BOTH directions -- a one-way wiring is worse than none, because
   //    cherry-picking silently only works from one side.
+  //    Each one fetched by name only (`SIBLING_REMOTE_CONFIG`), so no `fetch --all` walks the fleet.
+  const quietFailures: string[] = [];
   for (const sibling of existing) {
     addRemote(clone, sibling.name, `../${sibling.name}`);
     addRemote(sibling, clone.name, `../${clone.name}`);
+    for (const [repo, name] of [
+      [clone, sibling.name],
+      [sibling, clone.name],
+    ] as const) {
+      quietFailures.push(
+        ...quietSiblingRemote(repo.path, name).failed.map((k) => `${repo.name}: ${k}`),
+      );
+    }
   }
-  ok(`wired ${existing.length} sibling remote(s) in both directions`);
+  ok(`wired ${existing.length} sibling remote(s) in both directions, skipped by fetch --all`);
+  if (quietFailures.length > 0) {
+    warn(`could not set ${quietFailures.join(', ')} — run \`hangar doctor --fix\``);
+  }
 
   // 2b. and the config those remotes make necessary, in EVERY clone for the same reason the
   //     remotes go both ways: this clone makes `git checkout <branch>` newly ambiguous in all

@@ -27,7 +27,8 @@ import {
 } from '../src/palette.ts';
 import { cloneAt } from '../src/fleet.ts';
 import { KEY_TABLE, RETIRED_KEYS, keyHelpLines } from '../src/keys.ts';
-import { fetchReport, gateReport } from '../src/commands/key.ts';
+import { fetchKeyRemotes, fetchReport, gateReport } from '../src/commands/key.ts';
+import { fetchArgs } from '../src/git.ts';
 import { namesNoMachinePath, syntheticHangar } from './fixture.ts';
 
 /**
@@ -419,17 +420,28 @@ test('the help table names every key, and the key that shows it', () => {
 });
 
 test('a fetch press says which clone, which remotes and what git said', () => {
+  assert.equal(fetchReport('clone_02', 0, { ok: true, stderr: '' }), 'clone_02: fetched origin');
   assert.equal(
-    fetchReport('clone_02', false, { ok: true, stderr: '' }),
-    'clone_02: fetched origin',
-  );
-  assert.equal(
-    fetchReport('clone_02', true, {
+    fetchReport('clone_02', 3, {
       ok: false,
       stderr: '\nfatal: could not read from remote\nmore',
     }),
-    'clone_02: fetch from every remote failed -- fatal: could not read from remote',
+    'clone_02: fetch from origin and 3 sibling(s) failed -- fatal: could not read from remote',
   );
+});
+
+test('a fetch NAMES every remote it wants, because --all skips the siblings', () => {
+  // `remote.<sibling>.skipFetchAll` makes git's own `--all` mean origin alone, so a press that
+  // asked for the siblings has to name each one.
+  for (const all of [false, true]) {
+    const argv = fetchArgs(fetchKeyRemotes(all, ['clone_01', 'clone_03']));
+    assert.ok(!argv.includes('--all'), argv.join(' '));
+    assert.ok(argv.includes('--prune'));
+    assert.equal(argv.includes('clone_01') && argv.includes('clone_03'), all);
+    assert.ok(argv.includes('origin'));
+  }
+  // One remote needs no `--multiple`, which git refuses to mix with a refspec.
+  assert.deepEqual(fetchArgs(['origin']), ['fetch', '--prune', 'origin']);
 });
 
 test('node is prepended to the server PATH, once, and never replaces what is there', () => {

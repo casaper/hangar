@@ -73,7 +73,7 @@ browser test run — that isolation is the entire reason the fleet exists.
   | `ctrl+b ctrl+p` | open the clone's plan, or pick one                                       |
   | `ctrl+b ctrl+n` | run a script in its own tmux window, or toggle a dev server              |
   | `ctrl+b a`      | `git fetch origin`                                                       |
-  | `ctrl+b ctrl+a` | `git fetch --all`                                                        |
+  | `ctrl+b ctrl+a` | `git fetch` origin and every sibling clone, each by name                 |
   | `ctrl+b ctrl+g` | toggle the commit gate                                                   |
   | `ctrl+b ctrl+s` | paste `keys.selectionCommand` with the selection's reference filled in   |
   | `ctrl+k ctrl+k` | paste `@<file>#<lines>` of the selection, or of the files selected in the Explorer |

@@ -5,6 +5,7 @@ import { tryDefaultBranch } from '../config/default-branch.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import {
   currentBranch,
+  fetchArgs,
   git,
   inProgressOperation,
   syncStashes,
@@ -215,7 +216,7 @@ export const status = (hangar: Hangar, ref: string | undefined, opts: StatusOpti
 
   if (opts.fetch === true) {
     for (const clone of clones) {
-      const res = git(clone.path, ['fetch', '--all', '--prune', '--quiet']);
+      const res = git(clone.path, [...fetchArgs(['origin']), '--quiet']);
       if (res.ok) ok(`fetched ${clone.name}`);
       else fail(`fetch failed in ${clone.name}: ${res.stderr.trim()}`);
     }

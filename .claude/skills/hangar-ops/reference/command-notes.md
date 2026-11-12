@@ -178,7 +178,8 @@ tool is the separate `<thing>_preview`.
   so, or a dev server toggled through `servers start` and stopped with `C-c`; `C-b C-f`
   opens its ticket's `tmp/<KEY>` folder in Finder (`hangar browse tmp`) — refused, with a message
   on the bar, on the default branch or before the ticket has been fetched; `C-b a` fetches origin
-  and `C-b C-a` every remote, each saying on the bar how it went; `C-b C-g` toggles the commit gate
+  and `C-b C-a` origin plus every sibling clone, naming each one (`git fetch --all` skips them),
+  each saying on the bar how it went; `C-b C-g` toggles the commit gate
   (`hangar-commit-gate toggle`): arm or disarm on the default branch — armed, it locks the next
   branch checked out — and lock or release on any other.
   **The same chords work in the clone's VS Code window on macOS** — `ctrl+b ctrl+g`, `ctrl+b a`,

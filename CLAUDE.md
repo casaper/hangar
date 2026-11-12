@@ -321,10 +321,16 @@ git log --oneline <sibling>/<branch>
 git cherry-pick <sha>
 ```
 
-Because a branch usually exists on more than one of those remotes, every clone sets
+**A sibling is fetched by name, never by `--all`.** Every sibling remote carries
+`remote.<sibling>.skipFetchAll=true`, so `git fetch --all`, `git remote update` and an editor's
+fetch-all reach `origin` alone, and hangar's own fetches name `origin`. A sibling's
+`<sibling>/<branch>` refs exist only after `git fetch <sibling>`, or after `C-b C-a`, which
+fetches origin and every sibling by name. `add-clone` sets the key and `doctor --fix` repairs it,
+dropping the stale refs a sibling remote already had.
+
+Because a fetched sibling's branch can also exist on `origin`, every clone sets
 **`checkout.defaultRemote=origin`** locally (`add-clone` writes it, `doctor --fix` repairs it).
-Without it `git checkout <branch>` refuses with _"matched multiple remote tracking branches"_ —
-the more clones the fleet has, the more often that is any branch worth checking out.
+Without it `git checkout <branch>` refuses with _"matched multiple remote tracking branches"_.
 
 Sibling remotes are for **fetching and cherry-picking only — never push to a sibling.** Git's
 default `receive.denyCurrentBranch=refuse` (unset everywhere, so in effect) only protects the

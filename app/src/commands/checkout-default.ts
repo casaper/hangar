@@ -5,6 +5,7 @@ import { CliError } from '../exec.ts';
 import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import {
   currentBranch,
+  fetchArgs,
   git,
   gitTry,
   inProgressOperation,
@@ -126,8 +127,8 @@ export const landOnBranch = (
   note(`branch:   ${branch}`);
 
   /*
-   * Every guard runs BEFORE the fetch, so a refusal is instant. The fetch is the slow part --
-   * `--all` in this fleet means origin plus every sibling clone as a remote.
+   * Every guard runs BEFORE the fetch, so a refusal is instant. The fetch is the slow part, and
+   * it is origin's alone: every branch this command lands on is an `origin/` one.
    *
    * None of them fires under `-n`, which has to REPORT what would stop the run rather than
    * stopping on the first one: a dry run that throws answers one question when it was asked
@@ -211,14 +212,15 @@ export const landOnBranch = (
     note(
       `sessions: ${sessions.length === 0 ? 'none' : sessions.map((s) => `pid ${s.pid} on ${s.tty ?? 'no tty'}`).join(', ')}`,
     );
+    note(`fetch:    git ${fetchArgs(['origin']).join(' ')}`);
     note('(dry run — nothing was fetched or checked out)');
     return 'done';
   }
 
-  step('git fetch --all');
-  if (!git(clone.path, ['fetch', '--all'], { inherit: true }).ok) {
+  step(`git ${fetchArgs(['origin']).join(' ')}`);
+  if (!git(clone.path, fetchArgs(['origin']), { inherit: true }).ok) {
     // Not fatal: the local refs may already be new enough to check out with, and refusing over
-    // an offline sibling remote would make this command useless on a train.
+    // an unreachable origin would make this command useless on a train.
     warn('fetch did not complete — working from the refs this clone already has');
   }
 
