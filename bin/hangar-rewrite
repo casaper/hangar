@@ -80,7 +80,9 @@ const refuseRemoteArgs = (args) => {
  *
  * `--remotes` covers every remote-tracking ref, not just `origin/<branch>`: a sibling clone is a
  * named remote in this fleet, so a commit fetched into one of those has been seen elsewhere too
- * and is no longer this machine's alone.
+ * and is no longer this machine's alone. A sibling's refs exist only after a fetch BY NAME --
+ * `fetch --all` skips sibling remotes -- so a sibling that took this commit and was not fetched
+ * since is invisible here, and the commit reads as unpublished.
  */
 const isPublished = (rev) => {
   const sha = gitTry(['rev-parse', rev]);

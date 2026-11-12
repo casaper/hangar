@@ -262,10 +262,15 @@ export const loudSiblingRemotes = (repo: string, siblingNames: readonly string[]
  * Write `SIBLING_REMOTE_CONFIG` for one sibling remote, and drop that remote's tracking refs.
  *
  * The refs are dropped because nothing refreshes or prunes them once `fetch --all` skips the
- * remote, and three safety checks (`unpushedCommits`, `remove-clone`'s unpushed check,
- * `hangar-rewrite`'s published check) read any remote-tracking ref as proof that a commit is
- * safe. A ref left stale says that after the sibling has dropped the commit. A later
- * `git fetch <sibling>` brings fresh ones back.
+ * remote, and a stale one misleads both ways. `unpushedCommits` and `remove-clone` read it as
+ * "this commit exists elsewhere" after the sibling has dropped the commit; `hangar-rewrite`
+ * reads only the refs that exist as "published", so it can never see more than a by-name fetch
+ * brought in. Dropping makes the first two stricter, and leaves the third as blind as it already
+ * was for a sibling not fetched since its last commit. A later `git fetch <sibling>` brings
+ * fresh refs back.
+ *
+ * **A ref a local branch tracks is kept**: dropping it would leave that branch's upstream
+ * "gone", and with it `@{upstream}`, `git status` and `hangar status`'s ahead/behind answer.
  *
  * `--no-deref`: the remote's `HEAD` symref and the branch it points at would otherwise be two
  * updates of one ref, which `update-ref --stdin` refuses as a whole.
@@ -281,11 +286,14 @@ export const quietSiblingRemote = (
     if (git(repo, ['config', '--local', full, value]).ok) set.push(`${full}=${value}`);
     else failed.push(full);
   }
-  const refs = (
-    gitTry(repo, ['for-each-ref', '--format=%(refname)', `refs/remotes/${name}/`]) ?? ''
-  )
-    .split('\n')
-    .filter((ref) => ref !== '');
+  const lines = (output: string | undefined): string[] =>
+    (output ?? '').split('\n').filter((line) => line !== '');
+  const upstreams = new Set(
+    lines(gitTry(repo, ['for-each-ref', '--format=%(upstream)', 'refs/heads/'])),
+  );
+  const refs = lines(
+    gitTry(repo, ['for-each-ref', '--format=%(refname)', `refs/remotes/${name}/`]),
+  ).filter((ref) => !upstreams.has(ref));
   if (refs.length === 0) return { set, dropped: 0, failed };
   const deleted = git(repo, ['update-ref', '--no-deref', '--stdin'], {
     input: refs.map((ref) => `delete ${ref}\n`).join(''),

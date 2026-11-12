@@ -54,9 +54,18 @@ test('real git: a quieted sibling loses its refs and is skipped by fetch --all, 
     const siblings = ['clone_01', 'clone_02', 'clone_09'];
     assert.deepEqual(loudSiblingRemotes(repo, siblings), ['clone_01', 'clone_02']);
 
+    // A branch tracking a sibling keeps its upstream ref; every other ref of that sibling goes.
+    git(join(root, 'clone_01'), 'branch', 'side');
+    git(repo, 'fetch', '-q', 'clone_01');
+    git(repo, 'branch', '-q', '--track', 'mine', 'clone_01/side');
+
     const quieted = quietSiblingRemote(repo, 'clone_01');
     assert.deepEqual(quieted.failed, []);
     assert.ok(quieted.dropped > 0, 'the refs of a remote that had been fetched were kept');
+    assert.equal(refsOf('clone_01'), 'refs/remotes/clone_01/side');
+    git(repo, 'rev-parse', '--verify', '-q', 'mine@{upstream}');
+    git(repo, 'branch', '-q', '-D', 'mine');
+    quietSiblingRemote(repo, 'clone_01');
     assert.equal(refsOf('clone_01'), '');
     assert.deepEqual(loudSiblingRemotes(repo, siblings), ['clone_02']);
     assert.ok(!git(repo, 'remote').split('\n').includes('clone_09'));

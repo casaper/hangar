@@ -39,12 +39,15 @@ restored by a pull. Per clone:
   those remotes make necessary.
 - `sibling fetch`: `remote.<sibling>.skipFetchAll=true` on every sibling remote, so a
   `git fetch --all` reaches `origin` alone. Without the key, a 16-clone fleet's `--all` walks 16
-  remotes, and the siblings' refs are about half of a clone's remote-tracking refs. **The repair also drops the
-  refs a sibling remote already has**, because nothing refreshes or prunes them after that, and
-  `unpushedCommits`, `remove-clone`'s unpushed check and `hangar-rewrite`'s published check all
-  read any remote-tracking ref as proof that a commit is safe. A stale one says so after the
-  sibling has dropped the commit. Only the remotes that exist get the key: a config section for
-  a missing one would show up in `git remote`.
+  remotes, and the siblings' refs are about half of a clone's remote-tracking refs. **The repair
+  also drops the refs a sibling remote already has**, because nothing refreshes or prunes them
+  after that. A stale ref tells `unpushedCommits` and `remove-clone`'s unpushed check that a
+  commit exists elsewhere after the sibling has dropped it, so dropping makes them stricter.
+  `hangar-rewrite`'s published check works the other way round (a ref means "published, refuse"),
+  so it sees only what a by-name fetch brought in, as blind as it already was for a sibling not
+  fetched since its last commit. **A ref a local branch tracks is kept**, or that branch's
+  upstream would read "gone". Only the remotes that exist get the key: a config section for a
+  missing one would show up in `git remote`.
 - That `tmp/` is the clone's own directory, the `*.code-workspace` pair, and one declaration-only
   row per `repo.install[]` step.
 
