@@ -42,7 +42,8 @@ Its report is the plan. Do not re-derive dates or peer ranges by hand. That hand
 script replaces, and it was where earlier sweeps went wrong. Sections:
 
 - **TAKE** — past the floor, inside the line. Take every row.
-- **WAITS** — the next release in the line and the UTC time it clears. Report it.
+- **WAITS** — the next release in the line and the UTC time it clears. Report it, with the local
+  time for anything clearing today.
 - **HELD** — a standing hold (`reference/holds.md`). `still blocked` → leave it. `UNBLOCKED` →
   stop and ask: lifting a hold is a migration with its own plan, not a bump.
 - **MAJOR AVAILABLE** — ask; never take it in a sweep.
