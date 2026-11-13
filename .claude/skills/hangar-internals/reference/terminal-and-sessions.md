@@ -1109,8 +1109,8 @@ falling back to `tmp/` itself when the ticket has none yet -- the press asked fo
 
 #### `C-b P` is the palette, and Cmd+Shift+P reaches it only through the emulator
 
-`hangar key palette` puts every key but itself and every `PALETTE_ONLY` command (`src/keys.ts`)
-in one fzf list, chord or command first so a narrow popup cuts the prose and not the part a person
+`hangar key palette` puts every key but itself, every `PALETTE_ONLY` command (`src/keys.ts`) and
+every `keys.palette` entry from the config in one fzf list, chord or command first so a narrow popup cuts the prose and not the part a person
 learns from. The answer to "can it be Cmd+Shift+P" is no, for tmux, and yes, one layer out:
 
 - **Command never reaches a pty.** iTerm2, Terminal.app and every macOS emulator keep it for their
@@ -1121,15 +1121,43 @@ learns from. The answer to "can it be Cmd+Shift+P" is no, for tmux, and yes, one
   iTerm2 tab, where outside tmux it is readline's back-char and a `P`. Terminal.app maps no
   Command chord to bytes at all, so there `C-b P` is the way.
 - **VS Code needs nothing**: the extension contributes every `hangar.*` command under the
-  `Hangar` category, so its own Cmd+Shift+P already lists them.
+  `Hangar` category, every palette command and entry included, so its own Cmd+Shift+P is this
+  palette there (`editors.md`).
 
-**Every row runs as `bin/hangar --hangar <root> <argv> [clone]`, with the popup's tty inherited**,
-never through a map to the `key*` functions: a map would be a second table beside `KEY_TABLE`,
-and a key missing from it would show in the palette and do nothing. A child's failure is the
-palette's exit, because `display-popup -EE` keeps the popup only for a failure. **`PALETTE_ONLY`
-holds reports and nothing worse than a key** -- `keys-palette.test.ts` matches each row to an MCP
-exposure that does not act, `browse` and `tmp merge` named as the two exceptions. A command that
-moves a working tree, a server or a session stays typed, where the line is read before Enter.
+**Every command row runs as `bin/hangar --hangar <root> <argv> [clone]`, with the popup's tty
+inherited and the clone as its directory**, never through a map to the `key*` functions: a map
+would be a second table beside `KEY_TABLE`, and a key missing from it would show in the palette
+and do nothing. A child's failure is the palette's exit, because `display-popup -EE` keeps the
+popup only for a failure. **The child's env has no `TMUX_PANE`**: a popup may carry the pane it
+was opened over, and `reload` skips the pane it thinks it runs in -- which would be the Claude Code
+`hangar-reload` was chosen to restart.
+
+**`PALETTE_ONLY` is reports plus two rows that act on purpose**, and `keys-palette.test.ts` holds
+the line: each report matches an MCP exposure that does not act (`browse` and `tmp merge` named as
+harmless), and `acts` is true for exactly `update-pr` and `hangar-reload`. `update-pr` is
+`hangar key pr`: one open-pull-request lookup, then `pr update` or `pr create` with `-y`, so every
+refusal is theirs -- including a stale description in a busy clone, which is every clone a palette
+is opened in, so it wants the description written first. Anything else that moves a working tree,
+a server or a session stays typed, where the line is read before Enter.
+
+**A `keys.palette` entry is config because its prompt names a skill.** `session` pastes it into
+the clone's running Claude Code and presses Enter after a 150 ms pause -- an Enter that arrives
+while the paste is still being taken is lost -- and it does so even with a permission dialog on
+screen, which then reads the text: the user chose submit over the extra key, knowing that.
+`background` starts `hangar key bg` detached, stdin ignored, logging to the clone's
+`tmp/.hangar-bg/` (a dotfile, so `tmp merge` never shares it), and that run says on the bar when
+it ends. It runs beside the live session on purpose. Its `claude` comes from `claudeBinary()`,
+never bare PATH: a key runs under the tmux SERVER's environment, and until this, `sync` and `pr`
+had only ever started a headless run from a shell.
+
+**`{ref}` and `{file}` are the only way an entry says what it needs from VS Code.** From tmux the
+palette asks: a `{kind: 'selection'}` request into the clone's `tmp/.hangar-ide/` mailbox, and the
+extension answers `answer-<id>.json` with its own `refFor` string and the Explorer's paths. A
+string and not a line record, because start and end lines cannot tell a cursor from one whole
+selected line -- `promptFor` only asks whether the ref has a `#`. No window, or no answer in two
+seconds, is one refusal: there is no selection either way. The Explorer half is `copyFilePath`
+with a marker on the clipboard first, since a copy with nothing to copy leaves the old clipboard
+to be read back as paths.
 
 All the bindings are one list, `keyBindings` in `generate/tmux-conf.ts`, for the reason `barOptions`
 is one table: `TmuxServer.restyle` ISSUES them onto a server that is already running while the

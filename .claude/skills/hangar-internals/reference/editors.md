@@ -264,6 +264,19 @@ caveat:
   calls an install stale the moment a key or the script changes, without asking VS Code. **One
   extension per machine**: the script finds its hangar by walking up from the workspace to
   `hangar.config.yaml`, so it names no path, and two hangars share it.
+- **The palette reaches VS Code as one command per row, read out of the manifest.** Every
+  `PALETTE_ONLY` command and every `keys.palette` entry is `hangar.palette.<name>`, titled with its
+  name first, and the manifest carries the list again as `hangarPalette`, a field VS Code ignores
+  -- the script registers by that list, so a new config entry needs no edit there, and
+  `keys-vscode.test.ts` exempts exactly those ids from its declared-equals-registered rule. Each
+  runs `hangar key palette --entry` with the selection as `--selection` JSON: VS Code knows what
+  it has selected, so only tmux has to ask. A report's whole output goes to the `Hangar` output
+  channel; an entry taking `{file}` is also on the Explorer's right-click menu. **The config's
+  entries are part of the hashed manifest**, so a `keys.palette` change is a stale extension that
+  `doctor --fix` reinstalls -- and with one extension per machine, a second hangar with other
+  entries replaces these with its own. Accepted: one machine with two hangars of different
+  palettes is not a case anybody has, and a per-hangar extension id would be one install per
+  hangar to keep current.
 - **`openFile` is optional, and only the VS Code family has it.** A picker that chose one file
   takes the first configured driver offering it; with none, the key says so rather than opening
   the file in some other window. It is the fallback for a machine without the hangar keys

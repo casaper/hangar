@@ -182,12 +182,23 @@ tool is the separate `<thing>_preview`.
   each saying on the bar how it went; `C-b C-g` toggles the commit gate
   (`hangar-commit-gate toggle`): arm or disarm on the default branch — armed, it locks the next
   branch checked out — and lock or release on any other. `C-b P` is the **palette**: every key
-  above plus a few reports with no key (`status`, `ports`, `servers list`, `browse pr|ticket`,
-  `pr refresh`, `tmp merge`, `doctor`) in one fuzzy list. **Cmd+Shift+P cannot reach tmux** —
+  above, a few reports with no key (`status`, `ports`, `servers list`, `browse pr|ticket`,
+  `pr refresh`, `tmp merge`, `doctor`), two that act WITHOUT asking — `update-pr` (`pr update`
+  when the branch has an open pull request, `pr create` when not, both `-y`) and
+  `hangar-reload` (`reload -y` on this clone) — and the config's `keys.palette` entries, in one
+  fuzzy list. An entry is a Claude Code prompt: `session` is pasted into the clone's running
+  Claude Code and submitted with Enter, so choose it while that session sits at its prompt;
+  `background` runs as a headless `claude -p` in the clone that ends by itself, says so on the
+  bar, and logs to `tmp/.hangar-bg/`. `{ref}` in a prompt takes VS Code's selected lines and
+  refuses without them; `{file}` takes the selected files, the Explorer's first. From tmux the
+  palette asks the clone's VS Code window, so a window must be open there. **Cmd+Shift+P cannot reach tmux** —
   macOS terminals keep Command — so in iTerm2 add a key mapping Cmd+Shift+P → *Send Hex Codes*
   `0x02 0x50`, which is `C-b P` on the wire. It fires in every iTerm2 tab, outside tmux too —
   hangar opens its tabs with the default profile, so a profile of its own would never apply.
-  Terminal.app cannot map it.
+  Terminal.app cannot map it. **In VS Code, Cmd+Shift+P then `Hangar:` lists the same commands
+  and entries** — reports print into the `Hangar` output channel, and a `{file}` entry is also
+  on the Explorer's right-click. A changed `keys.palette` reaches VS Code at the next
+  `doctor --fix`, which reinstalls the extension.
   **The same chords work in the clone's VS Code window on macOS** — `ctrl+b ctrl+g`, `ctrl+b a`,
   `ctrl+b ctrl+a`, `ctrl+b ctrl+t`, `ctrl+b ctrl+p`, `ctrl+b ctrl+n`, with VS Code's own pickers —
   through the hangar keys extension, which `ide vscode sync` and `doctor --fix` install and

@@ -76,7 +76,10 @@ rather than `hangar` subcommands, what each refuses, and how `personal-skills/` 
   rather than before it: a rewritten branch has diverged from its remote, which is the one moment
   a force-push looks like the obvious next step. The capability and the refusal were one decision.
   It covers `push`, `send-pack`, `http-push`, `gh pr create|merge` and hangar's own
-  `pr create|update` unless the invocation carries `-n`, token-based so
+  `pr create|update` unless the invocation carries `-n` -- and the palette's acting hangar keys,
+  `key pr` without `-n`, `key bg` and `key palette --entry`, which reach the same forge write and a
+  second headless agent. Only those forms, because a refusal of every `hangar key` would also catch
+  a `grep` or a commit body naming one. Token-based so
   `git log --grep=push` and a file called `push.ts` survive. A managed repo may forbid pushing in
   its own rules; this is not per-project, and holds in a fresh clone and in a repo that has no
   such rule.
