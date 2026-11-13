@@ -185,8 +185,9 @@ tool is the separate `<thing>_preview`.
   above plus a few reports with no key (`status`, `ports`, `servers list`, `browse pr|ticket`,
   `pr refresh`, `tmp merge`, `doctor`) in one fuzzy list. **Cmd+Shift+P cannot reach tmux** —
   macOS terminals keep Command — so in iTerm2 add a key mapping Cmd+Shift+P → *Send Hex Codes*
-  `0x02 0x50`, which is `C-b P` on the wire; it also fires outside tmux, so a hangar-only profile
-  is the place for it if that matters. Terminal.app cannot map it.
+  `0x02 0x50`, which is `C-b P` on the wire. It fires in every iTerm2 tab, outside tmux too —
+  hangar opens its tabs with the default profile, so a profile of its own would never apply.
+  Terminal.app cannot map it.
   **The same chords work in the clone's VS Code window on macOS** — `ctrl+b ctrl+g`, `ctrl+b a`,
   `ctrl+b ctrl+a`, `ctrl+b ctrl+t`, `ctrl+b ctrl+p`, `ctrl+b ctrl+n`, with VS Code's own pickers —
   through the hangar keys extension, which `ide vscode sync` and `doctor --fix` install and

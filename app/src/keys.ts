@@ -8,7 +8,8 @@
  *
  * **Every key is in tmux's prefix table and takes nothing tmux binds there.** Measured with
  * `list-keys -T prefix` on 3.7c and 3.8: the Ctrl letters tmux binds are `C-b`, `C-o` and `C-z`,
- * and `a` is unbound -- tmux's `g` is a plain letter, so `C-g` is free too. `C-h`, `C-i`, `C-j`
+ * and `a` and `P` are unbound -- tmux's `g` is a plain letter, so `C-g` is free too, and its `p`
+ * is not `P`. `C-h`, `C-i`, `C-j`
  * and `C-m` are never used: a terminal sends them as the Backspace, Tab, line feed and Enter
  * bytes, so tmux cannot tell them apart. `C-?` is the same byte as Backspace, which is why help
  * is `C-k` and tmux's own `C-b ?` stays tmux's.
