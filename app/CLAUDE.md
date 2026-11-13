@@ -147,7 +147,12 @@ skips). Reuse one; the jira-cache reference has why a pid beats an age.
 `cli.ts` and a `'key <action>'` entry in `NOT_EXPOSED`.** `hangar colours sync` puts a changed
 binding on the live server; a change to a row's `vscode` command or to
 `vscode-extension/extension.cjs` changes the extension's hash version, and `doctor --fix`
-reinstalls it.
+reinstalls it. A new row shows in the `C-b P` palette with no further edit. A key that starts
+`bin/hangar` itself passes `--hangar <root>`, as `boundHangar` does: a popup runs in the pane's
+directory. `hangar colours sync -n | grep -v unchanged` shows only what a sync would rewrite.
+
+**A `hangar key` picker does not return when run without a terminal**: fzf reads `/dev/tty`, not
+stdin, so `</dev/null` still leaves it waiting. Test the pure row builder, not the command.
 
 **Probe in a scratchpad or a throwaway hangar, never the live fleet.** The recipes — git
 behaviour, Claude Code permissions, a command's file I/O, a generated script, an `advisory/` diff, a
