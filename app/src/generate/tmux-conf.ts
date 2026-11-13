@@ -475,8 +475,9 @@ export const statusClickBinding = (hangar: Hangar): readonly string[] => {
  * **`popup` is `run-shell -C 'display-popup …'`, because a popup expands no formats.** Measured on
  * 3.8: `display-popup`'s command, its `-e` values and the same line bound to a key all arrive
  * with `#{@hangar_clone}` unexpanded. `run-shell -C` expands the line and then runs it as a tmux
- * command, so the popup is handed the clone's name. `-EE` closes the popup only on success, so a
- * failure stays on screen to be read.
+ * command, so the popup is handed the clone's name. `-E` closes the popup whenever the command
+ * exits; a failure stays on screen because the action itself waits for a key (`holdOnFailure`),
+ * not because of `-EE`, whose failed popup Escape and C-c were seen not to dismiss on 3.8.
  *
  * A session with no `@hangar_clone` -- one made by hand on this socket -- expands to an empty
  * argument and the command fails, which is the whole degradation; there is no second `if-shell`
@@ -495,7 +496,7 @@ export const keyBinding = (hangar: Hangar, entry: HangarKey): readonly string[] 
       entry.key,
       'run-shell',
       '-C',
-      `display-popup -EE -w 80% -h 70% -T " hangar " "${command} #{@hangar_clone}"`,
+      `display-popup -E -w 80% -h 70% -T " hangar " "${command} #{@hangar_clone}"`,
     ];
   }
   const fail =

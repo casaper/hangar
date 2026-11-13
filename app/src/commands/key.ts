@@ -195,6 +195,34 @@ const waitForKey = (): void => {
   }
 };
 
+/**
+ * Run a popup key's action, and keep its failure on screen until a key is pressed.
+ *
+ * **The popup is `display-popup -E`, so it closes whenever the command exits**, and this is what
+ * keeps an error readable instead. `-EE` did that job by leaving a failed popup open for tmux to
+ * dismiss on Escape or C-c -- and in a clone's session on 3.8 neither key dismissed it (seen, not
+ * yet explained), so a palette whose process was killed left the developer in an empty box with
+ * no way out but `display-popup -C` from another terminal. Our own wait reads the raw tty, so any key closes it; and a killed process
+ * now closes its popup instead of stranding it.
+ *
+ * Off a terminal -- the VS Code extension, a pipe -- the error goes to the usual reporter.
+ */
+export const holdOnFailure = async (action: () => void | Promise<void>): Promise<void> => {
+  try {
+    await action();
+  } catch (error) {
+    if (!process.stdin.isTTY) throw error;
+    if (error instanceof CliError) {
+      console.error(`error: ${error.message}`);
+      if (error.hint !== undefined) console.error(`       ${error.hint}`);
+    } else {
+      console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
+    }
+    waitForKey();
+    process.exitCode = 1;
+  }
+};
+
 /** The env every palette child gets: the tmux pane under the popup is not the child's own. */
 const childEnv = (): NodeJS.ProcessEnv => {
   // A popup may carry the pane it was opened over as TMUX_PANE, and `reload` skips the pane it
@@ -221,8 +249,9 @@ export type KeyPaletteOptions = {
  * show here and do nothing. The child inherits the popup's tty, so a picker row opens its own fzf
  * in place, and it runs in the clone, so `pr` finds the clone it is for.
  *
- * **A failure is this command's exit too**: the binding is `display-popup -EE`, which keeps the
- * popup open only when the command fails, and that is the only way its message stays readable.
+ * **A failed row waits for a key before the palette exits**, because the popup (`-E`) closes the
+ * moment it does. A `key` row holds its own failure through `holdOnFailure`, so it is not held
+ * twice; anything else is held here.
  *
  * Cmd+Shift+P cannot reach tmux -- a macOS terminal keeps Command for itself -- so the header
  * names the iTerm2 key mapping that turns it into this key.
@@ -272,6 +301,8 @@ export const keyPalette = (hangar: Hangar, ref: string, opts: KeyPaletteOptions 
   const line = result.ok ? row.ok : row.fail;
   if (line !== undefined) console.log(line.replaceAll('#{@hangar_clone}', clone.name));
   if (!result.ok) {
+    // A `key` action holds its own failure (`holdOnFailure`); anything else exits at once.
+    if (row.argv[0] !== 'key') waitForKey();
     process.exitCode = result.code > 0 ? result.code : 1;
     return;
   }

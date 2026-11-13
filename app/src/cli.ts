@@ -21,6 +21,7 @@ import {
   keyFetch,
   keyGate,
   keyHelp,
+  holdOnFailure,
   keyBg,
   keyPalette,
   type KeyPaletteOptions,
@@ -1194,8 +1195,10 @@ key
   .command('edit')
   .description('Pick a file or directory of a clone and open it, or the clone itself (C-b C-e)')
   .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
-  .action((clone: string) => {
-    keyEdit(requireHangar(), clone);
+  .action(async (clone: string) => {
+    await holdOnFailure(() => {
+      keyEdit(requireHangar(), clone);
+    });
   });
 
 key
@@ -1203,8 +1206,10 @@ key
   .description("Pick a file of a clone's ticket folder and open it, or the folder (C-b C-t)")
   .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
   .option('--list', 'print the rows as JSON instead of asking (for the VS Code extension)')
-  .action((clone: string, options: { list?: boolean }) => {
-    keyTicket(requireHangar(), clone, options);
+  .action(async (clone: string, options: { list?: boolean }) => {
+    await holdOnFailure(() => {
+      keyTicket(requireHangar(), clone, options);
+    });
   });
 
 key
@@ -1212,8 +1217,10 @@ key
   .description("Open a clone's plan, or pick one when there are several (C-b C-p)")
   .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
   .option('--list', 'print the rows as JSON instead of asking (for the VS Code extension)')
-  .action((clone: string, options: { list?: boolean }) => {
-    keyPlan(requireHangar(), clone, options);
+  .action(async (clone: string, options: { list?: boolean }) => {
+    await holdOnFailure(() => {
+      keyPlan(requireHangar(), clone, options);
+    });
   });
 
 key
@@ -1224,8 +1231,10 @@ key
   .option('--list-files <name>', "print (all) and that row's pickable files as JSON")
   .option('--entry <name>', 'run this row without asking')
   .option('--file <path...>', 'with --entry: the picked files, relative to the row’s dir')
-  .action((clone: string, options: KeyRunOptions) => {
-    keyRun(requireHangar(), clone, options);
+  .action(async (clone: string, options: KeyRunOptions) => {
+    await holdOnFailure(() => {
+      keyRun(requireHangar(), clone, options);
+    });
   });
 
 key
@@ -1249,8 +1258,10 @@ key
   .option('--entry <name>', 'run this command or `keys.palette` entry without asking')
   .option('--selection <json>', "with --entry: VS Code's selection, {editor, explorer}")
   .option('--list', 'print the names --entry takes, as JSON')
-  .action((clone: string, options: KeyPaletteOptions) => {
-    keyPalette(requireHangar(), clone, options);
+  .action(async (clone: string, options: KeyPaletteOptions) => {
+    await holdOnFailure(() => {
+      keyPalette(requireHangar(), clone, options);
+    });
   });
 
 key
@@ -1259,7 +1270,7 @@ key
   .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
   .option('-n, --dry-run', 'say what would be opened or changed, change nothing')
   .action(async (clone: string, options: { dryRun?: boolean }) => {
-    await keyPr(requireHangar(), clone, options);
+    await holdOnFailure(() => keyPr(requireHangar(), clone, options));
   });
 
 key

@@ -967,9 +967,14 @@ goes through the same helper, `boundHangar`.
 - **`popup` is `run-shell -C 'display-popup …'`, because a popup expands no formats.** Measured on
   3.8: `display-popup`'s command, its `-e` values and the same line bound directly to a key all
   arrive with `#{@hangar_clone}` unexpanded. `run-shell -C` expands the line and then runs it as a
-  tmux command, so the popup is handed the clone's name. `-EE` closes the popup only on success, so
-  a failure stays on screen to be read. A popup is for anything that waits on a person -- the help
-  table waits for a key.
+  tmux command, so the popup is handed the clone's name. **`-E`, closing the popup whenever the
+  command exits, and the action itself keeps a failure on screen** (`holdOnFailure` in
+  `commands/key.ts`: the error, then any key). `-EE` -- close only on success -- was the first
+  design, and it relied on tmux to dismiss a failed popup on Escape or C-c; in a clone's session
+  on 3.8 neither key did (seen, not yet explained), and a palette whose process was killed left an
+  empty box that only `display-popup -C -c <tty>` from another terminal closed. The action's own
+  wait reads the raw tty, so any key works, and a killed process now takes its popup with it. A
+  popup is for anything that waits on a person -- the help table waits for a key.
 
 The clone comes from `@hangar_clone`, the session option, so a key needs no argument and cannot be
 pressed for the wrong clone -- and a session made by hand on this socket, which has no such
@@ -1127,8 +1132,8 @@ learns from. The answer to "can it be Cmd+Shift+P" is no, for tmux, and yes, one
 **Every command row runs as `bin/hangar --hangar <root> <argv> [clone]`, with the popup's tty
 inherited and the clone as its directory**, never through a map to the `key*` functions: a map
 would be a second table beside `KEY_TABLE`, and a key missing from it would show in the palette
-and do nothing. A child's failure is the palette's exit, because `display-popup -EE` keeps the
-popup only for a failure. **The child's env has no `TMUX_PANE`**: a popup may carry the pane it
+and do nothing. A failed row waits for a key before the palette exits, since the popup closes
+when it does; a `key` row holds its own failure, so it is held once. **The child's env has no `TMUX_PANE`**: a popup may carry the pane it
 was opened over, and `reload` skips the pane it thinks it runs in -- which would be the Claude Code
 `hangar-reload` was chosen to restart.
 

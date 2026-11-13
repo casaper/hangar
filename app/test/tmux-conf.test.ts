@@ -392,7 +392,7 @@ test('a report key never opens a view pane, and a popup key hands the popup its 
     } else {
       // A popup expands no formats (measured on 3.8); `run-shell -C` expands the line first.
       assert.deepEqual(binding.slice(4, 6), ['run-shell', '-C']);
-      assert.match(binding[6] ?? '', /^display-popup -EE .* #\{@hangar_clone\}"$/);
+      assert.match(binding[6] ?? '', /^display-popup -E .* #\{@hangar_clone\}"$/);
     }
     // `quoteTmuxValue` wraps in single quotes and cannot escape one.
     assert.ok(!binding.some((word) => word.includes("'")), `${entry.key} carries a single quote`);
