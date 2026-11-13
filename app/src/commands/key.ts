@@ -237,20 +237,21 @@ export const keyPalette = (hangar: Hangar, ref: string, opts: KeyPaletteOptions 
     );
     return;
   }
+  // Asked ONCE, outside `find`: a pick inside its predicate opens fzf again for every row compared.
+  const chosen =
+    opts.entry === undefined
+      ? pick(
+          rows.map((r) => r.label),
+          {
+            prompt: `${clone.name} > `,
+            header:
+              'Enter runs it · Esc cancels · Cmd+Shift+P: map it in iTerm2 to send hex 0x02 0x50',
+          },
+        )
+      : undefined;
   const row =
     opts.entry === undefined
-      ? rows.find(
-          (r) =>
-            r.label ===
-            pick(
-              rows.map((x) => x.label),
-              {
-                prompt: `${clone.name} > `,
-                header:
-                  'Enter runs it · Esc cancels · Cmd+Shift+P: map it in iTerm2 to send hex 0x02 0x50',
-              },
-            ),
-        )
+      ? rows.find((r) => r.label === chosen)
       : rows.find((r) =>
           r.kind === 'entry' ? r.entry.name === opts.entry : r.name === opts.entry,
         );
