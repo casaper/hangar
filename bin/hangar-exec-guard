@@ -59,7 +59,13 @@ process.stdin.on('end', () => {
         'however reasonable the push looks, and it holds especially right after a local history ' +
         'rewrite — a rewritten branch has diverged from its remote, and that is exactly when a ' +
         'force-push starts to feel necessary. Say the branch is ready, give the exact line, stop.'
-      : undefined;
+      : actsThroughKey(command)
+        ? 'This is the far end of a hangar key: the person presses it, and the palette entry runs. ' +
+          'Run by an agent, `key pr` opens or rewrites a pull request, `key bg` starts a second ' +
+          'headless Claude Code in a clone, and `key palette --entry` runs either -- each is ' +
+          'the user’s. Name the entry and let them choose it from C-b P or VS Code. ' +
+          '`hangar key pr -n` and `key palette --list` are let through.'
+        : undefined;
 
   if (reason === undefined) process.exit(0);
   deny(reason);
@@ -145,6 +151,37 @@ function writesPullRequest(command) {
       if (tokens[j + 1] !== 'create' && tokens[j + 1] !== 'update') continue;
       const rest = tokens.slice(j + 2);
       if (!rest.includes('-n') && !rest.includes('--dry-run')) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Does this command line run a `hangar key` action that acts?
+ *
+ * `key pr` (without `-n`), `key bg` and `key palette --entry` are what a palette entry runs, and
+ * they are reached through the palette for a reason: `key pr` is `pr create`/`pr update` with
+ * `-y`, so without this it is the way around `writesPullRequest`, and `key bg` starts a second
+ * headless agent in a clone that already has one. Only the acting forms: the guard sees tokens,
+ * so refusing every `hangar key` would also refuse a `grep` or a commit body that names one.
+ * Per shell segment, like `writesPullRequest`, so a `-n` elsewhere on the line lends nothing.
+ */
+function actsThroughKey(command) {
+  const bare = (t) => t.replace(/^["']|["']$/g, '');
+  for (const segment of command.split(/[;&|()`\n]+/)) {
+    const tokens = segment.split(/\s+/).filter(Boolean).map(bare);
+    for (let i = 0; i < tokens.length; i += 1) {
+      if (!/(^|\/)hangar$/.test(tokens[i]) && !/(^|\/)cli\.ts$/.test(tokens[i])) continue;
+      let j = i + 1;
+      while (j < tokens.length && tokens[j].startsWith('-')) j += tokens[j] === '--hangar' ? 2 : 1;
+      if (tokens[j] !== 'key') continue;
+      const action = tokens[j + 1];
+      const rest = tokens.slice(j + 2);
+      if (action === 'bg') return true;
+      if (action === 'pr' && !rest.includes('-n') && !rest.includes('--dry-run')) return true;
+      if (action === 'palette' && rest.some((t) => t === '--entry' || t.startsWith('--entry='))) {
+        return true;
+      }
     }
   }
   return false;

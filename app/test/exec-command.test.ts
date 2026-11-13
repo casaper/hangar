@@ -236,6 +236,30 @@ test('the guard lets everything else through, `exec` in another tool included', 
   }
 });
 
+test('the guard refuses the hangar keys that act, and only those', () => {
+  // `key pr` is `pr create`/`pr update` with `-y`, and `key bg` a second headless agent: both
+  // reached through the palette on purpose, and the way around the pull-request rule without this.
+  for (const command of [
+    'hangar key bg 1 tidy "/tidy @a.ts#1-2"',
+    'cd /x && hangar --hangar /h key pr 2',
+    'node app/src/cli.ts key palette 1 --entry update-pr',
+    'bin/hangar key palette 3 --entry=sync-branch',
+    // A `-n` belonging to another command on the line lends nothing.
+    'hangar key pr 1 && ls -n',
+  ]) {
+    assert.equal(guardVerdict(command), 'deny', `not refused: ${command}`);
+  }
+  for (const command of [
+    'hangar key pr 1 -n',
+    'hangar key palette 1 --list',
+    'hangar key fetch 1',
+    // Naming one is not running one.
+    'grep -n "key bg" src/cli.ts',
+  ]) {
+    assert.equal(guardVerdict(command), 'allow', `wrongly refused: ${command}`);
+  }
+});
+
 test('the guard fails OPEN on a payload it cannot read and CLOSED on a command it cannot', () => {
   /*
    * Deliberately the opposite of the command check. An unparseable payload means Claude Code
