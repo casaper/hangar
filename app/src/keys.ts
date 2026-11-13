@@ -105,6 +105,12 @@ export const KEY_TABLE: readonly HangarKey[] = [
     run: 'report',
     vscode: 'hangar.gate',
   },
+  {
+    key: 'P',
+    does: 'command palette: every hangar key and report, fuzzy-searched',
+    argv: ['key', 'palette'],
+    run: 'popup',
+  },
   { key: 'C-k', does: 'show this table', argv: ['key', 'help'], run: 'popup' },
 ];
 
@@ -131,6 +137,100 @@ export const keyHelpLines = (table: readonly HangarKey[]): string[] => {
     '',
     "tmux's own keys stay where they are: C-b ? lists them.",
   ];
+};
+
+// ---- the palette: C-b P -----------------------------------------------------------------------
+
+/**
+ * A command the palette offers that has no key of its own.
+ *
+ * **Only reports, and commands as harmless as a key.** Nothing that moves a working tree, starts
+ * or kills a server, or ends a session is here: those stay typed, where a person reads the line
+ * before pressing Enter. `test/keys-palette.test.ts` holds each row to an MCP exposure that does
+ * not act, or names why it may.
+ */
+export type PaletteCommand = {
+  readonly does: string;
+  readonly argv: readonly string[];
+  /** Whether the clone is appended -- a fleet-level command takes none. */
+  readonly clone: boolean;
+  /** Whether the popup waits for a key afterwards, so a table stays readable. */
+  readonly waits: boolean;
+};
+
+export const PALETTE_ONLY: readonly PaletteCommand[] = [
+  { does: 'status of this clone', argv: ['status'], clone: true, waits: true },
+  { does: 'the port map of every clone', argv: ['ports'], clone: false, waits: true },
+  { does: 'dev servers of every clone', argv: ['servers', 'list'], clone: false, waits: true },
+  {
+    does: "open the branch's pull request in the browser",
+    argv: ['browse', 'pr'],
+    clone: true,
+    waits: false,
+  },
+  {
+    does: "open the branch's ticket in the browser",
+    argv: ['browse', 'ticket'],
+    clone: true,
+    waits: false,
+  },
+  {
+    does: "refresh the bar's pull-request record",
+    argv: ['pr', 'refresh'],
+    clone: true,
+    waits: true,
+  },
+  {
+    does: "merge the clones' shared tmp/ entries",
+    argv: ['tmp', 'merge'],
+    clone: false,
+    waits: true,
+  },
+  { does: 'check this clone, changing nothing', argv: ['doctor'], clone: true, waits: true },
+];
+
+/** One row of the palette: its line, and what choosing it runs. */
+export type PaletteRow = {
+  readonly label: string;
+  /** The `hangar` words, without the clone. */
+  readonly argv: readonly string[];
+  readonly clone: boolean;
+  readonly waits: boolean;
+  /** A `report` key's own bar lines, which the palette prints from the exit status. */
+  readonly ok?: string | undefined;
+  readonly fail?: string | undefined;
+};
+
+/**
+ * The palette's rows: every key but the palette itself, then every `PALETTE_ONLY` command. PURE.
+ *
+ * The chord or the command comes FIRST, padded to one width, so a narrow popup cuts the prose and
+ * never the part a person learns from -- and fzf matches both, so `C-g`, `gate` and `ports` all
+ * find their row.
+ */
+export const paletteRows = (
+  table: readonly HangarKey[],
+  only: readonly PaletteCommand[],
+): PaletteRow[] => {
+  const rows = [
+    ...table
+      .filter((k) => k.argv.join(' ') !== 'key palette')
+      .map((k) => ({
+        short: chordName(k.key),
+        does: k.does,
+        argv: k.argv,
+        clone: true,
+        waits: false,
+        ok: k.ok,
+        fail: k.fail,
+      })),
+    ...only.map((c) => ({ short: `hangar ${c.argv.join(' ')}`, ...c })),
+  ];
+  const width = Math.max(...rows.map((r) => r.short.length));
+  return rows.map(({ short, does, ...row }) => ({
+    label: `${short.padEnd(width)}   ${does}`,
+    ...row,
+  }));
 };
 
 // ---- the same keys in VS Code (macOS) -------------------------------------------------------

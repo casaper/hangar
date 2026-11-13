@@ -21,6 +21,7 @@ import {
   keyFetch,
   keyGate,
   keyHelp,
+  keyPalette,
   keyPaste,
   keyPlan,
   keyRun,
@@ -1234,6 +1235,14 @@ key
   .option('--command', 'wrap it in `keys.selectionCommand` first (VS Code C-b C-s)')
   .action((clone: string, text: string, options: { command?: boolean }) => {
     keyPaste(requireHangar(), clone, text, options);
+  });
+
+key
+  .command('palette')
+  .description('Pick any hangar key or report from one fuzzy list, and run it (C-b P)')
+  .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
+  .action((clone: string) => {
+    keyPalette(requireHangar(), clone);
   });
 
 key

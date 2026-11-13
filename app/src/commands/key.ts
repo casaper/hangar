@@ -15,7 +15,7 @@ import { pick, pickMany } from '../fuzzy.ts';
 import { fetchArgs, git, remotes } from '../git.ts';
 import type { Hangar } from '../hangar.ts';
 import { inferTicket, ticketKeyOf } from '../jira.ts';
-import { KEY_TABLE, keyHelpLines } from '../keys.ts';
+import { KEY_TABLE, keyHelpLines, PALETTE_ONLY, paletteRows } from '../keys.ts';
 import { defaultExtensionsDir, keysExtensionState } from '../editor/keys-extension.ts';
 import { home } from '../user-paths.ts';
 import {
@@ -149,11 +149,16 @@ export const keyGate = (hangar: Hangar, ref: string): void => {
 /**
  * The help table, in the popup `C-b C-k` opens, until a key is pressed.
  *
- * The clone is accepted and unused, so every key in the table runs the same way. Waiting only on a
- * terminal: a pipe has nobody to press anything, and a popup closes the moment its command exits.
+ * The clone is accepted and unused, so every key in the table runs the same way. A popup closes
+ * the moment its command exits, hence the wait.
  */
 export const keyHelp = (): void => {
   console.log(keyHelpLines(KEY_TABLE).join('\n'));
+  waitForKey();
+};
+
+/** Wait for one key, on a terminal only: a pipe has nobody to press anything. */
+const waitForKey = (): void => {
   if (!process.stdin.isTTY) return;
   console.log('\n(any key closes this)');
   process.stdin.setRawMode(true);
@@ -171,6 +176,46 @@ export const keyHelp = (): void => {
   } finally {
     process.stdin.setRawMode(false);
   }
+};
+
+/**
+ * `C-b P`: every key and every `PALETTE_ONLY` report in one fzf list, and the chosen row run.
+ *
+ * **Each row runs as `bin/hangar <argv> [clone]`, never through a map to the `key*` functions** --
+ * a map would be a second table beside `KEY_TABLE`, and a row missing from it would show here and
+ * do nothing. The child inherits the popup's tty, so a picker row opens its own fzf in place.
+ *
+ * **A failure is this command's exit too**: the binding is `display-popup -EE`, which keeps the
+ * popup open only when the command fails, and that is the only way its message stays readable.
+ *
+ * Cmd+Shift+P cannot reach tmux -- a macOS terminal keeps Command for itself -- so the header
+ * names the iTerm2 key mapping that turns it into this key.
+ */
+export const keyPalette = (hangar: Hangar, ref: string): void => {
+  const clone = requireClone(hangar, ref);
+  const rows = paletteRows(KEY_TABLE, PALETTE_ONLY);
+  const chosen = pick(
+    rows.map((r) => r.label),
+    {
+      prompt: `${clone.name} > `,
+      header: 'Enter runs it · Esc cancels · Cmd+Shift+P: map it in iTerm2 to send hex 0x02 0x50',
+    },
+  );
+  const row = rows.find((r) => r.label === chosen);
+  if (row === undefined) return;
+  const result = run(
+    hangar.paths.bin,
+    // `--hangar` for the binding's reason (`boundHangar`): the popup runs in the pane's directory.
+    ['--hangar', hangar.root, ...row.argv, ...(row.clone ? [clone.name] : [])],
+    { inherit: true },
+  );
+  const line = result.ok ? row.ok : row.fail;
+  if (line !== undefined) console.log(line.replaceAll('#{@hangar_clone}', clone.name));
+  if (!result.ok) {
+    process.exitCode = result.code > 0 ? result.code : 1;
+    return;
+  }
+  if (row.waits) waitForKey();
 };
 
 // ---- the pickers: C-b C-e, C-b C-t, C-b C-p -------------------------------------------------

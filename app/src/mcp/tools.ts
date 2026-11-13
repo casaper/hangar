@@ -653,6 +653,7 @@ export const NOT_EXPOSED: readonly string[] = [
   'key fetch',
   'key gate',
   'key help',
+  'key palette',
   'key paste',
   'key plan',
   'key run',

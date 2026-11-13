@@ -933,8 +933,9 @@ bind-key -T prefix C-e if-shell -b '<hangar>/bin/hangar --hangar <hangar> edit "
 prefix -- so a `C-<letter>` takes nothing away, the same rule the click above is built on. Four Ctrl
 letters are never used even so: `C-h`, `C-i`, `C-j` and `C-m` are the Backspace, Tab, line-feed and
 Enter bytes on the wire, and tmux cannot tell the key from the byte. `C-?` is the Backspace byte
-too, which is why help is `C-k` and tmux's own `C-b ?` stays tmux's. `a` is the one plain letter
-in the table, and it is unbound. `list-keys -T prefix` is how that was checked and is how the next
+too, which is why help is `C-k` and tmux's own `C-b ?` stays tmux's. `a` and `P` are the two
+plain letters in the table, and both are unbound -- tmux's `p` is previous-window, and a capital is
+a different key. `list-keys -T prefix` is how that was checked and is how the next
 one should be; `tmux-conf.test.ts` holds the table to it.
 
 **A key that leaves the table is UNBOUND on a running server, from `RETIRED_KEYS`.** `restyle`
@@ -1105,6 +1106,30 @@ Finder. `C-f` because `f` is tmux's `find-window`.
 caller of it here branches on the exit status: exiting 0 after a warning would have this key and
 the bar's click report "opened" for a press that opened nothing. The folder is refused rather than
 falling back to `tmp/` itself when the ticket has none yet -- the press asked for one ticket.
+
+#### `C-b P` is the palette, and Cmd+Shift+P reaches it only through the emulator
+
+`hangar key palette` puts every key but itself and every `PALETTE_ONLY` command (`src/keys.ts`)
+in one fzf list, chord or command first so a narrow popup cuts the prose and not the part a person
+learns from. The answer to "can it be Cmd+Shift+P" is no, for tmux, and yes, one layer out:
+
+- **Command never reaches a pty.** iTerm2, Terminal.app and every macOS emulator keep it for their
+  own menus, and `extended-keys` encodes Shift, Ctrl and Meta only. No tmux binding can name it.
+- **iTerm2 can turn it into bytes**: a key mapping Cmd+Shift+P → *Send Hex Codes* `0x02 0x50` is
+  `C-b P` on the wire. Hangar does not write it -- iTerm2 rewrites its prefs on quit over a
+  `defaults write`, and a mapping is the person's, not the hangar's -- and it fires in every
+  iTerm2 tab, where outside tmux it is readline's back-char and a `P`. Terminal.app maps no
+  Command chord to bytes at all, so there `C-b P` is the way.
+- **VS Code needs nothing**: the extension contributes every `hangar.*` command under the
+  `Hangar` category, so its own Cmd+Shift+P already lists them.
+
+**Every row runs as `bin/hangar --hangar <root> <argv> [clone]`, with the popup's tty inherited**,
+never through a map to the `key*` functions: a map would be a second table beside `KEY_TABLE`,
+and a key missing from it would show in the palette and do nothing. A child's failure is the
+palette's exit, because `display-popup -EE` keeps the popup only for a failure. **`PALETTE_ONLY`
+holds reports and nothing worse than a key** -- `keys-palette.test.ts` matches each row to an MCP
+exposure that does not act, `browse` and `tmp merge` named as the two exceptions. A command that
+moves a working tree, a server or a session stays typed, where the line is read before Enter.
 
 All the bindings are one list, `keyBindings` in `generate/tmux-conf.ts`, for the reason `barOptions`
 is one table: `TmuxServer.restyle` ISSUES them onto a server that is already running while the

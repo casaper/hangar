@@ -181,7 +181,12 @@ tool is the separate `<thing>_preview`.
   and `C-b C-a` origin plus every sibling clone, naming each one (`git fetch --all` skips them),
   each saying on the bar how it went; `C-b C-g` toggles the commit gate
   (`hangar-commit-gate toggle`): arm or disarm on the default branch — armed, it locks the next
-  branch checked out — and lock or release on any other.
+  branch checked out — and lock or release on any other. `C-b P` is the **palette**: every key
+  above plus a few reports with no key (`status`, `ports`, `servers list`, `browse pr|ticket`,
+  `pr refresh`, `tmp merge`, `doctor`) in one fuzzy list. **Cmd+Shift+P cannot reach tmux** —
+  macOS terminals keep Command — so in iTerm2 add a key mapping Cmd+Shift+P → *Send Hex Codes*
+  `0x02 0x50`, which is `C-b P` on the wire; it also fires outside tmux, so a hangar-only profile
+  is the place for it if that matters. Terminal.app cannot map it.
   **The same chords work in the clone's VS Code window on macOS** — `ctrl+b ctrl+g`, `ctrl+b a`,
   `ctrl+b ctrl+a`, `ctrl+b ctrl+t`, `ctrl+b ctrl+p`, `ctrl+b ctrl+n`, with VS Code's own pickers —
   through the hangar keys extension, which `ide vscode sync` and `doctor --fix` install and
