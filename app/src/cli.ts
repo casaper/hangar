@@ -21,7 +21,10 @@ import {
   keyFetch,
   keyGate,
   keyHelp,
+  keyBg,
   keyPalette,
+  type KeyPaletteOptions,
+  keyPr,
   keyPaste,
   keyPlan,
   keyRun,
@@ -1239,10 +1242,36 @@ key
 
 key
   .command('palette')
-  .description('Pick any hangar key or report from one fuzzy list, and run it (C-b P)')
+  .description(
+    'Pick any hangar key, command or palette entry from one fuzzy list, and run it (C-b P)',
+  )
   .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
-  .action((clone: string) => {
-    keyPalette(requireHangar(), clone);
+  .option('--entry <name>', 'run this command or `keys.palette` entry without asking')
+  .option('--selection <json>', "with --entry: VS Code's selection, {editor, explorer}")
+  .option('--list', 'print the names --entry takes, as JSON')
+  .action((clone: string, options: KeyPaletteOptions) => {
+    keyPalette(requireHangar(), clone, options);
+  });
+
+key
+  .command('pr')
+  .description("Rewrite the branch's pull request, or open one when it has none -- no confirmation")
+  .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
+  .option('-n, --dry-run', 'say what would be opened or changed, change nothing')
+  .action(async (clone: string, options: { dryRun?: boolean }) => {
+    await keyPr(requireHangar(), clone, options);
+  });
+
+key
+  .command('bg')
+  .description(
+    "A background `keys.palette` entry's headless Claude Code run, started by the palette",
+  )
+  .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
+  .argument('<entry>', 'the entry name')
+  .argument('<prompt>', 'the prompt, its tokens already filled in')
+  .action(async (clone: string, entry: string, prompt: string) => {
+    await keyBg(requireHangar(), clone, entry, prompt);
   });
 
 key

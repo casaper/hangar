@@ -10,9 +10,17 @@ import {
   keysExtensionManifest,
   keysExtensionProblem,
   keysExtensionVersion,
+  paletteCommandId,
   vsixPackageFiles,
 } from '../src/editor/keys-extension.ts';
-import { KEY_TABLE, VSCODE_ONLY_KEYS, vscodeKeyName, vscodeKeybindings } from '../src/keys.ts';
+import {
+  KEY_TABLE,
+  PALETTE_ONLY,
+  type PaletteEntry,
+  VSCODE_ONLY_KEYS,
+  vscodeKeyName,
+  vscodeKeybindings,
+} from '../src/keys.ts';
 
 /**
  * The VS Code half of the hangar keys. The manifest is generated and the script is hand-written,
@@ -42,22 +50,59 @@ test('every VS Code chord is the tmux chord, on macOS only', () => {
   }
 });
 
-test('the manifest and the script name exactly the same commands', () => {
-  const manifest = keysExtensionManifest('1.0.0') as {
-    contributes: { commands: { command: string }[]; keybindings: { command: string }[] };
+const ENTRIES: readonly PaletteEntry[] = [
+  { name: 'tidy-files', run: 'background', prompt: '/tidy-all {file}' },
+  { name: 'ship-it', run: 'session', prompt: '/ship' },
+];
+
+type Manifest = {
+  contributes: {
+    commands: { command: string; title: string; category: string }[];
+    keybindings: { command: string }[];
+    menus: { 'explorer/context': { command: string }[] };
   };
+  hangarPalette: { command: string; name: string; needs: string }[];
+};
+
+test('the manifest and the script name exactly the same commands', () => {
+  const manifest = keysExtensionManifest('1.0.0', ENTRIES) as Manifest;
   const declared = new Set(manifest.contributes.commands.map((c) => c.command));
   for (const binding of manifest.contributes.keybindings) {
     assert.ok(declared.has(binding.command), `${binding.command} is bound and not declared`);
   }
-  assert.deepEqual([...declared].sort(), [...registered].sort());
+  // The palette's commands are registered by the list the manifest carries, not one by one.
+  const palette = new Set(manifest.hangarPalette.map((row) => row.command));
+  assert.ok(script.includes('packageJSON.hangarPalette'), 'the script never reads the palette');
+  assert.deepEqual([...declared].filter((c) => !palette.has(c)).sort(), [...registered].sort());
+  for (const command of palette) assert.ok(declared.has(command), `${command} is not declared`);
+});
+
+test('VS Code lists every palette command and entry under Hangar, and none of the tmux-only rows', () => {
+  const manifest = keysExtensionManifest('1.0.0', ENTRIES) as Manifest;
+  const ids = manifest.hangarPalette.map((row) => row.command);
+  for (const command of PALETTE_ONLY) assert.ok(ids.includes(paletteCommandId(command.name)));
+  for (const entry of ENTRIES) assert.ok(ids.includes(paletteCommandId(entry.name)));
+  for (const c of manifest.contributes.commands) assert.equal(c.category, 'Hangar', c.command);
+  // The title leads with the name, so `Hangar: ship` finds it.
+  const ship = manifest.contributes.commands.find((c) => c.command === paletteCommandId('ship-it'));
+  assert.match(ship?.title ?? '', /^ship-it /);
+  // Only an entry that takes files is offered on a right-click in the Explorer.
+  assert.deepEqual(
+    manifest.contributes.menus['explorer/context'].map((m) => m.command),
+    [paletteCommandId('tidy-files')],
+  );
+  // The palette itself, the editor picker and the help are tmux's.
+  for (const key of ['P', 'C-e', 'C-k']) {
+    assert.equal(KEY_TABLE.find((e) => e.key === key)?.vscode, undefined, key);
+  }
 });
 
 test('the version follows the content, so a changed key table or script is a stale install', () => {
-  const version = keysExtensionVersion(script);
+  const version = keysExtensionVersion(script, ENTRIES);
   assert.match(version, /^1\.0\.\d+$/);
-  assert.equal(keysExtensionVersion(script), version, 'the same bytes, the same version');
-  assert.notEqual(keysExtensionVersion(`${script}\n`), version);
+  assert.equal(keysExtensionVersion(script, ENTRIES), version, 'the same bytes, the same version');
+  assert.notEqual(keysExtensionVersion(`${script}\n`, ENTRIES), version);
+  assert.notEqual(keysExtensionVersion(script, []), version, 'a changed palette is a new version');
   assert.match(vsixPackageFiles(version)['extension.vsixmanifest'] ?? '', new RegExp(version));
   assert.equal(keysExtensionProblem({ wanted: version, installed: [version] }), undefined);
   assert.match(keysExtensionProblem({ wanted: version, installed: [] }) ?? '', /not installed/);

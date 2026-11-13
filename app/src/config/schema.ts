@@ -1,6 +1,7 @@
 import { posix } from 'node:path';
 
 import { z } from 'zod';
+import { PALETTE_ONLY } from '../keys.ts';
 import { TOKENS, unknownTokens } from '../template.ts';
 
 import {
@@ -712,6 +713,54 @@ const runnerEntrySchema = z.union([
 ]);
 
 /**
+ * One `keys.palette` entry: a prompt for Claude Code that `C-b P` and VS Code's Cmd+Shift+P offer.
+ *
+ * `session` pastes the prompt into the clone's running Claude Code and presses Enter; `background`
+ * runs it as a headless `claude -p` in the clone that ends by itself, with the entry's
+ * `allowedTools` (default `DEFAULT_BACKGROUND_TOOLS`) granted unasked. The tokens say what the
+ * entry needs from VS Code: `{ref}` the selected lines as `@<abs>#<a>-<b>`, `{file}` the selected
+ * files as `@<abs>` each. A session prompt takes neither -- its Claude Code has the IDE itself.
+ */
+const paletteEntrySchema = z
+  .strictObject({
+    name: z
+      .string()
+      .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'a palette name is kebab-case, e.g. sync-branch'),
+    does: z.string().min(1).optional(),
+    run: z.enum(['session', 'background']),
+    prompt: z.string().min(1),
+    allowedTools: z.array(z.string().min(1)).optional(),
+    timeoutMinutes: z.number().int().positive().optional(),
+  })
+  .superRefine((entry, ctx) => {
+    const tokens = ['{ref}', '{file}'].filter((t) => entry.prompt.includes(t));
+    if (tokens.length > 1) {
+      ctx.addIssue({ code: 'custom', path: ['prompt'], message: 'use {ref} or {file}, not both' });
+    }
+    if (entry.run === 'session' && tokens.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['prompt'],
+        message: `a session prompt takes no ${tokens.join(' or ')} -- only a background one does`,
+      });
+    }
+    if (entry.run === 'session' && (entry.allowedTools ?? entry.timeoutMinutes) !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['run'],
+        message: 'allowedTools and timeoutMinutes are for a background entry only',
+      });
+    }
+    if (PALETTE_ONLY.some((c) => c.name === entry.name)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['name'],
+        message: `"${entry.name}" is a built-in palette command`,
+      });
+    }
+  });
+
+/**
  * The hangar keys' own settings.
  *
  * `selectionCommand` is what `C-b C-s` in VS Code hands the clone's Claude Code: a line with
@@ -720,6 +769,7 @@ const runnerEntrySchema = z.union([
  */
 const keysSchema = z.strictObject({
   selectionCommand: z.string().includes('{ref}').optional(),
+  palette: z.array(paletteEntrySchema).default([]),
 });
 
 export const hangarConfigSchema = z
@@ -748,6 +798,18 @@ export const hangarConfigSchema = z
   })
   .superRefine((cfg, ctx) => {
     const { ports, tracker, editor } = cfg;
+
+    const paletteNames = new Set<string>();
+    cfg.keys.palette.forEach((entry, i) => {
+      if (paletteNames.has(entry.name)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['keys', 'palette', i, 'name'],
+          message: `duplicate palette name "${entry.name}"`,
+        });
+      }
+      paletteNames.add(entry.name);
+    });
 
     // A runner row is found by its name, and a role row toggles a server only `start` can begin.
     const runnerNames = new Set<string>();

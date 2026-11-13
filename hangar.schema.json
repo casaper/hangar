@@ -797,6 +797,52 @@
           "type": "string",
           "format": "includes",
           "pattern": "\\{ref\\}"
+        },
+        "palette": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+              },
+              "does": {
+                "type": "string",
+                "minLength": 1
+              },
+              "run": {
+                "type": "string",
+                "enum": [
+                  "session",
+                  "background"
+                ]
+              },
+              "prompt": {
+                "type": "string",
+                "minLength": 1
+              },
+              "allowedTools": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "timeoutMinutes": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "name",
+              "run",
+              "prompt"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false

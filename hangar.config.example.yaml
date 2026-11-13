@@ -713,3 +713,37 @@ keys:
   # What C-b C-s in VS Code pastes into the clone's Claude Code; {ref} is the selection's
   # @<file>#<lines>. No default: it names a skill.
   selectionCommand: /bg-shorten-comment {ref}
+  # What C-b P (Cmd+Shift+P) and VS Code's Cmd+Shift+P offer beside the built-in commands. No
+  # default: each prompt names a skill. `session` pastes the prompt into the clone's running
+  # Claude Code and presses Enter; `background` runs it as a headless `claude -p` in the clone
+  # that ends by itself, its log in tmp/.hangar-bg/. {ref} is VS Code's selected lines as
+  # @<file>#<lines>, refused without one; {file} is the selected files as @<file>, line numbers
+  # stripped, the Explorer's selection first.
+  palette:
+    - name: shorten-ide-selection
+      run: background
+      prompt: /shorten-comment {ref}
+    - name: shorten-ide-selection-high
+      run: background
+      prompt: /shorten-comment {ref} high
+    - name: shorten-all-comments
+      run: background
+      prompt: /bg-shorten-all-comments {file}
+    - name: shorten-changed-comments
+      run: background
+      prompt: /bg-shorten-changed-comments
+    - name: sync-branch
+      run: session
+      prompt: /sync-branch
+    - name: pr-description
+      run: session
+      prompt: Invoke the pr-description skill in a subagent.
+    - name: pr-readiness
+      run: session
+      prompt: Invoke the pr-readiness skill in a subagent.
+    - name: implement-pr
+      run: session
+      prompt: /implement-pr
+    - name: granular-commits
+      run: session
+      prompt: /granular-commits

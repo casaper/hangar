@@ -51,12 +51,12 @@ const here = () => {
 };
 
 /** `bin/hangar --hangar <root> <args…>`, resolved with its stdout and stderr. */
-const hangar = (where, args) =>
+const hangar = (where, args, env = {}) =>
   new Promise((resolve) => {
     execFile(
       path.join(where.root, 'bin', 'hangar'),
       ['--hangar', where.root, ...args],
-      { cwd: where.clonePath, maxBuffer: 64 * 1024 * 1024 },
+      { cwd: where.clonePath, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, ...env } },
       (error, stdout, stderr) => resolve({ ok: error === null, stdout, stderr }),
     );
   });
@@ -143,7 +143,22 @@ const answerRequest = async (where) => {
     return; // not there, or half-written: the next change event brings the whole file
   }
   if (typeof request?.at !== 'number' || Date.now() - request.at > REQUEST_TTL_MS) return;
+  if (request.kind === 'selection' && typeof request.id === 'string') {
+    await answerSelection(where, request.id);
+    return;
+  }
   if (typeof request.path === 'string') await openHere(where, request.path);
+};
+
+/**
+ * What is selected here, for a palette entry chosen in the clone's tmux window: written to
+ * `answer-<id>.json` under another name and renamed, so the waiting side never reads half of it.
+ */
+const answerSelection = async (where, id) => {
+  const answer = currentSelection(undefined, undefined);
+  const pending = path.join(mailbox(where), `answer-${id}.json.part`);
+  fs.writeFileSync(pending, `${JSON.stringify(await answer)}\n`);
+  fs.renameSync(pending, path.join(mailbox(where), `answer-${id}.json`));
 };
 
 /** Say a window is open on the clone, and read the requests written for it. */
@@ -228,13 +243,65 @@ const run = async () => {
  */
 const explorerSelection = async () => {
   const before = await vscode.env.clipboard.readText();
+  // A marker first: a `copyFilePath` with nothing to copy leaves the clipboard alone, and what
+  // was already on it would otherwise be read back as the selection.
+  const marker = `hangar-no-selection-${String(Date.now())}`;
+  await vscode.env.clipboard.writeText(marker);
   await vscode.commands.executeCommand('copyFilePath');
   const copied = await vscode.env.clipboard.readText();
   await vscode.env.clipboard.writeText(before);
+  if (copied === marker) return [];
   return copied
     .split(/\r?\n/)
-    .filter((line) => line !== '')
+    .filter((line) => path.isAbsolute(line))
     .map((line) => vscode.Uri.file(line));
+};
+
+/**
+ * `{editor, explorer}` for a palette entry: the active editor's reference, and the files a
+ * right-click handed over or the Explorer has selected. A lone Explorer path that is the open
+ * file is the editor's own, not a selection -- `copyFilePath` answers with it when the editor has
+ * focus.
+ */
+const currentSelection = async (clicked, selected) => {
+  const editor = vscode.window.activeTextEditor;
+  const open = editor?.document.uri.scheme === 'file' ? editor.document.uri : undefined;
+  let explorer;
+  if (Array.isArray(selected) && selected.length > 0) explorer = selected.map((u) => u.fsPath);
+  else if (clicked instanceof vscode.Uri) explorer = [clicked.fsPath];
+  else explorer = (await explorerSelection()).map((u) => u.fsPath);
+  if (open !== undefined && explorer.length === 1 && explorer[0] === open.fsPath) explorer = [];
+  return { editor: open === undefined ? undefined : refFor(open, editor.selection), explorer };
+};
+
+/**
+ * One palette command or `keys.palette` entry, run as `hangar key palette --entry`: the same
+ * command `C-b P` runs, so the two cannot do different things. A report's whole output goes to
+ * the Hangar channel; anything else is one line.
+ */
+const paletteCommand = (row, output) => async (clicked, selected) => {
+  const where = here();
+  if (where === undefined) return outside();
+  const args = ['key', 'palette', where.clone, '--entry', row.name];
+  if (row.needs !== 'nothing') {
+    args.push('--selection', JSON.stringify(await currentSelection(clicked, selected)));
+  }
+  if (row.show !== 'output') {
+    report(await hangar(where, args));
+    return;
+  }
+  const result = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: `Hangar: ${row.name}…` },
+    () => hangar(where, args, { NO_COLOR: '1' }),
+  );
+  output.clear();
+  output.appendLine(`hangar ${row.name} · ${where.clone}`);
+  output.append(result.stdout);
+  if (result.stderr !== '') output.append(result.stderr);
+  output.show(true);
+  if (!result.ok) {
+    void vscode.window.showErrorMessage(firstLine(result.stderr) || `${row.name} failed`);
+  }
 };
 
 /** `C-k C-k` and `C-b C-s`: hand the refs to the clone's Claude Code, never pressing Enter. */
@@ -269,6 +336,16 @@ const activate = (context) => {
     await paste(false)(undefined, uris);
   });
   register('hangar.selectionCommand', paste(true));
+  register('hangar.ticketFolder', reporting(['browse', 'tmp']));
+  // The palette's rows come from the manifest, which `hangar ide vscode sync` writes from the
+  // CLI's table and the hangar's `keys.palette`, so a new entry needs no edit here.
+  const output = vscode.window.createOutputChannel('Hangar');
+  context.subscriptions.push(output);
+  for (const row of context.extension.packageJSON.hangarPalette ?? []) {
+    context.subscriptions.push(
+      vscode.commands.registerCommand(row.command, paletteCommand(row, output)),
+    );
+  }
   const where = here();
   if (where !== undefined) watchMailbox(context, where);
 };

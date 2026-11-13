@@ -1,4 +1,7 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { home } from './user-paths.ts';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 
 import pc from 'picocolors';
@@ -186,7 +189,29 @@ const renderEvent = (event: unknown, startedAt: number, state: StreamRender): vo
   }
 };
 
+/**
+ * `claude`, found without trusting PATH -- `fzfBinary`'s rule, for the same reason: a palette
+ * entry's run starts under the tmux SERVER's environment, which a terminal-started server gives
+ * launchd's bare PATH. PATH first, then where the native installer and Homebrew put it.
+ */
+export const claudeBinary = (): string | undefined => {
+  const onPath = spawnSync('sh', ['-c', 'command -v claude 2>/dev/null'], { encoding: 'utf8' });
+  const found = typeof onPath.stdout === 'string' ? onPath.stdout.trim() : '';
+  if (onPath.status === 0 && found !== '') return found;
+  return [
+    join(home, '.local', 'bin', 'claude'),
+    join(home, '.claude', 'local', 'claude'),
+    ...(process.env['HOMEBREW_PREFIX']
+      ? [join(process.env['HOMEBREW_PREFIX'], 'bin', 'claude')]
+      : []),
+    '/opt/homebrew/bin/claude',
+    '/usr/local/bin/claude',
+  ].find((path) => existsSync(path));
+};
+
 export type HeadlessRun = {
+  /** The `claude` to run; PATH's when left out, which is right from a shell. */
+  readonly binary?: string | undefined;
   /** The clone directory. The run's cwd, so the repo's own CLAUDE.md and skills load. */
   readonly repo: string;
   readonly prompt: string;
@@ -227,7 +252,7 @@ export const runHeadlessClaude = async (run: HeadlessRun): Promise<HeadlessOutco
   };
 
   const child = spawn(
-    'claude',
+    run.binary ?? 'claude',
     [
       '-p',
       // The prompt goes in over stdin as the first user message rather than as an argv prompt,

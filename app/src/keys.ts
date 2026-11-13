@@ -61,6 +61,7 @@ export const KEY_TABLE: readonly HangarKey[] = [
     does: "open the ticket's folder under tmp/ in the file manager",
     argv: ['browse', 'tmp'],
     run: 'report',
+    vscode: 'hangar.ticketFolder',
     ok: 'opened the ticket folder for #{@hangar_clone}',
     fail: 'no ticket folder for #{@hangar_clone} -- run hangar browse tmp in a shell to see why',
   },
@@ -143,95 +144,211 @@ export const keyHelpLines = (table: readonly HangarKey[]): string[] => {
 // ---- the palette: C-b P -----------------------------------------------------------------------
 
 /**
- * A command the palette offers that has no key of its own.
+ * A command the palette offers that has no key of its own, built into every hangar.
  *
- * **Only reports, and commands as harmless as a key.** Nothing that moves a working tree, starts
- * or kills a server, or ends a session is here: those stay typed, where a person reads the line
- * before pressing Enter. `test/keys-palette.test.ts` holds each row to an MCP exposure that does
- * not act, or names why it may.
+ * **Reports, plus two acting rows named by `acts`.** A report is what an MCP exposure that does
+ * not act would be (`test/keys-palette.test.ts` holds each to one). The two that act are the
+ * person's own, chosen from a list rather than typed: opening or rewriting this branch's pull
+ * request, and reloading this clone. Nothing else that moves a tree, a server or a session is
+ * here -- those stay typed, where the line is read before Enter.
  */
 export type PaletteCommand = {
+  /** What `--entry` and the VS Code command id (`hangar.palette.<name>`) call it. */
+  readonly name: string;
   readonly does: string;
   readonly argv: readonly string[];
   /** Whether the clone is appended -- a fleet-level command takes none. */
   readonly clone: boolean;
   /** Whether the popup waits for a key afterwards, so a table stays readable. */
   readonly waits: boolean;
+  readonly acts: boolean;
+  /** How VS Code shows the answer: the whole output in its Hangar channel, or the first line. */
+  readonly vscode: 'output' | 'line';
 };
+
+const report = (
+  name: string,
+  does: string,
+  argv: readonly string[],
+  clone: boolean,
+  vscode: 'output' | 'line' = 'output',
+): PaletteCommand => ({ name, does, argv, clone, waits: vscode === 'output', acts: false, vscode });
 
 export const PALETTE_ONLY: readonly PaletteCommand[] = [
-  { does: 'status of this clone', argv: ['status'], clone: true, waits: true },
-  { does: 'the port map of every clone', argv: ['ports'], clone: false, waits: true },
-  { does: 'dev servers of every clone', argv: ['servers', 'list'], clone: false, waits: true },
+  report('status', 'status of this clone', ['status'], true),
+  report('ports', 'the port map of every clone', ['ports'], false),
+  report('servers', 'dev servers of every clone', ['servers', 'list'], false),
+  report(
+    'browse-pr',
+    "open the branch's pull request in the browser",
+    ['browse', 'pr'],
+    true,
+    'line',
+  ),
+  report(
+    'browse-ticket',
+    "open the branch's ticket in the browser",
+    ['browse', 'ticket'],
+    true,
+    'line',
+  ),
+  report('pr-refresh', "refresh the bar's pull-request record", ['pr', 'refresh'], true),
+  report('tmp-merge', "merge the clones' shared tmp/ entries", ['tmp', 'merge'], false),
+  report('doctor', 'check this clone, changing nothing', ['doctor'], true),
   {
-    does: "open the branch's pull request in the browser",
-    argv: ['browse', 'pr'],
-    clone: true,
-    waits: false,
-  },
-  {
-    does: "open the branch's ticket in the browser",
-    argv: ['browse', 'ticket'],
-    clone: true,
-    waits: false,
-  },
-  {
-    does: "refresh the bar's pull-request record",
-    argv: ['pr', 'refresh'],
+    name: 'update-pr',
+    does: "open this branch's pull request, or rewrite the one it has (no confirmation)",
+    argv: ['key', 'pr'],
     clone: true,
     waits: true,
+    acts: true,
+    vscode: 'output',
   },
   {
-    does: "merge the clones' shared tmp/ entries",
-    argv: ['tmp', 'merge'],
-    clone: false,
-    waits: true,
+    name: 'hangar-reload',
+    does: "reload this clone's tmux session: idle shells and Claude Code restarted (no confirmation)",
+    argv: ['reload', '-y'],
+    clone: true,
+    waits: false,
+    acts: true,
+    vscode: 'line',
   },
-  { does: 'check this clone, changing nothing', argv: ['doctor'], clone: true, waits: true },
 ];
 
-/** One row of the palette: its line, and what choosing it runs. */
-export type PaletteRow = {
-  readonly label: string;
-  /** The `hangar` words, without the clone. */
-  readonly argv: readonly string[];
-  readonly clone: boolean;
-  readonly waits: boolean;
-  /** A `report` key's own bar lines, which the palette prints from the exit status. */
-  readonly ok?: string | undefined;
-  readonly fail?: string | undefined;
+/**
+ * A palette entry from `keys.palette` in the config: a prompt for Claude Code.
+ *
+ * Config and never built in, because a prompt names a skill and a skill's name is one repo's
+ * business (`forge.prDescriptionPrompt`'s rule). `session` pastes it into the clone's running
+ * Claude Code and submits it; `background` runs it as a headless `claude -p` that ends by itself.
+ */
+export type PaletteEntry = {
+  readonly name: string;
+  readonly does?: string | undefined;
+  readonly run: 'session' | 'background';
+  readonly prompt: string;
+  readonly allowedTools?: readonly string[] | undefined;
+  readonly timeoutMinutes?: number | undefined;
 };
 
+/** The tools a `background` entry may use unasked when it names none. */
+export const DEFAULT_BACKGROUND_TOOLS: readonly string[] = [
+  'Read',
+  'Edit',
+  'Write',
+  'Grep',
+  'Glob',
+  'Agent',
+];
+
+/** What an entry needs from the editor, read off its tokens. PURE. */
+export const paletteNeeds = (prompt: string): 'lines' | 'files' | 'nothing' =>
+  prompt.includes('{ref}') ? 'lines' : prompt.includes('{file}') ? 'files' : 'nothing';
+
 /**
- * The palette's rows: every key but the palette itself, then every `PALETTE_ONLY` command. PURE.
+ * What VS Code had selected: the active editor's reference, and the Explorer's selected paths.
  *
- * The chord or the command comes FIRST, padded to one width, so a narrow popup cuts the prose and
- * never the part a person learns from -- and fzf matches both, so `C-g`, `gate` and `ports` all
- * find their row.
+ * `editor` is the extension's own `refFor` string -- `@<abs>#<a>-<b>` for selected lines, the bare
+ * `@<abs>` for a cursor -- so the format has one implementation, and "are there lines" is whether
+ * it carries a `#`. A record of start and end lines could not tell an empty cursor from one whole
+ * selected line.
+ */
+export type IdeSelection = {
+  readonly editor?: string | undefined;
+  readonly explorer: readonly string[];
+};
+
+/** The prompt an entry sends, or the sentence that says why it cannot. PURE. */
+export const promptFor = (
+  prompt: string,
+  selection: IdeSelection,
+): { readonly text: string } | { readonly refuse: string } => {
+  const needs = paletteNeeds(prompt);
+  if (needs === 'nothing') return { text: prompt };
+  if (needs === 'lines') {
+    if (selection.editor === undefined) return { refuse: 'no file is open in VS Code' };
+    if (!selection.editor.includes('#')) {
+      return { refuse: 'select lines in VS Code first -- the cursor alone names only the file' };
+    }
+    return { text: prompt.replaceAll('{ref}', selection.editor) };
+  }
+  const files =
+    selection.explorer.length > 0
+      ? selection.explorer.map((path) => `@${path}`)
+      : selection.editor === undefined
+        ? []
+        : [selection.editor.replace(/#.*$/, '')];
+  if (files.length === 0) return { refuse: 'no file is open or selected in VS Code' };
+  return { text: prompt.replaceAll('{file}', files.join(' ')) };
+};
+
+/** One row of the palette: its line, and what choosing it runs. */
+export type PaletteRow =
+  | {
+      readonly kind: 'command';
+      readonly label: string;
+      /** The `hangar` words, without the clone. */
+      readonly argv: readonly string[];
+      readonly clone: boolean;
+      readonly waits: boolean;
+      /** A `report` key's own bar lines, which the palette prints from the exit status. */
+      readonly ok?: string | undefined;
+      readonly fail?: string | undefined;
+      readonly name?: string | undefined;
+    }
+  | { readonly kind: 'entry'; readonly label: string; readonly entry: PaletteEntry };
+
+/**
+ * The palette's rows: every key but the palette itself, every `PALETTE_ONLY` command, then the
+ * config's entries. PURE.
+ *
+ * The chord, the command or the name comes FIRST, padded to one width, so a narrow popup cuts the
+ * prose and never the part a person learns from -- and fzf matches both, so `C-g`, `gate` and
+ * `ports` all find their row. A report shows the `hangar` line it runs; a row that acts shows its
+ * name, because the line it runs is not one a person would type.
  */
 export const paletteRows = (
   table: readonly HangarKey[],
   only: readonly PaletteCommand[],
+  entries: readonly PaletteEntry[],
 ): PaletteRow[] => {
-  const rows = [
+  type Draft = { short: string; does: string; row: (label: string) => PaletteRow };
+  const drafts: Draft[] = [
     ...table
       .filter((k) => k.argv.join(' ') !== 'key palette')
       .map((k) => ({
         short: chordName(k.key),
         does: k.does,
-        argv: k.argv,
-        clone: true,
-        waits: false,
-        ok: k.ok,
-        fail: k.fail,
+        row: (label: string): PaletteRow => ({
+          kind: 'command',
+          label,
+          argv: k.argv,
+          clone: true,
+          waits: false,
+          ok: k.ok,
+          fail: k.fail,
+        }),
       })),
-    ...only.map((c) => ({ short: `hangar ${c.argv.join(' ')}`, ...c })),
+    ...only.map((c) => ({
+      short: c.acts ? c.name : `hangar ${c.argv.join(' ')}`,
+      does: c.does,
+      row: (label: string): PaletteRow => ({
+        kind: 'command',
+        label,
+        argv: c.argv,
+        clone: c.clone,
+        waits: c.waits,
+        name: c.name,
+      }),
+    })),
+    ...entries.map((e) => ({
+      short: e.name,
+      does: e.does ?? (e.run === 'background' ? `${e.prompt} (in the background)` : e.prompt),
+      row: (label: string): PaletteRow => ({ kind: 'entry', label, entry: e }),
+    })),
   ];
-  const width = Math.max(...rows.map((r) => r.short.length));
-  return rows.map(({ short, does, ...row }) => ({
-    label: `${short.padEnd(width)}   ${does}`,
-    ...row,
-  }));
+  const width = Math.max(...drafts.map((d) => d.short.length));
+  return drafts.map((d) => d.row(`${d.short.padEnd(width)}   ${d.does}`));
 };
 
 // ---- the same keys in VS Code (macOS) -------------------------------------------------------

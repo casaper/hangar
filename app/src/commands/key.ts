@@ -1,21 +1,37 @@
+import { spawn } from 'node:child_process';
 import {
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   readSync,
   renameSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { join, relative } from 'node:path';
+import { basename, join, relative } from 'node:path';
+import { openPullRequests, repoRef } from '../bitbucket.ts';
+import { claudeBinary, runHeadlessClaude } from '../claude-headless.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import { CliError, run } from '../exec.ts';
 import { pick, pickMany } from '../fuzzy.ts';
-import { fetchArgs, git, remotes } from '../git.ts';
+import { currentBranch, fetchArgs, git, remotes } from '../git.ts';
 import type { Hangar } from '../hangar.ts';
 import { inferTicket, ticketKeyOf } from '../jira.ts';
-import { KEY_TABLE, keyHelpLines, PALETTE_ONLY, paletteRows } from '../keys.ts';
+import {
+  DEFAULT_BACKGROUND_TOOLS,
+  type IdeSelection,
+  KEY_TABLE,
+  keyHelpLines,
+  PALETTE_ONLY,
+  type PaletteEntry,
+  paletteNeeds,
+  paletteRows,
+  promptFor,
+} from '../keys.ts';
 import { defaultExtensionsDir, keysExtensionState } from '../editor/keys-extension.ts';
 import { home } from '../user-paths.ts';
 import {
@@ -37,6 +53,7 @@ import {
 import { SHELL_COMMANDS } from './reload.ts';
 import { scanFleet, startPlan } from './servers.ts';
 import { editorsToOpen, openEditors } from './open.ts';
+import { prCreate, prUpdate } from './pr.ts';
 
 /**
  * `hangar key <action> <clone>` -- what a hangar key in a clone's tmux session runs.
@@ -178,12 +195,31 @@ const waitForKey = (): void => {
   }
 };
 
+/** The env every palette child gets: the tmux pane under the popup is not the child's own. */
+const childEnv = (): NodeJS.ProcessEnv => {
+  // A popup may carry the pane it was opened over as TMUX_PANE, and `reload` skips the pane it
+  // thinks it runs in -- which would be the very Claude Code the reload was asked to restart.
+  const { TMUX_PANE: _pane, ...rest } = process.env;
+  return rest;
+};
+
+export type KeyPaletteOptions = {
+  /** Run this row or entry by name, and ask nothing -- the VS Code extension's way in. */
+  readonly entry?: string | undefined;
+  /** VS Code's selection as `IdeSelection` JSON, which the extension knows and tmux must ask. */
+  readonly selection?: string | undefined;
+  /** Print the names `--entry` takes, as JSON. */
+  readonly list?: boolean | undefined;
+};
+
 /**
- * `C-b P`: every key and every `PALETTE_ONLY` report in one fzf list, and the chosen row run.
+ * `C-b P`: every key, every `PALETTE_ONLY` command and every `keys.palette` entry in one fzf list,
+ * and the chosen row run.
  *
- * **Each row runs as `bin/hangar <argv> [clone]`, never through a map to the `key*` functions** --
- * a map would be a second table beside `KEY_TABLE`, and a row missing from it would show here and
- * do nothing. The child inherits the popup's tty, so a picker row opens its own fzf in place.
+ * **A command row runs as `bin/hangar <argv> [clone]`, never through a map to the `key*`
+ * functions** -- a map would be a second table beside `KEY_TABLE`, and a row missing from it would
+ * show here and do nothing. The child inherits the popup's tty, so a picker row opens its own fzf
+ * in place, and it runs in the clone, so `pr` finds the clone it is for.
  *
  * **A failure is this command's exit too**: the binding is `display-popup -EE`, which keeps the
  * popup open only when the command fails, and that is the only way its message stays readable.
@@ -191,23 +227,46 @@ const waitForKey = (): void => {
  * Cmd+Shift+P cannot reach tmux -- a macOS terminal keeps Command for itself -- so the header
  * names the iTerm2 key mapping that turns it into this key.
  */
-export const keyPalette = (hangar: Hangar, ref: string): void => {
+export const keyPalette = (hangar: Hangar, ref: string, opts: KeyPaletteOptions = {}): void => {
   const clone = requireClone(hangar, ref);
-  const rows = paletteRows(KEY_TABLE, PALETTE_ONLY);
-  const chosen = pick(
-    rows.map((r) => r.label),
-    {
-      prompt: `${clone.name} > `,
-      header: 'Enter runs it · Esc cancels · Cmd+Shift+P: map it in iTerm2 to send hex 0x02 0x50',
-    },
-  );
-  const row = rows.find((r) => r.label === chosen);
-  if (row === undefined) return;
+  const entries = hangar.config.keys.palette;
+  const rows = paletteRows(KEY_TABLE, PALETTE_ONLY, entries);
+  if (opts.list === true) {
+    console.log(
+      JSON.stringify([...PALETTE_ONLY.map((c) => c.name), ...entries.map((e) => e.name)]),
+    );
+    return;
+  }
+  const row =
+    opts.entry === undefined
+      ? rows.find(
+          (r) =>
+            r.label ===
+            pick(
+              rows.map((x) => x.label),
+              {
+                prompt: `${clone.name} > `,
+                header:
+                  'Enter runs it · Esc cancels · Cmd+Shift+P: map it in iTerm2 to send hex 0x02 0x50',
+              },
+            ),
+        )
+      : rows.find((r) =>
+          r.kind === 'entry' ? r.entry.name === opts.entry : r.name === opts.entry,
+        );
+  if (row === undefined) {
+    if (opts.entry !== undefined) throw new CliError(`no palette entry "${opts.entry}"`);
+    return;
+  }
+  if (row.kind === 'entry') {
+    runPaletteEntry(hangar, clone, row.entry, opts.selection);
+    return;
+  }
   const result = run(
     hangar.paths.bin,
     // `--hangar` for the binding's reason (`boundHangar`): the popup runs in the pane's directory.
     ['--hangar', hangar.root, ...row.argv, ...(row.clone ? [clone.name] : [])],
-    { inherit: true },
+    { inherit: true, cwd: clone.path, env: childEnv() },
   );
   const line = result.ok ? row.ok : row.fail;
   if (line !== undefined) console.log(line.replaceAll('#{@hangar_clone}', clone.name));
@@ -216,6 +275,168 @@ export const keyPalette = (hangar: Hangar, ref: string): void => {
     return;
   }
   if (row.waits) waitForKey();
+};
+
+/**
+ * Ask the clone's VS Code window what is selected, through the mailbox `openPicked` writes to.
+ *
+ * The extension answers with `answer-<id>.json`; nothing else can tell the tmux side what VS Code
+ * has selected. No window, or no answer within two seconds, is "not connected" -- the same answer,
+ * because either way there is no selection to act on.
+ */
+const askIdeSelection = (clone: Clone): IdeSelection | undefined => {
+  if (!ideWindowOpen(clone)) return undefined;
+  const id = `${String(process.pid)}-${String(Date.now())}`;
+  postIdeMessage(clone, { kind: 'selection', id, at: Date.now() });
+  const answer = join(clone.path, 'tmp', IDE_MAILBOX, `answer-${id}.json`);
+  for (let waited = 0; waited < 2000; waited += 50) {
+    sleepMs(50);
+    try {
+      const parsed = JSON.parse(readFileSync(answer, 'utf8')) as {
+        editor?: unknown;
+        explorer?: unknown;
+      };
+      rmSync(answer, { force: true });
+      return {
+        editor: typeof parsed.editor === 'string' ? parsed.editor : undefined,
+        explorer: Array.isArray(parsed.explorer)
+          ? parsed.explorer.filter((p): p is string => typeof p === 'string')
+          : [],
+      };
+    } catch {
+      // not written yet, or half-written: the extension renames it into place
+    }
+  }
+  return undefined;
+};
+
+/** Where a background entry's run writes, per clone: a dotfile, which `tmp merge` never shares. */
+export const BACKGROUND_LOGS = '.hangar-bg';
+
+/** Run one `keys.palette` entry: into the live Claude Code, or as a detached headless run. */
+const runPaletteEntry = (
+  hangar: Hangar,
+  clone: Clone,
+  entry: PaletteEntry,
+  selectionJson: string | undefined,
+): void => {
+  let selection: IdeSelection = { explorer: [] };
+  if (paletteNeeds(entry.prompt) !== 'nothing') {
+    const given =
+      selectionJson === undefined ? askIdeSelection(clone) : parseSelection(selectionJson);
+    if (given === undefined) {
+      throw new CliError(`${clone.name}: VS Code is not open on this clone, or did not answer`);
+    }
+    selection = given;
+  }
+  const prompt = promptFor(entry.prompt, selection);
+  if ('refuse' in prompt) throw new CliError(`${clone.name}: ${prompt.refuse}`);
+  if (entry.run === 'session') {
+    keyPaste(hangar, clone.name, prompt.text, { submit: true, raw: true });
+    return;
+  }
+  const dir = join(clone.path, 'tmp', BACKGROUND_LOGS);
+  mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().replaceAll(':', '').slice(0, 15);
+  const log = join(dir, `${stamp}-${entry.name}.log`);
+  const fd = openSync(log, 'a');
+  try {
+    // Detached with stdin ignored, so closing the popup -- or the VS Code window -- does not end
+    // the run, and its own bar line says when it has.
+    const child = spawn(
+      hangar.paths.bin,
+      ['--hangar', hangar.root, 'key', 'bg', clone.name, entry.name, prompt.text],
+      { cwd: clone.path, env: childEnv(), detached: true, stdio: ['ignore', fd, fd] },
+    );
+    child.unref();
+  } finally {
+    closeSync(fd);
+  }
+  say(
+    hangar,
+    clone,
+    `${clone.name}: ${entry.name} started -- tmp/${BACKGROUND_LOGS}/${basename(log)}`,
+  );
+};
+
+const parseSelection = (json: string): IdeSelection => {
+  const parsed = JSON.parse(json) as { editor?: unknown; explorer?: unknown };
+  return {
+    editor: typeof parsed.editor === 'string' ? parsed.editor : undefined,
+    explorer: Array.isArray(parsed.explorer)
+      ? parsed.explorer.filter((p): p is string => typeof p === 'string')
+      : [],
+  };
+};
+
+/**
+ * `hangar key bg <clone> <entry> <prompt>`: a `background` entry's headless run, which the palette
+ * starts detached with its output in `tmp/.hangar-bg/`. Ends by saying so on the clone's bar.
+ *
+ * `claude` is resolved to a path rather than left to PATH: this runs under the tmux SERVER's
+ * environment, which may lack direnv's PATH -- `boundHangar`'s reason, met for the first time
+ * here, since `sync` and `pr` only ever start a headless run from a shell.
+ */
+export const keyBg = async (
+  hangar: Hangar,
+  ref: string,
+  name: string,
+  prompt: string,
+): Promise<void> => {
+  const clone = requireClone(hangar, ref);
+  const entry = hangar.config.keys.palette.find((e) => e.name === name);
+  if (entry?.run !== 'background') throw new CliError(`no background palette entry "${name}"`);
+  const binary = claudeBinary();
+  if (binary === undefined) {
+    say(
+      hangar,
+      clone,
+      `${clone.name}: ${name} failed -- claude is not installed where hangar looks`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`${new Date().toISOString()} ${name}: ${prompt}`);
+  const outcome = await runHeadlessClaude({
+    binary,
+    repo: clone.path,
+    prompt,
+    allowedTools: entry.allowedTools ?? DEFAULT_BACKGROUND_TOOLS,
+    permissionMode: 'acceptEdits',
+    timeoutMs: (entry.timeoutMinutes ?? 15) * 60 * 1000,
+  });
+  if (outcome.finalText !== '') console.log(outcome.finalText);
+  if (outcome.ok) say(hangar, clone, `${clone.name}: ${name} finished`);
+  else {
+    say(hangar, clone, `${clone.name}: ${name} failed -- ${outcome.reason ?? 'see its log'}`);
+    process.exitCode = 1;
+  }
+};
+
+/**
+ * `update-pr`: `pr update` when the branch has an open pull request, `pr create` when it has none,
+ * each with `-y`. Every refusal is the two commands' own, and lands in the popup.
+ *
+ * The lookup is the one `pr create` makes, and a failed one is an abort: "could not ask" is not
+ * "there is none", and creating on it is how a timeout becomes a duplicate pull request.
+ */
+export const keyPr = async (
+  hangar: Hangar,
+  ref: string,
+  opts: { readonly dryRun?: boolean | undefined } = {},
+): Promise<void> => {
+  const clone = requireClone(hangar, ref);
+  const branch = currentBranch(clone.path);
+  const lookup = await openPullRequests(hangar, repoRef(hangar, clone.path), branch);
+  if (!lookup.ok) {
+    throw new CliError(
+      `${clone.name}: could not find out whether ${branch} has a pull request: ${lookup.reason}`,
+      'Nothing was created or changed.',
+    );
+  }
+  const asked = { yes: true, dryRun: opts.dryRun };
+  if (lookup.pullRequests.length > 0) await prUpdate(hangar, clone.name, asked);
+  else await prCreate(hangar, clone.name, asked);
 };
 
 // ---- the pickers: C-b C-e, C-b C-t, C-b C-p -------------------------------------------------
@@ -319,10 +540,15 @@ export const IDE_MAILBOX = '.hangar-ide';
  * must not reveal a stale path the next time somebody opens the window.
  */
 const postIdeRequest = (clone: Clone, path: string): void => {
+  postIdeMessage(clone, { path, at: Date.now() });
+};
+
+/** Write one request into the clone's mailbox, under another name and renamed into place. */
+const postIdeMessage = (clone: Clone, message: Record<string, unknown>): void => {
   const mailbox = join(clone.path, 'tmp', IDE_MAILBOX);
   mkdirSync(mailbox, { recursive: true });
   const pending = join(mailbox, `request.${String(process.pid)}.json`);
-  writeFileSync(pending, `${JSON.stringify({ path, at: Date.now() })}\n`);
+  writeFileSync(pending, `${JSON.stringify(message)}\n`);
   renameSync(pending, join(mailbox, 'request.json'));
 };
 
@@ -695,7 +921,13 @@ export const keyPaste = (
   hangar: Hangar,
   ref: string,
   text: string,
-  opts: { readonly command?: boolean | undefined } = {},
+  opts: {
+    readonly command?: boolean | undefined;
+    /** Press Enter after the paste: a palette entry the person chose to run, not to edit. */
+    readonly submit?: boolean | undefined;
+    /** The text is a whole prompt: no trailing space to type on after. */
+    readonly raw?: boolean | undefined;
+  } = {},
 ): void => {
   const clone = requireClone(hangar, ref);
   const typed =
@@ -707,8 +939,17 @@ export const keyPaste = (
   if (pane === undefined) {
     throw new CliError(`no Claude Code is running in ${clone.name}'s tmux session`);
   }
-  if (!server.pasteInto(pane.id, `${typed} `)) {
+  if (!server.pasteInto(pane.id, opts.raw === true ? typed : `${typed} `)) {
     throw new CliError(`could not paste into ${clone.name}'s Claude Code`);
   }
-  say(hangar, clone, `${clone.name}: handed to Claude Code -- Enter is yours`);
+  if (opts.submit !== true) {
+    say(hangar, clone, `${clone.name}: handed to Claude Code -- Enter is yours`);
+    return;
+  }
+  // A pause first: an Enter that lands while Claude Code is still taking the paste is lost.
+  sleepMs(150);
+  if (!server.sendKey(pane.id, 'Enter')) {
+    throw new CliError(`pasted into ${clone.name}'s Claude Code, but could not press Enter`);
+  }
+  say(hangar, clone, `${clone.name}: handed to Claude Code and submitted`);
 };
