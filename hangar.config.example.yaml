@@ -713,7 +713,7 @@ keys:
   # What C-b C-s in VS Code pastes into the clone's Claude Code; {ref} is the selection's
   # @<file>#<lines>. No default: it names a skill.
   selectionCommand: /bg-shorten-comment {ref}
-  # What C-b P (Cmd+Shift+P) and VS Code's Cmd+Shift+P offer beside the built-in commands. No
+  # What C-b P (Cmd+P in iTerm2) and VS Code's Cmd+Shift+P offer beside the built-in commands. No
   # default: each prompt names a skill. `session` pastes the prompt into the clone's running
   # Claude Code and presses Enter; `background` runs it as a headless `claude -p` in the clone
   # that ends by itself, its log in tmp/.hangar-bg/. {ref} is VS Code's selected lines as

@@ -253,8 +253,8 @@ export type KeyPaletteOptions = {
  * moment it does. A `key` row holds its own failure through `holdOnFailure`, so it is not held
  * twice; anything else is held here.
  *
- * Cmd+Shift+P cannot reach tmux -- a macOS terminal keeps Command for itself -- so the header
- * names the iTerm2 key mapping that turns it into this key.
+ * Cmd+P cannot reach tmux -- a macOS terminal keeps Command for itself -- so the header names
+ * the iTerm2 key mapping that turns it into this key.
  */
 export const keyPalette = (hangar: Hangar, ref: string, opts: KeyPaletteOptions = {}): void => {
   const clone = requireClone(hangar, ref);
@@ -273,8 +273,7 @@ export const keyPalette = (hangar: Hangar, ref: string, opts: KeyPaletteOptions 
           rows.map((r) => r.label),
           {
             prompt: `${clone.name} > `,
-            header:
-              'Enter runs it · Esc cancels · Cmd+Shift+P: map it in iTerm2 to send hex 0x02 0x50',
+            header: 'Enter runs it · Esc cancels · Cmd+P: map it in iTerm2 to send hex 0x02 0x50',
           },
         )
       : undefined;

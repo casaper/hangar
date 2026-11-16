@@ -53,7 +53,7 @@ browser test run — that isolation is the entire reason the fleet exists.
   on, and its branch. Click the key or the pull request to open it in the browser — clicking a
   tab still switches to it. `C-b C-e` fuzzy-finds a file to open in the clone's editor,
   `C-b C-t` a file of its ticket, `C-b C-p` opens its plan, and `C-b C-k` lists every hangar key.
-  `C-b P` — or Cmd+Shift+P, once iTerm2 maps it to send hex `0x02 0x50` — is a fuzzy palette of
+  `C-b P` — or Cmd+P, once iTerm2 maps it to send hex `0x02 0x50` — is a fuzzy palette of
   every hangar key, report and Claude Code prompt from `keys.palette` in the config; VS Code's own
   Cmd+Shift+P lists the same commands as `Hangar: …`.
   On macOS the clone's VS Code window has the same chords, plus `ctrl+k ctrl+k`, which pastes

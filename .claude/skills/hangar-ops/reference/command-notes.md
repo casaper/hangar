@@ -191,11 +191,12 @@ tool is the separate `<thing>_preview`.
   `background` runs as a headless `claude -p` in the clone that ends by itself, says so on the
   bar, and logs to `tmp/.hangar-bg/`. `{ref}` in a prompt takes VS Code's selected lines and
   refuses without them; `{file}` takes the selected files, the Explorer's first. From tmux the
-  palette asks the clone's VS Code window, so a window must be open there. **Cmd+Shift+P cannot reach tmux** —
-  macOS terminals keep Command — so in iTerm2 add a key mapping Cmd+Shift+P → *Send Hex Codes*
+  palette asks the clone's VS Code window, so a window must be open there. **Cmd+P cannot reach tmux** —
+  macOS terminals keep Command — so in iTerm2 add a key mapping Cmd+P → *Send Hex Codes*
   `0x02 0x50`, which is `C-b P` on the wire. It fires in every iTerm2 tab, outside tmux too —
   hangar opens its tabs with the default profile, so a profile of its own would never apply.
-  Terminal.app cannot map it. **In VS Code, Cmd+Shift+P then `Hangar:` lists the same commands
+  Cmd+P rather than Cmd+Shift+P because it is one key closer and iTerm2's Print, which it
+  takes over, is never wanted in a terminal. Terminal.app cannot map it. **In VS Code, Cmd+Shift+P then `Hangar:` lists the same commands
   and entries** — reports print into the `Hangar` output channel, and a `{file}` entry is also
   on the Explorer's right-click. A changed `keys.palette` reaches VS Code at the next
   `doctor --fix`, which reinstalls the extension.

@@ -1112,16 +1112,17 @@ caller of it here branches on the exit status: exiting 0 after a warning would h
 the bar's click report "opened" for a press that opened nothing. The folder is refused rather than
 falling back to `tmp/` itself when the ticket has none yet -- the press asked for one ticket.
 
-#### `C-b P` is the palette, and Cmd+Shift+P reaches it only through the emulator
+#### `C-b P` is the palette, and Cmd+P reaches it only through the emulator
 
 `hangar key palette` puts every key but itself, every `PALETTE_ONLY` command (`src/keys.ts`) and
 every `keys.palette` entry from the config in one fzf list, chord or command first so a narrow popup cuts the prose and not the part a person
-learns from. The answer to "can it be Cmd+Shift+P" is no, for tmux, and yes, one layer out:
+learns from. The answer to "can it be Cmd+P" is no, for tmux, and yes, one layer out:
 
 - **Command never reaches a pty.** iTerm2, Terminal.app and every macOS emulator keep it for their
   own menus, and `extended-keys` encodes Shift, Ctrl and Meta only. No tmux binding can name it.
-- **iTerm2 can turn it into bytes**: a key mapping Cmd+Shift+P → *Send Hex Codes* `0x02 0x50` is
-  `C-b P` on the wire. Hangar does not write it -- iTerm2 rewrites its prefs on quit over a
+- **iTerm2 can turn it into bytes**: a key mapping Cmd+P → *Send Hex Codes* `0x02 0x50` is
+  `C-b P` on the wire. Cmd+P and not Cmd+Shift+P: it is easier to reach, and what it displaces
+  is iTerm2's Print, which nobody wants from a terminal -- while Cmd+Shift+P stays VS Code's. Hangar does not write it -- iTerm2 rewrites its prefs on quit over a
   `defaults write`, and a mapping is the person's, not the hangar's -- and it fires in every
   iTerm2 tab, where outside tmux it is readline's back-char and a `P`. Terminal.app maps no
   Command chord to bytes at all, so there `C-b P` is the way.
