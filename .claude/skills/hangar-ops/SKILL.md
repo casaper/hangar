@@ -166,7 +166,8 @@ it only on that yes:
 - **`close`, `reload` and `jira-plan`: `-y`** (`yes` as a tool parameter) — each names the live
   session or dev server it would end before asking.
 - **`pr create` / `pr update`: `-y`** — but read the preview's title back first; see
-  `command-notes.md`.
+  `command-notes.md`. Both push the branch first when origin lacks it or its latest commits.
+- **`push`: `-y`** — the preview says whether the branch is missing, ahead, behind or diverged.
 - **`open -c` / `open -b`: `--include-busy`** — moves the branch of a clone with a live session.
 
 Two do not have one, and naming a flag for them would be wrong:

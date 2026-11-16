@@ -98,6 +98,7 @@ export const recordPrTarget = async (
   clone: Clone,
   branch: string,
   own: PullRequest | undefined,
+  opts: { readonly write?: boolean } = {},
 ): Promise<string | undefined> => {
   const target =
     own?.state === 'open' && own.destination !== ''
@@ -108,6 +109,9 @@ export const recordPrTarget = async (
             ? undefined
             : followTarget(stored, tryDefaultBranch(hangar), forgeAsk(hangar, clone));
         })();
-  if (target !== undefined && target !== branch) writePrTarget(clone.path, branch, target);
+  // `write: false` answers what a real run would record, so `sync -n` names the same target.
+  if (target !== undefined && target !== branch && opts.write !== false) {
+    writePrTarget(clone.path, branch, target);
+  }
   return target;
 };

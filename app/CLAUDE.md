@@ -127,7 +127,8 @@ edit script that quotes it as an anchor is refused. Put such a script in a scrat
 `python3 -I <file>`.
 
 **The publish guard judges the whole Bash line**: `hangar pr create --help` is refused, and so is
-any chain where one `pr create|update` lacks `-n` — heredoc text included. Run the dry run on its
+any chain where one `hangar push` or `pr create|update` lacks `-n` — heredoc text, a quoted grep
+pattern and a commit message naming a branch push included. Run the dry run on its
 own line, and put an edit script that quotes the command in a scratchpad file.
 
 **Search a clone with `git -C <clone> grep`, never `grep -r`**: a clone carries `node_modules`

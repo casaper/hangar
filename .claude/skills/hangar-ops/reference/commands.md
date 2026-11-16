@@ -120,7 +120,7 @@ rule that cannot tell it from the report.
 | `reload` | `[clones...]` | `--all` · `--no-shells` · `--no-claude` · `--close-claude` · `--no-editor` · `-y, --yes` · `-n, --dry-run` | **act [user]** |
 | `jira-plan` | `<key>` | `-y, --yes` · `-n, --dry-run` | **act [user]** — ends what runs in the chosen clone's Claude Code window |
 | `browse` | `<ticket\|pr\|tmp> <clone>` | `-n, --dry-run` (print the URL or folder, open nothing) | act (opens a browser, or Finder on the ticket's `tmp/<KEY>` folder; `-n` is report). Nothing to open exits 1 |
-| `pr refresh` | `[clones...]` | `-a, --all` · `--force` · `-q, --quiet` · `-n, --dry-run` | act (writes a cache; the bar spawns it for you) |
+| `pr refresh` | `[clones...]` | `-a, --all` · `--force` · `-q, --quiet` · `-n, --dry-run` | act (writes a cache and the branch's stored PR target; the bar spawns it for you) |
 | `pr create` | `[clone]` (defaults to the clone you are in; naming ANOTHER is refused) | `--onto <branch>` · `--title <text>` · `--file <path>` · `--ready` · `--no-describe` · `--include-busy` · `-y, --yes` · `-n, --dry-run` | **act — writes to the forge.** Opens a DRAFT unless `--ready`; pushes the branch first when origin lacks it or its latest commits |
 | `pr update` | `[clone]` (same rule) | `--title <text>` · `--file <path>` · `--keep-title` · `--keep-body` · `--draft` \| `--ready` · `--no-describe` · `--include-busy` · `-y, --yes` · `-n, --dry-run` | **act — writes to the forge.** Only on pull requests you opened; pushes unpushed commits first |
 | `pr target` | `[clone]` (same rule) | `--set <branch>` · `--clear` | report bare; **act** with `--set`/`--clear` — the clone's own git config only |

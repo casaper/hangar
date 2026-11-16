@@ -592,12 +592,13 @@ Four things about that script are deliberate:
   Claude Code reports a hook error and the call proceeds. The `Bash(hangar exec)` deny entries
   are what stands underneath that, which is the second reason they are not redundant.
 
-**It also refuses `hangar pr create` and `pr update` through Bash, unless the invocation carries
-`-n`.** They were the one publishing path left open once `git push` and `gh pr create` were
+**It also refuses `hangar push`, `pr create` and `pr update` through Bash, unless the invocation
+carries `-n`.** `push` is a branch push under hangar's name, and the two `pr` commands push before
+they write, so the three are one rule. They were the one publishing path left open once `git push` and `gh pr create` were
 covered: both default to the clone they run in, and `-y` skips their `/dev/tty` confirmation, so
 nothing stood between a clone agent and the forge. The `-n` test is per shell segment, or
-`… -y && ls -n` would borrow the flag. The `pr_create`/`pr_update` tools are unaffected — a tool
-call is not a Bash call — and stay behind their `ask` rules.
+`… -y && ls -n` would borrow the flag. The `push`/`pr_create`/`pr_update` tools are unaffected — a
+tool call is not a Bash call — and stay behind their `ask` rules.
 
 `doctor` carries a row for it, unconditionally — unlike the tracker hook, no config makes this
 one unwanted — and `--fix` writes it. **Developer mode is denied it too**, which is the one place

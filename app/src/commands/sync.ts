@@ -223,10 +223,12 @@ const resolveTarget = async (
     if (found.reason === undefined) await recordPrTarget(hangar, clone, branch, found.pr);
   }
   if (pr === undefined) {
-    const stored = storedTarget(
-      readPrTarget(clone.path, branch),
-      'no open pull request — the stored PR target',
-    );
+    // On `-n` the hop a real run would record is followed but not written, so both name one target.
+    const followed =
+      opts.dryRun === true
+        ? await recordPrTarget(hangar, clone, branch, undefined, { write: false })
+        : readPrTarget(clone.path, branch);
+    const stored = storedTarget(followed, 'no open pull request — the stored PR target');
     if (stored !== undefined) return stored;
     return onDefault(`no open pull request — the default branch (${defaultBranch})`);
   }
