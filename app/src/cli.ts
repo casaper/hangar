@@ -46,6 +46,7 @@ import { skillsList, skillsSync } from './commands/skills.ts';
 import { bookmarksSync } from './commands/bookmarks.ts';
 import { prCreate, prRefresh, prUpdate } from './commands/pr.ts';
 import { push } from './commands/push.ts';
+import { prTarget } from './commands/pr-target.ts';
 import { ports, portsPin, portsTake, portsUnpin } from './commands/ports.ts';
 import { removeClone } from './commands/remove-clone.ts';
 import { resume } from './commands/resume.ts';
@@ -945,6 +946,18 @@ pr.command('refresh')
   .option('-q, --quiet', "say nothing but warnings (for the status bar's own spawn)")
   .action(async (clones: string[], options) => {
     await prRefresh(requireHangar(), clones, options);
+  });
+
+pr.command('target')
+  .summary("Show, set or clear where a clone branch's pull request goes")
+  .description(
+    "Shows the PR target stored for the clone's current branch -- git config branch.<branch>.hangarPrTarget -- which `sync` and `pr create` use when the branch has no open pull request, and `sync` when Bitbucket cannot be asked.\n\nEvery `pr refresh` (and so the clone bar), `sync`, `pr create` and `pr update` records the open pull request's destination there. When the stored target's own pull request has been merged and its branch deleted from origin, the target moves on to where that one went, as Bitbucket retargets.\n\n--set stores one by hand, for a stacked branch with no pull request yet; it must name a branch origin has. Local only: nothing is written to the forge.",
+  )
+  .argument('[clone]', 'clone name or index — defaults to the clone you are in')
+  .option('--set <branch>', 'store this branch as the target')
+  .option('--clear', 'forget the stored target')
+  .action((clone: string | undefined, options) => {
+    prTarget(requireHangar(), clone, options);
   });
 
 /*

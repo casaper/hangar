@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 
 import type { Hangar } from './hangar.ts';
+import { PR_TARGET_KEY } from './pr-target.ts';
 import { portPins } from './port-pins.ts';
 
 /**
@@ -146,6 +147,7 @@ export const hangarClaudeLocalMdContent = (hangar: Hangar): string => {
         ? '_none read — the branch name decides_'
         : `\`git config branch.<branch>.${cfg.tracker.branchConfigKey}\` — a key, or \`none\``,
     ),
+    row('PR target', `\`git config branch.<branch>.${PR_TARGET_KEY}\` — written by hangar`),
   ];
 
   /*

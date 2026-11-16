@@ -22,6 +22,7 @@ import {
 import { tmuxServer, tmuxSocketName } from '../tmux.ts';
 import { claudeSessionsIn, type ClaudeSession } from '../procs.ts';
 import { refreshPullRequest } from '../pr-cache.ts';
+import { readPrTarget, recordPrTarget } from '../pr-target.ts';
 import { resolveWithClaude } from '../resolve-conflicts.ts';
 import { cloneLabel, confirm, fail, heading, note, ok, step, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
@@ -108,8 +109,8 @@ type Target = {
 };
 
 /**
- * The target, in priority order: `--onto`, then the branch's open pull request, then the
- * repo's default branch.
+ * The target, in priority order: `--onto`, then the branch's open pull request, then the target
+ * stored for the branch (`pr-target.ts`), then the repo's default branch.
  *
  * The pull request is the authoritative answer and nothing local substitutes for it. A branch
  * cut from `master` may perfectly well have a PR onto `release9`, or onto another branch of
@@ -169,9 +170,26 @@ const resolveTarget = async (
   if (branch === defaultBranch) return onDefault(`on the default branch (${defaultBranch})`);
   if (branch === DETACHED) return onDefault('detached HEAD — no branch to look a PR up by');
 
+  /*
+   * The target stored for this branch (`pr-target.ts`): what the forge said last, or what
+   * `hangar pr target` set before any pull request existed. It answers when the forge cannot,
+   * and when the branch has no open pull request yet -- a stacked branch is synced onto the
+   * branch it stacks on, not onto the default branch. Only when it still names a branch origin
+   * has; a target that vanished is no target.
+   */
+  const storedTarget = (stored: string | undefined, why: string): Target | undefined =>
+    stored !== undefined && stored !== branch && refExists(clone.path, `origin/${stored}`)
+      ? { branch: stored, ref: `origin/${stored}`, why, guessed: false, pr: undefined }
+      : undefined;
+
   const lookup = await openPullRequests(hangar, repoRef(hangar, clone.path), branch);
   if (!lookup.ok) {
     warn(`could not ask Bitbucket which branch this one's PR targets: ${lookup.reason}`);
+    const stored = storedTarget(
+      readPrTarget(clone.path, branch),
+      'the stored PR target — Bitbucket could not be asked',
+    );
+    if (stored !== undefined) return stored;
     return onDefault(`assuming the default branch (${defaultBranch}) — PR target unknown`, true);
   }
   const destinations = [...new Set(lookup.pullRequests.map((pr) => pr.destination))];
@@ -201,9 +219,15 @@ const resolveTarget = async (
      * have filled them in. One extra pair of requests on a command that already waits for the
      * network is the cheap side of that trade.
      */
-    await refreshPullRequest(hangar, clone, branch);
+    const found = await refreshPullRequest(hangar, clone, branch);
+    if (found.reason === undefined) await recordPrTarget(hangar, clone, branch, found.pr);
   }
   if (pr === undefined) {
+    const stored = storedTarget(
+      readPrTarget(clone.path, branch),
+      'no open pull request — the stored PR target',
+    );
+    if (stored !== undefined) return stored;
     return onDefault(`no open pull request — the default branch (${defaultBranch})`);
   }
   return {

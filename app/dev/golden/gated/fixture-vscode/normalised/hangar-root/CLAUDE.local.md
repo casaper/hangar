@@ -18,6 +18,7 @@ which hangar this is, and every value in it comes from `hangar.config.yaml`.
 | shared tmp           | `%HANGAR%/tmp` |
 | issue keys           | `UI-…`, `PLAT-…` |
 | ticket binding       | _none read — the branch name decides_ |
+| PR target            | `git config branch.<branch>.hangarPrTarget` — written by hangar |
 
 **Which clones exist is in no file, this one included.** They are whatever `checkout_<NN>`
 directories are there; index gaps are normal, because `hangar remove-clone` never renumbers —

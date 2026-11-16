@@ -56,6 +56,7 @@ another name.
 | `pr create` | `pr_create_preview` | `pr_create` (with `--no-describe` fixed — see below) |
 | `pr update` | `pr_update_preview` | `pr_update` (same) |
 | `push` | `push_preview` | `push` |
+| `pr target` | `pr_target` | `pr_target_set` (`set` or `clear`) |
 | `resume` | `resume_list` | — |
 | `teach-rg` | `teach_rg_preview` | `teach_rg` |
 | `setup` | `setup_preview` | `setup` |
@@ -122,6 +123,7 @@ rule that cannot tell it from the report.
 | `pr refresh` | `[clones...]` | `-a, --all` · `--force` · `-q, --quiet` · `-n, --dry-run` | act (writes a cache; the bar spawns it for you) |
 | `pr create` | `[clone]` (defaults to the clone you are in; naming ANOTHER is refused) | `--onto <branch>` · `--title <text>` · `--file <path>` · `--ready` · `--no-describe` · `--include-busy` · `-y, --yes` · `-n, --dry-run` | **act — writes to the forge.** Opens a DRAFT unless `--ready`; pushes the branch first when origin lacks it or its latest commits |
 | `pr update` | `[clone]` (same rule) | `--title <text>` · `--file <path>` · `--keep-title` · `--keep-body` · `--draft` \| `--ready` · `--no-describe` · `--include-busy` · `-y, --yes` · `-n, --dry-run` | **act — writes to the forge.** Only on pull requests you opened; pushes unpushed commits first |
+| `pr target` | `[clone]` (same rule) | `--set <branch>` · `--clear` | report bare; **act** with `--set`/`--clear` — the clone's own git config only |
 | `push` | `[clone]` (same rule) | `-y, --yes` · `-n, --dry-run` (still fetches the branch) | **act — writes to origin.** A fast-forward only: missing or ahead is pushed, behind is reported, diverged is refused |
 | `resume` | `[clone]` (defaults to the clone you are in) | `-n, --limit <count>` (default `20`, `0` = all) | report **for you** — with no tty it prints the list instead of the picker; at a terminal it launches `claude --resume` |
 | `add-clone` | — | `--no-install` (+ a hidden `--remote <url>`) | **act [user]**, no `-n` |

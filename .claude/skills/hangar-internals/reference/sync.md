@@ -39,11 +39,30 @@ through the same Bitbucket adapter.
   takes as a bearer token. A hard-coded name here is a soft failure: a token under another name is
   indistinguishable from no token, and the target is reported as a guess. The target is **printed on
   every run** with where it came from, and `-n` shows it without changing anything. Priority is
-  `--onto <ref>` > the open PR's destination > the default branch. Two open PRs onto different
+  `--onto <ref>` > the open PR's destination > the branch's stored PR target > the default
+  branch. Two open PRs onto different
   branches **abort** and ask for `--onto`; a destination that does not exist on origin even
   after the fetch **aborts** too, rather than quietly falling back — a rebase onto the wrong
   base is the expensive thing to undo here. No token, no network or a 401 is _not_ an error: it
-  falls back to the default branch and says the target is a guess. The ref handed to git is
+  falls back to the stored PR target when there is one that origin still has, and otherwise to the
+  default branch, saying the target is a guess.
+- **The stored PR target is the one per-branch value hangar writes rather than derives**
+  (`pr-target.ts`, `git config branch.<branch>.hangarPrTarget`). Everything else here prefers
+  asking git or the forge at the moment of use, and so does this whenever it can: the branch's
+  own OPEN pull request always wins, and its destination already carries any retarget Bitbucket
+  made. The store answers the three cases asking cannot -- a stacked branch with no pull request
+  yet (`hangar pr target --set <branch>`), a forge that cannot be reached, and a retarget that
+  Bitbucket offered and then silently failed to apply, which its own tracker records. Written by
+  `recordPrTarget`, called explicitly by `pr refresh` (and so by the bar), `sync`, `pr create` and
+  `pr update` -- never by `list`, `browse` or `jira-plan`, which share the refresh but are
+  promised to clone sessions as reports, and must not write a sibling's `.git/config`.
+- **A stored target moves on only when its branch's pull request is MERGED and the branch is
+  GONE from origin** (`followTarget`). That is the state in which Bitbucket offers to retarget the
+  pull requests stacked on it: merging with the source branch closed. A long-lived branch that
+  once had a merged pull request still exists, so it is never hopped off, and neither is the
+  default branch, where every chain ends. "Gone" is `ls-remote --exit-code`'s exit 2; any other
+  failure, like a failed forge lookup, stops the walk where it stands. Five hops, and a cycle,
+  end it. The ref handed to git is
   always `origin/<branch>` — a bare name is ambiguous the moment a sibling clone has the same
   branch, which in a stacked PR it does by definition, and `checkout.defaultRemote` does not
   reach `rev-parse` or `rebase`.

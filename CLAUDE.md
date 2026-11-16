@@ -103,13 +103,13 @@ skills load only as far as the repository root, and each clone is its own repo.
 
 **Read freely; do not integrate.** `list`, `ports`, `status`, `servers list`, `colours list`,
 `skills list`, `scrub`, `config show`, `config validate`, `config schema --check`,
-`colours sync --check` and a bare `doctor` only report, and every `-n` is a dry run — except
+`colours sync --check`, a bare `pr target` and a bare `doctor` only report, and every `-n` is a dry run — except
 `hangar resume`'s, which is `--limit`, the one place in this CLI where `-n` does not mean "change
 nothing". A clone session is welcome to all of them, and `plans collect` and `tmp merge --quiet`
 already run there from `SessionEnd` hooks. **Every other command acts, and is the user's, from
 the hangar root** — among them `sync` (under any of its three names), `checkout-default`, `open`,
 `jira-plan`, `edit`, `close`, `reload`, `down`, `add-clone`, `install`, `remove-clone`, `exec`,
-`push`,
+`push`, `pr target --set`/`--clear`,
 `servers start`, `servers kill`, `bookmarks sync`, `colours change`, `ports pin`, `ports unpin`,
 `ports take` and `doctor --fix`.
 
@@ -123,6 +123,12 @@ that starts while the gate is armed is told the ticket.
 and the bar take the branch's ticket binding first — the git config variable the hangar's
 `CLAUDE.local.md` names under "ticket binding", holding a key or `none` — then a key in the
 branch name, and `status` and `browse` then a key in this branch's commit subjects.
+
+**The pull-request target is the one per-branch value hangar does store**, in the git config
+variable `CLAUDE.local.md` names under "PR target". Every forge refresh records the open pull
+request's destination there, and moves it on when the target branch's own pull request has merged
+and the branch is gone from origin, as Bitbucket retargets. `sync` and `pr create` fall back to it
+when the branch has no open pull request; `hangar pr target` shows it.
 
 **`hangar push`, `hangar pr create` and `hangar pr update` publish** — the only three commands
 that write anywhere outside this machine. `push` puts your branch on origin, and the two `pr`

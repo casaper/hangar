@@ -27,6 +27,14 @@ tool is the separate `<thing>_preview`.
     `pr create` and `pr update` unless the invocation carries `-n`, because `-y` skips the
     confirmation. The `push`, `pr_create` and `pr_update` tools are not Bash calls and stay
     behind their `ask` rules.
+- **`hangar pr target [clone]` shows where the branch's pull request goes**, stored in the
+  clone's git config (`branch.<branch>.hangarPrTarget`). Every `pr refresh` — so the bar — plus
+  `sync`, `pr create` and `pr update` record the open pull request's destination there, and move
+  it on when the target's own pull request has merged and its branch is gone from origin, as
+  Bitbucket retargets. `sync` and `pr create` use it when the branch has no open pull request.
+  `--set <branch>` stores one by hand for a stacked branch that has no pull request yet (origin
+  must have that branch); `--clear` forgets it. Local only. `status` shows it as `pr target`;
+  `list` and the bar append `→ <target>` when it is not the default branch.
 - **`hangar push [clone]` is the push on its own.** It pushes only a fast-forward: a branch origin
   lacks, or one ahead of origin. Behind is reported and nothing is pushed (`sync` brings it up to
   date); diverged is refused, never forced. It refuses the default branch and a detached HEAD, and

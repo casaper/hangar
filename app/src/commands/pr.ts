@@ -44,6 +44,7 @@ import {
   refreshPullRequest,
   type CachedPullRequest,
 } from '../pr-cache.ts';
+import { readPrTarget, recordPrTarget } from '../pr-target.ts';
 import { claudeSessionsIn } from '../procs.ts';
 import { confirm, note, ok, step, warn } from '../ui.ts';
 import { tildify } from '../user-paths.ts';
@@ -193,6 +194,8 @@ export const prRefresh = async (
     }
     if (!quiet) step(`${clone.name}: ${branch}`);
     const found = await refreshPullRequest(hangar, clone, branch);
+    // The bar's spawn comes through here, so a retarget lands at the next TTL unasked.
+    if (found.reason === undefined) await recordPrTarget(hangar, clone, branch, found.pr);
     if (found.reason !== undefined) {
       /*
        * A warning and not a throw, and the loop carries on. `--all` over six clones must not
@@ -743,7 +746,11 @@ export const prCreate = async (
     return;
   }
 
-  const destination = opts.onto ?? requireDefaultBranch(hangar, { persist: opts.dryRun !== true });
+  // A stacked branch's target is stored before its pull request exists (`hangar pr target`).
+  const destination =
+    opts.onto ??
+    readPrTarget(clone.path, branch) ??
+    requireDefaultBranch(hangar, { persist: opts.dryRun !== true });
   const outcome = await resolveBody(hangar, clone, branch, opts);
   const draft = opts.ready !== true;
 
@@ -800,7 +807,8 @@ export const prCreate = async (
   ok(`${clone.name}: #${String(made.pr.id)} ${made.pr.draft ? 'draft' : 'open'} → ${made.pr.url}`);
   // Through the one writer, so the clone bar names it at the next redraw rather than at the next
   // TTL -- and so the record carries the volatile fields a hand-built one would leave blank.
-  await refreshPullRequest(hangar, clone, branch);
+  const refreshed = await refreshPullRequest(hangar, clone, branch);
+  if (refreshed.reason === undefined) await recordPrTarget(hangar, clone, branch, refreshed.pr);
 
   await reportReadBack(hangar, repo, asked, made, clone.name);
 };
@@ -1013,7 +1021,8 @@ export const prUpdate = async (
   ok(
     `${clone.name}: #${String(now.pr.id)} updated — ${now.pr.draft ? 'draft' : 'ready for review'} → ${now.pr.url}`,
   );
-  await refreshPullRequest(hangar, clone, branch);
+  const refreshed = await refreshPullRequest(hangar, clone, branch);
+  if (refreshed.reason === undefined) await recordPrTarget(hangar, clone, branch, refreshed.pr);
 
   if (now.pr.title !== edit.title) {
     warn(`${clone.name}: Bitbucket kept the title as ${now.pr.title}`);

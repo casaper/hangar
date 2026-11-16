@@ -363,7 +363,9 @@ thing that check is for.
 **`pr_refresh` reports for permission purposes even though it writes**, and the two readings do
 not conflict. The clone bar spawns exactly this, detached, every time a record passes
 `forge.prCacheTtlSeconds`; a prompt in front of what already happens unattended twenty times a
-minute is theatre, and what it writes the next redraw would rewrite anyway.
+minute is theatre, and what it writes the next redraw would rewrite anyway. That includes the
+branch's stored PR target in the clone's own git config, which is hangar's own key and moves only
+to what the forge already says.
 
 Measured, not assumed, with `--settings` and `--mcp-config` both loaded and a `-p` session:
 `mcp__hangar__doctor` ran with no prompt and `permission_denials` empty;

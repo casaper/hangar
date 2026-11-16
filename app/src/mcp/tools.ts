@@ -195,6 +195,13 @@ export const EXPOSURES: readonly Exposure[] = [
    */
   { name: 'pr_refresh', path: ['pr', 'refresh'], hides: [PREVIEW], acts: false },
   {
+    name: 'pr_target',
+    path: ['pr', 'target'],
+    hides: ['--set', '--clear'],
+    acts: false,
+    lede: "Reports the PR target stored for the clone's branch. Setting one is `pr_target_set`.",
+  },
+  {
     name: 'pr_refresh_preview',
     path: ['pr', 'refresh'],
     fixed: [PREVIEW],
@@ -426,6 +433,12 @@ export const EXPOSURES: readonly Exposure[] = [
     hides: [PREVIEW],
     fixed: ['--no-describe'],
     acts: true,
+  },
+  {
+    name: 'pr_target_set',
+    path: ['pr', 'target'],
+    acts: true,
+    lede: "Sets (`set`) or clears (`clear`) the PR target stored in the clone's own git config. Local only; `pr_target` is the report.",
   },
   // Publishes, like the two above -- and both of them now push too, before they write.
   { name: 'push', path: ['push'], hides: [PREVIEW], acts: true },

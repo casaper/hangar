@@ -39,7 +39,7 @@ export const describePush = (branch: string, state: OriginState): string => {
   const commits = (n: number): string => `${String(n)} commit${n === 1 ? '' : 's'}`;
   switch (state.plan) {
     case 'missing':
-      return `push ${branch} to origin, which does not have it yet (${commits(state.ahead)})`;
+      return `push ${branch} to origin, which does not have it yet (${state.ahead === 0 ? 'no commits of its own yet' : commits(state.ahead)})`;
     case 'ahead':
       return `push ${commits(state.ahead)} on ${branch} that origin does not have`;
     case 'up-to-date':
