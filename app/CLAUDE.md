@@ -129,7 +129,8 @@ edit script that quotes it as an anchor is refused. Put such a script in a scrat
 **The publish guard judges the whole Bash line**: `hangar pr create --help` is refused, and so is
 any chain where one `hangar push` or `pr create|update` lacks `-n` — heredoc text, a quoted grep
 pattern and a commit message naming a branch push included. Run the dry run on its
-own line, and put an edit script that quotes the command in a scratchpad file.
+own line, put an edit script that quotes the command in a scratchpad file, and pass such a
+commit message with `git commit -F <scratch file>`.
 
 **Search a clone with `git -C <clone> grep`, never `grep -r`**: a clone carries `node_modules`
 and a multi-GB `tmp/`, and `grep -r` over one runs past the Bash timeout.
@@ -148,9 +149,10 @@ skips). Reuse one; the jira-cache reference has why a pid beats an age.
 `cli.ts` and a `'key <action>'` entry in `NOT_EXPOSED`.** `hangar colours sync` puts a changed
 binding on the live server; a change to a row's `vscode` command or to
 `vscode-extension/extension.cjs` changes the extension's hash version, and `doctor --fix`
-reinstalls it. A new row shows in the `C-b P` palette with no further edit. A key that starts
-`bin/hangar` itself passes `--hangar <root>`, as `boundHangar` does: a popup runs in the pane's
-directory. `hangar colours sync -n | grep -v unchanged` shows only what a sync would rewrite.
+reinstalls it. A new row shows in the `C-b P` palette with no further edit; a palette entry
+that opens fzf sets `vscode: 'none'`, because an extension's output channel has no tty. A key
+that starts `bin/hangar` itself passes `--hangar <root>`, as `boundHangar` does: a popup runs in
+the pane's directory. `hangar colours sync -n | grep -v unchanged` shows only what a sync would rewrite.
 
 **A `hangar key` picker does not return when run without a terminal**: fzf reads `/dev/tty`, not
 stdin, so `</dev/null` still leaves it waiting. Test the pure row builder, not the command.
@@ -364,7 +366,8 @@ The layout under `src/` is what `ls` shows; only what a listing cannot say is ke
   set no editor AND `GIT_REFLOG_ACTION=hangar`, which is how `jira-plan` tells hangar's own branch
   moves from a person's; a raw `run('git', …)` skips both without anything noticing. The raw calls
   left (`git grep "run('git'" src`) either only read or touch no existing clone — `add-clone`'s
-  `git clone`, and `release`'s fetch of the hangar repo itself.
+  `git clone`, and `release`'s fetch of the hangar repo itself. `gitOut` trims, so porcelain
+  output, whose first column can be a space, is read through `git()`.
 - **`commands/vscode.ts`** — despite the name, the generic `editorSync` behind every
   `ide <kind> sync`, not only VS Code's.
 - **`exec.ts`** — `run`, `runCaptured` and `CliError`, the subprocess wrappers; **`template.ts`**
