@@ -16,6 +16,8 @@ import { issueUrl, ticketBinding } from '../jira.ts';
 import { cloneLabel, link, note, table, truncate } from '../ui.ts';
 import { prPlan } from './pr.ts';
 import type { Hangar } from '../hangar.ts';
+import { readPrTarget } from '../pr-target.ts';
+import { tryDefaultBranch } from '../config/default-branch.ts';
 
 /**
  * How long `list` waits for Bitbucket, across every clone at once.
@@ -43,6 +45,19 @@ export type ListPr =
   | { readonly kind: 'known'; readonly record: CachedPullRequest; readonly stale: boolean };
 
 const dash = pc.dim('-');
+
+/**
+ * The BRANCH cell: the branch, and ` → <target>` when its stored PR target is not the default
+ * branch -- a stacked branch is the one worth seeing at a glance. PURE.
+ */
+export const branchCell = (
+  branch: string,
+  target: string | undefined,
+  defaultBranch: string | undefined,
+): string =>
+  target === undefined || target === defaultBranch
+    ? truncate(branch, BRANCH_MAX)
+    : `${truncate(branch, BRANCH_MAX)} ${pc.dim(`→ ${truncate(target, BRANCH_MAX)}`)}`;
 
 /**
  * The PR, BUILD and REVIEW cells for one clone. Pure, so every variant prints without a network.
@@ -195,7 +210,7 @@ export const list = async (
       cloneLabel(clone),
       key === '' ? dash : link(key, issueUrl(hangar, key)),
       link(prCell, prUrl),
-      truncate(branch, BRANCH_MAX),
+      branchCell(branch, readPrTarget(clone.path, branch), tryDefaultBranch(hangar)),
       build,
       review,
       commitCell,

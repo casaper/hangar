@@ -17,6 +17,7 @@ import { claudeSessionsIn, runningServersIn } from '../procs.ts';
 import { cloneLabel, fail, heading, note, ok, table, warn } from '../ui.ts';
 import type { Hangar } from '../hangar.ts';
 import { portSummary } from '../ports.ts';
+import { readPrTarget } from '../pr-target.ts';
 
 /**
  * `hangar status` -- everything you need to know about a clone before touching it.
@@ -115,6 +116,19 @@ export const strandedStashRow = (entries: readonly StashEntry[]): string[][] =>
  * token fell into the arm below instead and blamed a missing `tracker.baseUrl`, which is a
  * third wrong answer for the same one cause.
  */
+/** The `pr target` row: the branch stored for this one's pull request, if any. PURE. */
+export const prTargetRow = (
+  stored: string | undefined,
+  defaultBranch: string | undefined,
+): string =>
+  stored === undefined
+    ? pc.dim(
+        `none stored — ${defaultBranch ?? 'the default branch'} until a pull request says otherwise`,
+      )
+    : stored === defaultBranch
+      ? `${stored} ${pc.dim('(the default branch)')}`
+      : stored;
+
 export const issueRow = (clone: Clone, ticket: TicketInference): string => {
   if (clone.hangar.config.tracker.kind === 'none') {
     return pc.dim('no tracker configured for this hangar');
@@ -172,6 +186,7 @@ export const statusOf = (clone: Clone, fetched: boolean): void => {
       'pull request',
       prSearchUrl(ref, branch) ?? pc.dim('no link — forge.originUrl is not a Bitbucket repository'),
     ],
+    ['pr target', prTargetRow(readPrTarget(clone.path, branch), tryDefaultBranch(clone.hangar))],
     ['ports', portSummary(clone.ports)],
     [
       'servers',

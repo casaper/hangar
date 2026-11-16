@@ -1253,6 +1253,10 @@ a lone `⇡6` that looks like an answer with its first half missing. Both counts
 digits before they are shown: they are parsed out of the same line as the branch name, so a branch
 called `something_behind_x` would otherwise be read as a count.
 
+The branch is followed by `→ <target>` when its stored PR target (`pr-target.ts`) is set and is not
+the default branch: a stacked branch is the one whose base is worth a glance. It is read straight
+from the clone's git config, like the ticket binding, so it costs no cache file and no forge call.
+
 The branch also comes off that `## ` line rather than from `symbolic-ref`, which is what lets the
 footer say `HEAD (no branch)` on a detached HEAD instead of going quiet. The path is shown from its
 END when it is long, since the leaf directory says where you are and the segments in front of it

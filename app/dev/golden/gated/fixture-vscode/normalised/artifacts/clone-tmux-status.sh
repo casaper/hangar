@@ -132,6 +132,10 @@ EOF
   # `status -b` names the branch too, and answers on a detached HEAD where `symbolic-ref`
   # cannot -- there it prints `HEAD (no branch)`, which is the honest thing to show.
   [ -n "$branch" ] || branch=$head
+  # The branch's stored PR target (`pr-target.ts`), read before the name is cut. Shown only
+  # when it is not the default branch: a stacked branch is the one worth a glance.
+  target=$(git -C "$dir" config --get "branch.$branch.hangarPrTarget" 2>/dev/null) || target=""
+  [ "$target" = "$DEFAULT_BRANCH" ] && target=""
   if [ ${#branch} -gt "$BRANCH_MAX" ]; then
     branch="$(printf '%s' "$branch" | cut -c1-"$BRANCH_MAX")…"
   fi
@@ -141,6 +145,7 @@ EOF
   out="$out · $marks"
   [ -n "$gate" ] && out="$out · $gate"
   [ -n "$branch" ] && out="$out · $branch"
+  [ -n "$target" ] && out="$out → $target"
   printf '%s ' "$out"
   ;;
 ticket)
