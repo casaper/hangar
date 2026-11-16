@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { editRows, planRows, ticketRows, WORKSPACE_ROW } from '../src/commands/key.ts';
+import { changedRows, editRows, planRows, ticketRows, WORKSPACE_ROW } from '../src/commands/key.ts';
 
 /**
  * What the pickers behind `C-b C-e`, `C-b C-t` and `C-b C-p` offer. Properties, not snapshots:
@@ -21,6 +21,13 @@ test('C-b C-e offers the clone first, then each directory once, then the files',
     rows.filter((row) => row !== WORKSPACE_ROW && !row.endsWith('/')),
     ['README.md', 'src/app/a.ts', 'src/app/b.ts', 'src/main.ts'],
   );
+});
+
+test('C-b C-e with changes offers the clone first, then the changed files and no directory', () => {
+  const rows = changedRows(['src/app/a.ts', 'README.md']);
+  assert.equal(rows[0], WORKSPACE_ROW);
+  assert.deepEqual(rows.slice(1), ['src/app/a.ts', 'README.md'], "git's order, untouched");
+  assert.ok(!rows.some((row) => row.endsWith('/')));
 });
 
 test('C-b C-t offers the ticket folder first, then its files, all under tmp/<KEY>/', () => {

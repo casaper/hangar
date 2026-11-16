@@ -162,8 +162,11 @@ export type PaletteCommand = {
   /** Whether the popup waits for a key afterwards, so a table stays readable. */
   readonly waits: boolean;
   readonly acts: boolean;
-  /** How VS Code shows the answer: the whole output in its Hangar channel, or the first line. */
-  readonly vscode: 'output' | 'line';
+  /**
+   * How VS Code shows the answer: the whole output in its Hangar channel, or the first line --
+   * or `none`, for a picker: fzf needs the popup's tty, and VS Code has its own Cmd+P.
+   */
+  readonly vscode: 'output' | 'line' | 'none';
 };
 
 const report = (
@@ -195,6 +198,15 @@ export const PALETTE_ONLY: readonly PaletteCommand[] = [
   report('pr-refresh', "refresh the bar's pull-request record", ['pr', 'refresh'], true),
   report('tmp-merge', "merge the clones' shared tmp/ entries", ['tmp', 'merge'], false),
   report('doctor', 'check this clone, changing nothing', ['doctor'], true),
+  {
+    name: 'open-any-file',
+    does: 'pick any file of this clone to open in VS Code, even while it has changes',
+    argv: ['key', 'edit', '--all'],
+    clone: true,
+    waits: false,
+    acts: false,
+    vscode: 'none',
+  },
   {
     name: 'update-pr',
     does: "open this branch's pull request, or rewrite the one it has (no confirmation)",

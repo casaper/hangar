@@ -18,7 +18,7 @@ import { claudeBinary, runHeadlessClaude } from '../claude-headless.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
 import { CliError, run } from '../exec.ts';
 import { pick, pickMany } from '../fuzzy.ts';
-import { currentBranch, fetchArgs, git, remotes } from '../git.ts';
+import { changedFiles, currentBranch, fetchArgs, git, remotes } from '../git.ts';
 import type { Hangar } from '../hangar.ts';
 import { inferTicket, ticketKeyOf } from '../jira.ts';
 import {
@@ -493,6 +493,19 @@ export const editRows = (files: readonly string[]): string[] => {
 };
 
 /**
+ * `C-b C-e`'s rows while the tree has changes: the workspace, then the changed files. PURE.
+ *
+ * No directory rows: the press is about the work in flight, and a folder is not part of a diff.
+ */
+export const changedRows = (files: readonly string[]): string[] => [WORKSPACE_ROW, ...files];
+
+const allFiles = (clone: Clone): string[] => {
+  const listed = git(clone.path, ['ls-files', '-co', '--exclude-standard']);
+  if (!listed.ok) throw new CliError(`could not list ${clone.name}'s files`, listed.stderr.trim());
+  return listed.stdout.split('\n').filter((line) => line !== '');
+};
+
+/**
  * `C-b C-t`'s rows: the ticket's directory first, then every file under it. PURE.
  *
  * The directory first, so Enter with nothing typed reveals the whole folder -- the press asked
@@ -656,16 +669,23 @@ const listOrPick = (
   if (chosen !== undefined) say(hangar, clone, openPicked(hangar, clone, chosen));
 };
 
-/** `C-b C-e`: pick a file or directory of the clone, or the clone itself. */
-export const keyEdit = (hangar: Hangar, ref: string): void => {
+/**
+ * `C-b C-e`: pick one of the clone's changed files, or -- with nothing changed, or `all` -- any
+ * file or directory of the clone, or the clone itself.
+ */
+export const keyEdit = (hangar: Hangar, ref: string, opts: { all?: boolean } = {}): void => {
   const clone = requireClone(hangar, ref);
-  const listed = git(clone.path, ['ls-files', '-co', '--exclude-standard']);
-  if (!listed.ok) throw new CliError(`could not list ${clone.name}'s files`, listed.stderr.trim());
-  const files = listed.stdout.split('\n').filter((line) => line !== '');
-  const chosen = pick(editRows(files), {
-    prompt: `${clone.name} > `,
-    header: 'Enter opens it in VS Code · a directory shows in its Explorer · Esc cancels',
-  });
+  const changed = opts.all === true ? [] : changedFiles(clone.path);
+  const chosen =
+    changed.length > 0
+      ? pick(changedRows(changed), {
+          prompt: `${clone.name} changed > `,
+          header: 'Enter opens it in VS Code · Esc cancels · every file: palette, open-any-file',
+        })
+      : pick(editRows(allFiles(clone)), {
+          prompt: `${clone.name} > `,
+          header: 'Enter opens it in VS Code · a directory shows in its Explorer · Esc cancels',
+        });
   if (chosen === undefined) return;
   if (chosen === WORKSPACE_ROW) {
     openEditors(clone, editorsToOpen(hangar), false);

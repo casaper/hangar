@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 
-import { run, runOrThrow, type RunResult } from './exec.ts';
+import { CliError, run, runOrThrow, type RunResult } from './exec.ts';
 
 /**
  * The environment every git subprocess of this CLI runs in: one where no editor can open.
@@ -378,6 +378,40 @@ export const refExists = (repo: string, ref: string): boolean =>
 export const conflictedFiles = (repo: string): string[] => {
   const out = gitTry(repo, ['diff', '--name-only', '--diff-filter=U']) ?? '';
   return out === '' ? [] : out.split('\n');
+};
+
+/**
+ * The paths `status --porcelain=v1 -z` names that can still be opened: staged, unstaged and
+ * untracked, each once, in git's order. PURE.
+ *
+ * `-z` reverses a rename's fields -- `R  <new>\0<old>\0` -- so the old path is a second field to
+ * consume, never a row. A path deleted in the index or the tree has nothing to open.
+ */
+export const parsePorcelainPaths = (raw: string): string[] => {
+  const fields = raw.split('\0');
+  const paths: string[] = [];
+  for (let i = 0; i < fields.length; i += 1) {
+    const field = fields[i] ?? '';
+    if (field.length < 4) continue;
+    const xy = field.slice(0, 2);
+    if (xy.includes('R') || xy.includes('C')) i += 1;
+    if (xy.includes('D')) continue;
+    const path = field.slice(3);
+    if (!paths.includes(path)) paths.push(path);
+  }
+  return paths;
+};
+
+/**
+ * What `C-b C-e` offers first: every changed file of the tree that is still there.
+ *
+ * Never through `gitOut`: it trims, and the first entry's leading space is half its status --
+ * ` M app/x.ts` became `pp/x.ts`.
+ */
+export const changedFiles = (repo: string): string[] => {
+  const res = git(repo, ['status', '--porcelain=v1', '-z', '--untracked-files=all']);
+  if (!res.ok) throw new CliError(`git status failed in ${repo}`, res.stderr.trim());
+  return parsePorcelainPaths(res.stdout);
 };
 
 /**

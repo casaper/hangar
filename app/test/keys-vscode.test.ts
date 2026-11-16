@@ -80,7 +80,12 @@ test('the manifest and the script name exactly the same commands', () => {
 test('VS Code lists every palette command and entry under Hangar, and none of the tmux-only rows', () => {
   const manifest = keysExtensionManifest('1.0.0', ENTRIES) as Manifest;
   const ids = manifest.hangarPalette.map((row) => row.command);
-  for (const command of PALETTE_ONLY) assert.ok(ids.includes(paletteCommandId(command.name)));
+  for (const command of PALETTE_ONLY) {
+    // A picker needs the popup's tty; VS Code has its own Cmd+P.
+    const listed = ids.includes(paletteCommandId(command.name));
+    assert.equal(listed, command.vscode !== 'none', command.name);
+  }
+  assert.ok(!ids.includes(paletteCommandId('open-any-file')));
   for (const entry of ENTRIES) assert.ok(ids.includes(paletteCommandId(entry.name)));
   for (const c of manifest.contributes.commands) assert.equal(c.category, 'Hangar', c.command);
   // The title leads with the name, so `Hangar: ship` finds it.

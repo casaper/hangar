@@ -1193,11 +1193,14 @@ key
 
 key
   .command('edit')
-  .description('Pick a file or directory of a clone and open it, or the clone itself (C-b C-e)')
+  .description(
+    "Pick one of a clone's changed files and open it -- or, with none changed, any file or directory, or the clone itself (C-b C-e)",
+  )
   .argument('<clone>', 'clone name, e.g. clone_02 (or just 2)')
-  .action(async (clone: string) => {
+  .option('--all', 'offer every file even when the tree has changes')
+  .action(async (clone: string, opts: { all?: boolean }) => {
     await holdOnFailure(() => {
-      keyEdit(requireHangar(), clone);
+      keyEdit(requireHangar(), clone, { all: opts.all === true });
     });
   });
 

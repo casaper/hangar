@@ -68,13 +68,19 @@ export const vscodePaletteCommands = (
   only: readonly PaletteCommand[],
   entries: readonly PaletteEntry[],
 ): VscodePaletteCommand[] => [
-  ...only.map((c) => ({
-    command: paletteCommandId(c.name),
-    name: c.name,
-    title: `${c.name} — ${c.does}`,
-    show: c.vscode,
-    needs: 'nothing' as const,
-  })),
+  ...only.flatMap((c) =>
+    c.vscode === 'none'
+      ? []
+      : [
+          {
+            command: paletteCommandId(c.name),
+            name: c.name,
+            title: `${c.name} — ${c.does}`,
+            show: c.vscode,
+            needs: 'nothing' as const,
+          },
+        ],
+  ),
   ...entries.map((e) => ({
     command: paletteCommandId(e.name),
     name: e.name,

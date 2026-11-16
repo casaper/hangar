@@ -923,9 +923,9 @@ row into a `bind-key -T prefix`, and `hangar key help` -- `C-b C-k` -- prints th
 help cannot name a key the conf does not bind. One `report` row, as rendered:
 
 ```
-bind-key -T prefix C-e if-shell -b '<hangar>/bin/hangar --hangar <hangar> edit "#{@hangar_clone}" >/dev/null 2>&1' \
-  'display-message "opened #{@hangar_clone} in its editor"' \
-  'display-message "hangar edit failed for #{@hangar_clone} -- run it in a shell to see why"'
+bind-key -T prefix C-f if-shell -b '<hangar>/bin/hangar --hangar <hangar> browse tmp "#{@hangar_clone}" >/dev/null 2>&1' \
+  'display-message "opened the ticket folder for #{@hangar_clone}"' \
+  'display-message "no ticket folder for #{@hangar_clone} -- run hangar browse tmp in a shell to see why"'
 ```
 
 **Which keys are free was measured, not assumed.** On tmux 3.7c and 3.8 the prefix table binds
@@ -993,8 +993,18 @@ thing**, because Enter with nothing typed picks it: `(workspace)` for `C-b C-e`,
 `hangar edit` below, and `tmp/<KEY>/` for `C-b C-t`. Esc leaves the popup with exit 0, so it
 closes without a message.
 
-- **`C-b C-e`'s rows are git's**, `ls-files -co --exclude-standard`, plus each parent directory
-  once with a trailing `/` -- the slash is how a row says it is a directory. A clone carries
+- **`C-b C-e` offers the changed files first**: while `status --porcelain=v1 -z
+  --untracked-files=all` names anything still on disk, the rows are `(workspace)` and those
+  paths, with no directory rows -- the press is about the work in flight. Untracked files count:
+  a new file is part of the change before it is staged. A rename's old path and a deleted path
+  are dropped, since neither opens. `changedFiles` reads git's output untrimmed, because the
+  first entry's leading space is half its status: through the trimming `gitOut`, ` M app/x.ts`
+  came back as `pp/x.ts`.
+- **With nothing changed, or from the palette's `open-any-file` (`key edit --all`), the rows
+  are git's**, `ls-files -co --exclude-standard`, plus each parent directory
+  once with a trailing `/` -- the slash is how a row says it is a directory. `open-any-file` is
+  `vscode: 'none'`, so VS Code never lists it: fzf needs the popup's tty, and VS Code has its own
+  Cmd+P. A clone carries
   `node_modules` and a multi-GB `tmp/`; git's list leaves both out, and runs to some 17,000 rows
   here, which fzf takes without pausing.
 - **`C-b C-p` lists `<clone>/.claude/plans/`, newest first, then `tmp/<KEY>/plan_<KEY>.md`.**
@@ -1138,9 +1148,10 @@ when it does; a `key` row holds its own failure, so it is held once. **The child
 was opened over, and `reload` skips the pane it thinks it runs in -- which would be the Claude Code
 `hangar-reload` was chosen to restart.
 
-**`PALETTE_ONLY` is reports plus two rows that act on purpose**, and `keys-palette.test.ts` holds
-the line: each report matches an MCP exposure that does not act (`browse` and `tmp merge` named as
-harmless), and `acts` is true for exactly `update-pr` and `hangar-reload`. `update-pr` is
+**`PALETTE_ONLY` is reports, one picker and two rows that act on purpose**, and
+`keys-palette.test.ts` holds the line: each report matches an MCP exposure that does not act
+(`browse` and `tmp merge` named as harmless, and `open-any-file` exempt as a `key` picker with
+no VS Code command -- it changes nothing until a choice opens a file), and `acts` is true for exactly `update-pr` and `hangar-reload`. `update-pr` is
 `hangar key pr`: one open-pull-request lookup, then `pr update` or `pr create` with `-y`, so every
 refusal is theirs -- including a stale description in a busy clone, which is every clone a palette
 is opened in, so it wants the description written first. Anything else that moves a working tree,

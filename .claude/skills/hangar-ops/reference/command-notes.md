@@ -169,8 +169,9 @@ tool is the separate `<thing>_preview`.
   `PR#1234` opens it in the browser; a click on a tab still switches to that window, and a click
   on a pane border still marks the pane. What a click runs is `hangar browse ticket|pr <clone>`,
   which is also worth typing directly. **The hangar's prefix keys act on the clone the window
-  belongs to, and `C-b C-k` lists them**: `C-b C-e` opens a fuzzy picker over the clone's files —
-  a file opens in its VS Code window, a directory is revealed in that window's Explorer — the
+  belongs to, and `C-b C-k` lists them**: `C-b C-e` opens a fuzzy picker over the clone's changed files — staged, unstaged and
+  untracked — or, when nothing has changed, over all of its files and directories (the
+  palette's `open-any-file` is the all-files list on demand); a file opens in its VS Code window, a directory is revealed in that window's Explorer — the
   window is started if it is not open — and the first row, `(workspace)`, is
   `hangar edit`; `C-b C-t` is the same picker over the ticket's `tmp/<KEY>/`, its first row the
   folder; `C-b C-p` opens the clone's plan, or picks between several; `C-b C-n` runs one of the
@@ -183,7 +184,7 @@ tool is the separate `<thing>_preview`.
   (`hangar-commit-gate toggle`): arm or disarm on the default branch — armed, it locks the next
   branch checked out — and lock or release on any other. `C-b P` is the **palette**: every key
   above, a few reports with no key (`status`, `ports`, `servers list`, `browse pr|ticket`,
-  `pr refresh`, `tmp merge`, `doctor`), two that act WITHOUT asking — `update-pr` (`pr update`
+  `pr refresh`, `tmp merge`, `doctor`), the all-files picker `open-any-file`, two that act WITHOUT asking — `update-pr` (`pr update`
   when the branch has an open pull request, `pr create` when not, both `-y`) and
   `hangar-reload` (`reload -y` on this clone) — and the config's `keys.palette` entries, in one
   fuzzy list. An entry is a Claude Code prompt: `session` is pasted into the clone's running

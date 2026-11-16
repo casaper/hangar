@@ -72,6 +72,9 @@ test('a built-in palette command is a report, or one of the two that act on purp
   for (const command of PALETTE_ONLY) {
     assert.equal(command.acts, ACTING_ON_PURPOSE.has(command.name), command.name);
     if (command.acts) continue;
+    // A picker is a key's popup with another argument: it changes nothing until a choice opens
+    // a file, which is what its key already does.
+    if (command.vscode === 'none' && command.argv[0] === 'key') continue;
     // `browse pr`: the second word is browse's argument, not a subcommand.
     const name = command.argv[0] === 'browse' ? 'browse' : command.argv.join(' ');
     if (HARMLESS_ACTING.has(name)) continue;
