@@ -373,7 +373,10 @@ The layout under `src/` is what `ls` shows; only what a listing cannot say is ke
 - **`exec.ts`** — `run`, `runCaptured` and `CliError`, the subprocess wrappers; **`template.ts`**
   — the `{token}` renderer every configurable path and URL goes through.
 - **`bitbucket.ts`** — the forge client; `pr-cache.ts` is the bar's on-disk pull-request record;
-  `pr-description.ts` FINDS the description the repo's own agent wrote, never writes one.
+  `pr-description.ts` FINDS the description the repo's own agent wrote, never writes one;
+  `pr-target.ts` reads and writes the stored per-branch target, which `status`, `list` and the bar
+  all show; `push.ts` plans the fast-forward-only push that `push`, `pr create` and `pr update`
+  share.
 - **`jira.ts`** — issue keys, URLs and inferring a branch's ticket; `jira-records.ts` — the
   shared record store and its names. The hook itself is `commands/jira.ts`.
   Three readers of a branch's ticket move together: `trackedKeyIn`, the bar
