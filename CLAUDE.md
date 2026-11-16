@@ -109,6 +109,7 @@ nothing". A clone session is welcome to all of them, and `plans collect` and `tm
 already run there from `SessionEnd` hooks. **Every other command acts, and is the user's, from
 the hangar root** — among them `sync` (under any of its three names), `checkout-default`, `open`,
 `jira-plan`, `edit`, `close`, `reload`, `down`, `add-clone`, `install`, `remove-clone`, `exec`,
+`push`,
 `servers start`, `servers kill`, `bookmarks sync`, `colours change`, `ports pin`, `ports unpin`,
 `ports take` and `doctor --fix`.
 
@@ -123,11 +124,12 @@ and the bar take the branch's ticket binding first — the git config variable t
 `CLAUDE.local.md` names under "ticket binding", holding a key or `none` — then a key in the
 branch name, and `status` and `browse` then a key in this branch's commit subjects.
 
-**`hangar pr create` and `hangar pr update` write to the forge** — the only two commands that
-write anywhere outside this machine. They default to the clone you are in, which is what makes them
-tempting, and `-y` skips their confirmation. Opening or rewriting a pull request is the user's:
-name the command and let them run it. The same `PreToolUse` hook that refuses `hangar exec`
-refuses both, and lets their `-n` through.
+**`hangar push`, `hangar pr create` and `hangar pr update` publish** — the only three commands
+that write anywhere outside this machine. `push` puts your branch on origin, and the two `pr`
+commands push it the same way before they write to the forge. All three default to the clone you
+are in, which is what makes them tempting, and `-y` skips their confirmation. Pushing, and opening
+or rewriting a pull request, are the user's: name the command and let them run it. The same
+`PreToolUse` hook that refuses `hangar exec` refuses all three, and lets their `-n` through.
 
 **`hangar close` and `hangar reload` both end a live Claude Code session**, which is what makes
 them the user's rather than yours. `close` kills the clone's whole tmux session and refuses when

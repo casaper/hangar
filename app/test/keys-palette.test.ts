@@ -66,9 +66,9 @@ test('a row shows its chord, its command or its name first, so a search for eith
  * shared `tmp/` merge every clone's `SessionEnd` hook already runs unasked.
  */
 const HARMLESS_ACTING = new Set(['browse', 'tmp merge']);
-const ACTING_ON_PURPOSE = new Set(['update-pr', 'hangar-reload']);
+const ACTING_ON_PURPOSE = new Set(['update-pr', 'push', 'hangar-reload']);
 
-test('a built-in palette command is a report, or one of the two that act on purpose', () => {
+test('a built-in palette command is a report, or one of the three that act on purpose', () => {
   for (const command of PALETTE_ONLY) {
     assert.equal(command.acts, ACTING_ON_PURPOSE.has(command.name), command.name);
     if (command.acts) continue;

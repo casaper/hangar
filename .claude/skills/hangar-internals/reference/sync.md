@@ -239,13 +239,23 @@ Every decision below follows from that one asymmetry.
   the argument is required. This is the fleet's own "stay in your own clone" rule reaching the one
   command whose mistake is published -- a pull request opened for the branch next door is on
   somebody's review queue before anybody notices. It is also why there is no `--all`.
-- **Origin is fetched before it is judged, on the dry run too.** `onOrigin` and `ahead` read
-  remote-tracking refs, and a stale one gives exactly the wrong answer: a branch reported as
-  unpushed that was pushed an hour ago, or -- far worse -- as pushed while the last three commits
-  are local, which opens a pull request that reads as complete and is missing the work its
-  description describes. Only `refs/remotes` moves, so no local branch and no file in the working
-  tree is touched, which is what makes it acceptable under `-n`. Both refusals print the `push`
-  command and neither offers to run it: pushing is the user's own action.
+- **Origin is fetched before it is judged, on the dry run too** (`originState` in `push.ts`).
+  The counts read remote-tracking refs, and a stale one gives exactly the wrong answer: a branch
+  reported as unpushed that was pushed an hour ago, or -- far worse -- as pushed while the last
+  three commits are local, which opens a pull request that reads as complete and is missing the
+  work its description describes. Only `refs/remotes` moves, so no local branch and no file in the
+  working tree is touched, which is what makes it acceptable under `-n`.
+- **A branch origin lacks, or has without its latest commits, is pushed rather than refused.**
+  The confirmation that publishes the pull request is already the moment a person decides to
+  publish, so a second step to push first would only be a refusal to work around. The push sits AFTER that confirmation, is
+  named in the summary's `first:` line, and is `git push -u origin <branch>` with no force:
+  should the counts have gone stale, git itself refuses anything but a fast-forward. Diverged is
+  the one state a push cannot settle without `--force`, which hangar never chooses -- `pr create`
+  refuses it, and `pr update`, which only rewrites text, warns and leaves the branch alone.
+- **`hangar push` is the same push on its own, and not a flag of `pr`**: pushing a branch that
+  has no pull request yet is the common case, and the palette wants it as one entry. It is a
+  publish, so the exec guard refuses it beside `pr create|update`, `-n` let through, and its MCP
+  tool sits in `ask`.
 
 ### The description is delegated, and the freshness rule is the shared store's fault
 

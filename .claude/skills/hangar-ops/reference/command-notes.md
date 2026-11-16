@@ -8,8 +8,8 @@ form the flags are named in. Everything here is equally true of the tool that ru
 tool is the separate `<thing>_preview`.
 
 - **`pr create` and `pr update` are the only commands that write to the FORGE**, which makes their
-  mistakes the only ones the whole team can see. Five things follow, and each one is a refusal
-  rather than a warning:
+  mistakes the only ones the whole team can see — and with `push` they are the only three that
+  publish at all. Five things follow:
   - **The clone comes from where the command runs.** In a clone's own shell the argument may be
     left out; naming a DIFFERENT clone is refused, and from the hangar root the argument is
     required. There is no `--all` — one pull request at a time, on purpose.
@@ -18,11 +18,19 @@ tool is the separate `<thing>_preview`.
     is reported, exit 0, and nothing is created — so re-running it is safe.
   - **`pr update` rewrites only pull requests the token owner authored**, and refuses when it
     cannot tell whose it is. With neither `--draft` nor `--ready` it leaves the draft state alone.
-  - **It refuses when the branch, or its latest commits, are not on origin** and prints the `push`
-    command. Pushing stays the user's own action; do not offer to do it.
-  - **No agent may run either through Bash.** `bin/hangar-exec-guard` refuses both unless the
-    invocation carries `-n`, because `-y` skips the confirmation. The `pr_create` and
-    `pr_update` tools are not Bash calls and stay behind their `ask` rules.
+  - **Both push first** when origin lacks the branch or its latest commits, exactly as
+    `hangar push` does: after the confirmation, `git push -u origin <branch>`, never forced. The
+    summary's `first:` line says so before anything is asked, and the previews fetch the branch
+    to know. A branch that has DIVERGED from origin is refused by `pr create` and only warned
+    about by `pr update`, which rewrites text and so has no reason to refuse; neither pushes it.
+  - **No agent may run any of the three through Bash.** `bin/hangar-exec-guard` refuses `push`,
+    `pr create` and `pr update` unless the invocation carries `-n`, because `-y` skips the
+    confirmation. The `push`, `pr_create` and `pr_update` tools are not Bash calls and stay
+    behind their `ask` rules.
+- **`hangar push [clone]` is the push on its own.** It pushes only a fast-forward: a branch origin
+  lacks, or one ahead of origin. Behind is reported and nothing is pushed (`sync` brings it up to
+  date); diverged is refused, never forced. It refuses the default branch and a detached HEAD, and
+  picks its clone as `pr create` does. The palette's `push` entry is `push -y`.
 - **The title and body come from the description the repo's own agent writes**, found in that
   clone's own `tmp/`, and a description written BEFORE the branch's last commit counts as out of
   date.
@@ -184,8 +192,9 @@ tool is the separate `<thing>_preview`.
   (`hangar-commit-gate toggle`): arm or disarm on the default branch — armed, it locks the next
   branch checked out — and lock or release on any other. `C-b P` is the **palette**: every key
   above, a few reports with no key (`status`, `ports`, `servers list`, `browse pr|ticket`,
-  `pr refresh`, `tmp merge`, `doctor`), the all-files picker `open-any-file`, two that act WITHOUT asking — `update-pr` (`pr update`
-  when the branch has an open pull request, `pr create` when not, both `-y`) and
+  `pr refresh`, `tmp merge`, `doctor`), the all-files picker `open-any-file`, three that act WITHOUT asking — `update-pr` (`pr update`
+  when the branch has an open pull request, `pr create` when not, both `-y`, and so both
+  pushing first), `push` (`push -y`) and
   `hangar-reload` (`reload -y` on this clone) — and the config's `keys.palette` entries, in one
   fuzzy list. An entry is a Claude Code prompt: `session` is pasted into the clone's running
   Claude Code and submitted with Enter, so choose it while that session sits at its prompt;

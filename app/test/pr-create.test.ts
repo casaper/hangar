@@ -51,8 +51,7 @@ test('create is blocked by the forge, the branch and origin, in that order', () 
     bitbucket: true,
     branch: 'features/ABC-1323_x',
     defaultBranch: 'master',
-    onOrigin: true,
-    ahead: 0,
+    origin: { plan: 'up-to-date', ahead: 0, behind: 0 } as const,
   };
   assert.equal(prCreateBlock(base), undefined, 'a pushed feature branch has nothing in its way');
 
@@ -62,25 +61,34 @@ test('create is blocked by the forge, the branch and origin, in that order', () 
     kind: 'default-branch',
     branch: 'master',
   });
-  assert.deepEqual(prCreateBlock({ ...base, onOrigin: false }), {
-    kind: 'not-on-origin',
-    branch: base.branch,
-  });
-  /*
-   * The one that would otherwise succeed and be wrong: origin HAS the branch, so the pull request
-   * opens and reads as complete -- while missing exactly the commits the description describes.
-   */
-  assert.deepEqual(prCreateBlock({ ...base, ahead: 3 }), {
-    kind: 'unpushed',
+  // Missing on origin, or without its latest commits: pushed first, so neither is in the way.
+  assert.equal(
+    prCreateBlock({ ...base, origin: { plan: 'missing', ahead: 4, behind: 0 } }),
+    undefined,
+  );
+  assert.equal(
+    prCreateBlock({ ...base, origin: { plan: 'ahead', ahead: 3, behind: 0 } }),
+    undefined,
+  );
+  // Behind is not a reason either: the pull request is opened from what origin has.
+  assert.equal(
+    prCreateBlock({ ...base, origin: { plan: 'behind', ahead: 0, behind: 2 } }),
+    undefined,
+  );
+  // Diverged would need a force, which is never this command's to choose.
+  assert.deepEqual(prCreateBlock({ ...base, origin: { plan: 'diverged', ahead: 3, behind: 1 } }), {
+    kind: 'diverged',
     branch: base.branch,
     ahead: 3,
+    behind: 1,
   });
 
   // A hangar whose default branch has never been resolved must not have every branch treated as
   // the default one; the check is skipped rather than guessed at.
   assert.equal(prCreateBlock({ ...base, defaultBranch: undefined }), undefined);
   // Order matters: no forge outranks everything, because none of the rest can be asked about.
-  assert.deepEqual(prCreateBlock({ ...base, bitbucket: false, onOrigin: false }), {
+  const diverged = { plan: 'diverged', ahead: 1, behind: 1 } as const;
+  assert.deepEqual(prCreateBlock({ ...base, bitbucket: false, origin: diverged }), {
     kind: 'no-forge',
   });
 });

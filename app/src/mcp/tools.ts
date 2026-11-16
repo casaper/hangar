@@ -213,14 +213,21 @@ export const EXPOSURES: readonly Exposure[] = [
     path: ['pr', 'create'],
     fixed: [PREVIEW],
     acts: false,
-    lede: `${previewLede} Names the description it found and the title it read out of it, and opens no pull request. It DOES fetch the branch from origin, because "is this branch pushed" cannot be answered off a stale remote-tracking ref.`,
+    lede: `${previewLede} Names the description it found and the title it read out of it, says whether the branch would be pushed first, and opens no pull request. It DOES fetch the branch from origin, because "is this branch pushed" cannot be answered off a stale remote-tracking ref.`,
   },
   {
     name: 'pr_update_preview',
     path: ['pr', 'update'],
     fixed: [PREVIEW],
     acts: false,
-    lede: `${previewLede} Says which fields would change and rewrites nothing.`,
+    lede: `${previewLede} Says which fields would change and whether the branch would be pushed first, and rewrites nothing. It DOES fetch the branch from origin, for the same reason pr_create_preview does.`,
+  },
+  {
+    name: 'push_preview',
+    path: ['push'],
+    fixed: [PREVIEW],
+    acts: false,
+    lede: `${previewLede} Says whether the branch is missing on origin, ahead, behind or diverged, and pushes nothing. It DOES fetch the branch from origin, because the answer cannot come off a stale remote-tracking ref.`,
   },
 
   // ---- previews ---------------------------------------------------------------------------
@@ -420,6 +427,8 @@ export const EXPOSURES: readonly Exposure[] = [
     fixed: ['--no-describe'],
     acts: true,
   },
+  // Publishes, like the two above -- and both of them now push too, before they write.
+  { name: 'push', path: ['push'], hides: [PREVIEW], acts: true },
   { name: 'browse', path: ['browse'], hides: [PREVIEW], acts: true },
   /*
    * `setup` is exposed rather than left out, and that CLOSES a gap rather than opening one.

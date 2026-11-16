@@ -1148,10 +1148,10 @@ when it does; a `key` row holds its own failure, so it is held once. **The child
 was opened over, and `reload` skips the pane it thinks it runs in -- which would be the Claude Code
 `hangar-reload` was chosen to restart.
 
-**`PALETTE_ONLY` is reports, one picker and two rows that act on purpose**, and
+**`PALETTE_ONLY` is reports, one picker and three rows that act on purpose**, and
 `keys-palette.test.ts` holds the line: each report matches an MCP exposure that does not act
 (`browse` and `tmp merge` named as harmless, and `open-any-file` exempt as a `key` picker with
-no VS Code command -- it changes nothing until a choice opens a file), and `acts` is true for exactly `update-pr` and `hangar-reload`. `update-pr` is
+no VS Code command -- it changes nothing until a choice opens a file), and `acts` is true for exactly `update-pr`, `push` and `hangar-reload`. `update-pr` is
 `hangar key pr`: one open-pull-request lookup, then `pr update` or `pr create` with `-y`, so every
 refusal is theirs -- including a stale description in a busy clone, which is every clone a palette
 is opened in, so it wants the description written first. Anything else that moves a working tree,

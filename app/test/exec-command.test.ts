@@ -246,6 +246,11 @@ test('the guard refuses the hangar keys that act, and only those', () => {
     'bin/hangar key palette 3 --entry=sync-branch',
     // A `-n` belonging to another command on the line lends nothing.
     'hangar key pr 1 && ls -n',
+    // `hangar push` is a git push by another name.
+    'hangar push',
+    'hangar push 2 -y',
+    'cd /x && bin/hangar --hangar /h push',
+    'hangar push -y && ls -n',
   ]) {
     assert.equal(guardVerdict(command), 'deny', `not refused: ${command}`);
   }
@@ -253,6 +258,8 @@ test('the guard refuses the hangar keys that act, and only those', () => {
     'hangar key pr 1 -n',
     'hangar key palette 1 --list',
     'hangar key fetch 1',
+    'hangar push -n',
+    'hangar push 2 --dry-run',
     // Naming one is not running one.
     'grep -n "key bg" src/cli.ts',
   ]) {

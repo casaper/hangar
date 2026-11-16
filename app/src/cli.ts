@@ -45,6 +45,7 @@ import { scrub } from './commands/scrub.ts';
 import { skillsList, skillsSync } from './commands/skills.ts';
 import { bookmarksSync } from './commands/bookmarks.ts';
 import { prCreate, prRefresh, prUpdate } from './commands/pr.ts';
+import { push } from './commands/push.ts';
 import { ports, portsPin, portsTake, portsUnpin } from './commands/ports.ts';
 import { removeClone } from './commands/remove-clone.ts';
 import { resume } from './commands/resume.ts';
@@ -955,7 +956,7 @@ pr.command('refresh')
 pr.command('create')
   .summary('Open the pull request this branch does not have yet')
   .description(
-    "Opens a pull request on Bitbucket from the clone's current branch, unless the branch already has one open -- in which case it says which and changes nothing, so it is safe to run twice.\n\nThe title and description come from the description file the repo's own agent writes into the shared tmp/ store; when there is none, or it was written before the branch's last commit, `forge.prDescriptionPrompt` is run as a headless Claude Code session in that clone to write one. IT OPENS A DRAFT: pass --ready to open it ready for review, which notifies its reviewers.\n\nThe clone comes from where the command is run: inside a clone the argument may be left out, and naming a DIFFERENT clone is refused.",
+    "Opens a pull request on Bitbucket from the clone's current branch, unless the branch already has one open -- in which case it says which and changes nothing, so it is safe to run twice.\n\nThe title and description come from the description file the repo's own agent writes into the shared tmp/ store; when there is none, or it was written before the branch's last commit, `forge.prDescriptionPrompt` is run as a headless Claude Code session in that clone to write one. IT OPENS A DRAFT: pass --ready to open it ready for review, which notifies its reviewers.\n\nA branch origin lacks, or has without its latest commits, is pushed first, as `hangar push` would -- after the confirmation, never forced; a diverged one is refused.\n\nThe clone comes from where the command is run: inside a clone the argument may be left out, and naming a DIFFERENT clone is refused.",
   )
   .argument('[clone]', 'clone name or index — defaults to the clone you are in')
   .option('--onto <branch>', 'target branch (default: the repo default branch)')
@@ -973,7 +974,7 @@ pr.command('create')
 pr.command('update')
   .summary('Rewrite the title, description or draft state of your OWN pull request')
   .description(
-    "Replaces the title and description of the pull request open for this clone's branch, from the same description file `pr create` uses.\n\nONLY ON PULL REQUESTS YOU OPENED. Bitbucket lets anyone with write access rewrite anyone's; this refuses unless the token owner is the author, and refuses too when it cannot tell whose it is.\n\nThe draft state is left exactly as it is unless --draft or --ready says otherwise. --keep-title and --keep-body each hold one half back.",
+    "Replaces the title and description of the pull request open for this clone's branch, from the same description file `pr create` uses.\n\nONLY ON PULL REQUESTS YOU OPENED. Bitbucket lets anyone with write access rewrite anyone's; this refuses unless the token owner is the author, and refuses too when it cannot tell whose it is.\n\nThe draft state is left exactly as it is unless --draft or --ready says otherwise. --keep-title and --keep-body each hold one half back.\n\nUnpushed commits on the branch are pushed first, as `hangar push` would -- after the confirmation, never forced; a branch behind or diverged from origin is said and left alone.",
   )
   .argument('[clone]', 'clone name or index — defaults to the clone you are in')
   .option('--title <text>', "use this title instead of the description file's heading")
@@ -988,6 +989,19 @@ pr.command('update')
   .option('-n, --dry-run', 'say what would change, change nothing')
   .action(async (clone: string | undefined, options) => {
     await prUpdate(requireHangar(), clone, options);
+  });
+
+program
+  .command('push')
+  .summary("Push a clone's branch when origin lacks it or its latest commits")
+  .description(
+    "Pushes the clone's current branch to origin, setting it as the upstream, when origin does not have the branch yet or has it without the latest commits. A fast-forward only: a branch that is behind origin has nothing to push, and one that has diverged is refused, never forced. Not the default branch.\n\n`pr create` and `pr update` do the same push themselves before they write to the forge.\n\nThe clone comes from where the command is run: inside a clone the argument may be left out, and naming a DIFFERENT clone is refused.",
+  )
+  .argument('[clone]', 'clone name or index — defaults to the clone you are in')
+  .option('-y, --yes', 'do not ask before pushing')
+  .option('-n, --dry-run', 'say what would be pushed, push nothing (it still fetches the branch)')
+  .action((clone: string | undefined, options) => {
+    push(requireHangar(), clone, options);
   });
 
 plans

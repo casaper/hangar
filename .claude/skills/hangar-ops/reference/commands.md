@@ -55,6 +55,7 @@ another name.
 | `pr refresh` | `pr_refresh_preview`, and `pr_refresh` itself | — |
 | `pr create` | `pr_create_preview` | `pr_create` (with `--no-describe` fixed — see below) |
 | `pr update` | `pr_update_preview` | `pr_update` (same) |
+| `push` | `push_preview` | `push` |
 | `resume` | `resume_list` | — |
 | `teach-rg` | `teach_rg_preview` | `teach_rg` |
 | `setup` | `setup_preview` | `setup` |
@@ -119,8 +120,9 @@ rule that cannot tell it from the report.
 | `jira-plan` | `<key>` | `-y, --yes` · `-n, --dry-run` | **act [user]** — ends what runs in the chosen clone's Claude Code window |
 | `browse` | `<ticket\|pr\|tmp> <clone>` | `-n, --dry-run` (print the URL or folder, open nothing) | act (opens a browser, or Finder on the ticket's `tmp/<KEY>` folder; `-n` is report). Nothing to open exits 1 |
 | `pr refresh` | `[clones...]` | `-a, --all` · `--force` · `-q, --quiet` · `-n, --dry-run` | act (writes a cache; the bar spawns it for you) |
-| `pr create` | `[clone]` (defaults to the clone you are in; naming ANOTHER is refused) | `--onto <branch>` · `--title <text>` · `--file <path>` · `--ready` · `--no-describe` · `--include-busy` · `-y, --yes` · `-n, --dry-run` | **act — writes to the forge.** Opens a DRAFT unless `--ready` |
-| `pr update` | `[clone]` (same rule) | `--title <text>` · `--file <path>` · `--keep-title` · `--keep-body` · `--draft` \| `--ready` · `--no-describe` · `--include-busy` · `-y, --yes` · `-n, --dry-run` | **act — writes to the forge.** Only on pull requests you opened |
+| `pr create` | `[clone]` (defaults to the clone you are in; naming ANOTHER is refused) | `--onto <branch>` · `--title <text>` · `--file <path>` · `--ready` · `--no-describe` · `--include-busy` · `-y, --yes` · `-n, --dry-run` | **act — writes to the forge.** Opens a DRAFT unless `--ready`; pushes the branch first when origin lacks it or its latest commits |
+| `pr update` | `[clone]` (same rule) | `--title <text>` · `--file <path>` · `--keep-title` · `--keep-body` · `--draft` \| `--ready` · `--no-describe` · `--include-busy` · `-y, --yes` · `-n, --dry-run` | **act — writes to the forge.** Only on pull requests you opened; pushes unpushed commits first |
+| `push` | `[clone]` (same rule) | `-y, --yes` · `-n, --dry-run` (still fetches the branch) | **act — writes to origin.** A fast-forward only: missing or ahead is pushed, behind is reported, diverged is refused |
 | `resume` | `[clone]` (defaults to the clone you are in) | `-n, --limit <count>` (default `20`, `0` = all) | report **for you** — with no tty it prints the list instead of the picker; at a terminal it launches `claude --resume` |
 | `add-clone` | — | `--no-install` (+ a hidden `--remote <url>`) | **act [user]**, no `-n` |
 | `install` | `[clone]` | `--all` · `-n, --dry-run` | **act [user]** |

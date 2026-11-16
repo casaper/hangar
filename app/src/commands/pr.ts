@@ -16,7 +16,8 @@ import {
 import { humanMs, runHeadlessClaude } from '../claude-headless.ts';
 import { requireDefaultBranch, tryDefaultBranch } from '../config/default-branch.ts';
 import { CliError } from '../exec.ts';
-import { currentBranch, DETACHED, git, gitTry, refExists } from '../git.ts';
+import { currentBranch, DETACHED, gitTry } from '../git.ts';
+import { describePush, originState, pushBranch, pushes, type OriginState } from '../push.ts';
 import {
   cloneAt,
   cloneForCwd,
@@ -259,8 +260,12 @@ export type PrBlock =
   | { readonly kind: 'no-forge' }
   | { readonly kind: 'detached' }
   | { readonly kind: 'default-branch'; readonly branch: string }
-  | { readonly kind: 'not-on-origin'; readonly branch: string }
-  | { readonly kind: 'unpushed'; readonly branch: string; readonly ahead: number };
+  | {
+      readonly kind: 'diverged';
+      readonly branch: string;
+      readonly ahead: number;
+      readonly behind: number;
+    };
 
 export type PrBlockFacts = {
   readonly bitbucket: boolean;
@@ -284,20 +289,26 @@ export const prCommonBlock = (facts: PrBlockFacts): PrBlock | undefined => {
 };
 
 /**
- * `create`'s own two, on top of the shared ones.
+ * `create`'s own one, on top of the shared ones: a branch that has diverged from origin.
  *
- * Both are about origin rather than about the forge, and both are refusals rather than warnings.
- * A branch origin does not have cannot be a pull request's source at all. A branch origin has
- * WITHOUT its latest commits is worse than that: the pull request opens, looks complete, and is
- * missing exactly the work the description describes -- and nothing on the page says so.
+ * A branch origin lacks, or has without its latest commits, is pushed first (`push.ts`) -- a
+ * pull request opened from it would otherwise be missing exactly the work its description
+ * describes, and nothing on the page would say so. A diverged one cannot be pushed without a
+ * force, which is never this command's to choose, so that one stays a refusal.
  */
 export const prCreateBlock = (
-  facts: PrBlockFacts & { readonly onOrigin: boolean; readonly ahead: number },
+  facts: PrBlockFacts & { readonly origin: OriginState },
 ): PrBlock | undefined => {
   const common = prCommonBlock(facts);
   if (common !== undefined) return common;
-  if (!facts.onOrigin) return { kind: 'not-on-origin', branch: facts.branch };
-  if (facts.ahead > 0) return { kind: 'unpushed', branch: facts.branch, ahead: facts.ahead };
+  if (facts.origin.plan === 'diverged') {
+    return {
+      kind: 'diverged',
+      branch: facts.branch,
+      ahead: facts.origin.ahead,
+      behind: facts.origin.behind,
+    };
+  }
   return undefined;
 };
 
@@ -317,17 +328,10 @@ export const describePrBlock = (clone: string, block: PrBlock): Refusal => {
       return {
         line: `${clone}: on the default branch (${block.branch}) — nothing to open a pull request from`,
       };
-    case 'not-on-origin':
+    case 'diverged':
       return {
-        line: `${clone}: origin has no branch ${block.branch}`,
-        // Not offered as something to do for you: pushing is the user's own action, which is
-        // this fleet's rule rather than this command's caution.
-        hint: `Push it first: git -C ${clone} push -u origin ${block.branch}`,
-      };
-    case 'unpushed':
-      return {
-        line: `${clone}: ${String(block.ahead)} commit(s) on ${block.branch} are not on origin`,
-        hint: `A pull request opened now would be missing them. Push first: git -C ${clone} push`,
+        line: `${clone}: ${block.branch} has diverged from origin (${String(block.ahead)} commit(s) here, ${String(block.behind)} there)`,
+        hint: 'A push would need --force, which hangar never chooses. Bring the two together first -- `hangar sync` -- or push it yourself.',
       };
   }
 };
@@ -463,7 +467,7 @@ export type PrUpdateOptions = {
  * above: this is the one command whose mistake is published, and the fleet's own rule is that a
  * session works in the clone it is in.
  */
-const forgeClone = (hangar: Hangar, ref: string | undefined, command: string): Clone => {
+export const forgeClone = (hangar: Hangar, ref: string | undefined, command: string): Clone => {
   const here = cloneForCwd(hangar);
   const asked = ref === undefined ? undefined : requireClone(hangar, ref);
   const choice = prCloneChoice(here?.index, asked?.index);
@@ -711,20 +715,9 @@ export const prCreate = async (
   const common = prCommonBlock(facts);
   if (common !== undefined) throw refuse(clone.name, common);
 
-  /*
-   * Fetched before origin is judged, on the dry run too. `onOrigin` and `ahead` read
-   * remote-tracking refs, and a stale one is exactly the wrong answer here: it would report a
-   * branch as unpushed that was pushed an hour ago, or -- far worse -- as pushed when the last
-   * three commits are local. Only refs under `refs/remotes` move; no local branch and no file in
-   * the working tree is touched, which is what makes it acceptable under `-n`.
-   */
-  const fetched = git(clone.path, ['fetch', '--quiet', 'origin', branch]);
-  const onOrigin = fetched.ok || refExists(clone.path, `origin/${branch}`);
-  const ahead = Number.parseInt(
-    gitTry(clone.path, ['rev-list', '--count', `origin/${branch}..HEAD`]) ?? '0',
-    10,
-  );
-  const block = prCreateBlock({ ...facts, onOrigin, ahead: Number.isFinite(ahead) ? ahead : 0 });
+  // Fetched first, on the dry run too (`originState` says why); only `refs/remotes` moves.
+  const origin = originState(clone, branch);
+  const block = prCreateBlock({ ...facts, origin });
   if (block !== undefined) throw refuse(clone.name, block);
 
   const repo = repoRef(hangar, clone.path);
@@ -757,6 +750,7 @@ export const prCreate = async (
   if (outcome.kind === 'would-regenerate') {
     note(`${clone.name}: would write a description first, then open a pull request`);
     note(`  ${describeDescriptionState(outcome.state, tildify(hangar.paths.tmp)).line}`);
+    if (pushes(origin.plan)) note(`  first: ${describePush(branch, origin)}`);
     note(`  into:  ${destination}`);
     note(`  state: ${draft ? 'draft' : 'ready for review'}`);
     note('(dry run — nothing was written and no run was started)');
@@ -773,6 +767,7 @@ export const prCreate = async (
   };
 
   step(`${clone.name}: open a pull request from ${branch}`);
+  if (pushes(origin.plan)) note(`first:       ${describePush(branch, origin)}`);
   note(`title:       ${text.title}`);
   note(`into:        ${destination}`);
   note(`description: ${text.from} (${bodyLines(text.body)})`);
@@ -793,6 +788,10 @@ export const prCreate = async (
     return;
   }
 
+  if (pushes(origin.plan)) {
+    pushBranch(clone, branch);
+    ok(`${clone.name}: pushed ${branch}`);
+  }
   const created = await createPullRequest(hangar, repo, asked);
   if (!created.ok) {
     throw new CliError(`${clone.name}: Bitbucket refused the pull request: ${created.reason}`);
@@ -885,6 +884,9 @@ export const prUpdate = async (
     defaultBranch: tryDefaultBranch(hangar),
   });
   if (common !== undefined) throw refuse(clone.name, common);
+  // Read before anything is asked of Bitbucket, and fetched on the dry run too. A branch that is
+  // behind or has diverged is no reason to refuse a rewrite of the text: it is said, not pushed.
+  const origin = originState(clone, branch);
 
   const keepTitle = opts.keepTitle === true;
   const keepBody = opts.keepBody === true;
@@ -964,6 +966,8 @@ export const prUpdate = async (
   };
 
   step(`${clone.name}: rewrite #${String(found.id)} (${branch} → ${current.pr.destination})`);
+  if (pushes(origin.plan)) note(`first:       ${describePush(branch, origin)}`);
+  else if (origin.plan !== 'up-to-date') warn(`${clone.name}: ${describePush(branch, origin)}`);
   note(
     `title:       ${edit.title === current.pr.title ? `${edit.title} (unchanged)` : edit.title}`,
   );
@@ -997,6 +1001,10 @@ export const prUpdate = async (
     return;
   }
 
+  if (pushes(origin.plan)) {
+    pushBranch(clone, branch);
+    ok(`${clone.name}: pushed ${branch}`);
+  }
   const written = await setPullRequest(hangar, repo, found.id, edit);
   if (!written.ok) {
     throw new CliError(`${clone.name}: Bitbucket refused the update: ${written.reason}`);

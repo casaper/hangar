@@ -146,10 +146,10 @@ export const keyHelpLines = (table: readonly HangarKey[]): string[] => {
 /**
  * A command the palette offers that has no key of its own, built into every hangar.
  *
- * **Reports, plus two acting rows named by `acts`.** A report is what an MCP exposure that does
- * not act would be (`test/keys-palette.test.ts` holds each to one). The two that act are the
- * person's own, chosen from a list rather than typed: opening or rewriting this branch's pull
- * request, and reloading this clone. Nothing else that moves a tree, a server or a session is
+ * **Reports, one picker, plus three acting rows named by `acts`.** A report is what an MCP
+ * exposure that does not act would be (`test/keys-palette.test.ts` holds each to one). The three
+ * that act are the person's own, chosen from a list rather than typed: opening or rewriting this
+ * branch's pull request, pushing it, and reloading this clone. Nothing else that moves a tree, a server or a session is
  * here -- those stay typed, where the line is read before Enter.
  */
 export type PaletteCommand = {
@@ -211,6 +211,15 @@ export const PALETTE_ONLY: readonly PaletteCommand[] = [
     name: 'update-pr',
     does: "open this branch's pull request, or rewrite the one it has (no confirmation)",
     argv: ['key', 'pr'],
+    clone: true,
+    waits: true,
+    acts: true,
+    vscode: 'output',
+  },
+  {
+    name: 'push',
+    does: 'push this branch when origin lacks it or its latest commits, never forced (no confirmation)',
+    argv: ['push', '-y'],
     clone: true,
     waits: true,
     acts: true,
