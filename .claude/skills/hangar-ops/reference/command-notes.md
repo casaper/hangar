@@ -100,7 +100,10 @@ tool is the separate `<thing>_preview`.
   is worth LOOKING at rather than killing: something is asking.
 - **`open` leaves each clone on the branch it has unless told otherwise.** `-c` fetches and puts
   it on the default branch, up to date; `--branch <name>` on that one. `--include-busy` only
-  governs that checkout, so it is refused without one of the two.
+  governs that checkout, so it is refused without one of the two. Either flag degrades rather than
+  refuses: a clone whose tree it will not touch — uncommitted work, a half-applied rebase, or a
+  live session it was not cleared to move (asked about for one clone, skipped in a sweep) — is
+  opened on the branch it has, with a warning, because the developer asked for their window.
 - **`open --resume-last` resumes the clone's last Claude Code session, but only in a window it
   creates.** On a clone that is already open it changes nothing and names `hangar resume <n>`.
   Where it cannot resume (no session, its directory gone, or a `claude` possibly still running

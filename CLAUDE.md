@@ -172,13 +172,9 @@ only ever fast-forwards — a default branch that has diverged from origin is re
 that outside `sync`: instead it asks the human, and that question is the only protection, so a
 clone whose branch changed under it was authorised by somebody at a terminal.
 
-**`hangar open <n>` opens one window for that clone, on the branch it already has.** The window
-is your terminal emulator's, attached to that clone's own tmux session — one tmux window per
-configured role. **`-c` moves a branch on the way**: the clone is fetched and put on its default
-branch, up to date, before any window opens, and `--branch <name>` puts it on that branch instead.
-Either one degrades rather than refuses: a clone whose tree it will not touch — uncommitted work,
-a half-applied rebase, a live session — is opened on the branch it has, with a warning, because
-the developer asked for their window.
+**`hangar open <n>` opens a window on that clone's tmux session, and `-c` or `--branch` moves its
+branch first** — never a tree with uncommitted work or a half-applied rebase, and one with a live
+session only when the user confirms or passes `--include-busy`.
 
 **A `SYNC PAUSE` line in your input is real, and it is not the user typing.** There is no CLI
 mechanism to message a running interactive session, so `sync` finds the session's tty and writes

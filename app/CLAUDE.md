@@ -73,24 +73,11 @@ a low-entropy pasted password that the second one catches (`hangar-internals/ref
 has the canary). Both also run in `app/.husky/pre-commit` and inside `hangar dev release`.
 
 **A dependency sweep is targeted, never a bare `pnpm update` of the manifest.** The
-`hangar-updates` skill runs one end to end, and `pnpm deps:survey` measures it. The floor is
-`minimumReleaseAge` in `pnpm-workspace.yaml`, and what else a sweep has to know:
-
-- `pnpm add <pkg>@<ver>` per package; `savePrefix: ''` rewrites a caret to an exact pin, so put
-  it back by hand when the bump should not change the range. A bare `pnpm update` is the
-  transitive sweep and leaves the manifest alone (pnpm 12 rejects `--depth Infinity`).
-- `pnpm outdated` compares only against `latest`, so check peer ceilings by hand:
-  `typescript` is held by `typescript-eslint`'s `typescript` peer, and pnpm installs across a
-  violated peer with a warning, not an error.
-- `@types/node` tracks the runtime major in `.nvmrc`, not the registry.
-- The `packageManager` pin ignores the floor: check pnpm's own publish dates with
-  `npm view pnpm time`.
-- The `conventional-commits-parser` unmet-peer warning is pre-existing: it comes from the
-  deprecated `conventional-changelog-cli` chain, and it clears only when that CLI is replaced.
-- An audit fix waits on the floor too: `npm view <pkg> time --json` gives the patched version's
-  publish date, and that date plus 14 days is when the fix can be installed.
-
-A zod bump also needs `hangar config schema --check`. The commit is `chore(deps)`.
+`hangar-updates` skill runs one end to end — `pnpm add` per package, peer ceilings, the
+`minimumReleaseAge` floor in `pnpm-workspace.yaml`, audit fixes, the standing peer warning — and
+`pnpm deps:survey` measures it. Even for a one-package bump, load the skill rather than working
+from memory. The one fact it does not carry: the `packageManager` pin ignores the floor, so
+check pnpm's own publish dates with `npm view pnpm time`. The commit is `chore(deps)`.
 
 `pnpm` is not assumed to be on PATH: the hangar root's `.envrc` runs `hangar_use_pnpm` (defined
 in `.envrc.hangar`), which has corepack write its shims into the gitignored `.hangar/pnpm-bin/`
@@ -102,6 +89,8 @@ almost always that direnv has not loaded: run `direnv allow` at the hangar root.
 **Prefer bullet lists to wide tables in any CLAUDE.md under `app/`.** `format:check` pads every row
 to the widest cell, so one long cell inflates the whole table, and a wide
 code-by-role table runs to ~14k characters, mostly spaces. Keep table cells short.
+
+### Shell and guard traps
 
 **`hangar_use_gnu` puts GNU coreutils first on PATH, so `sed -i` takes no `''` argument.** The
 BSD spelling fails partway through a multi-file edit, and a half-edited `src/**` is live at once
@@ -138,6 +127,8 @@ and a multi-GB `tmp/`, and `grep -r` over one runs past the Bash timeout.
 **`hangar scrub` scans `tmp/` only; hangar text in a clone's tracked agent files is one grep away**:
 `git -C <clone> grep -n -i -E 'hangar|sibling clone' -- CLAUDE.md AGENTS.md '.claude/**'`.
 Report what it finds; fixing it is clone work, on a branch.
+
+### Traps in the code itself
 
 **Every `SessionEnd` hook runs once per clone, and `reload`/`down` start them all at the same
 moment** — anything a hook runs must survive a twin over the same shared files. The locks that
