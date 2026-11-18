@@ -359,6 +359,38 @@ export const processTable = (): Map<number, ProcessRow> => {
   return table;
 };
 
+/**
+ * The live session that started this process, walking up from `startPid`, or undefined. PURE.
+ *
+ * A command a clone session runs through its own Bash tool must not type SYNC PAUSE into that
+ * same session: the line lands in its prompt as queued input while it is still waiting on the
+ * command, and the pause would then outlive the very run it was announcing. The chain is
+ * `bin/hangar` (sh) -> the tool's shell -> `claude`, so a bound of 32 steps is generous; it
+ * exists for a table whose parents loop, which `ps` can print mid-reparent.
+ */
+export const callerSession = <S extends { readonly pid: number }>(
+  table: ReadonlyMap<number, ProcessRow>,
+  startPid: number,
+  sessions: readonly S[],
+): S | undefined => {
+  const byPid = new Map(sessions.map((s) => [s.pid, s] as const));
+  let pid: number | undefined = startPid;
+  for (let step = 0; step < 32 && pid !== undefined && pid > 1; step += 1) {
+    const hit = byPid.get(pid);
+    if (hit !== undefined) return hit;
+    pid = table.get(pid)?.ppid;
+  }
+  return undefined;
+};
+
+/** The clone's live sessions, less the one this command is running inside, if any. */
+export const sessionsBesidesCaller = (clonePath: string): ClaudeSession[] => {
+  const all = claudeSessionsIn(clonePath);
+  if (all.length === 0) return all;
+  const caller = callerSession(processTable(), process.pid, all);
+  return all.filter((s) => s !== caller);
+};
+
 /** Where a branch that scopes its pid files per clone writes them. */
 export const pidDirIn = (clonePath: string): string =>
   join(clonePath, 'tmp', `_${basename(clonePath)}`);

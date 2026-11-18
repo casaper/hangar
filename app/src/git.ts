@@ -381,6 +381,20 @@ export const conflictedFiles = (repo: string): string[] => {
 };
 
 /**
+ * Mark resolved paths as no longer unmerged, leaving their content UNSTAGED.
+ *
+ * A conflicted `stash apply` leaves its paths unmerged until something stages them, and
+ * `conflictedFiles` keeps naming them however well the markers were resolved. Staging alone
+ * would hand the developer a fully staged file they never staged; `reset -- <paths>` straight
+ * after puts the index entry back to HEAD's, which is what an unstaged change is. Measured on
+ * git 2.56: `add` then `reset -q -- p` takes `UU p` to ` M p` with the content untouched.
+ */
+export const settleResolved = (repo: string, paths: readonly string[]): boolean => {
+  if (paths.length === 0) return true;
+  return git(repo, ['add', '--', ...paths]).ok && git(repo, ['reset', '-q', '--', ...paths]).ok;
+};
+
+/**
  * The paths `status --porcelain=v1 -z` names that can still be opened: staged, unstaged and
  * untracked, each once, in git's order. PURE.
  *

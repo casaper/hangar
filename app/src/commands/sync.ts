@@ -14,13 +14,14 @@ import {
   inProgressOperation,
   refExists,
   remotes,
+  settleResolved,
   syncStashes,
   syncState,
   SYNC_STASH_LABEL,
   type StashEntry,
 } from '../git.ts';
 import { tmuxServer, tmuxSocketName } from '../tmux.ts';
-import { claudeSessionsIn, type ClaudeSession } from '../procs.ts';
+import { claudeSessionsIn, sessionsBesidesCaller, type ClaudeSession } from '../procs.ts';
 import { refreshPullRequest } from '../pr-cache.ts';
 import { readPrTarget, recordPrTarget } from '../pr-target.ts';
 import { resolveWithClaude } from '../resolve-conflicts.ts';
@@ -748,7 +749,9 @@ const leftovers = (hangar: Hangar, state: TreeAfterSync): string =>
 const syncOne = async (hangar: Hangar, clone: Clone, opts: SyncOptions): Promise<boolean> => {
   heading(`Syncing ${cloneLabel(clone)}`);
 
-  const sessions = claudeSessionsIn(clone.path);
+  // Never the session running this command: run from a clone session's own Bash tool, the
+  // pause would be typed into the prompt of the very session waiting for this to return.
+  const sessions = sessionsBesidesCaller(clone.path);
   const branch = currentBranch(clone.path);
 
   // Refuse to start on top of a half-applied rebase or merge. Step 2 would `git stash push`
@@ -946,7 +949,11 @@ const integrate = async (
       git(clone.path, ['stash', 'drop']);
       ok('re-applied your changes and dropped the stash');
     } else {
+      // Read BEFORE the resolver runs: once it has removed the markers, nothing but the index
+      // still says which paths were unmerged, and those are the ones to settle.
+      const unmerged = conflictedFiles(clone.path);
       const outcome = await resolveWithClaude(clone.path, 'stash apply', strategy.target.ref);
+      if (outcome.resolved) settleResolved(clone.path, unmerged);
       if (outcome.resolved && conflictedFiles(clone.path).length === 0) {
         ok('re-applied your changes (conflicts resolved)');
         warn('the stash was KEPT — verify the result, then `git stash drop`');
