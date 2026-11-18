@@ -62,22 +62,32 @@ test('staging comes back only where the stash index still describes HEAD', () =>
   );
 });
 
-test('a test run inside the clone blocks a stash; a report server or a sibling does not', () => {
+test('a test run inside the clone blocks a stash; a server or a sibling does not', () => {
   const rows = [
     row(1, 0, 'node /x/node_modules/.bin/playwright test spec.ts'),
     row(2, 0, 'node /x/node_modules/.bin/playwright show-report'),
     row(3, 0, 'node /x/node_modules/.bin/vitest run'),
     row(4, 0, 'node ng serve'),
+    // Long-lived servers that never exit on their own: an editor's test server, the session's
+    // own Playwright MCP, and a browser one of them launched.
+    row(5, 0, 'node angular/node_modules/@playwright/test/cli.js test-server -c pw.config.ts'),
+    row(6, 0, 'node /x/node_modules/@playwright/mcp/cli.js --config /x/playwright-mcp.config.json'),
+    row(7, 0, '/cache/ms-playwright/chromium-1200/chrome --headless'),
+    row(8, 0, 'node /x/node_modules/@playwright/test/cli.js test --project mcp'),
   ];
   const cwds = new Map([
     [1, '/h/wt-001/angular'],
     [2, '/h/wt-001'],
     [3, '/h/wt-0010'],
     [4, '/h/wt-001'],
+    [5, '/h/wt-001'],
+    [6, '/h/wt-001'],
+    [7, '/h/wt-001'],
+    [8, '/h/wt-001'],
   ]);
   assert.deepEqual(
     busyRunners(rows, cwds, '/h/wt-001').map((r) => r.pid),
-    [1],
+    [1, 8],
   );
 });
 

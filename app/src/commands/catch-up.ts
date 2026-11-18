@@ -196,9 +196,16 @@ export const restageDecision = (path: {
   return path.inHead ? 'unstage' : 'leave';
 };
 
-/** Test runners whose cwd is inside the clone, and which write into it while they run. PURE. */
+/**
+ * Test runners whose cwd is inside the clone, and which write into it while they run. PURE.
+ *
+ * A long-lived server only names a runner: an editor's `playwright test-server`, the session's
+ * own `@playwright/mcp` and the browsers under `ms-playwright/` never exit on their own, so
+ * counting them refused nearly every catch-up until somebody killed them by hand.
+ */
 const RUNNER = /\b(playwright|vitest|jest|karma|cypress)\b/;
-const NOT_A_RUN = /\b(show-report|show-trace|merge-reports|codegen)\b|--ui\b/;
+const NOT_A_RUN =
+  /\b(show-report|show-trace|merge-reports|codegen|test-server|run-server|run-driver|launch-server)\b|--ui\b|@playwright\/mcp\/|ms-playwright\//;
 
 const isRunnerCommand = (command: string): boolean =>
   RUNNER.test(command) && !NOT_A_RUN.test(command);

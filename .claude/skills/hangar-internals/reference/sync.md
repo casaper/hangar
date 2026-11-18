@@ -205,7 +205,11 @@ below follows from that.
   3 is "already on origin or has a pull request — nothing changed", 4 is "conflicts, resolve and
   `--continue`", 5 is "a test runner has its cwd in the clone". The last one exists because a
   stopped agent's runner can outlive it, and stashing a tree something is still writing results
-  into loses them.
+  into loses them. A long-lived server that only names a runner does not count: an editor's
+  `playwright test-server`, a session's own `@playwright/mcp` and the browsers under
+  `ms-playwright/` never exit, and counting them refused nearly every run until the developer
+  killed them by hand. The skill ends a real runner that outlives a short wait itself, because
+  the rebase invalidates its results anyway.
 - **Published branches are refused, not rebased.** Origin is asked live with `ls-remote` (a stale
   remote-tracking ref answers both ways wrongly), and the forge for an open pull request. Rewriting
   a published branch is the person's call, made through `pr rebranch`.
