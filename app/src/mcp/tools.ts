@@ -230,6 +230,13 @@ export const EXPOSURES: readonly Exposure[] = [
     lede: `${previewLede} Says which fields would change and whether the branch would be pushed first, and rewrites nothing. It DOES fetch the branch from origin, for the same reason pr_create_preview does.`,
   },
   {
+    name: 'pr_rebranch_preview',
+    path: ['pr', 'rebranch'],
+    fixed: [PREVIEW],
+    acts: false,
+    lede: `${previewLede} Checks the new name and lists the pull request it would decline, the origin branch it would delete and the rename, and changes nothing.`,
+  },
+  {
     name: 'push_preview',
     path: ['push'],
     fixed: [PREVIEW],
@@ -434,6 +441,8 @@ export const EXPOSURES: readonly Exposure[] = [
     fixed: ['--no-describe'],
     acts: true,
   },
+  // Writes to the forge and deletes on origin, though it publishes nothing.
+  { name: 'pr_rebranch', path: ['pr', 'rebranch'], hides: [PREVIEW], acts: true },
   {
     name: 'pr_target_set',
     path: ['pr', 'target'],
@@ -659,6 +668,10 @@ export const argvFor = (
  *
  * `mcp` is this server, which has no business calling itself.
  *
+ * - **`catch-up`** rebases the clone the CALLING session is in and hands the conflicts back to
+ *   that session, which resolves them with its own repo's tooling. Operator mode is in no clone,
+ *   so a tool would be a command that can only refuse, and a clone session reaches it through
+ *   Bash, from the skill the developer invoked.
  * - **`key …`** is the far end of a tmux key in a clone's session: it reports onto the bar of
  *   whoever is attached there, and its pickers and help wait on a terminal a tool call does not
  *   have. Each action is also a command a tool already covers or a person types, so a tool would
@@ -666,6 +679,7 @@ export const argvFor = (
  */
 export const NOT_EXPOSED: readonly string[] = [
   'up',
+  'catch-up',
   'down',
   'exec',
   'dev golden',

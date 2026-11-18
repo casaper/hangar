@@ -64,6 +64,8 @@ import {
 import { status } from './commands/status.ts';
 import { teachRg } from './commands/teach-rg.ts';
 import { forcedStrategy, sync } from './commands/sync.ts';
+import { catchUp } from './commands/catch-up.ts';
+import { rebranch } from './commands/rebranch.ts';
 import { tmpMerge } from './commands/tmp.ts';
 import { syncEditor } from './commands/vscode.ts';
 import type { EditorKind } from './editor/index.ts';
@@ -476,6 +478,26 @@ program
       ...options,
       strategy: options.strategy ?? forcedStrategy(process.argv),
     });
+  });
+
+program
+  .command('catch-up')
+  .summary(
+    'Rebase the unpublished branch you are on onto its target, keeping your uncommitted diff',
+  )
+  .description(
+    [
+      'Stash the uncommitted diff, fetch, rebase onto what the branch will be merged into, and put the diff back -- staged as it was wherever that still applies. Meant to be run by the clone session itself: every other session in the clone is paused, the caller is not.',
+      'Every conflict comes back to the caller rather than to a headless resolver: exit 4 lists the files, and `--continue` carries on once they are resolved. Exit 3 means the branch is already on origin or has a pull request, and nothing was changed; exit 5 means a test run is still writing into the clone. `--abort` puts everything back.',
+    ].join('\n\n'),
+  )
+  .argument('[clone]', 'clone name, e.g. clone_02 (or just 2); defaults to the clone you are in')
+  .option('--continue', 'carry on after resolving the conflicts the last run stopped on')
+  .option('--abort', 'abandon the catch-up and put the branch and the diff back as they were')
+  .option('--onto <ref>', 'rebase onto this ref instead of the pull-request target')
+  .option('-n, --dry-run', 'show the target and what would be stashed, and change nothing')
+  .action(async (clone, options) => {
+    process.exitCode = await catchUp(requireHangar(), clone, options);
   });
 
 program
@@ -1002,6 +1024,19 @@ pr.command('update')
   .option('-n, --dry-run', 'say what would change, change nothing')
   .action(async (clone: string | undefined, options) => {
     await prUpdate(requireHangar(), clone, options);
+  });
+
+pr.command('rebranch')
+  .summary('Decline the pull request, delete the branch on origin and rename it locally')
+  .description(
+    "For rewriting a branch that is already published where force-pushes are restricted: declines the branch's open pull request, deletes the branch on origin, and renames the local branch to --to <name>, carrying its ticket binding, its stored PR target and a commit-gate lock with it. A new name is needed because the forge would revive the deleted branch, pull request included, under the old one.\n\nThe new name must keep the prefix and the ticket key, and must not add words that say what was done (`new`, `v2`, `recreate`, a trailing number).\n\nIt publishes nothing: pushing the new name and opening a pull request are left to you.",
+  )
+  .argument('[clone]', 'clone name or index — defaults to the clone you are in')
+  .requiredOption('--to <name>', 'the new branch name')
+  .option('-y, --yes', 'do not ask before declining, deleting and renaming')
+  .option('-n, --dry-run', 'check the name and say what would happen, change nothing')
+  .action(async (clone: string | undefined, options) => {
+    await rebranch(requireHangar(), clone, options);
   });
 
 program

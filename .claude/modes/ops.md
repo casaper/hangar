@@ -71,8 +71,10 @@ work. The shell is still there for whatever the tools do not cover. **The two ex
 `add-clone`:** run them through Bash in the background, never as the `sync` or `add_clone` tool,
 because a tool call has no long timeout (the skill has the reason).
 
-**Three of those tools write outside this machine.** `push` puts the clone's branch on origin,
-and `pr_create` and `pr_update` push it the same way before they write to Bitbucket. A push is
+**Four of those tools write outside this machine.** `push` puts the clone's branch on origin,
+and `pr_create` and `pr_update` push it the same way before they write to Bitbucket.
+`pr_rebranch` publishes nothing but declines a pull request and deletes its branch on origin;
+it is meant for the clone's own session, through a skill the user invokes there. A push is
 never forced, and the previews say whether one would happen. The two `pr` tools' mistakes are the only ones a stranger sees: a pull request is on somebody's
 review queue the moment it exists, and one opened `--ready` has notified its reviewers before you
 read the result. Preview first, like everything else — and then read the preview's title line back

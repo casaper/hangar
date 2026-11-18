@@ -55,6 +55,7 @@ another name.
 | `pr refresh` | `pr_refresh_preview`, and `pr_refresh` itself | — |
 | `pr create` | `pr_create_preview` | `pr_create` (with `--no-describe` fixed — see below) |
 | `pr update` | `pr_update_preview` | `pr_update` (same) |
+| `pr rebranch` | `pr_rebranch_preview` | `pr_rebranch` |
 | `push` | `push_preview` | `push` |
 | `pr target` | `pr_target` | `pr_target_set` (`set` or `clear`) |
 | `resume` | `resume_list` | — |
@@ -86,8 +87,10 @@ writes a cache file, so it acts; but the clone bar spawns exactly this, detached
 record passes `forge.prCacheTtlSeconds`, and asking you to approve what happens unattended twenty
 times a minute would be theatre. The next redraw would rewrite what it wrote.
 
-**Besides `exec` (above) and `mcp` itself, five commands have no tool, and none of them is an
-oversight.** `up` refuses whenever
+**Besides `exec` (above) and `mcp` itself, six commands have no tool, and none of them is an
+oversight.** `catch-up` rebases the clone its CALLER is in and hands the conflicts back to that
+session, so from operator mode, which is in no clone, it could only refuse — and the Bash form is
+denied to you. `up` refuses whenever
 `$CLAUDECODE` is set, so the tool could only ever fail — and it is the escalation boundary.
 `down` refuses there too, and would end your own session with every other one.
 `dev release` pushes and cuts a version, and its confirmation fails closed, so the only form that
@@ -113,6 +116,7 @@ rule that cannot tell it from the report.
 | `status` | `[clone]` (defaults to every clone) | `-a, --all` · `-f, --fetch` | report (`--fetch` reaches the network, touches no tree) |
 | `sync` | `[clone]` | `-a, --all` · `-n, --dry-run` · `--no-session-notify` · `--include-busy` · `--onto <ref>` · `--strategy <rebase\|merge>` | **act [user]** |
 | `merge-default`, `rebase-default` | — | aliases of `sync`, identical options | **act [user]** |
+| `catch-up` | `[clone]` (defaults to the clone you are in; naming ANOTHER is refused) | `--continue` · `--abort` · `--onto <ref>` · `-n, --dry-run` | **act — a clone session's, through the `catch-up-default` skill.** Stash, fetch, rebase onto the PR target, re-apply with the staging kept. Exits 3 when the branch is published (nothing changed), 4 on conflicts for the caller to resolve, 5 while a test run writes into the clone |
 | `checkout-default` (alias `checkout`) | `[clone]` | `-a, --all` · `-n, --dry-run` · `--include-busy` | **act [user]** |
 | `open` | `[clones...]` | `--all` · `--no-claude` · `-r, --resume-last` (not with `--no-claude`) · `-e, --editor` · `--tab` (default) \| `--window` · `-c, --checkout` · `-b, --branch <name>` · `--include-busy` (only with `-c` or `-b`) · `-n, --dry-run` | **act [user]** |
 | `edit` | `[clones...]` | `--all` · `-n, --dry-run` | **act [user]** |
@@ -123,6 +127,7 @@ rule that cannot tell it from the report.
 | `pr refresh` | `[clones...]` | `-a, --all` · `--force` · `-q, --quiet` · `-n, --dry-run` | act (writes a cache and the branch's stored PR target; the bar spawns it for you) |
 | `pr create` | `[clone]` (defaults to the clone you are in; naming ANOTHER is refused) | `--onto <branch>` · `--title <text>` · `--file <path>` · `--ready` · `--no-describe` · `--include-busy` · `-y, --yes` · `-n, --dry-run` | **act — writes to the forge.** Opens a DRAFT unless `--ready`; pushes the branch first when origin lacks it or its latest commits |
 | `pr update` | `[clone]` (same rule) | `--title <text>` · `--file <path>` · `--keep-title` · `--keep-body` · `--draft` \| `--ready` · `--no-describe` · `--include-busy` · `-y, --yes` · `-n, --dry-run` | **act — writes to the forge.** Only on pull requests you opened; pushes unpushed commits first |
+| `pr rebranch` | `[clone]` (same rule) | `--to <name>` (required) · `-y, --yes` · `-n, --dry-run` | **act — writes to the forge and deletes on origin.** Declines the open pull request, deletes the branch on origin, renames it locally (binding, PR target and gate lock move with it). Refuses a name that changes the prefix, drops the ticket or adds a give-away word. Publishes nothing |
 | `pr target` | `[clone]` (same rule) | `--set <branch>` · `--clear` | report bare; **act** with `--set`/`--clear` — the clone's own git config only |
 | `push` | `[clone]` (same rule) | `-y, --yes` · `-n, --dry-run` (still fetches the branch) | **act — writes to origin.** A fast-forward only: missing or ahead is pushed, behind is reported, diverged is refused |
 | `resume` | `[clone]` (defaults to the clone you are in) | `-n, --limit <count>` (default `20`, `0` = all) | report **for you** — with no tty it prints the list instead of the picker; at a terminal it launches `claude --resume` |

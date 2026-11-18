@@ -294,7 +294,7 @@ turns, so the session's opening git snapshot says nothing about what is still un
 **Scopes** are the subsystem: `sync` `checkout-default` `doctor` `open` `close` `reload` `edit`
 `browse` `tmp` `plans` `pr` `jira` `jira-plan` `colours` `config` `editor` `terminal` `platform`
 `setup` `add-clone` `remove-clone` `install` `resume` `ide` `status` `list` `golden` `cli` `fleet`
-`ports` `bookmarks` `modes` `exec` `servers` `allow` `waypoint` `commit-gate` `rewrite` `skills`
+`ports` `bookmarks` `catch-up` `modes` `exec` `servers` `allow` `waypoint` `commit-gate` `rewrite` `skills`
 `scrub` `teach-rg` `test` `mcp` `release` `deps` — `modes` covering `hangar up`/`down` and the
 shim, `release` being `hangar dev release`, and also the scope semantic-release gives its own
 `chore(release)` commits. That list is documented and deliberately

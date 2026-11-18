@@ -109,7 +109,7 @@ nothing". A clone session is welcome to all of them, and `plans collect` and `tm
 already run there from `SessionEnd` hooks. **Every other command acts, and is the user's, from
 the hangar root** — among them `sync` (under any of its three names), `checkout-default`, `open`,
 `jira-plan`, `edit`, `close`, `reload`, `down`, `add-clone`, `install`, `remove-clone`, `exec`,
-`push`, `pr target --set`/`--clear`,
+`push`, `pr target --set`/`--clear`, `catch-up`, `pr rebranch`,
 `servers start`, `servers kill`, `bookmarks sync`, `colours change`, `ports pin`, `ports unpin`,
 `ports take` and `doctor --fix`.
 
@@ -130,12 +130,20 @@ request's destination there, and moves it on when the target branch's own pull r
 and the branch is gone from origin, as Bitbucket retargets. `sync` and `pr create` fall back to it
 when the branch has no open pull request; `hangar pr target` shows it.
 
-**`hangar push`, `hangar pr create` and `hangar pr update` publish** — the only three commands
-that write anywhere outside this machine. `push` puts your branch on origin, and the two `pr`
-commands push it the same way before they write to the forge. All three default to the clone you
+**`hangar push`, `hangar pr create` and `hangar pr update` publish** — and with `pr rebranch`
+they are the only commands that write anywhere outside this machine. `push` puts your branch on
+origin, and the two `pr` commands push it the same way before they write to the forge. All three default to the clone you
 are in, which is what makes them tempting, and `-y` skips their confirmation. Pushing, and opening
 or rewriting a pull request, are the user's: name the command and let them run it. The same
-`PreToolUse` hook that refuses `hangar exec` refuses all three, and lets their `-n` through.
+`PreToolUse` hook that refuses `hangar exec` refuses `push`, `pr create` and `pr update`, and
+lets their `-n` through.
+
+**`hangar catch-up` and `hangar pr rebranch` are run from INSIDE a clone, but only through the
+personal skill the user invoked** — `catch-up-default` and `rebranch-pr` — never on your own
+initiative. `catch-up` stashes your diff, rebases the unpublished branch onto its target and puts
+the diff back, handing any conflict to you to resolve and `--continue`; `pr rebranch` declines the
+pull request, deletes the branch on origin and renames it. Both do inside hangar what the repo
+forbids you to type, which is why that skill — the user's request — is the only door to them.
 
 **`hangar close` and `hangar reload` both end a live Claude Code session**, which is what makes
 them the user's rather than yours. `close` kills the clone's whole tmux session and refuses when
@@ -160,7 +168,8 @@ in place, so a clone with a dev server running loses them mid-request. That make
 
 **`hangar sync <clone>` starts with a `git stash push --include-untracked`**, and the
 busy-clone skip applies only to `--all` — so naming a clone explicitly does not protect it, and a
-clone session naming its OWN index would stash the tree it is working in. It also **refuses to
+clone session naming its OWN index would stash the tree it is working in — `catch-up`, above, is
+the own-clone form. It also **refuses to
 start on a clone that is already mid-rebase or mid-merge**: finish or abort that first, or the
 half-applied state gets buried in a stash nobody thinks to look in.
 

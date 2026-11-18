@@ -7,9 +7,9 @@ form the flags are named in. Everything here is equally true of the tool that ru
 `commands.md`'s map says which — with one substitution throughout: where a note says `-n`, the
 tool is the separate `<thing>_preview`.
 
-- **`pr create` and `pr update` are the only commands that write to the FORGE**, which makes their
-  mistakes the only ones the whole team can see — and with `push` they are the only three that
-  publish at all. Five things follow:
+- **`pr create` and `pr update` are the only commands that PUBLISH to the forge**, which makes
+  their mistakes the only ones the whole team can see — and with `push` they are the only three
+  that publish at all. (`pr rebranch` writes to the forge too, but only to decline; see below.) Five things follow:
   - **The clone comes from where the command runs.** In a clone's own shell the argument may be
     left out; naming a DIFFERENT clone is refused, and from the hangar root the argument is
     required. There is no `--all` — one pull request at a time, on purpose.
@@ -98,6 +98,17 @@ tool is the separate `<thing>_preview`.
   for a signed commit, a prompt from one of the repo's own hooks — the question appears on screen
   and waits for it. There is no timeout, so a sync sitting silent after the resolver has finished
   is worth LOOKING at rather than killing: something is asking.
+- **`catch-up` is the own-clone form of a rebase, and it is a clone session's command.** The
+  session in that clone runs it through the `catch-up-default` skill. It never pauses the session
+  that ran it, never asks a question (an exit code says what happened), and leaves every conflict
+  to that session, which resolves it with the repo's own tooling and runs `--continue`. From the
+  root, the answer to "catch clone N up" is `sync N`.
+- **`sync` never types SYNC PAUSE into the session running it**, so a session naming its own
+  clone is not paused by itself. The stash is still the tree it is working in.
+- **`pr rebranch` is the one way to rewrite a published branch on a forge that restricts
+  force-pushes**: decline, delete on origin, rename. It publishes nothing — the new name reaches
+  origin only when the user pushes it. Its delete runs with `--no-verify`, because a repo's
+  `pre-push` hook may refuse every push from inside a session. Nothing else here skips that hook.
 - **`open` leaves each clone on the branch it has unless told otherwise.** `-c` fetches and puts
   it on the default branch, up to date; `--branch <name>` on that one. `--include-busy` only
   governs that checkout, so it is refused without one of the two. Either flag degrades rather than

@@ -765,3 +765,25 @@ export const setPullRequest = async (
     ? { ok: false, reason: `Bitbucket's answer for #${String(id)} could not be read` }
     : { ok: true, value: detail };
 };
+
+/**
+ * Decline one pull request. `POST /pullrequests/{id}/decline` takes no body and answers the
+ * declined pull request, of which nothing is read: what a caller needs is whether it worked.
+ *
+ * Only `hangar pr rebranch` calls it, and it declines before deleting the branch on origin --
+ * so a delete the forge refuses (a branch restriction) leaves a declined pull request that can
+ * be reopened by hand, never a deleted branch under an open one.
+ */
+export const declinePullRequest = async (
+  hangar: Hangar,
+  ref: RepoRef | undefined,
+  id: number,
+): Promise<ForgeResult<undefined>> => {
+  if (ref === undefined) {
+    return { ok: false, reason: 'forge.originUrl is not a Bitbucket repository' };
+  }
+  const res = await request(hangar, apiUrl(ref, `/pullrequests/${String(id)}/decline`), {
+    method: 'POST',
+  });
+  return res.ok ? { ok: true, value: undefined } : res;
+};

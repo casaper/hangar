@@ -85,7 +85,7 @@ export type SyncOptions = {
  */
 export type ForcedStrategy = 'rebase' | 'merge';
 
-type Strategy =
+export type Strategy =
   | { kind: 'up-to-date'; target: Target }
   | { kind: 'ff-only'; target: Target; reason: string }
   | { kind: 'rebase'; target: Target; reason: string }
@@ -99,7 +99,7 @@ type Strategy =
  * it does by definition -- and `checkout.defaultRemote=origin` is no help here: it steers
  * `git checkout` DWIM only, not `rev-parse`, `merge-base` or `rebase`.
  */
-type Target = {
+export type Target = {
   readonly branch: string;
   readonly ref: string;
   /** Where this target came from, for the one line that says so. */
@@ -129,7 +129,7 @@ type Target = {
  * for `master` comes back with `master`'s own historical PRs (`master` -> `release9`, merged in
  * 2024), which must never become a sync target.
  */
-const resolveTarget = async (
+export const resolveTarget = async (
   hangar: Hangar,
   clone: Clone,
   branch: string,
@@ -272,13 +272,13 @@ export const fetchRemotesFor = (
 };
 
 /** The sibling clones' names, as the remote names they have in `clone`. */
-const siblingNamesOf = (hangar: Hangar, clone: Clone): string[] =>
+export const siblingNamesOf = (hangar: Hangar, clone: Clone): string[] =>
   discoverClones(hangar)
     .filter((other) => other.name !== clone.name)
     .map((other) => other.name);
 
 /** The target line, printed for every sync so the base is never implicit. */
-const describeTarget = (hangar: Hangar, clone: Clone, target: Target): void => {
+export const describeTarget = (hangar: Hangar, clone: Clone, target: Target): void => {
   note(`target ${target.ref}${target.guessed ? pc.yellow(' (a guess)') : ''} — ${target.why}`);
   if (target.pr !== undefined) note(pc.dim(target.pr.url));
   // Fleet-aware, and print-only: a stacked PR targets a branch a sibling clone is working in,
@@ -298,7 +298,7 @@ const describeTarget = (hangar: Hangar, clone: Clone, target: Target): void => {
   }
 };
 
-const chooseStrategy = (clone: Clone, target: Target): Strategy => {
+export const chooseStrategy = (clone: Clone, target: Target): Strategy => {
   const ref = target.ref;
   const branch = currentBranch(clone.path);
 
@@ -590,7 +590,7 @@ export const closingMessage = (kind: Closing, strategy: Strategy, state: TreeAft
  * not all be reached, which is the right question -- a live agent is about to have its working
  * tree rebased under it and cannot be told.
  */
-const notifySessions = (
+export const notifySessions = (
   hangar: Hangar,
   sessions: readonly ClaudeSession[],
   message: string,

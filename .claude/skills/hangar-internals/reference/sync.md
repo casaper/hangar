@@ -184,6 +184,82 @@ through the same Bitbucket adapter.
   between commits is exactly when a landing that ran by default would move it to the default branch.
   `--include-busy` is refused without a landing, since it governs nothing else.
 
+## `catch-up`: a rebase run by the clone's own session
+
+`sync` is run from the hangar root at a clone; `catch-up` is run by the session INSIDE the clone,
+through the `catch-up-default` personal skill, on the branch it is working on. Every difference
+below follows from that.
+
+- **Its conflicts go back to the caller, never to the headless resolver.** The caller is a session
+  with the repo's own skills, agents and generators, and a conflict in a lockfile, a generated
+  file or a test suite only a specialist agent may edit is exactly what a `claude -p` with four
+  read-only git tools resolves wrongly. So a conflict ends the run with exit 4 and the files
+  listed, and `--continue` picks it up. That also keeps every invocation to seconds, which matters
+  because a Bash tool call has a ceiling: a resolver killed by the tool would leave the rebase
+  stopped mid-pick, the state this whole file exists to avoid.
+- **The state between invocations is a LEDGER, `<git dir>/hangar/catch-up.json`,** recording the
+  phase, the old head, the stash label, the conflicted paths and the sessions it paused. Inside the
+  git directory, so it is never stashed or tracked, and written only by hangar, so the caller is
+  never asked for permission to write it. Everything else is read back off git.
+- **Exit codes, not questions.** A tool call has no tty, so `confirm()` would decline every time:
+  3 is "already on origin or has a pull request — nothing changed", 4 is "conflicts, resolve and
+  `--continue`", 5 is "a test runner has its cwd in the clone". The last one exists because a
+  stopped agent's runner can outlive it, and stashing a tree something is still writing results
+  into loses them.
+- **Published branches are refused, not rebased.** Origin is asked live with `ls-remote` (a stale
+  remote-tracking ref answers both ways wrongly), and the forge for an open pull request. Rewriting
+  a published branch is the person's call, made through `pr rebranch`.
+- **The staging survives when it can.** `stash apply --index` first. Measured on git 2.56, it fails
+  in two different ways: a conflict in the INDEX refuses with exit 128 and touches nothing; a
+  conflict only in the work tree applies everything else, prints "Index was not unstashed", and
+  leaves what a conflicted plain apply leaves. A conflicted plain apply is worse than unstaged: it
+  leaves every cleanly merged path FULLY staged, including the half the developer never staged. So
+  after a plain apply every path is set deliberately (`restageDecision`): back to the stash's index
+  commit (`stash^2`) where HEAD's copy of the file is still the one it was staged against, unstaged
+  where the update touched it, a new file left added.
+- **The caller is never paused.** `sessionsBesidesCaller` walks the process table up from this
+  process to the `claude` that ran it and leaves that one out — typing SYNC PAUSE into the session
+  waiting on the command would queue the pause in its own prompt, to be read after the run it
+  announced. `sync` uses the same exclusion. Other sessions in the clone get the usual protocol,
+  with the closing line deferred until the catch-up finishes or is aborted, however many
+  `--continue`s that takes, because the protocol promises exactly one.
+- **`--abort` mid-rebase is `rebase --abort`; after the rebase it is `reset --hard` to the old
+  head**, then the stash is re-applied. The stash is checked to exist before anything is
+  discarded, and the untracked files a half-done apply restored are removed first, or the re-apply
+  would refuse over them.
+
+**`sync`'s own stash re-apply settles what its resolver resolved.** A conflicted `stash apply`
+leaves its paths unmerged until something stages them, and the resolver never stages, so
+without that step `conflictedFiles` names every path however well it is resolved, and a
+resolved stash conflict ends as `aborted-after-integrating`. `settleResolved` (`git add` then
+`reset -q` on those paths) marks them resolved and leaves the content unstaged; `catch-up
+--continue` uses the same helper.
+
+## `pr rebranch`: rewriting a branch the forge will not let you force-push
+
+A forge that restricts force-pushes leaves one way to rewrite a published branch: decline its pull
+request, delete the branch on origin, and publish the rewrite under ANOTHER name — Bitbucket revives
+a deleted branch, pull request included, when the same name is pushed again. `pr rebranch` does
+the first three and deliberately not the fourth: pushing the new name and opening a pull request
+stay the person's, which is why it is not on the exec guard's publish list.
+
+- **The order is the safe one.** The PR target is recorded first (after the decline nothing says
+  where the pull request was going), then the decline, then the delete. A delete the forge refuses
+  therefore leaves a declined pull request and an untouched local branch — reopenable — never an
+  open pull request whose branch is gone.
+- **The delete runs with `--no-verify`, and nothing else in this CLI does.** A repo's `pre-push`
+  hook may refuse every push from inside an agent session, and this one is made from inside one by
+  design, after the person said yes. A deletion sends no objects, so the hook has nothing else to
+  check.
+- **`branch -m` carries `branch.<old>.*`** (measured): the ticket binding and the stored PR target
+  move with it. The upstream moves too, and names the deleted branch, so it is unset.
+- **The commit gate's lock follows only a real rename** (`hangar-commit-gate follow-rename`, see
+  `root-tools.md`). Without it the gate keyed on the old name would silently stop applying.
+- **The new name is checked, not chosen** (`rebranchNameProblems`): same prefix, same ticket key,
+  no word added that says what was done (`new`, `v2`, `recreate`, `again`, a trailing number). A
+  word the old name already had is fine. Choosing the wording is the skill's job; the command only
+  refuses a bad one.
+
 ## `pr create` and `pr update`: the only writes that leave the machine
 
 `app/src/commands/pr.ts`, with `pr-description.ts` beside it for the body and `bitbucket.ts` for
