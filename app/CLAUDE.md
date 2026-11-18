@@ -632,6 +632,11 @@ More root files are hand-maintained and belong to this package rather than to th
   **A claim corrected in one prose surface is usually stated in another**: grep its key phrase
   across both `CLAUDE.md` files, `.claude/modes/*.md` and both skills before committing. The
   root file's "reach outside this machine" was also in `ops.md`.
+  **Check a behaviour claim against the code before moving or shortening it**: the root file's
+  `open` paragraph said a live session is never moved, when `open.ts` asks or takes
+  `--include-busy`.
+  **`hangar-updates` is the one skill in `app/.claude/skills/`**, not the root's: skills load
+  from the session's own project, so only developer mode sees it.
 
 **One thing that looks broken and is not: `pnpm --version` differs by directory** — corepack
 reads the nearest `packageManager`, and the root `package.json` declares none. Do not "fix" it;
