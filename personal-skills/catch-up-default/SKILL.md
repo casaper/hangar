@@ -1,7 +1,7 @@
 ---
 name: catch-up-default
 description: Invoked by /catch-up-default inside a hangar clone session. Brings the unpublished pull-request branch up to date with what it will be merged into (normally the default branch) while keeping the uncommitted diff — stops this session's running subagents, runs `hangar catch-up` (stash, fetch, rebase, re-apply with the staging kept), resolves any conflicts with the repo's own skills and agents, then resumes the stopped work after checking it still makes sense. Use when the user says the branch is behind master/main, asks to rebase or catch up their uncommitted work onto the latest default branch, or invokes the skill by name. If the branch is already pushed, it asks before handing over to rebranch-pr.
-allowed-tools: Bash(hangar catch-up:*), Bash(hangar status:*), Bash(hangar pr target:*), Bash(ps -p:*)
+allowed-tools: Bash(hangar catch-up:*), Bash(hangar status:*), Bash(hangar pr target:*), Bash(ps -p:*), Bash(kill -TERM:*)
 ---
 
 # /catch-up-default
@@ -38,9 +38,12 @@ Run `hangar catch-up` with a Bash timeout of 300000. Act on the exit code:
 
 - **0: done.** Go to step 4.
 - **5: a test run is still writing into the clone.** A stopped subagent's runner can outlive it.
-  Wait for the pids it names to exit (poll with a few short `ps -p <pid>` checks; do not loop in
-  the background), then run `hangar catch-up` again. If they do not exit, tell the user which pids
-  are blocking and stop there.
+  Dev servers, an editor's test server and MCP servers never cause this, so leave them running.
+  Check the pids it names a few times over about 30 seconds with `ps -p <pid>` (do not loop in
+  the background). If they are still running after that, end them yourself with
+  `kill -TERM <pid> ...`, because the rebase invalidates their results anyway and step 4 tells
+  every agent to rerun its tests. Then run `hangar catch-up` again. Never ask the user to stop
+  them. Report a pid only if it is still alive after `kill -TERM`, and stop there.
 - **3: the branch is already published.** It is on origin or has a pull request, and nothing was
   changed. Ask with `AskUserQuestion`, single-select:
   - "Rename the branch and catch up". The `rebranch-pr` skill declines the pull request, deletes
