@@ -21,6 +21,13 @@ rather than `hangar` subcommands, what each refuses, and how `personal-skills/` 
   test for every releasing spelling, and the script exports it with `toggleDecision` when it is
   required rather than run, so `test/personal-tools.test.ts` holds the hook's own patterns rather
   than a copy. `lock` itself is refused only while armed, below.
+  **`follow-rename` moves a lock onto the branch it was renamed to, and onto nothing else.** The
+  lock is keyed on the branch NAME, so `hangar pr rebranch`'s `git branch -m` would otherwise
+  turn the gate off silently. It moves only when the locked branch no longer exists AND the newest
+  reflog entry of the branch checked out is git's own `Branch: renamed refs/heads/<old> to
+  refs/heads/<new>` (that text does not change under `GIT_REFLOG_ACTION`, measured). Anything
+  looser would be a re-point, the escape `arm` and `lock` are denied for. `followsRename` is
+  exported with the other pure halves and held in `test/catch-up.test.ts`.
   **`arm --ticket <KEY>` is a lock for a branch that does not exist yet**, and it exists for
   `hangar jira-plan`, which starts a planning agent on the default branch -- unlockable -- that
   cuts the ticket's branch minutes later. The PreToolUse hook PROMOTES an armed gate to the

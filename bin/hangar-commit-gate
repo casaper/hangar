@@ -531,6 +531,43 @@ const hook = () => {
   );
 };
 
+/**
+ * Whether a lock may move from `state.branch` to `current`. PURE.
+ *
+ * Only behind a real `git branch -m`: the stored branch is gone, and the newest reflog entry of
+ * the branch now checked out is git's own record of that very rename. Anything looser would be a
+ * way to point a lock at a branch nobody commits on, which turns the gate off as surely as
+ * releasing it -- the escape `GATE_REPOINT` exists to close for `arm` and `lock`.
+ */
+const followsRename = (state, current, storedExists, newestSubject) =>
+  Boolean(state && state.locked) &&
+  state.branch !== current &&
+  !storedExists &&
+  newestSubject === `Branch: renamed refs/heads/${state.branch} to refs/heads/${current}`;
+
+/** Move the lock along with a branch rename -- see `followsRename`. Silent when there is none. */
+const followRename = () => {
+  const root = repoRoot();
+  const state = readState(root);
+  if (!state || !state.locked) return;
+  const current = currentBranch(root);
+  if (state.branch === current) return;
+  let storedExists = true;
+  try {
+    git(['rev-parse', '--verify', '--quiet', `refs/heads/${state.branch}`], { cwd: root });
+  } catch {
+    storedExists = false;
+  }
+  const newest = git(['reflog', 'show', '-1', '--format=%gs', `refs/heads/${current}`], {
+    cwd: root,
+  });
+  if (!followsRename(state, current, storedExists, newest)) {
+    fail(`Refusing: ${current} is not ${state.branch} renamed, so the lock stays where it is.`);
+  }
+  writeState(root, { ...state, branch: current });
+  console.log(`Commit gate lock moved with the rename: ${state.branch} -> ${current}.`);
+};
+
 const usage = () => {
   console.log(
     [
@@ -541,6 +578,7 @@ const usage = () => {
       '  hangar-commit-gate toggle',
       '  hangar-commit-gate release --note "<summary>"',
       '  hangar-commit-gate unlock',
+      '  hangar-commit-gate follow-rename',
       '',
       'With no verb, reads a Claude Code hook payload on stdin.',
     ].join('\n'),
@@ -557,6 +595,7 @@ const main = () => {
   if (command === 'release') return clear('released', valueFor(rest, '--note') ?? 'checklist passed');
   if (command === 'unlock') return clear('unlocked');
   if (command === 'toggle') return toggle();
+  if (command === 'follow-rename') return followRename();
 
   usage();
   process.exit(command === '--help' ? 0 : 1);
@@ -579,5 +618,12 @@ if (require.main === module) {
   process.exit(0);
 } else {
   // The pure half, for the tests: the patterns the hook applies and the toggle's decision table.
-  module.exports = { GATE_RELEASE, GATE_KEY, GATE_STATE, releasesGate, toggleDecision };
+  module.exports = {
+    GATE_RELEASE,
+    GATE_KEY,
+    GATE_STATE,
+    followsRename,
+    releasesGate,
+    toggleDecision,
+  };
 }
