@@ -98,6 +98,14 @@ skills:
     divergence: standalone
     reason: No tracked counterpart in any managed repo -- this one exists only at user level.
 
+  - name: catch-up-default
+    divergence: standalone
+    reason: Drives `hangar catch-up` from inside a clone session -- hangar's, not any repo's.
+
+  - name: rebranch-pr
+    divergence: standalone
+    reason: Drives `hangar pr rebranch` from inside a clone session -- hangar's, not any repo's.
+
   - name: copy-to-clipboard
     divergence: intentional
     mirrors: .claude/skills/copy-to-clipboard/SKILL.md
