@@ -37,6 +37,10 @@ of `git diff -U3 -- <file>` in a scratchpad script and pipe them to `git apply -
 and read the result with `tmux -L pA capture-pane -p`. Background the `send-keys` when the key
 opens a popup: it blocks until the popup closes.
 
+**A throwaway clone that fetches needs an origin**: `git init --bare origin.git`, push a seed repo
+to it, then `git clone` it to `cloneAt(hangar, 1).path`. Forge calls fail soft there (no
+`FIXTURE_FORGE_TOKEN`), so `catch-up` and `sync` run end to end offline.
+
 **A git fixture that needs `origin/HEAD`**: `git update-ref refs/remotes/origin/<b> HEAD` and
 `git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/<b>`, never a push (the publish
 guard refuses even a scratch bare remote). Put the probe in a script file taking a fresh directory

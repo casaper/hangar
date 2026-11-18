@@ -121,6 +121,10 @@ pattern and a commit message naming a branch push included. Run the dry run on i
 own line, put an edit script that quotes the command in a scratchpad file, and pass such a
 commit message with `git commit -F <scratch file>`.
 
+**Write a multi-step probe as a scratchpad script and run `sh <file>`**: the same steps as one long
+inline Bash line were refused. **`node --check` given no path reads stdin and hangs** — set the
+path variable in the same shell line that uses it.
+
 **Search a clone with `git -C <clone> grep`, never `grep -r`**: a clone carries `node_modules`
 and a multi-GB `tmp/`, and `grep -r` over one runs past the Bash timeout.
 
@@ -144,6 +148,9 @@ reinstalls it. A new row shows in the `C-b P` palette with no further edit; a pa
 that opens fzf sets `vscode: 'none'`, because an extension's output channel has no tty. A key
 that starts `bin/hangar` itself passes `--hangar <root>`, as `boundHangar` does: a popup runs in
 the pane's directory. `hangar colours sync -n | grep -v unchanged` shows only what a sync would rewrite.
+
+**A command that answers with an exit code sets `process.exitCode` in its `cli.ts` action**
+(`catch-up`'s 3/4/5); `report()` knows only 1, and `bin/hangar` `exec`s node, so the code arrives.
 
 **A `hangar key` picker does not return when run without a terminal**: fzf reads `/dev/tty`, not
 stdin, so `</dev/null` still leaves it waiting. Test the pure row builder, not the command.
