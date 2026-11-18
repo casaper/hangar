@@ -47,6 +47,11 @@ guard refuses even a scratch bare remote). Put the probe in a script file taking
 as its argument, with no `rm`: an `rm -rf $VAR` inside `sh -c` is refused by Claude Code's own
 safety check.
 
+**Check a process classifier against the live fleet** (`busyRunners`, `procs.ts`): save
+`ps -axo pid=,command=` to a scratchpad file in one go, read each cwd with
+`lsof -a -p <pid> -d cwd -Fn`, and feed the rows to the pure builder with `node -e`. Test runs
+exit within seconds, so a second `ps` usually finds them gone.
+
 **VS Code's built-in keybindings**: grep
 `/Applications/Visual Studio Code.app/Contents/Resources/app/out/vs/workbench/workbench.desktop.main.js`
 for `mac:{primary:<n>` or `secondary:[<n>]`. `n` is the key code OR'd with the modifier:

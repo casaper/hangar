@@ -253,7 +253,7 @@ The rule, and the two halves it splits into:
   one theme file per clone, and the `hangar_dvb_gn_colour` shell function two hangars can both
   source. Renaming it is a three-phase operation, not a find-and-replace.
 
-Three consequences worth knowing before editing the files they touch:
+Four consequences worth knowing before editing the files they touch:
 
 - **`hangar.config.example.yaml` is a superset of the live config EXCEPT for five keys.**
   `displayName`, `profile`, `forge.originUrl`, `forge.webBaseUrl` and `tracker.baseUrl` are
@@ -272,6 +272,9 @@ Three consequences worth knowing before editing the files they touch:
 - **A config key that names a repo's own skill or prompt is optional with NO default**
   (`forge.prDescriptionPrompt`, `tracker.planPrompt`): absent means the command refuses and names
   the key, because a default would put one repo's skill name into every hangar.
+- **`scan:literals` refuses any `/Users/<name>/` or `/home/<name>/` path, a made-up one
+  included**, unless the name is `someone`, `you`, `me`, `user` or `USERNAME`. A test row uses
+  one of those or a neutral root such as `/h/wt-001`.
 
 ## Commit messages
 
