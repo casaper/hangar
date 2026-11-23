@@ -116,7 +116,7 @@ import { paletteEntry } from '../palette.ts';
 import { portPins } from '../port-pins.ts';
 import { describeCollision, portCollisions, portSummary, slotOf } from '../ports.ts';
 import { platform } from '../platform/index.ts';
-import { claudeSessionDiagnostic, claudeSessionsIn } from '../procs.ts';
+import { allClaudeSessions, claudeSessionDiagnostic, claudeSessionsIn } from '../procs.ts';
 import { terminal, type EmulatorCapabilities, type MouseReporting } from '../terminal/index.ts';
 import { CLAUDE_CODE_ENVIRONMENT, TMUX_SETTINGS, tmuxConfArtifact } from '../generate/tmux-conf.ts';
 import { tmuxStatusArtifact } from '../generate/tmux-status-sh.ts';
@@ -1081,13 +1081,15 @@ const reportTmux = (hangar: Hangar): readonly string[] => {
    * them, which is to say it went quiet exactly when the other repair ran and left the empty
    * sessions unreported. A derelict session is derelict painted or not.
    */
+  // One `ps` + `lsof` for the whole list, not one per detached session.
+  const sessions = allClaudeSessions();
   const derelict = rows.filter((row) => {
     if (row.attached) return false;
     const clone =
       row.clone === undefined ? bySessionName.get(row.name) : byCloneName.get(row.clone);
     // A tag naming a clone that is gone is `staleSessions`' business, reported just below.
     if (clone === undefined) return false;
-    return server.roles(clone).length === 0 && claudeSessionsIn(clone.path).length === 0;
+    return server.roles(clone).length === 0 && claudeSessionsIn(clone.path, sessions).length === 0;
   });
   for (const row of derelict) {
     const text = `tmux session ${row.name} holds no role window, no client and no agent`;

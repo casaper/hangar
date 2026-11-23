@@ -298,7 +298,9 @@ These are `perf(<scope>)` commits.
 
 - [x] doctor's sibling-remote checks run N² git calls _(done: `doctor --all` 13.9s → 5.6s)_ (`doctor.ts:733-763`). Read each clone's
   remotes and remote config once.
-- [ ] ps/lsof run per clone (`doctor.ts:1080`, `close.ts:186-197`, `open.ts:474,682`). Call
+- [x] ps/lsof run per clone _(done for doctor, close and the diagnostic; `doctor --all` is
+  now 3.4s. The two cheap spawns in `open.ts`, `invokingTty` and `currentSession`, are left as
+  they are.)_ (`doctor.ts:1080`, `close.ts:186-197`, `open.ts:474,682`). Call
   `allClaudeSessions()`, `currentSession()` and `invokingTty()` once per run. Also stop
   `procs.ts:186` from running `ps` twice.
 - [ ] catch-up's restage spawns two processes per path (`catch-up.ts:284`). Use one

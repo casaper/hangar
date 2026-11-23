@@ -86,11 +86,17 @@ const parseEtime = (etime: string): number | undefined => {
  *   looks like. `claudeSessionDiagnostic()` below exists to make that visible on a first run
  *   rather than leaving it to be discovered by a rebase landing under a live agent.
  */
-const psRows = (): PsRow[] => {
+/** `ps` once, with whether it ran at all -- the diagnostic needs both from the SAME run. */
+const readPs = (): { readonly ok: boolean; readonly rows: PsRow[] } => {
   const res = run('ps', ['-axo', 'pid=,tty=,etime=,args=']);
-  if (!res.ok) return [];
+  return { ok: res.ok, rows: res.ok ? parsePs(res.stdout) : [] };
+};
+
+const psRows = (): PsRow[] => readPs().rows;
+
+const parsePs = (stdout: string): PsRow[] => {
   const rows: PsRow[] = [];
-  for (const line of res.stdout.split('\n')) {
+  for (const line of stdout.split('\n')) {
     const match = /^\s*(\d+)\s+(\S+)\s+(.*)$/.exec(line);
     if (!match?.[1] || !match[2] || match[3] === undefined) continue;
     const withEtime = ETIME_RE.exec(match[3]);
@@ -181,8 +187,9 @@ export type ClaudeSessionDiagnostic = {
 };
 
 export const claudeSessionDiagnostic = (): ClaudeSessionDiagnostic => {
-  const res = run('ps', ['-axo', 'pid=,tty=,etime=,args=']);
-  const rows = psRows();
+  // One `ps`: the flag and the counts used to come from two separate runs, which could disagree.
+  const ps = readPs();
+  const rows = ps.rows;
   const matched = rows.filter(isClaudeRow);
   const near = new Set<string>();
   for (const row of rows) {
@@ -192,7 +199,7 @@ export const claudeSessionDiagnostic = (): ClaudeSessionDiagnostic => {
   const markers = new Set<string>();
   for (const row of rows) if (row.tty === undefined) markers.add(row.ttyRaw);
   return {
-    psOk: res.ok,
+    psOk: ps.ok,
     rows: rows.length,
     matched: matched.length,
     withCwd: cwdsOf(matched.map((r) => r.pid)).size,
@@ -205,8 +212,10 @@ export const claudeSessionDiagnostic = (): ClaudeSessionDiagnostic => {
  * Live Claude Code sessions whose working directory is inside `clonePath`. A session started
  * in `angular/` counts -- it is the same clone, and a rebase disturbs it just as much.
  */
-export const claudeSessionsIn = (clonePath: string): ClaudeSession[] =>
-  allClaudeSessions().filter((s) => isInside(s.cwd, clonePath));
+export const claudeSessionsIn = (
+  clonePath: string,
+  sessions: readonly ClaudeSession[] = allClaudeSessions(),
+): ClaudeSession[] => sessions.filter((s) => isInside(s.cwd, clonePath));
 
 /**
  * Whether a process with this pid exists. Signal 0 checks without sending anything.

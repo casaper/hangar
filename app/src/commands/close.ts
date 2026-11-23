@@ -184,17 +184,18 @@ const factsFor = (
    * holding a second opinion about which process is safe to signal.
    */
   const scan = scanFleet([clone]);
+  const sessions = allClaudeSessions();
   const plan = killPlan(
     scan.records,
     hangarRoot,
-    new Set(allClaudeSessions().map((session) => session.pid)),
+    new Set(sessions.map((session) => session.pid)),
     {},
   );
   return {
     clone,
     sessionExists,
     roles: sessionExists ? server.roles(clone) : [],
-    claudeSessions: claudeSessionsIn(clone.path).length,
+    claudeSessions: claudeSessionsIn(clone.path, sessions).length,
     servers: plan.kill,
     serversRefused: plan.refused.map(({ record, why }) => `${record.name} — ${why}`),
     serversUnknown: !scan.scanned,
