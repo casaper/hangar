@@ -206,7 +206,8 @@ All of these are `fix(<scope>)` commits.
   and `cloneEnv.vars` too.
 - [x] **Exclude repairs append the whole block** _(done: `excludeAddition`)_ (`doctor.ts:432`, `tmp.ts:855`,
   `add-clone.ts:207`). Append only `missingExcludeLines`.
-- [ ] **Hook writers drop a whole matcher** (`clone-config.ts:796,876`, R). Remove only the
+- [x] **Hook writers drop a whole matcher** _(done: `withoutOurs` in all 6 writers, plus
+  `isOwnScript`, an anchored match, for the guard and the gate)_ (`clone-config.ts:796,876`, R). Remove only the
   hangar hook and use the anchored `invokesOurCli`. Test with a foreign hook sharing the matcher.
 - [ ] **`plans collect` races** (`plans.ts:162,209`, V at :162). Fleet-live.
   - Make the `rmSync` `force` and wrap it in a try.

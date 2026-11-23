@@ -7,6 +7,7 @@ import {
   hasCommitGateCommand,
   hasCommitGateHook,
   withCommitGateHook,
+  withExecGuardHook,
   type SettingsJson,
 } from '../src/clone-config.ts';
 import { cloneAt } from '../src/fleet.ts';
@@ -70,4 +71,33 @@ test('reconciling it leaves one gate per event, at today’s timeouts', () => {
 test('the stale clone is still WIRED, which is what keeps doctor from calling it unhonoured', () => {
   assert.ok(hasCommitGateCommand(syntheticHangar(), wiredBeforeTheSplit()));
   assert.equal(hasCommitGateCommand(syntheticHangar(), {}), false);
+});
+
+test('a repair takes out only our hook, never a developer hook that shares its matcher', () => {
+  /*
+   * The writers dropped a whole matcher when ANY hook in it was ours, so a command a developer
+   * had added to the same `Bash` matcher object vanished on the next `doctor --fix`.
+   */
+  const hangar = syntheticHangar();
+  const theirs = { type: 'command' as const, command: '/usr/local/bin/my-audit-hook' };
+  const wrapped = { type: 'command' as const, command: 'sh -c "log; hangar-commit-gate"' };
+  const shared: SettingsJson = {
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: 'Bash',
+          hooks: [{ type: 'command', command: commitGateHookCommand(hangar) }, theirs, wrapped],
+        },
+      ],
+    },
+  };
+  const repaired = withExecGuardHook(hangar, withCommitGateHook(hangar, shared));
+  const commands = (repaired.hooks?.['PreToolUse'] ?? []).flatMap((m) =>
+    m.hooks.map((h) => h.command),
+  );
+  assert.ok(commands.includes(theirs.command), 'a developer hook was dropped');
+  // A command that merely ENDS with the script's name is somebody's wrapper, not ours.
+  assert.ok(commands.includes(wrapped.command), 'a wrapper was mistaken for our hook');
+  assert.equal(commands.filter((c) => c === commitGateHookCommand(hangar)).length, 1);
+  assert.equal(hasCommitGateCommand(hangar, repaired), true);
 });

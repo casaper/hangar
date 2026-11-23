@@ -666,6 +666,32 @@ export type SettingsJson = {
  */
 const MOVED_ROOT_INVOCATION = /^\/\S*\/bin\/\S+ --hangar \S+ /;
 
+/**
+ * Every matcher with OUR hook taken out of it, and a matcher dropped only once it has nothing
+ * left. PURE.
+ *
+ * The writers used to drop a whole matcher whenever ANY of its hooks was ours, so a developer
+ * who had added a command of their own to the same `Bash` matcher object lost it on the next
+ * `doctor --fix`, with nothing reporting it.
+ */
+const withoutOurs = (
+  matchers: readonly HookMatcher[],
+  ours: (command: string | undefined) => boolean,
+): HookMatcher[] =>
+  matchers.flatMap((matcher) => {
+    if (!matcher.hooks.some((hook) => ours(hook.command))) return [matcher];
+    const kept = matcher.hooks.filter((hook) => !ours(hook.command));
+    return kept.length === 0 ? [] : [{ ...matcher, hooks: kept }];
+  });
+
+/**
+ * One of this hangar's own `bin/` scripts, invoked bare -- an absolute path ending in the name,
+ * with nothing around it. `endsWith` alone also claimed a developer's own wrapper whose command
+ * merely ENDED with the script's name.
+ */
+const isOwnScript = (name: string, command: string | undefined): boolean =>
+  command !== undefined && new RegExp(`^/\\S*/${name}$`).test(command);
+
 const invokesOurCli = (hangar: Hangar, command: string | undefined, subcommand: string): boolean =>
   command !== undefined &&
   command.includes(subcommand) &&
@@ -755,8 +781,8 @@ export const hasAnyJiraHook = (hangar: Hangar, settings: SettingsJson | undefine
  */
 export const withJiraHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
   const hooks = { ...settings.hooks };
-  const existing = (hooks['PreToolUse'] ?? []).filter(
-    (matcher) => !matcher.hooks.some((hook) => invokesOurCli(hangar, hook.command, 'jira hook')),
+  const existing = withoutOurs(hooks['PreToolUse'] ?? [], (command) =>
+    invokesOurCli(hangar, command, 'jira hook'),
   );
   if (hangar.config.tracker.kind !== 'none') {
     hooks['PreToolUse'] = [...existing, jiraHookMatcher(hangar)];
@@ -802,8 +828,8 @@ export const hasTmpHook = (hangar: Hangar, settings: SettingsJson | undefined): 
 
 export const withTmpHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
   const hooks = { ...settings.hooks };
-  const existing = (hooks['SessionEnd'] ?? []).filter(
-    (matcher) => !matcher.hooks.some((hook) => invokesOurCli(hangar, hook.command, 'tmp merge')),
+  const existing = withoutOurs(hooks['SessionEnd'] ?? [], (command) =>
+    invokesOurCli(hangar, command, 'tmp merge'),
   );
   hooks['SessionEnd'] = [...existing, tmpHook(hangar)];
   return { ...settings, hooks };
@@ -841,8 +867,8 @@ export const hasExecGuardHook = (hangar: Hangar, settings: SettingsJson | undefi
 /** Reconciles like the others: one guard, at the path this hangar would write today. */
 export const withExecGuardHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
   const hooks = { ...settings.hooks };
-  const existing = (hooks['PreToolUse'] ?? []).filter(
-    (matcher) => !matcher.hooks.some((hook) => hook.command.endsWith('hangar-exec-guard')),
+  const existing = withoutOurs(hooks['PreToolUse'] ?? [], (command) =>
+    isOwnScript('hangar-exec-guard', command),
   );
   hooks['PreToolUse'] = [...existing, execGuardHook(hangar)];
   return { ...settings, hooks };
@@ -890,7 +916,7 @@ const commitGateMatcher = (
 });
 
 const isCommitGateHook = (command: string | undefined): boolean =>
-  command?.endsWith('hangar-commit-gate') === true;
+  isOwnScript('hangar-commit-gate', command);
 
 /**
  * Both events, each at the path AND the timeout this hangar would write today -- so a clone wired
@@ -921,9 +947,7 @@ export const hasCommitGateCommand = (hangar: Hangar, settings: SettingsJson | un
 export const withCommitGateHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
   const hooks = { ...settings.hooks };
   for (const { event, matcher, timeout } of COMMIT_GATE_EVENTS) {
-    const existing = (hooks[event] ?? []).filter(
-      (entry) => !entry.hooks.some((hook) => isCommitGateHook(hook.command)),
-    );
+    const existing = withoutOurs(hooks[event] ?? [], isCommitGateHook);
     hooks[event] = [...existing, commitGateMatcher(hangar, matcher, timeout)];
   }
   return { ...settings, hooks };
@@ -957,8 +981,8 @@ export const hasScrubHook = (hangar: Hangar, settings: SettingsJson | undefined)
 
 export const withScrubHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
   const hooks = { ...settings.hooks };
-  const existing = (hooks['SessionEnd'] ?? []).filter(
-    (matcher) => !matcher.hooks.some((hook) => invokesOurCli(hangar, hook.command, 'scrub')),
+  const existing = withoutOurs(hooks['SessionEnd'] ?? [], (command) =>
+    invokesOurCli(hangar, command, 'scrub'),
   );
   hooks['SessionEnd'] = [...existing, scrubHook(hangar)];
   return { ...settings, hooks };
@@ -974,9 +998,8 @@ export const withScrubHook = (hangar: Hangar, settings: SettingsJson): SettingsJ
  */
 export const withPlansHook = (hangar: Hangar, settings: SettingsJson): SettingsJson => {
   const hooks = { ...settings.hooks };
-  const existing = (hooks['SessionEnd'] ?? []).filter(
-    (matcher) =>
-      !matcher.hooks.some((hook) => invokesOurCli(hangar, hook.command, 'plans collect')),
+  const existing = withoutOurs(hooks['SessionEnd'] ?? [], (command) =>
+    invokesOurCli(hangar, command, 'plans collect'),
   );
   hooks['SessionEnd'] = [...existing, plansHook(hangar)];
   return { ...settings, hooks };
