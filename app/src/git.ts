@@ -72,19 +72,39 @@ export type GitOptions = {
 };
 
 /**
+ * `-C <repo>`, and paths printed as they are.
+ *
+ * `core.quotePath` defaults to true, under which git prints a non-ASCII path as a C string in
+ * double quotes: a conflicted `src/café.ts` comes out of `diff --name-only` as
+ * `"src/caf\303\251.ts"`. Every reader here splits that output into paths and hands them back to
+ * git or to `readFileSync`, where the quoted form names nothing -- so the conflict-marker check
+ * read "no markers" for a file it could not open, and the integration committed them. Turning
+ * quoting off prints the bytes as they are; only a name with a control character, `"` or `\`
+ * stays quoted. In argv rather than the environment, so it cannot clobber a
+ * `GIT_CONFIG_COUNT` the operator exported.
+ */
+const gitArgv = (repo: string, args: readonly string[]): string[] => [
+  '-C',
+  repo,
+  '-c',
+  'core.quotePath=false',
+  ...args,
+];
+
+/**
  * Thin git wrappers. Everything here is read-only unless the name says otherwise, and every
  * call is scoped with `-C <repo>` -- the fleet rule is that a session never writes outside
  * its own clone, and passing an explicit repo path is what makes that auditable.
  */
 export const git = (repo: string, args: readonly string[], opts: GitOptions = {}): RunResult =>
-  run('git', ['-C', repo, ...args], {
+  run('git', gitArgv(repo, args), {
     env: hangarGitEnv(process.env),
     inherit: opts.inherit === true,
     ...(opts.input === undefined ? {} : { input: opts.input }),
   });
 
 export const gitOut = (repo: string, args: readonly string[]): string =>
-  runOrThrow('git', ['-C', repo, ...args], { env: hangarGitEnv(process.env) });
+  runOrThrow('git', gitArgv(repo, args), { env: hangarGitEnv(process.env) });
 
 /** Trimmed stdout, or undefined when the command failed (missing ref, detached HEAD, ...). */
 export const gitTry = (repo: string, args: readonly string[]): string | undefined => {

@@ -33,12 +33,19 @@ const timeoutMs = (): number => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TIMEOUT_MS;
 };
 
+/**
+ * The files that still carry a conflict marker.
+ *
+ * A file that is genuinely ABSENT is clean -- a modify/delete conflict resolved by deleting it
+ * leaves nothing to read. Any other failure to read counts as markers: the answer feeds a commit,
+ * and "could not check" must not pass as "checked and clean".
+ */
 export const hasConflictMarkers = (repo: string, files: readonly string[]): string[] =>
   files.filter((file) => {
     try {
       return readFileSync(join(repo, file), 'utf8').includes(MARKER);
-    } catch {
-      return false;
+    } catch (error) {
+      return (error as NodeJS.ErrnoException).code !== 'ENOENT';
     }
   });
 

@@ -101,7 +101,10 @@ through the same Bitbucket adapter.
   under a working agent. Every guard runs BEFORE the fetch so a refusal is instant, and under `-n`
   none of them throws: a dry run reports every reason the run would stop, not just the first.
 - **Conflicts are delegated to a headless `claude -p` inside the clone**, then verified
-  mechanically (no unmerged paths, no markers). If that fails the whole operation is aborted and
+  mechanically (no unmerged paths, no markers -- a file that cannot be READ counts as markers,
+  one that is absent does not, and every git call runs with `core.quotePath=false` so a
+  non-ASCII path names a real file; the default quoting once let `café.ts`'s markers through as
+  "unreadable, so clean"). If that fails the whole operation is aborted and
   the pre-sync state restored — never left half-merged. **One exception, and it is inherent:**
   putting your stashed work back happens after the integration is already committed, so if that
   is what fails, the branch has moved and cannot be rolled back. The clone is then left with

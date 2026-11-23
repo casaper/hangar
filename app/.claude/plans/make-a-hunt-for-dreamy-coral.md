@@ -147,7 +147,10 @@ This plan file is NOT in that commit. **Done in `3ac7841`**; 51 old plans delete
 
 All of these are `fix(<scope>)` commits.
 
-- [ ] **Quoted non-ASCII paths** (V). Commit `fix(sync)`.
+- [x] **Quoted non-ASCII paths** (V). Commit `fix(sync)`.
+  _Done differently: `git.ts`'s `gitArgv` adds `-c core.quotePath=false` to every
+  `git`/`gitOut`/`gitTry` call, which fixes every reader at once without `-z` rewrites. The test
+  uses real git and `café.ts`._
   - Read path lists with `-z` and NUL-split in `conflictedFiles` (`git.ts:379`), catch-up's
     restage and abort, and `resolve-conflicts.ts`.
   - `hasConflictMarkers` returns `false` only on ENOENT; any other read error counts as markers.
