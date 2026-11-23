@@ -38,10 +38,15 @@ import type { CommandUnknownOpts } from '@commander-js/extra-typings';
  *
  * ## Nothing is confirmed here, and nothing needs to be
  *
- * `ui.ts`'s `confirm()` reads `/dev/tty` and fails CLOSED where there is none -- which is the
- * subprocess's situation always. So `remove_clone --delete` detaches a clone and can never delete
- * its files, and `checkout-default` can never talk its way past a live session. Those protections
- * are inherited rather than reimplemented. The approval that a tool call DOES get is the
+ * `ui.ts`'s `confirm()` reads `/dev/tty` and fails CLOSED where there is none -- and the
+ * subprocess has none because `runHangar` makes it so: it spawns `detached`, a new session with
+ * no controlling terminal. Without that it would NOT fail closed. This server runs under the
+ * terminal Claude Code draws in, a child inherits it, and `exec </dev/tty` succeeds -- measured --
+ * so a `confirm()` would sit reading the user's keystrokes behind a prompt written to a pipe
+ * nobody sees. With it, `checkout-default` can never talk its way past a live session, and every
+ * other question takes its declining branch. Those protections are inherited rather than
+ * reimplemented. `remove_clone --delete` is the exception that asks nothing at all: its guards
+ * are refusals, so it deletes a clone that passes them, and `--force` is hidden from the tool. The approval that a tool call DOES get is the
  * permission prompt in front of it, which is why `--yes` stays an ordinary parameter: the human
  * has already answered by then.
  */
@@ -103,6 +108,8 @@ const runHangar = async (hangar: Hangar, argv: readonly string[]): Promise<Spawn
       cwd: hangar.root,
       env: { ...process.env, NO_COLOR: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],
+      // A new session, so no controlling terminal: see "Nothing is confirmed here" above.
+      detached: true,
     });
     let output = '';
     const collect = (chunk: Buffer): void => {

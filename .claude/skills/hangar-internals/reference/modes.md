@@ -399,6 +399,14 @@ document both spellings from one table. Colour escapes are stripped on the way o
 is set for the child: `paint()` writes 24-bit escapes unconditionally, because a clone's hue is
 its identity rather than styling, and a model reading a tool result has no use for them.
 
+**The child is spawned `detached`, which is what makes "a tool has no terminal" true.** The
+server itself runs under the terminal Claude Code draws in -- `ps` shows each `hangar mcp` on a
+`ttys` -- and a child inherits that as its controlling terminal, so `confirm()`'s
+`exec </dev/tty` succeeded there (measured under `script(1)`: attached `HAS-TTY`, detached
+`NO-TTY`). An acting tool reaching a question would have sat reading the user's keystrokes
+behind a prompt written into a pipe. `detached` is `setsid()`: a new session, no terminal, and
+every `confirm()` takes its declining branch as the rest of this file assumes.
+
 ### The enumeration is a test, and the coverage is only a warning
 
 The two directions fail differently, so they are held differently.

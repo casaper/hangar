@@ -129,8 +129,12 @@ This plan file is NOT in that commit. **Done in `3ac7841`**; 51 old plans delete
   - Pass `bin` as `$1` in the `command -v` probes in `editor/jetbrains.ts:89`,
     `launch-only.ts:85`, `vscode.ts:481` and `vim.ts:32`.
   - Do the same for the nvm `version` in `install.ts:245`.
-- [ ] **MCP confirm and tty** (`src/mcp/server.ts:41-46`, V; `remove-clone.ts:135`, R). Commit
+- [x] **MCP confirm and tty** (`src/mcp/server.ts:41-46`, V; `remove-clone.ts:135`, R). Commit
   `fix(mcp)`.
+  _Done, with a deviation: I added no `confirm()` to `remove-clone --delete`. `tools.ts`
+  documents that its guards are refusals and that `--force` is hidden from the tool, so that is
+  the design, and the header now says so. `detached: true` was verified under script(1):
+  HAS-TTY becomes NO-TTY. A spawned `ports` tool still answers._
   - Spawn children `detached: true`, with no controlling tty, so `confirm()` really fails
     closed.
   - Make `remove-clone --delete` `confirm()` unless `--yes`.
