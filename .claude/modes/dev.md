@@ -49,9 +49,11 @@ user to run the line and report back; that is also the only honest test, since t
 command is the user's own shell.
 
 **The same `PreToolUse` guard refuses publishing, in this mode too**: `git push`, `send-pack` and
-`http-push`, `gh pr create` and `gh pr merge`, and `hangar push` / `pr create` / `pr update`
-unless the line carries `-n` or `--dry-run`. Testing a change to `push`, `pr` or `hangar-rewrite`
-means the dry run, or asking the user.
+`http-push` (an alias defined with `-c` included), `gh pr create|new|merge`, `gh release create`,
+a `gh api` write to a pulls or releases endpoint, `hangar push` / `pr create` / `pr update`, and a
+release -- `hangar dev release`, `pnpm release`, `semantic-release` -- unless the invocation
+carries an UNQUOTED `-n` or `--dry-run`. Testing a change to `push`, `pr`, `release` or
+`hangar-rewrite` means the dry run, or asking the user.
 
 ## The gates
 

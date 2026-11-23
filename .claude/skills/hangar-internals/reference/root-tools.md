@@ -82,7 +82,10 @@ rather than `hangar` subcommands, what each refuses, and how `personal-skills/` 
 - **`bin/hangar-exec-guard` also refuses publishing**, and the remit widened with `hangar-rewrite`
   rather than before it: a rewritten branch has diverged from its remote, which is the one moment
   a force-push looks like the obvious next step. The capability and the refusal were one decision.
-  It covers `push`, `send-pack`, `http-push`, `gh pr create|merge` and hangar's own
+  It covers `push`, `send-pack`, `http-push` (through a `-c alias.*=` too, and past every git
+  global that takes a value, `--namespace` and `--config-env` included), `gh pr create|new|merge`,
+  `gh release create`, a `gh api` call that writes to a `pulls` or `releases` endpoint, a release
+  (`hangar dev release`, the `release` script, `semantic-release`), and hangar's own
   `push` and `pr create|update` unless the invocation carries `-n` -- and the palette's acting hangar keys,
   `key pr` without `-n`, `key bg` and `key palette --entry`, which reach the same forge write and a
   second headless agent. Only those forms, because a refusal of every `hangar key` would also catch

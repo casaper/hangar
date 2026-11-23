@@ -597,7 +597,10 @@ carries `-n`.** `push` is a branch push under hangar's name, and the two `pr` co
 they write, so the three are one rule. They were the one publishing path left open once `git push` and `gh pr create` were
 covered: both default to the clone they run in, and `-y` skips their `/dev/tty` confirmation, so
 nothing stood between a clone agent and the forge. The `-n` test is per shell segment, or
-`… -y && ls -n` would borrow the flag. The `push`/`pr_create`/`pr_update` tools are unaffected — a
+`… -y && ls -n` would borrow the flag, and it reads the segment with quoted spans blanked out, or
+`--title "fix -n flag"` would lend the real run a dry run it does not have. Only that leniency is
+quote-aware: finding the command stays the cruder whitespace split, which over-matches -- a
+quoted `grep` pattern naming a push is refused -- and that is the direction to err in. The `push`/`pr_create`/`pr_update` tools are unaffected — a
 tool call is not a Bash call — and stay behind their `ask` rules.
 
 `doctor` carries a row for it, unconditionally — unlike the tracker hook, no config makes this

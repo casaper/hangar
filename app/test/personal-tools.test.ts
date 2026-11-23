@@ -233,6 +233,27 @@ test('publishing is refused in every spelling, and nothing else is', () => {
     'node app/src/cli.ts pr update',
     // A dry run elsewhere on the line is not this invocation's.
     'hangar pr create -y && ls -n',
+    // Nor is a `-n` inside a quoted argument: the shell hands the title over as one word.
+    'hangar pr create -y --title "fix -n flag"',
+    "hangar push 1 --message '-n'",
+    // gh's own alias for `create`, and the API it wraps.
+    'gh pr new --fill',
+    'gh api repos/o/r/pulls -f head=x -f base=main',
+    'gh api --method POST repos/o/r/pulls/7/merge',
+    'gh release create v1.0.0',
+    // A global option whose value would otherwise be read as the subcommand.
+    'git --namespace x push',
+    'git --config-env a=B push',
+    // An alias defined on the command line.
+    'git -c alias.p=push p',
+    'git -c "alias.p=!git push" p',
+    // A release commits, tags and pushes, and `-y` skips its question.
+    'hangar dev release -y',
+    'cd /x && bin/hangar --hangar /h dev release --skip-checks -y',
+    'pnpm release -y',
+    'pnpm run release',
+    'npx semantic-release',
+    'app/node_modules/.bin/semantic-release --no-ci',
   ]) {
     assert.ok(guardSays(command), `publishing was ALLOWED: ${command}`);
   }
@@ -251,6 +272,18 @@ test('publishing is refused in every spelling, and nothing else is', () => {
     'hangar pr update --dry-run',
     'hangar pr refresh',
     'hangar status 2',
+    'hangar pr create -n --title "a title"',
+    'gh pr view 7 --json title',
+    'gh api repos/o/r/pulls/7',
+    'gh api -X GET repos/o/r/pulls -f state=open',
+    'gh release view v1.0.0',
+    'git -c core.pager=cat log',
+    'git --namespace x log',
+    'hangar dev release -n',
+    'pnpm release -n',
+    'pnpm run release --dry-run',
+    'npx semantic-release --dry-run',
+    'git log --grep release',
   ]) {
     assert.ok(!guardSays(command), `ordinary work was denied: ${command}`);
   }
