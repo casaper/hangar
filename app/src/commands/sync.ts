@@ -905,7 +905,19 @@ const integrate = async (
     integrated = res.ok || (await continueRebase(clone, strategy));
   } else if (strategy.kind === 'merge') {
     const res = git(clone.path, ['merge', '--no-edit', target.ref], { inherit: true });
-    if (!res.ok) {
+    // A merge git REFUSED -- unrelated histories, an untracked file in the way -- leaves no
+    // MERGE_HEAD and nothing conflicted. Handed to the resolver, zero files read as "resolved",
+    // `merge --continue` fails with nothing to continue, and the state check then calls that a
+    // finished merge: "merge complete" and SYNC FINISHED, with HEAD never moved. The same guard
+    // `continueRebase` opens with.
+    if (
+      !res.ok &&
+      inProgressOperation(clone.path) === undefined &&
+      conflictedFiles(clone.path).length === 0
+    ) {
+      fail('the merge did not start — git printed the reason above');
+      integrated = false;
+    } else if (!res.ok) {
       const outcome = await resolveWithClaude(clone.path, 'merge', strategy.target.ref);
       if (outcome.resolved) {
         git(clone.path, ['add', '-A']);

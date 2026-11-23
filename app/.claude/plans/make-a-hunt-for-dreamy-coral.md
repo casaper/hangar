@@ -156,8 +156,9 @@ All of these are `fix(<scope>)` commits.
   - `hasConflictMarkers` returns `false` only on ENOENT; any other read error counts as markers.
   - Test with `café.ts` in a real temp repo, using the env pattern from
     `store-git-fence.test.ts`.
-- [ ] **A sync merge that never started reads as integrated** (`sync.ts:906-921`, V). Require
-  `MERGE_HEAD` or a conflict before resolving.
+- [x] **A sync merge that never started reads as integrated** (`sync.ts:906-921`, V). Require
+  `MERGE_HEAD` or a conflict before resolving. _Done; no pure seam, so the commit body is the
+  record._
 - [ ] **`storeContentFrom` `$` expansion** (`jira-records.ts:415`, P). Use
   `replace(frontmatter, () => kept)` and test `$&`/`$$`. This file is fleet-live.
 - [ ] **`ls-remote` tail match** (`catch-up.ts:444`, `pr-target.ts:83`, R). Use
