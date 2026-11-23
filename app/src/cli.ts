@@ -319,10 +319,12 @@ program
     "\nReports and changes nothing. A clone session can see the whole fleet and almost none of it is the managed repo's subject -- a draft that says \"this clone's own node_modules\", or reproduction steps naming one clone's dev-server port, cannot be followed by a reader who has one checkout. Scans the shared store and every clone's own tmp/, deduplicated, since that is where issue text is drafted and where it goes out verbatim.",
   )
   .option('-q, --quiet', 'say nothing unless something was found (for the SessionEnd hook)')
+  // No default value: commander would then set `recent` on EVERY run, and a hand-run scrub --
+  // whose interesting answer is the whole store -- was limited to a day, with no way to lift it.
+  // The SessionEnd hook passes a bare `--recent`, which is the 24 hours below.
   .option(
     '--recent [hours]',
-    'only files changed in the last N hours, so a backlog is not re-reported every session',
-    '24',
+    'only files changed in the last N hours (24 when no N), so a backlog is not re-reported every session',
   )
   .action((options: { quiet?: boolean; recent?: string | boolean }) => {
     const recentHours =

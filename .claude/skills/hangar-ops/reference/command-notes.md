@@ -456,7 +456,8 @@ followed by anybody else at all.
 - **Documents only.** Prose and the files a reproduction case is made of; dot-directories under
   `tmp/` are machine scratch and are skipped whole.
 - **`--recent` bounds it to a day** and is what the `SessionEnd` hook in every clone passes. By
-  hand, the interesting answer is usually the whole store: `hangar scrub --recent=100000`.
+  hand, the interesting answer is usually the whole store, which is what a bare `hangar scrub`
+  reports; `--recent <hours>` narrows it.
 - A base port is never reported — that is the project's own default and is correct anywhere. Only
   a port this fleet derived from it is.
 

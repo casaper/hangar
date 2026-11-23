@@ -112,7 +112,7 @@ rule that cannot tell it from the report.
 | --- | --- | --- | --- |
 | `list` | — | `--no-refresh` | report (asks Bitbucket for stale pull requests, ≤3s; writes only the bar's PR cache) |
 | `ports` | — | `--json` | report |
-| `scrub` | — | `--recent [hours]` (default `24`; pass a big number for the whole store) · `-q, --quiet` | report |
+| `scrub` | — | `--recent [hours]` (bare `--recent` is 24; omitted, the whole store) · `-q, --quiet` | report |
 | `status` | `[clone]` (defaults to every clone) | `-a, --all` · `-f, --fetch` | report (`--fetch` reaches the network, touches no tree) |
 | `sync` | `[clone]` | `-a, --all` · `-n, --dry-run` · `--no-session-notify` · `--include-busy` · `--onto <ref>` · `--strategy <rebase\|merge>` | **act [user]** |
 | `merge-default`, `rebase-default` | — | aliases of `sync`, identical options | **act [user]** |

@@ -220,7 +220,8 @@ All of these are `fix(<scope>)` commits.
 - [x] **Stale-lock takeover race** _(done: `clearStale` renames the lock aside, and links a
   fresh lock back if that is what it moved)_ (`tmp-merge-lock.ts:94`, R). Take the lock over with an atomic
   `rename`. Fleet-live.
-- [ ] **`scrub --recent` is always set** (`cli.ts:322`, V).
+- [x] **`scrub --recent` is always set** (`cli.ts:322`, V). _Done. The hook's bare `--recent`
+  is 24 hours; commands.md and command-notes are updated._
   - Drop the `'24'` default.
   - Check that the SessionEnd hook passes `--recent`.
   - Update `command-notes.md`.
