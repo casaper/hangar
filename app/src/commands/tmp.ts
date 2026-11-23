@@ -281,7 +281,10 @@ const adoptCloneEntries = (
     // canonical store under a name no pass reads as a record.
     if (entry === jiraTicketsDirname(hangar)) continue;
 
-    report(adoptInto(path, hangar.paths.tmp, { label: clone.name, dryRun }), counts);
+    report(
+      adoptInto(path, hangar.paths.tmp, { label: clone.name, dryRun, storeRoot: hangar.paths.tmp }),
+      counts,
+    );
     contributed.push(entry);
   }
   return contributed;

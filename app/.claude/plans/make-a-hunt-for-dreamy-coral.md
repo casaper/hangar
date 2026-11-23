@@ -254,6 +254,10 @@ All of these are `fix(<scope>)` commits.
 - [x] The publish guard over-matched `semantic-release` (`npm view semantic-release time` was
   denied) and under-matched `pnpm -C app release`. Now matched in command position only, and
   past the package manager's own options.
+- [x] Found during a live `tmp merge -n`, pre-existing: `adoptInto` warned "left alone" about the
+  Jira hook's relative links in a clone's real ticket directory (58 in clone_08 and clone_04),
+  and in `--quiet` that printed the whole narration at every SessionEnd. A store link is now
+  carried like a file: moved in, dropped as the same link, or left with a reason.
 - [x] `sort=-updated_on` checked against the live Bitbucket API: `sync 5 -n` and an
   any-state lookup both answer. No change needed.
 

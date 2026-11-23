@@ -4,13 +4,16 @@ import {
   lstatSync,
   mkdirSync,
   readdirSync,
+  readlinkSync,
   readFileSync,
   realpathSync,
   renameSync,
   rmSync,
   rmdirSync,
 } from 'node:fs';
-import { basename, extname, join } from 'node:path';
+import { basename, extname, isAbsolute, join, resolve } from 'node:path';
+
+import { isInside } from './user-paths.ts';
 
 /**
  * Moving per-clone state into one shared fleet directory.
@@ -34,6 +37,14 @@ export type AdoptOptions = {
   /** Where the entry came from -- used for the `.from-<label>` conflict suffix. */
   readonly label: string;
   readonly dryRun: boolean;
+  /**
+   * The store's ROOT, carried down unchanged while `destDir` descends. A link anywhere in it is
+   * the store's own -- the Jira hook links a real ticket directory's records into
+   * `jira-tickets/`, which is not under that ticket's `destDir` -- and judging by `destDir`
+   * alone warned "left alone" about every one of them, which in `--quiet` mode is a warn that
+   * prints the whole narration at the end of every session in that clone.
+   */
+  readonly storeRoot: string;
 };
 
 const hashOf = (path: string): string =>
@@ -59,6 +70,21 @@ const exists = (path: string): boolean => {
   try {
     lstatSync(path);
     return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Whether the link at `from`, moved into `destDir`, would still resolve to `target`. An absolute
+ * link always does; the Jira hook's are RELATIVE (`../jira-tickets/<KEY>.md`), and those do too
+ * whenever the destination sits at the same depth beside the record store -- as a ticket
+ * directory in the clone and its twin in the store do.
+ */
+const samePlaceFrom = (destDir: string, from: string, target: string): boolean => {
+  try {
+    const link = readlinkSync(from);
+    return realpathSync(isAbsolute(link) ? link : resolve(destDir, link)) === target;
   } catch {
     return false;
   }
@@ -110,6 +136,35 @@ export const adoptInto = (from: string, destDir: string, opts: AdoptOptions): Ad
     if (target === undefined || target === to || target.startsWith(`${destDir}/`)) {
       actions.push({ kind: 'dropped', message: `${opts.label}/${name}: symlink into the store` });
       if (!opts.dryRun) rmSync(from);
+    } else if (isInside(target, opts.storeRoot) && samePlaceFrom(destDir, from, target)) {
+      // A link into the store from OUTSIDE this destination -- the Jira hook's link from a real
+      // ticket directory to its record in `jira-tickets/`. It is the store's own, and is carried
+      // like a file: moved in when the name is free (an absolute link moves intact), dropped when
+      // the store already has the same link, and only otherwise left -- with a reason.
+      let there: string | undefined;
+      try {
+        there = exists(to) ? realpathSync(to) : undefined;
+      } catch {
+        there = undefined;
+      }
+      if (!exists(to)) {
+        actions.push({ kind: 'moved', message: `${opts.label}/${name}: link into the store` });
+        if (!opts.dryRun) {
+          mkdirSync(destDir, { recursive: true });
+          move(from, to);
+        }
+      } else if (there === target) {
+        actions.push({
+          kind: 'dropped',
+          message: `${opts.label}/${name}: same link as the store's`,
+        });
+        if (!opts.dryRun) rmSync(from);
+      } else {
+        actions.push({
+          kind: 'skipped',
+          message: `${opts.label}/${name}: links to ${target}, but the store's ${name} is something else — left alone`,
+        });
+      }
     } else {
       actions.push({
         kind: 'skipped',

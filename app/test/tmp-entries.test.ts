@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { adoptInto } from '../src/adopt.ts';
 import { cloneAt } from '../src/fleet.ts';
 import {
   isNeverSharedName,
@@ -101,6 +102,48 @@ test('what deleting a clone would lose: its real, shareable tmp/ entries and not
     writeFileSync(join(tmp, '.DS_Store'), '');
 
     assert.deepEqual(unsharedTmpEntries(clone), ['ABC-1349', 'jira-tickets', 'run1.txt']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the Jira hook's links in a real ticket directory are the store's own, not a stranger's", () => {
+  /*
+   * A real `tmp/<KEY>/` in a clone holds the hook's RELATIVE links into `jira-tickets/`. Judged
+   * by the ticket's own destination they looked foreign, so every `tmp merge` warned "left alone"
+   * about each one -- and in `--quiet` a single warn prints the whole narration, at every session
+   * end in that clone.
+   */
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'adopt-links-')));
+  try {
+    const store = join(root, 'store');
+    const clone = join(root, 'clone', 'tmp');
+    mkdirSync(join(store, 'jira-tickets'), { recursive: true });
+    writeFileSync(join(store, 'jira-tickets', 'ABC-7.md'), 'record\n');
+    writeFileSync(join(store, 'jira-tickets', 'ABC-8.md'), 'other\n');
+    mkdirSync(join(store, 'ABC-7'));
+    symlinkSync('../jira-tickets/ABC-7.md', join(store, 'ABC-7', 'ticket.md'));
+    mkdirSync(join(clone, 'ABC-7'), { recursive: true });
+    symlinkSync(join(store, 'jira-tickets'), join(clone, 'jira-tickets'));
+    symlinkSync('../jira-tickets/ABC-7.md', join(clone, 'ABC-7', 'ticket.md'));
+    symlinkSync('../jira-tickets/ABC-8.md', join(clone, 'ABC-7', 'ticket_relation_ABC-8.md'));
+
+    const actions = adoptInto(join(clone, 'ABC-7'), store, {
+      label: 'clone_01',
+      dryRun: false,
+      storeRoot: store,
+    });
+    const kinds = actions.map((a) => `${a.kind} ${a.message}`);
+    assert.ok(!kinds.some((k) => k.startsWith('skipped')), `warned about: ${kinds.join('; ')}`);
+    assert.ok(
+      kinds.some((k) => /dropped .*ticket\.md: same link/.test(k)),
+      kinds.join('; '),
+    );
+    // The relation link the store lacked moved in, and still resolves to the same record.
+    assert.equal(
+      realpathSync(join(store, 'ABC-7', 'ticket_relation_ABC-8.md')),
+      join(store, 'jira-tickets', 'ABC-8.md'),
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
