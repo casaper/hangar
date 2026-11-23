@@ -4,7 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { envLocalPath, readEnvLocalPorts } from '../src/clone-config.ts';
+import {
+  dotenvValues,
+  envLocalContent,
+  envLocalExtrasDrift,
+  envLocalPath,
+  readEnvLocalPorts,
+} from '../src/clone-config.ts';
 import { CliError } from '../src/exec.ts';
 import { cloneAt } from '../src/fleet.ts';
 import { clearPortPin, portPins, setPortPin } from '../src/port-pins.ts';
@@ -89,4 +95,26 @@ test('a port key with a digit in it is read back from the dotenv', () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('the dotenv check covers the root key and every cloneEnv var, not only the ports', () => {
+  const clone = cloneAt(syntheticHangar(), 2);
+  const generated = envLocalContent(clone);
+  assert.deepEqual(envLocalExtrasDrift(clone, generated), []);
+
+  const extras = [...dotenvValues(generated).keys()].filter(
+    (key) => !clone.ports.some((entry) => entry.role.envKey === key),
+  );
+  assert.ok(extras.length > 0, 'the fixture derives nothing but ports -- this test proves nothing');
+  const [first] = extras;
+  assert.ok(first !== undefined);
+  const without = generated
+    .split('\n')
+    .filter((line) => !line.startsWith(`${first}=`))
+    .join('\n');
+  assert.deepEqual(envLocalExtrasDrift(clone, without), [`${first} missing`]);
+  const changed = generated.replace(new RegExp(`^${first}=.*$`, 'm'), `${first}=elsewhere`);
+  assert.deepEqual(envLocalExtrasDrift(clone, changed), [
+    `${first} differs from what the config derives`,
+  ]);
 });

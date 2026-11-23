@@ -201,7 +201,8 @@ All of these are `fix(<scope>)` commits.
   `clone_001` (a second clone 1). Deferred: a doctor row for skipped directories._
 - [x] **Bar PR refresh with no `--hangar`** _(done; golden delta as predicted, plus 2 comment lines)_ (`tmux-status-sh.ts:424`, V). Add
   `--hangar <root>`. Expected golden: one line of `clone-tmux-status.sh` per fixture.
-- [ ] **doctor `.env.local` checks only the ports** (`doctor.ts:262-297`, R). Compare the root key
+- [x] **doctor `.env.local` checks only the ports** _(done: `envLocalExtrasDrift`; the live
+  fleet stays green)_ (`doctor.ts:262-297`, R). Compare the root key
   and `cloneEnv.vars` too.
 - [ ] **Exclude repairs append the whole block** (`doctor.ts:432`, `tmp.ts:855`,
   `add-clone.ts:207`). Append only `missingExcludeLines`.

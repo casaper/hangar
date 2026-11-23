@@ -205,6 +205,39 @@ export const envLocalContent = (clone: Clone): string => {
   ].join('\n');
 };
 
+/** `KEY=value` lines of a dotenv, one level of matching quotes taken off. PURE. */
+export const dotenvValues = (text: string): Map<string, string> => {
+  const values = new Map<string, string>();
+  for (const line of text.split('\n')) {
+    const match = /^\s*([A-Z][A-Z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
+    if (match?.[1] === undefined || match[2] === undefined) continue;
+    const raw = match[2];
+    const quoted = /^(['"])(.*)\1$/.exec(raw);
+    values.set(match[1], quoted?.[2] ?? raw);
+  }
+  return values;
+};
+
+/**
+ * What in a clone's `.env.local` differs from what `envLocalContent` derives, PORTS EXCLUDED --
+ * the root-path key and every `repo.cloneEnv.vars` entry. PURE given the file's text.
+ *
+ * `doctor` compared the ports alone, so a changed `cloneEnv.vars` template or a moved root stayed
+ * green although the file's own header sends the reader to `doctor --fix` for drift; and when
+ * the row did go red, the repair rewrote those values silently.
+ */
+export const envLocalExtrasDrift = (clone: Clone, text: string): string[] => {
+  const ports = new Set(clone.ports.map((entry) => entry.role.envKey));
+  const actual = dotenvValues(text);
+  return [...dotenvValues(envLocalContent(clone))]
+    .filter(([key]) => !ports.has(key))
+    .flatMap(([key, wanted]) => {
+      const found = actual.get(key);
+      if (found === undefined) return [`${key} missing`];
+      return found === wanted ? [] : [`${key} differs from what the config derives`];
+    });
+};
+
 export const envrcPrivateContent = (hangar: Hangar): string =>
   [
     '## Private direnv config for this clone -- gitignored, never committed.',

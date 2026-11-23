@@ -33,6 +33,7 @@ import {
   withTmpHook,
   claudeLocalMdPath,
   envLocalContent,
+  envLocalExtrasDrift,
   envLocalPath,
   envrcDotenvLine,
   envrcPrivateContent,
@@ -260,14 +261,20 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
 
   // --- ports -------------------------------------------------------------------------
   const actual = readEnvLocalPorts(clone);
-  const portProblems = clone.ports.flatMap((entry) => {
-    const key = entry.role.envKey;
-    const found = actual[key];
-    if (found === undefined) return [`${key} missing`];
-    return found === entry.port
-      ? []
-      : [`${key}=${String(found)}, formula says ${String(entry.port)}`];
-  });
+  const portProblems = [
+    ...clone.ports.flatMap((entry) => {
+      const key = entry.role.envKey;
+      const found = actual[key];
+      if (found === undefined) return [`${key} missing`];
+      return found === entry.port
+        ? []
+        : [`${key}=${String(found)}, formula says ${String(entry.port)}`];
+    }),
+    // The rest of what the file is generated from: the root key and `repo.cloneEnv.vars`.
+    ...(existsSync(envLocalPath(clone))
+      ? envLocalExtrasDrift(clone, readFileSync(envLocalPath(clone), 'utf8'))
+      : []),
+  ];
   /*
    * A repair must not write a port a sibling already claims. `ports unpin` refuses to release a
    * clone onto one, so this is the net for a pin file edited by hand: the row stays red with no
