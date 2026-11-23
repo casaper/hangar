@@ -15,6 +15,7 @@ import {
   refExists,
   remotes,
   settleResolved,
+  stashRefLabelled,
   syncStashes,
   syncState,
   SYNC_STASH_LABEL,
@@ -643,15 +644,28 @@ export const notifySessions = (
   return reached;
 };
 
-const abortAndRestore = (clone: Clone, strategy: Strategy, stashed: boolean): void => {
+/**
+ * Pop THIS run's stash -- found by its label, never `stash@{0}` -- and report whether it came
+ * back. Nothing is said when there was nothing stashed.
+ */
+const restoreStash = (clone: Clone, label: string | undefined): boolean => {
+  if (label === undefined) return true;
+  const ref = stashRefLabelled(clone.path, label);
+  const res = ref === undefined ? undefined : git(clone.path, ['stash', 'pop', ref]);
+  if (res?.ok === true) {
+    ok('restored your stashed changes');
+    return true;
+  }
+  warn(
+    `your changes are still in the stash${ref === undefined ? '' : ` (${ref})`} — recover with \`git stash list\` / \`git stash pop\``,
+  );
+  return false;
+};
+
+const abortAndRestore = (clone: Clone, strategy: Strategy, label: string | undefined): void => {
   if (strategy.kind === 'rebase') git(clone.path, ['rebase', '--abort']);
   if (strategy.kind === 'merge') git(clone.path, ['merge', '--abort']);
-  if (stashed) {
-    const res = git(clone.path, ['stash', 'pop']);
-    if (res.ok) ok('restored your stashed changes');
-    else
-      warn('your changes are still in the stash — recover with `git stash list` / `git stash pop`');
-  }
+  restoreStash(clone, label);
 };
 
 /**
@@ -703,7 +717,7 @@ const continueRebase = async (clone: Clone, strategy: Strategy): Promise<boolean
       fail(outcome.reason ?? 'could not resolve conflicts');
       return false;
     }
-    git(clone.path, ['add', '-A']);
+    git(clone.path, ['add', '-u']);
   }
   fail('rebase did not finish after 50 steps — giving up');
   return false;
@@ -880,7 +894,7 @@ const integrate = async (
   step(`git ${fetchArgv.join(' ')}`);
   const fetched = git(clone.path, fetchArgv);
   if (!fetched.ok) {
-    if (stashed) git(clone.path, ['stash', 'pop']);
+    restoreStash(clone, run.stashLabel);
     throw new CliError(`fetch failed in ${clone.name}`, fetched.stderr.trim());
   }
 
@@ -888,14 +902,14 @@ const integrate = async (
   //    than falling back to the default branch is the point: a rebase onto the wrong base is
   //    the expensive thing to undo in this command, and it would look like it worked.
   if (!refExists(clone.path, target.ref)) {
-    if (stashed) git(clone.path, ['stash', 'pop']);
+    const restored = stashed && restoreStash(clone, run.stashLabel);
     throw new CliError(
       `${clone.name}: ${target.ref} does not exist, even after fetching`,
       `${
         target.pr === undefined
           ? 'Nothing on origin goes by that name.'
           : `PR #${String(target.pr.id)} targets ${target.branch}, but origin has no such branch — deleted since?`
-      } Pick a base with --onto <ref>.${stashed ? ' Your changes were restored from the stash.' : ''}`,
+      } Pick a base with --onto <ref>.${restored ? ' Your changes were restored from the stash.' : ''}`,
     );
   }
 
@@ -937,7 +951,7 @@ const integrate = async (
     } else if (!res.ok) {
       const outcome = await resolveWithClaude(clone.path, 'merge', strategy.target.ref);
       if (outcome.resolved) {
-        git(clone.path, ['add', '-A']);
+        git(clone.path, ['add', '-u']);
         // Same two rules as `continueRebase`: the terminal is the child's, so anything wanting
         // an answer can be given one, and whether the merge landed is read back off git rather
         // than taken from an exit code -- `run.integrated` is what a paused agent is told.
@@ -951,7 +965,7 @@ const integrate = async (
   }
 
   if (!integrated) {
-    abortAndRestore(clone, strategy, stashed);
+    abortAndRestore(clone, strategy, run.stashLabel);
     // Asked, not assumed: `abortAndRestore`'s `stash pop` can fail, and it only warns.
     const left = leftovers(hangar, inspectAfterSync(clone, run.stashLabel));
     throw new CliError(
@@ -971,12 +985,26 @@ const integrate = async (
   if (strategy.kind !== 'up-to-date') run.integrated = true;
 
   // 7. put the working tree back
-  if (stashed) {
+  const stashRef = stashed ? stashRefLabelled(clone.path, run.stashLabel) : undefined;
+  if (stashed && stashRef === undefined) {
+    fail(`this run's stash ("${run.stashLabel ?? ''}") is no longer listed`);
+    warn('nothing was re-applied — look for the changes with `git stash list`');
+    return false;
+  }
+  if (stashRef !== undefined) {
     // `apply`, not `pop`: the stash stays as a safety net until the apply is proven clean.
-    const applied = git(clone.path, ['stash', 'apply'], { inherit: true });
+    const applied = git(clone.path, ['stash', 'apply', stashRef], { inherit: true });
     if (applied.ok && conflictedFiles(clone.path).length === 0) {
-      git(clone.path, ['stash', 'drop']);
+      git(clone.path, ['stash', 'drop', stashRef]);
       ok('re-applied your changes and dropped the stash');
+    } else if (conflictedFiles(clone.path).length === 0) {
+      // git REFUSED the apply -- an untracked file in the stash where the integration now has a
+      // tracked one ("already exists, no checkout") -- and conflicted nothing. There is nothing
+      // for a resolver to resolve: handed zero files it answers "resolved", and the agent was
+      // then told its changes ARE back in the tree when none of them were.
+      fail('git refused to re-apply your stashed changes, and nothing is conflicted to resolve');
+      warn(`your changes are still in ${stashRef} in ${clone.name} — re-apply them by hand`);
+      return false;
     } else {
       // Read BEFORE the resolver runs: once it has removed the markers, nothing but the index
       // still says which paths were unmerged, and those are the ones to settle.

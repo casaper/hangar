@@ -113,7 +113,12 @@ through the same Bitbucket adapter.
   `sync stash` — and both appear **only when there is something to say**, so a clone that shows
   neither is the healthy case and not a missing feature. The stash row earns its place: these
   clones carry six hundred stashes each, and a leftover `hangar-sync` one is invisible in
-  that pile. `git rerere` and `-X ours/theirs` are
+  that pile. **For the same reason every restore finds the run's stash by its timestamped
+  label (`stashRefLabelled`), never as `stash@{0}`**, which is whoever pushed last; and a
+  re-apply git REFUSES with nothing conflicted (an untracked file in the stash where the
+  integration put a tracked one) is a failure, not a zero-file "resolution". The resolver's
+  result is staged with `add -u`, as catch-up's is, so a scratch file it left behind stays out
+  of the replayed commit. `git rerere` and `-X ours/theirs` are
   deliberately not used: they look like resolution and silently produce wrong code.
   **That run takes one to three minutes and streams its progress** — a dim line per tool call,
   per API retry, and a heartbeat into any longer silence — because `claude -p` in its default

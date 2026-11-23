@@ -16,6 +16,7 @@ import {
   refExists,
   settleResolved,
   stashList,
+  stashRefLabelled,
   SYNC_STASH_LABEL,
   syncState,
 } from '../git.ts';
@@ -250,10 +251,7 @@ const dropLedger = (repo: string): void => {
 // Git, step by step
 
 /** `stash@{N}` for this run's stash, found by its full label -- never by position. */
-const stashRefFor = (repo: string, label: string | undefined): string | undefined =>
-  label === undefined
-    ? undefined
-    : stashList(repo).find((entry) => entry.message.endsWith(label))?.ref;
+const stashRefFor = stashRefLabelled;
 
 const lines = (out: string | undefined): string[] =>
   out === undefined || out === '' ? [] : out.split('\n');

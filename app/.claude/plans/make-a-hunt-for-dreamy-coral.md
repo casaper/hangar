@@ -171,7 +171,9 @@ All of these are `fix(<scope>)` commits.
   fetch. _Done another way: the stored target is checked against origin with an exact
   `ls-remote`, falling back to the local ref only when origin is unreachable. Re-resolving would
   have needed the PR lookup moved._
-- [ ] **sync stash handling** (`sync.ts:866-881,947-960`, R).
+- [x] **sync stash handling** (`sync.ts:866-881,947-960`, R). _Done. `stashRefLabelled` in
+  `git.ts` is shared with catch-up, `restoreStash` reports what actually happened, and step 7
+  refuses a stash that has disappeared._
   - Find the stash by its label.
   - Derive "restored" from git rather than from the flag.
   - Treat a failed apply with no conflicts as a failure.

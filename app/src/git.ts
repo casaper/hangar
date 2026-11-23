@@ -511,6 +511,19 @@ export const stashList = (repo: string): StashEntry[] => {
 };
 
 /**
+ * The stash entry carrying this label, found by its MESSAGE, never by position.
+ *
+ * `stash@{0}` is whatever was pushed last, and between a sync's push and its restore a hook, a
+ * paused agent's tool call or a person may have pushed another -- popping by position then hands
+ * back somebody else's work and leaves this run's in the list. The label carries a timestamp, so
+ * it names one entry.
+ */
+export const stashRefLabelled = (repo: string, label: string | undefined): string | undefined =>
+  label === undefined
+    ? undefined
+    : stashList(repo).find((entry) => entry.message.endsWith(label))?.ref;
+
+/**
  * Stash entries `hangar sync` created and did not manage to give back.
  *
  * On every path that finishes, sync either drops its stash or says out loud that it kept one.
