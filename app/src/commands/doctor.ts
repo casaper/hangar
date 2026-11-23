@@ -261,10 +261,11 @@ const checksFor = (
 ): Check[] => {
   const checks: Check[] = [];
 
+  const isRepo = isGitRepo(clone.path);
   checks.push({
     name: 'git repo',
-    ok: isGitRepo(clone.path),
-    detail: isGitRepo(clone.path) ? clone.path : 'not a git repository',
+    ok: isRepo,
+    detail: isRepo ? clone.path : 'not a git repository',
   });
 
   // --- ports -------------------------------------------------------------------------
@@ -587,7 +588,7 @@ const checksFor = (
         ? 'unset — plans land in ~/.claude/plans, shared with every other project on this machine'
         : plans.resolved === undefined
           ? `${plans.value} resolves outside the clone — Claude Code REJECTS that and silently uses ~/.claude/plans instead`
-          : `${plans.value}${readSettings(clone)?.plansDirectory === undefined ? ' (from the repo settings)' : ''}`,
+          : `${plans.value}${settings?.plansDirectory === undefined ? ' (from the repo settings)' : ''}`,
     // Through `reconcileHook`, which reads the file again: the `settings` above was read once
     // for every check, and writing it back here undid the `settings.local.json` repair that runs
     // earlier in the same `--fix` -- "repaired", and red again on the next run.
@@ -1564,12 +1565,12 @@ const reportDefaultBranch = (
     return [unrecorded];
   }
 
-  const disagree = clones
-    .map((clone) => ({ clone, branch: defaultBranchFromGit(clone.path) }))
-    .filter((seen) => seen.branch !== undefined && seen.branch !== recorded);
+  // Each clone asked once: the agreement count below reads the same answers.
+  const seen = clones.map((clone) => ({ clone, branch: defaultBranchFromGit(clone.path) }));
+  const disagree = seen.filter((one) => one.branch !== undefined && one.branch !== recorded);
   if (disagree.length > 0) {
     const renamed = `${CONFIG_FILENAME} says the default branch is ${recorded}, but ${disagree
-      .map((seen) => `${seen.clone.name} says ${String(seen.branch)}`)
+      .map((one) => `${one.clone.name} says ${String(one.branch)}`)
       .join(', ')}`;
     warn(renamed);
     note(
@@ -1579,7 +1580,7 @@ const reportDefaultBranch = (
     return [renamed];
   }
 
-  const agree = clones.filter((clone) => defaultBranchFromGit(clone.path) === recorded).length;
+  const agree = seen.filter((one) => one.branch === recorded).length;
   ok(
     `${'default branch'.padEnd(22)} ${pc.dim(
       agree === 0

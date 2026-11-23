@@ -311,7 +311,7 @@ These are `perf(<scope>)` commits.
   statusline runs one `jq` per field (`statusline-sh.ts`). Write the golden delta first.
 - [ ] `sleepSync` busy-waits; use `Atomics.wait`. `restyle` spawns tmux once per option; chain
   the commands with `\;` after a probe. `reload` sources the conf once per clone instead of once.
-- [ ] doctor repeats work: `defaultBranchFromGit` (lines 1556 and 1570), `isGitRepo` (257) and
+- [x] doctor repeats work _(done)_: `defaultBranchFromGit` (lines 1556 and 1570), `isGitRepo` (257) and
   `readSettings` (575).
 - [ ] `tmp merge` runs jdupes twice (`dedupe.ts:61,91`). Measure first. Then make `scrub` filter
   by mtime before it stats or reads anything (`scrub.ts:321,370`).
