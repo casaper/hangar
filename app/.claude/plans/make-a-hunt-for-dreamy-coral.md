@@ -214,7 +214,8 @@ All of these are `fix(<scope>)` commits.
   a new name. The live `-n` run still works._
   - Make the `rmSync` `force` and wrap it in a try.
   - Move without overwriting: `link` + `unlink`, taking the next free name on EEXIST.
-- [ ] **`tmp merge` replaces a foreign symlink** (`tmp.ts:278,332-339`, R). Pass 2b skips any
+- [x] **`tmp merge` replaces a foreign symlink** _(done; the live `-n` run is clean. No unit
+  test, because `linkStoreEntries` is not pure.)_ (`tmp.ts:278,332-339`, R). Pass 2b skips any
   link that 2a classed as foreign. Fleet-live.
 - [ ] **Stale-lock takeover race** (`tmp-merge-lock.ts:94`, R). Take the lock over with an atomic
   `rename`. Fleet-live.

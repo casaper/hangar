@@ -328,6 +328,9 @@ const linkStoreEntries = (
     // a clone whose `tmp` symlink has not actually been replaced yet can still see every store
     // entry through it. On a real run the name is free -- and a name that is NOT free is a
     // skipped adoption, which must be left exactly where it is.
+    // A link somewhere other than the store is the developer's: pass 2a said "left alone" about
+    // it, and replacing it here would make that a lie. Only OUR link -- a stale one -- is renewed.
+    if (target !== undefined && !isOurLink(hangar, target)) continue;
     const mine = movedAway.has(name) || tmpWillBeEmpty;
     if (target === undefined && existsSync(path) && !(dryRun && mine)) {
       warn(`${name}: a real file or directory is in the way — not linked`);
