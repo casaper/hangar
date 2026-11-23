@@ -582,8 +582,12 @@ const proceed = (hangar: Hangar, clone: Clone, ledger: Ledger): CatchUpExit => {
     ok(`rebased onto ${ledger.targetRef}`);
     return finishOrStop(hangar, clone, { ...ledger, phase: 'stash', conflicted: [] }, true);
   }
+  // Asked of git, never assumed: the rebase may have been finished -- or ABORTED -- by hand
+  // since the ledger was written, and "rebased onto" about a branch still at its old head is the
+  // false report this file's closing messages exist to avoid.
+  const moved = gitTry(repo, ['rev-parse', 'HEAD']) !== ledger.oldHead;
   if (ledger.phase === 'rebase' || !ledger.applied) {
-    return finishOrStop(hangar, clone, { ...ledger, phase: 'stash', conflicted: [] }, true);
+    return finishOrStop(hangar, clone, { ...ledger, phase: 'stash', conflicted: [] }, moved);
   }
 
   const marked = hasConflictMarkers(repo, ledger.conflicted);
@@ -601,7 +605,7 @@ const proceed = (hangar: Hangar, clone: Clone, ledger: Ledger): CatchUpExit => {
   if (ref !== undefined) git(repo, ['stash', 'drop', ref]);
   dropLedger(repo);
   closePaused(hangar, ledger, 'finished', false);
-  ok(doneMessage(ledger.targetRef, true, 'partial'));
+  ok(doneMessage(ledger.targetRef, moved, 'partial'));
   return CATCH_UP_EXIT.done;
 };
 
