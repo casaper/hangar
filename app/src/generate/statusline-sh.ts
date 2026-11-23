@@ -2,6 +2,7 @@ import type { Hangar } from '../hangar.ts';
 import { cloneGlobPattern, type Clone } from '../fleet.ts';
 import { tildify } from '../user-paths.ts';
 import { type Artifact, artifactHeader } from './index.ts';
+import { singleQuoted } from '../shell-quote.ts';
 
 /**
  * `~/.claude/<id>-clone-statusline.sh` -- ONE script for every clone in one hangar.
@@ -110,7 +111,7 @@ export const statuslineArtifact = (hangar: Hangar, clones: readonly Clone[]): Ar
     '# The clone is the path segment under the hangar root, not basename($dir) -- a session',
     '# started in a SUBDIRECTORY of a clone must still report the clone. The digit count is',
     '# open at the top, so this keeps working past the first index that needs another digit.',
-    `FLEET='${hangar.root}'`,
+    `FLEET=${singleQuoted(hangar.root)}`,
     `clone="$(printf '%s' "$dir" | sed -n "s|^\${FLEET}/\\(${cloneGlobPattern(hangar)}\\).*|\\1|p")"`,
     '[ -n "$clone" ] || clone="$(basename "$dir")"',
     '',

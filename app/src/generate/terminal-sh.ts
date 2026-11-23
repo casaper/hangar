@@ -1,6 +1,7 @@
 import type { Hangar } from '../hangar.ts';
 import { tmuxSocketName } from '../tmux.ts';
 import { type Artifact, artifactHeader } from './index.ts';
+import { singleQuoted } from '../shell-quote.ts';
 
 export type TerminalColourSettings = {
   readonly chrome: boolean;
@@ -125,7 +126,7 @@ export const terminalHookArtifact = (hangar: Hangar, colour: TerminalColourSetti
     '# HANGAR_CLONE* variables -- which need no terminal support at all, so a prompt or a tmux',
     '# status line can colour itself even where the chrome cannot be touched.',
     '',
-    `${p}_root='${hangar.root}'`,
+    `${p}_root=${singleQuoted(hangar.root)}`,
     `${p}_id='${hangarId}'`,
     `${p}_tint=${String(tint)}   # per cent of the hue that reaches the background`,
     `${p}_chrome=${colour.chrome ? '1' : '0'}`,

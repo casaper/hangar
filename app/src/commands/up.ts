@@ -19,6 +19,7 @@ import { claudeSocketName, tmuxBinary, tmuxSocketOf } from '../tmux.ts';
 import { confirm, note, ok, step, warn } from '../ui.ts';
 import { resumeChoice, type ResumeChoice } from './open.ts';
 import { syncVscodeBookmarks } from '../editor/vscode-bookmarks-sync.ts';
+import { shellQuote } from '../shell-quote.ts';
 
 /**
  * `hangar up` -- both hangar-root modes and a shell, in one tmux window, as three tabs.
@@ -135,9 +136,6 @@ export const restartTargets = (value: string): readonly Mode[] => {
 
 /** The shim a mode tab runs, by absolute path. */
 export const shimPath = (hangar: Hangar): string => join(hangar.root, '.local', 'bin', 'claude');
-
-const shellQuote = (value: string): string =>
-  /^[A-Za-z0-9_./:=-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`;
 
 /**
  * The command a mode tab runs: the shim, by ABSOLUTE path, never a bare `claude`.

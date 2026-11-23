@@ -142,6 +142,7 @@ import {
   syncVscodeBookmarks,
 } from '../editor/vscode-bookmarks-sync.ts';
 import { bookmarkSyncSummary, hasNewChanges, touchedClones } from '../editor/vscode-bookmarks.ts';
+import { firstShellWord } from '../shell-quote.ts';
 
 /**
  * `hangar doctor` -- the regression net for everything `add-clone` sets up.
@@ -475,7 +476,7 @@ const checksFor = (
       ? join(themesDir, `${namedTheme.slice('custom:'.length)}.json`)
       : undefined;
   const statusCommand = (settings?.['statusLine'] as { command?: unknown } | undefined)?.command;
-  const statusPath = typeof statusCommand === 'string' ? statusCommand.split(' ')[0] : undefined;
+  const statusPath = typeof statusCommand === 'string' ? firstShellWord(statusCommand) : undefined;
   const unresolved = [
     namedThemeFile !== undefined && !existsSync(namedThemeFile)
       ? `theme ${namedTheme ?? ''} → ${tildify(namedThemeFile)}`

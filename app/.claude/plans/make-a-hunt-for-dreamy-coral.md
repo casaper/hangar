@@ -323,7 +323,10 @@ These are `perf(<scope>)` commits.
 
 ### 5. Robustness hardening
 
-- [ ] Handle a hangar root containing spaces or quotes:
+- [x] Handle a hangar root containing spaces or quotes. _Done in `src/shell-quote.ts`, quoting only
+  when needed, so the golden delta is zero; `invokesOurCli`, `isOwnScript` and doctor's
+  status-line path all read the quoted form. Deferred: escaping regex characters in the root
+  inside the statusline's `sed`, where `.` matches any character and `|` would break it._
   - Move one quoting helper (`shellQuote`/`sq`) into a shared module.
   - Use it in `boundHangar`, in the status-job path, and in the hook commands
     (`clone-config.ts:639,663,743,898`).

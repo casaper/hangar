@@ -2,6 +2,7 @@ import type { Hangar } from '../hangar.ts';
 import { type CloneColour, STATUS_BAR_BG, STATUS_BAR_DIM, STATUS_BAR_FG } from '../palette.ts';
 import { type HangarKey, KEY_TABLE, RETIRED_KEYS } from '../keys.ts';
 import { type Artifact, artifactHeader } from './index.ts';
+import { tmuxShellWord } from '../shell-quote.ts';
 
 /**
  * `clone-tmux.conf` -- the config this hangar's OWN tmux server starts under.
@@ -387,7 +388,7 @@ export const paneBorderFormat = (hangar: Hangar, colour?: CloneColour): string =
 const statusJob =
   (hangar: Hangar) =>
   (field: string, ...variables: readonly string[]): string =>
-    `#(${hangar.paths.tmuxStatusScript} ${field} #{q:@hangar_clone}${variables
+    `#(${tmuxShellWord(hangar.paths.tmuxStatusScript)} ${field} #{q:@hangar_clone}${variables
       .map((v) => ` #{q:${v}}`)
       .join('')})`;
 
@@ -401,7 +402,8 @@ const statusJob =
  * worse: the walk would find THAT one. The flag outranks the walk, so the key acts on the hangar
  * whose conf bound it, from any pane.
  */
-const boundHangar = (hangar: Hangar): string => `${hangar.paths.bin} --hangar ${hangar.root}`;
+const boundHangar = (hangar: Hangar): string =>
+  `${tmuxShellWord(hangar.paths.bin)} --hangar ${tmuxShellWord(hangar.root)}`;
 
 /**
  * `bind-key -T root MouseDown1Status …` -- one binding, as argv, for the conf and for `restyle`.

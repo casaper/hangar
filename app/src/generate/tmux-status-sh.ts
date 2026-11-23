@@ -4,6 +4,7 @@ import { CI_COLOURS } from '../palette.ts';
 import { PR_LOCK_STALE_SECONDS, prCacheTtlSeconds } from '../pr-cache.ts';
 import { PR_TARGET_KEY } from '../pr-target.ts';
 import { type Artifact, artifactHeader } from './index.ts';
+import { singleQuoted } from '../shell-quote.ts';
 
 /**
  * `clone-tmux-status.sh` -- the facts the clone bar shows that tmux cannot answer itself.
@@ -486,4 +487,4 @@ export const tmuxStatusArtifact = (hangar: Hangar): Artifact => ({
 });
 
 /** Single-quote for `sh`. A hangar root with a quote in it is not a case, but a silent one. */
-const sq = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
+const sq = singleQuoted;

@@ -13,6 +13,7 @@ import {
 } from './generate/tmux-conf.ts';
 import { type CloneColour, colourByHex } from './palette.ts';
 import { devPath, orUndefined } from './terminal/types.ts';
+import { shellQuote } from './shell-quote.ts';
 
 /**
  * tmux -- every window `hangar open` creates, and the pane a `SYNC PAUSE` lands in.
@@ -186,12 +187,7 @@ export const tmuxBinary = (): string => {
   return cachedBinary;
 };
 
-/**
- * One word for a POSIX shell: bare when it is safe bare, single-quoted otherwise. Quote only what
- * needs it, so the common line carries no quotes at all.
- */
-export const shellQuote = (value: string): string =>
-  /^[A-Za-z0-9_./:=-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`;
+export { shellQuote } from './shell-quote.ts';
 
 /**
  * The command an emulator runs to put a clone's session on screen.
