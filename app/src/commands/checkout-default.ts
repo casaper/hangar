@@ -242,7 +242,7 @@ export const landOnBranch = (
     if (!checkout(clone, target)) return 'failed';
   }
 
-  return bringUpToDate(hangar, clone, target) ? 'done' : 'failed';
+  return bringUpToDate(clone, target) ? 'done' : 'failed';
 };
 
 /**
@@ -341,7 +341,7 @@ const aheadBehind = (
  * `git rebase` refuses outright on a dirty tree, in its own words, and the hint names `hangar
  * sync` -- which stashes under a label `hangar status` can recognise and puts it back.
  */
-const bringUpToDate = (hangar: Hangar, clone: Clone, branch: string): boolean => {
+const bringUpToDate = (clone: Clone, branch: string): boolean => {
   const remote = `origin/${branch}`;
   // A branch that exists only here has nothing to pull, and saying so beats warning that a
   // comparison failed. Reachable through `--branch <name>`: an unpushed local branch.

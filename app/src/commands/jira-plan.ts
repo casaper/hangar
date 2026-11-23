@@ -29,6 +29,7 @@ import { cloneLabel, confirm, heading, note, ok, step } from '../ui.ts';
 import { landOnBranch } from './checkout-default.ts';
 import { CLAUDE_ROLE, claudeWithPrompt, openOne, prepareOpen } from './open.ts';
 import { closeClaudePane, collectEndedSessions, isIdleShell } from './reload.ts';
+import { isInside } from '../user-paths.ts';
 
 /**
  * `hangar jira-plan <KEY>` -- start a ticket in a free clone, in one command.
@@ -281,9 +282,6 @@ const readArmedGate = (hangar: Hangar, clone: Clone): ArmedGate | undefined => {
 };
 
 const bareTty = (tty: string | undefined): string | undefined => tty?.replace(/^\/dev\//, '');
-
-const isInside = (child: string, parent: string): boolean =>
-  child === parent || child.startsWith(`${parent}/`);
 
 type Gathered = { readonly facts: CloneFacts; readonly claudePane: TmuxPane | undefined };
 

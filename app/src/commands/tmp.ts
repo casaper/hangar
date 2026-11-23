@@ -39,7 +39,7 @@ import { STORE_GIT_FENCE_CONTENT, storeGitFencePath } from '../hangar-files.ts';
 import { isAlive } from '../procs.ts';
 import { tryTakeLock } from '../tmp-merge-lock.ts';
 
-import { tildify } from '../user-paths.ts';
+import { isInside, tildify } from '../user-paths.ts';
 import {
   cloneTmpPath,
   isPrivateTmpEntry,
@@ -98,12 +98,8 @@ const bump = (counts: Counts, kind: string): void => {
   counts.set(kind, (counts.get(kind) ?? 0) + 1);
 };
 
-const isInside = (hangar: Hangar, child: string, parent: string): boolean =>
-  child === parent || child.startsWith(`${parent}/`);
-
 /** A link this fleet maintains: one that points into the shared store. */
-const isOurLink = (hangar: Hangar, target: string): boolean =>
-  isInside(hangar, target, hangar.paths.tmp);
+const isOurLink = (hangar: Hangar, target: string): boolean => isInside(target, hangar.paths.tmp);
 
 /**
  * Pass 1: undo the whole-directory symlink an earlier version of this command created.
@@ -567,7 +563,7 @@ const sameBytes = (a: string, b: string): boolean => {
   }
 };
 
-const kb = (hangar: Hangar, bytes: number): string =>
+const kb = (bytes: number): string =>
   bytes >= 1024 * 1024
     ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
     : `${String(Math.max(1, Math.round(bytes / 1024)))} KB`;
@@ -598,10 +594,10 @@ const dedupeStore = (hangar: Hangar, dryRun: boolean): void => {
       if (sets.length > MAX_LISTED) note(pc.dim(`… and ${String(sets.length - MAX_LISTED)} more`));
       const what = `${String(files)} file(s) in ${String(sets.length)} set(s)`;
       if (dryRun) {
-        ok(`${what} would be hard-linked, freeing ${kb(hangar, bytes)}`);
+        ok(`${what} would be hard-linked, freeing ${kb(bytes)}`);
       } else {
         const res = hardLinkDuplicates(hangar.paths.tmp);
-        if (res.ok) ok(`hard-linked ${what}, freeing ${kb(hangar, bytes)}`);
+        if (res.ok) ok(`hard-linked ${what}, freeing ${kb(bytes)}`);
         else {
           warn(`jdupes could not link them: ${res.error || 'unknown error'}`);
           if (res.error.includes('read-only')) {

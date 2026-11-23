@@ -450,7 +450,7 @@ const ACTION: Record<Strategy['kind'], string> = {
  * ever came. So the closing message is sent from a `finally` (see `closeSessions`) and the marker
  * is what makes it recognisable in a tab full of ordinary conversation.
  */
-export const pauseMessage = (hangar: Hangar, strategy: Strategy): string =>
+export const pauseMessage = (strategy: Strategy): string =>
   'SYNC PAUSE — STOP what you are doing and do not edit, stage or commit any file. ' +
   `\`hangar sync\` is about to ${ACTION[strategy.kind]} this clone onto ${strategy.target.ref}. ` +
   'If it conflicts, a separate headless Claude Code run will edit the conflicted files in this ' +
@@ -768,7 +768,7 @@ const closeSessions = (hangar: Hangar, clone: Clone, run: Run): void => {
 };
 
 /** The same facts as `closingMessage`, worded for the operator's terminal. */
-const leftovers = (hangar: Hangar, state: TreeAfterSync): string =>
+const leftovers = (state: TreeAfterSync): string =>
   [
     state.pending === undefined ? undefined : `a ${state.pending} is still in progress`,
     state.conflicted === 0 ? undefined : `${state.conflicted} file(s) still conflicted`,
@@ -872,7 +872,7 @@ const integrate = async (
       warn(`${sessions.length} live Claude session(s) — not notified (--no-session-notify)`);
     } else {
       step(`pausing ${sessions.length} live Claude Code session(s)`);
-      run.paused = notifySessions(hangar, sessions, pauseMessage(hangar, run.strategy));
+      run.paused = notifySessions(hangar, sessions, pauseMessage(run.strategy));
       if (run.paused.length !== sessions.length) {
         if (!confirm('Some sessions could not be reached. Sync anyway?')) {
           note('skipped');
@@ -973,7 +973,7 @@ const integrate = async (
   if (!integrated) {
     abortAndRestore(clone, strategy, run.stashLabel);
     // Asked, not assumed: `abortAndRestore`'s `stash pop` can fail, and it only warns.
-    const left = leftovers(hangar, inspectAfterSync(clone, run.stashLabel));
+    const left = leftovers(inspectAfterSync(clone, run.stashLabel));
     throw new CliError(
       `${clone.name}: ${strategy.kind} onto ${target.ref} failed and was rolled back`,
       left === ''

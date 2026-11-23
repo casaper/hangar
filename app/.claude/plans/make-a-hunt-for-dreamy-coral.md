@@ -261,7 +261,9 @@ All of these are `fix(<scope>)` commits.
 
 Commits are `refactor` or `docs`.
 
-- [ ] Remove the unused `hangar` params and fix their callers:
+- [x] Remove the unused `hangar` params and fix their callers. _Done, including the four
+  identical `isInside` copies, now one in `user-paths.ts`. `tsconfig.json` sets
+  `noUnusedLocals` and `noUnusedParameters`._
   - `checkout-default.ts:260,340`
   - `sync.ts:435,740`
   - `jira.ts:314`
@@ -279,6 +281,7 @@ Commits are `refactor` or `docs`.
   - the `clone-colours.sh` header's `set -- $(…)`;
   - `tmux-status-sh.ts:236`.
 - [ ] De-duplicate `tmp.ts`'s `isInside` against `procs.ts`, and `sleepMs` against `waitMs`.
+  _`isInside` is done (see above); `sleepMs` against `waitMs` is still open._
 - Keep the 176 test-only exports: they are the pure-builder convention, not dead code.
 
 ### 4. Performance

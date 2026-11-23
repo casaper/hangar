@@ -230,7 +230,7 @@ const writeFile = (path: string, content: string): void => {
  * tracker; the plans and tmp hooks are unconditional and so are still pure adds through here.
  */
 const reconcileHook =
-  (hangar: Hangar, clone: Clone, apply: (settings: SettingsJson) => SettingsJson): (() => void) =>
+  (clone: Clone, apply: (settings: SettingsJson) => SettingsJson): (() => void) =>
   () => {
     const current = readSettings(clone);
     if (current === undefined) return;
@@ -585,7 +585,7 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
     // earlier in the same `--fix` -- "repaired", and red again on the next run.
     repair:
       plans.resolved === undefined && settings !== undefined
-        ? reconcileHook(hangar, clone, (current) => ({
+        ? reconcileHook(clone, (current) => ({
             ...current,
             plansDirectory: PLANS_DIRECTORY,
           }))
@@ -600,9 +600,7 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
       ? "collects this clone's finished plans into the shared archive"
       : 'missing — a finished plan stays in this clone until `hangar plans collect` is run by hand',
     repair:
-      settings === undefined
-        ? undefined
-        : reconcileHook(hangar, clone, (s) => withPlansHook(hangar, s)),
+      settings === undefined ? undefined : reconcileHook(clone, (s) => withPlansHook(hangar, s)),
   });
 
   /*
@@ -628,9 +626,7 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
         ? 'a ticket fetched in the last hour is served from the shared record store, not re-fetched'
         : 'missing — every `jira-ticket-sync` run re-fetches the ticket and its whole neighbourhood',
     repair:
-      settings === undefined
-        ? undefined
-        : reconcileHook(hangar, clone, (s) => withJiraHook(hangar, s)),
+      settings === undefined ? undefined : reconcileHook(clone, (s) => withJiraHook(hangar, s)),
   });
 
   const tmpHookOk = hasTmpHook(hangar, settings);
@@ -643,9 +639,7 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
       ? "folds this clone's new `tmp/` entries into the shared store at session end"
       : 'missing — anything first written here reaches the siblings only when `hangar tmp merge` is run by hand',
     repair:
-      settings === undefined
-        ? undefined
-        : reconcileHook(hangar, clone, (s) => withTmpHook(hangar, s)),
+      settings === undefined ? undefined : reconcileHook(clone, (s) => withTmpHook(hangar, s)),
   });
 
   /*
@@ -663,7 +657,7 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
     repair:
       settings === undefined
         ? undefined
-        : reconcileHook(hangar, clone, (s) => withExecGuardHook(hangar, s)),
+        : reconcileHook(clone, (s) => withExecGuardHook(hangar, s)),
   });
 
   /*
@@ -687,7 +681,7 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
     repair:
       settings === undefined
         ? undefined
-        : reconcileHook(hangar, clone, (s) => withCommitGateHook(hangar, s)),
+        : reconcileHook(clone, (s) => withCommitGateHook(hangar, s)),
   });
 
   /*
@@ -705,9 +699,7 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
       ? 'reports fleet references in this clone’s tmp/ as the session ends'
       : 'missing — a draft naming a clone, a port or a path would go out unremarked',
     repair:
-      settings === undefined
-        ? undefined
-        : reconcileHook(hangar, clone, (s) => withScrubHook(hangar, s)),
+      settings === undefined ? undefined : reconcileHook(clone, (s) => withScrubHook(hangar, s)),
   });
 
   const strayPlanDirs = planDirsIn(clone).filter(

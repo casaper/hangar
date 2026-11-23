@@ -125,7 +125,7 @@ const write = (hangar: Hangar, out: string, rel: string, content: string): void 
   }
 };
 
-const parseIndices = (hangar: Hangar, spec: string): number[] =>
+const parseIndices = (spec: string): number[] =>
   spec
     .split(',')
     .map((part) => Number.parseInt(part.trim(), 10))
@@ -205,7 +205,7 @@ export const golden = (hangar: Hangar, opts: GoldenOptions): void => {
   const clones =
     opts.indices === undefined
       ? discoverClones(hangar)
-      : parseIndices(hangar, opts.indices).map((i) => cloneAt(hangar, i));
+      : parseIndices(opts.indices).map((i) => cloneAt(hangar, i));
 
   heading(`Capturing ${String(clones.length)} clone(s) into ${out}`);
 

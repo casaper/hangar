@@ -22,6 +22,7 @@ import {
 import { paintOn } from '../palette.ts';
 import { tmuxServer } from '../tmux.ts';
 import { blank, confirm, heading, note, ok, raw, table, truncate, warn } from '../ui.ts';
+import { isInside } from '../user-paths.ts';
 
 /**
  * `hangar servers` -- what the fleet is serving, across every clone at once.
@@ -127,9 +128,6 @@ const ORDER: readonly ServerState[] = [
   'recycled',
   'stale',
 ];
-
-const isInside = (child: string, parent: string): boolean =>
-  child === parent || child.startsWith(`${parent}/`);
 
 /**
  * Every server the fleet is running, classified. PURE -- the four facts are gathered by

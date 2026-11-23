@@ -3,6 +3,7 @@ import { basename, join } from 'node:path';
 
 import { run } from './exec.ts';
 import type { Clone } from './fleet.ts';
+import { isInside } from './user-paths.ts';
 
 /**
  * Finding what is actually running in a clone.
@@ -118,9 +119,6 @@ export const cwdsOf = (pids: readonly number[]): Map<number, string> => {
   }
   return found;
 };
-
-const isInside = (child: string, parent: string): boolean =>
-  child === parent || child.startsWith(`${parent}/`);
 
 /**
  * How a Claude Code process is recognised in the process table.

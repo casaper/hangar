@@ -36,3 +36,7 @@ export const userPlans = join(claudeDir, 'plans');
 
 /** Render an absolute path under $HOME as `~/...` for output. */
 export const tildify = (p: string): string => (p.startsWith(home) ? `~${p.slice(home.length)}` : p);
+
+/** `child` is `parent` or somewhere below it. String-based: both must already be absolute. */
+export const isInside = (child: string, parent: string): boolean =>
+  child === parent || child.startsWith(`${parent}/`);

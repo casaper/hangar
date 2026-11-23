@@ -311,7 +311,7 @@ const destinationFreshness = (destination: string): number | undefined => {
  */
 type Decline = { readonly reason: string };
 
-const decline = (hangar: Hangar, reason: string): Decline => ({ reason });
+const decline = (reason: string): Decline => ({ reason });
 
 /**
  * The whole set of links to make, or undefined if any part of it cannot be satisfied.
@@ -338,19 +338,15 @@ export const planLinks = (
    */
   const namerScript = namerScriptOf(hangar);
   if (namerScript === undefined) {
-    return decline(
-      hangar,
-      'this hangar declares no `tracker.namerScript`, so no file can be named',
-    );
+    return decline('this hangar declares no `tracker.namerScript`, so no file can be named');
   }
   for (const trunkKey of invocation.keys) {
     const trunk = freshRecord(hangar, trunkKey, ttlMs);
     if (trunk === undefined)
-      return decline(hangar, `${trunkKey} is not in the store, or is older than the TTL`);
+      return decline(`${trunkKey} is not in the store, or is older than the TTL`);
     const wanted = wantedFiles(trunk, invocation.relations, invocation.siblings);
     if (wanted === undefined) {
       return decline(
-        hangar,
         `${trunkKey}'s record does not state its neighbourhood (no \`relations:\`/\`parent:\`/\`siblings:\` ` +
           'keys, or an entry without an id) — only the newer sync contract does',
       );
@@ -360,24 +356,19 @@ export const planLinks = (
       const record = item.key === trunk.key ? trunk : freshRecord(hangar, item.key, ttlMs);
       if (record === undefined) {
         return decline(
-          hangar,
           `${trunkKey} needs ${item.key} (${item.relation ?? 'the trunk'}), which is not in the ` +
             'store or is older than the TTL',
         );
       }
       const destination = destinationOf(clone, namerScript, trunkKey, item, created);
       if (destination === undefined) {
-        return decline(
-          hangar,
-          `${clone.name} could not name the file for ${item.key} under ${trunkKey}`,
-        );
+        return decline(`${clone.name} could not name the file for ${item.key} under ${trunkKey}`);
       }
       if (invocation.assets) {
         const dir = dirname(destination);
         for (const ref of assetRefsIn(record.content)) {
           if (!existsSync(join(dir, ref))) {
             return decline(
-              hangar,
               `${item.key}'s record references ${ref}, which is not beside ${destination} — ` +
                 'attachment names are trunk-specific, so this record belongs to another trunk',
             );

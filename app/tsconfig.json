@@ -21,6 +21,10 @@
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
     "noPropertyAccessFromIndexSignature": true,
+    // An unused parameter is a promise the code does not keep: nine `hangar` parameters had
+    // outlived every use, each one reading as "this answer depends on the hangar" when it did not.
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "skipLibCheck": true
   },
   "include": [
