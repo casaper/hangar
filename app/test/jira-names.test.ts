@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import {
   assetRefsIn,
   pickWinner,
+  storeContentFrom,
   storeLinkTarget,
   ticketNameOf,
   type TicketGroup,
@@ -231,4 +232,34 @@ test('the record store is linked into every clone like any other shared entry', 
   // PID files and dotfiles stay out, which is the rest of the rule and is unchanged.
   assert.ok(!entries.includes('dev-server.pid'));
   assert.ok(!entries.includes('.gitkeep'));
+});
+
+test('a `$` in a record survives the relation strip byte for byte', () => {
+  /*
+   * `String.replace` with a STRING replacement expands `$&`, `$$`, `` $` `` and `$'`, so a
+   * summary like "costs $$ and $& here" came out with the whole matched frontmatter -- the very
+   * `relation:` line being stripped -- pasted back in.
+   */
+  const content = [
+    '---',
+    'id: ABC-7',
+    "title: costs $$ and $& and $` and $' here",
+    'relation: relates',
+    '---',
+    'body with $& too',
+    '',
+  ].join('\n');
+  const { content: stored, stripped } = storeContentFrom(content);
+  assert.deepEqual(stripped, ['relation']);
+  assert.equal(
+    stored,
+    [
+      '---',
+      'id: ABC-7',
+      "title: costs $$ and $& and $` and $' here",
+      '---',
+      'body with $& too',
+      '',
+    ].join('\n'),
+  );
 });

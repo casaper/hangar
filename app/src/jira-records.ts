@@ -412,7 +412,9 @@ export const storeContentFrom = (content: string): { content: string; stripped: 
     })
     .join('\n');
   if (stripped.length === 0) return { content, stripped };
-  return { content: content.replace(frontmatter, kept), stripped };
+  // A function, never the string: a string replacement still expands `$&`, `$$`, `$`` and `$'`,
+  // so a summary with a `$` in it pasted the whole block -- `relation:` line included -- back in.
+  return { content: content.replace(frontmatter, () => kept), stripped };
 };
 
 /** Long enough to cover a `sync.mjs` fetch and the writes that follow it. */
