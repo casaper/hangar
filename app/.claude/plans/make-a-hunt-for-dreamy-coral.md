@@ -241,7 +241,10 @@ All of these are `fix(<scope>)` commits.
   _No change needed. The config `setup` generates hard-codes `file: .env.shared` (line 430), so
   the file it creates and the config always agree, and a `--force` re-run rewrites both._
 - [x] **`isAlive` treats EPERM as dead** _(done; test against pid 1)_ (`procs.ts:213`, R). EPERM means alive.
-- [ ] **Small message bugs** (R). Derive each of these from state:
+- [x] **Small message bugs** (R). Derive each of these from state. _Done as three commits: sync
+  gets a `'skipped'` outcome, catch-up compares HEAD with `oldHead`, and
+  `requireCleanForSwitch(clone, state, onto)` drops the unused `hangar` param, which is two of
+  Tier 3's list._
   - a declined "Sync anyway?" is counted as a failure (`sync.ts:840`);
   - catch-up hard-codes `rebased = true` (`catch-up.ts:579,600`);
   - `requireCleanForSwitch` says "default branch" for `open --branch`.

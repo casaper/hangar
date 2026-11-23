@@ -156,7 +156,9 @@ export const landOnBranch = (
    * refusal instant.
    */
   const switching = known !== undefined && branch !== known;
-  if (switching && opts.dryRun !== true) requireCleanForSwitch(hangar, clone, state);
+  if (switching && opts.dryRun !== true) {
+    requireCleanForSwitch(clone, state, wanted ?? 'the default branch');
+  }
 
   const sessions = claudeSessionsIn(clone.path);
   if (sessions.length > 0 && opts.includeBusy !== true && opts.dryRun !== true) {
@@ -236,7 +238,7 @@ export const landOnBranch = (
     // pre-fetch read of the tree, which a live agent could in principle have made stale during
     // the fetch -- harmless, because a checkout that should have been refused is refused by git
     // itself, with its own message.
-    requireCleanForSwitch(hangar, clone, state);
+    requireCleanForSwitch(clone, state, target);
     if (!checkout(clone, target)) return 'failed';
   }
 
@@ -257,10 +259,12 @@ export const landOnBranch = (
  * the command useless in the situation people run it in most: on the default branch, with a
  * scratch edit in the tree, wanting today's commits.
  */
-const requireCleanForSwitch = (hangar: Hangar, clone: Clone, state: SyncState): void => {
+const requireCleanForSwitch = (clone: Clone, state: SyncState, onto: string): void => {
   if (state.dirty === 0) return;
+  // `onto` is named by the caller: `open --branch <name>` reaches this too, and was told its
+  // work would land "onto the default branch" when it was about to land on <name>.
   throw new CliError(
-    `${clone.name} has ${state.dirty} modified file(s) — switching branches would carry them onto the default branch`,
+    `${clone.name} has ${state.dirty} modified file(s) — switching branches would carry them onto ${onto}`,
     `Commit them, stash them (\`git -C ${clone.path} stash\`), or run \`hangar sync ${clone.index}\`, which stashes and restores around the integration.`,
   );
 };
