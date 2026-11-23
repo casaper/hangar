@@ -219,6 +219,22 @@ test('a parameter nobody declared is refused, never dropped', () => {
   assert.throws(() => argvFor(command(), plain, { 'dry-run': true }), /has no parameter/);
   // An object where a value belongs would reach argv as `[object Object]`.
   assert.throws(() => argvFor(command(), plain, { clone: { n: 1 } }), /must be a single value/);
+  /*
+   * A value spelled like an option is read as one by commander, which turns the tool into a
+   * different command: `doctor({clone: "--fix"})` would be `doctor --fix` under `doctor`'s
+   * pre-approved rule, and `"--"` would cancel a preview's fixed `--dry-run`.
+   */
+  for (const value of ['--fix', '--', '-n', '--set=main']) {
+    assert.throws(() => argvFor(command(), preview, { clone: value }), /may not start with `-`/);
+    assert.throws(
+      () => argvFor(command(), plain, { clone: '1', extras: ['2', value] }),
+      /may not start with `-`/,
+    );
+    assert.throws(
+      () => argvFor(command(), plain, { clone: '1', strategy: value }),
+      /may not start with `-`/,
+    );
+  }
 });
 
 test('a required argument that is missing is refused before anything is spawned', () => {

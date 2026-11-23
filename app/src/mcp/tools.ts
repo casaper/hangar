@@ -580,7 +580,18 @@ export const toolDefinitions = (program: CommandUnknownOpts): ToolDefinition[] =
  * it would be a clone name nothing matches -- or, worse, an argument some command accepts.
  */
 const scalar = (exposure: Exposure, property: string, value: unknown): string => {
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') {
+    // commander reads any word starting with `-` as an option, so a value spelled like one would
+    // run a DIFFERENT command than the tool names: `doctor({clone: "--fix"})` is `doctor --fix`
+    // under `doctor`'s pre-approved rule, and `"--"` would swallow a preview's `--dry-run`.
+    if (value.startsWith('-')) {
+      throw new CliError(
+        `\`${exposure.name}\`'s \`${property}\` may not start with \`-\` (got \`${value}\`)`,
+        'A value spelled like an option would be read as one. Flags are parameters of their own.',
+      );
+    }
+    return value;
+  }
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   throw new CliError(
     `\`${exposure.name}\`'s \`${property}\` must be a single value, not ${typeof value}`,

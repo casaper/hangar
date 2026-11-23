@@ -107,7 +107,10 @@ This plan file is NOT in that commit. **Done in `3ac7841`**; 51 old plans delete
     path into `.hangar`.
   - Refuse `git branch -m|-M|--move` under a lock.
   - Update `root-tools.md`.
-- [ ] **MCP argv injection** (`src/mcp/tools.ts:640` `argvFor`, V). Commit `fix(mcp): …`.
+- [x] **MCP argv injection** (`src/mcp/tools.ts:640` `argvFor`, V). Commit `fix(mcp): …`.
+  _Done, with a deviation. `scalar()` refuses any dash-leading value, for positionals and option
+  values alike, instead of emitting `--`: it keeps every argv shape the tests pin, and it covers
+  option values too. The probe shows 0 and then 86, and `doctor({clone:"--fix"})` is refused._
   - Today `doctor({clone:"--fix"})` runs `doctor --fix`.
   - Refuse a positional that starts with `-`, and emit `--` before the positionals.
   - Test this in `test/mcp-tools.test.ts`.

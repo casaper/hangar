@@ -354,6 +354,12 @@ rather than fixed. `serveMcp` refuses to start if an acting tool's generated sch
 table names a command the registry does not have. Those two are wrong rather than missing, which
 is why they refuse while an unexposed command is only a warning.
 
+**The same split would leak through a VALUE, so `argvFor` refuses any value starting with `-`.**
+commander reads a dash-leading word as an option wherever it stands, so `doctor({clone: "--fix"})`
+was `doctor --fix` under `doctor`'s pre-approved rule, `pr_target({clone: "--set=main"})` wrote
+through the report tool, and `"--"` cancelled a preview's fixed `--dry-run`. No clone name, ref or
+title the tools take needs a leading dash, so the refusal costs nothing a caller meant.
+
 **`colours sync` is the one command with two read-only tools**, and that is not redundancy:
 `--check` is a gate that exits non-zero when an artifact is stale, `-n` is the report that says
 which one and what would change. `app/CLAUDE.md` names the dry run as the only staleness check
