@@ -210,7 +210,12 @@ export const claudeBinary = (): string | undefined => {
 };
 
 export type HeadlessRun = {
-  /** The `claude` to run; PATH's when left out, which is right from a shell. */
+  /**
+   * The `claude` to run. Left out, it is `claudeBinary()`'s answer, falling back to a bare
+   * `claude` -- never PATH alone: `sync`'s resolver and `pr`'s description run can start under a
+   * tmux server's launchd PATH just as a palette entry can, and there a bare spawn fails ENOENT
+   * and sync rolls the whole integration back over it.
+   */
   readonly binary?: string | undefined;
   /** The clone directory. The run's cwd, so the repo's own CLAUDE.md and skills load. */
   readonly repo: string;
@@ -252,7 +257,7 @@ export const runHeadlessClaude = async (run: HeadlessRun): Promise<HeadlessOutco
   };
 
   const child = spawn(
-    run.binary ?? 'claude',
+    run.binary ?? claudeBinary() ?? 'claude',
     [
       '-p',
       // The prompt goes in over stdin as the first user message rather than as an argv prompt,

@@ -188,8 +188,8 @@ All of these are `fix(<scope>)` commits.
   means the branch is not on origin. A network failure refuses.
 - [ ] **`pickPullRequest` "most recent"** (`pr-cache.ts:225`, `bitbucket.ts:407`, R). Send
   `sort=-updated_on`.
-- [ ] **Headless `claude` by bare name** (`resolve-conflicts.ts:90`, `pr.ts:551`, R). Use
-  `claudeBinary()`.
+- [x] **Headless `claude` by bare name** (`resolve-conflicts.ts:90`, `pr.ts:551`, R). Use
+  `claudeBinary()`. _Done in `runHeadlessClaude`'s default, so every caller is covered._
 - [ ] **doctor's `plansDirectory` repair clobbers the settings repair** (`doctor.ts:576`, V).
   Re-read the file inside the repair.
 - [ ] **Port keys with digits** (`clone-config.ts:1142`, V). Use `[A-Z][A-Z0-9_]*` and test
