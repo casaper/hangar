@@ -128,6 +128,21 @@ path variable in the same shell line that uses it.
 **Search a clone with `git -C <clone> grep`, never `grep -r`**: a clone carries `node_modules`
 and a multi-GB `tmp/`, and `grep -r` over one runs past the Bash timeout.
 
+**An edit script over `src/**` checks every substitution before writing ANY file**: one that
+asserts per file mid-run leaves the tree half-edited, and that half is live fleet-wide.
+
+**Check the width of a rewrap by hand**: `git diff -U0 | grep '^+' | awk 'length > 101'`,
+since no gate measures comment or skill-prose line length.
+
+**`npx commitlint --from <sha>` runs from `app/`**, where `.commitlintrc.json` is; at the root
+it fails on the missing config with output that reads like a lint failure.
+
+**A tmux probe of a `#()` job or the bar needs an attached client**: run it under `script(1)`;
+a detached server never runs the job, so the probe proves nothing.
+
+**The hook commands' dry runs (`tmp merge -n`, `plans collect -n`) are a read-only smoke test
+against the real fleet** — run them after touching what a `SessionEnd` hook runs.
+
 **`hangar scrub` scans `tmp/` only; hangar text in a clone's tracked agent files is one grep away**:
 `git -C <clone> grep -n -i -E 'hangar|sibling clone' -- CLAUDE.md AGENTS.md '.claude/**'`.
 Report what it finds; fixing it is clone work, on a branch.
