@@ -38,8 +38,9 @@ shared archive) and `statusLine` (the mode badge).
 **Only operator mode gets it.** Claude Code reads project settings from the session's own
 directory and does not walk up, and developer mode runs in `app/` — so that mode has its own
 tracked `app/.claude/settings.json`, carrying `plansDirectory: ".claude/plans"` and nothing
-else. Its plans stay in `app/.claude/plans/`, which is gitignored; they cannot be pointed at the
-shared archive, because `plansDirectory` is rejected when it resolves outside the project root.
+else. Its plans stay in `app/.claude/plans/`, which is tracked: each is committed with the work it
+describes and `git rm`'d when done (`.claude/modes/dev.md`). They cannot be pointed at the shared
+archive, because `plansDirectory` is rejected when it resolves outside the project root.
 
 **It carries no `permissions` block, deliberately.** It pre-approves no `hangar` command typed at
 a shell, not even `hangar list` — whatever runs unprompted does so because the user's own

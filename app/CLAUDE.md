@@ -533,12 +533,14 @@ Not tracked, and what writes each:
 - `.hangar/port-pins.json` — **INPUT** — `hangar ports pin` / `unpin` / `take`, nothing else
 - `.hangar/claude-tmux.conf` — `hangar up`, every run
 - `.hangar/pnpm-bin/` — corepack's pnpm shims — direnv, through `hangar_use_pnpm`
-- `app/.claude/plans/`, `.remember/` — developer-mode session state, not a `hangar` command's
+- `.remember/` — developer-mode session state, not a `hangar` command's
 
 Tracked: this file, the root `CLAUDE.md`, `README.md`, `bin/**`, `.local/bin/**`, `app/**`,
 `.envrc`, `.envrc.hangar`, `.nvmrc`, `.editorconfig`, `.gitleaks.toml`,
 `hangar.config.example.yaml`, `hangar.schema.json`, `.gitignore`, `CHANGELOG.md`,
 `package.json` (scripts and nothing else — see the top of this file), `.releaserc.json`,
+`app/.claude/plans/` (live developer-mode plans only, each `git rm`'d by the last commit of its
+work — `.claude/modes/dev.md`),
 `personal-skills/**` (the overrides `hangar skills sync` links into `~/.claude/skills`, tracked so
 a shadow that goes stale is a diff rather than a silence), `.claude/**` except the
 generated `settings.json`, and the two `.gitkeep` files under `plans/` and `tmp/`. Never the

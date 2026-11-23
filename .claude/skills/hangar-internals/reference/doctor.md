@@ -673,8 +673,8 @@ directory going the same way. `app/.claude/settings.json` is the fix and it is o
 `plansDirectory: ".claude/plans"`. It cannot be pointed at the hangar root for the reason above:
 `app/` is the project root here, so `../plans`, `<hangar>/.claude/dev-plans` and a symlink to
 either are all outside it. Tracked, because the value is relative and names no machine path;
-`app/.claude/plans/` itself is gitignored. **`doctor` gets no row for it** — that file is in
-git, and `doctor` is the net for what lives outside it.
+`app/.claude/plans/` is tracked too, holding only live plans (`.claude/modes/dev.md`). **`doctor`
+gets no row for either** — both are in git, and `doctor` is the net for what lives outside it.
 
 Dates come from the filename, then the file's own birthtime/mtime, then the first transcript that
 mentions it. **`stat` alone is not trustworthy here:** an earlier consolidation copied 157 plans

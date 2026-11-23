@@ -78,6 +78,28 @@ inside `app/` has to pass `format:check` and the same edit outside it does not. 
 untracked files: a new directory something writes under `app/` turns `format:check` red until
 `app/.prettierignore` names it, which is why `.claude/plans/` and `.remember/` are there.
 
+## Plans — a live checklist, committed with the work, `git rm`'d at the end
+
+This mode's plans live in `app/.claude/plans/` and are **tracked in git** while the work runs.
+Every plan carries a checklist of its tasks plus these standing tasks:
+
+```markdown
+## Standing tasks — keep this plan current
+- [ ] After every finished task: tick its box, note deviations or deferrals, and **stage this
+      file in the same commit** as the work it records. Never batch plan updates afterwards.
+- [ ] Last commit: `git rm` this plan.
+```
+
+So the plan's state lives in history, next to the code changes it describes, and a plan file
+in the tree always means unfinished work. Two things follow from it being tracked:
+
+- **`pnpm scan` reads it like any other file**, so a plan names no organisation, no ticket key of
+  this repo and no `/Users/<name>/` path — the fictional vocabulary of `app/CLAUDE.md`'s
+  **Nothing in here names one organisation** applies to it too.
+- **The standing tasks are what carry the rule.** This file is read once, at startup; a plan
+  written with its standing tasks keeps a session that started before this section existed, or
+  one resumed after a compaction, doing it right.
+
 ## Commits
 
 **Commit straight to `main` unless the user says otherwise.** Do not create a feature branch,

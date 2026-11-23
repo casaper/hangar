@@ -38,18 +38,13 @@ hangar.config.yaml
 # is the only form a negation can override -- see the one exception at the bottom of this file.
 /tmp/*
 
-# Developer mode's own plan directory. Developer mode runs in `app/` (a bare `claude` there, or
-# `hangar up`'s dev tab), and Claude Code reads project settings from the session's own directory
-# rather than walking up -- so the hangar root's `.claude/settings.json` reaches OPERATOR mode and
-# not this one, and without a setting of its own developer mode's plans fall back to
-# `~/.claude/plans`, mixed in with every other project on this machine.
-# `app/.claude/settings.json` is what points them back in here, and that file is
-# TRACKED because its one value is relative and names no machine path. The plans written there
-# are one developer's and are not, and nothing moves them anywhere else: `plansDirectory` must
-# resolve INSIDE the project root, which for this mode is `app/` and not the hangar root, so
-# this is the only place they can go. Claude Code creates the directory when it writes the
-# first plan, which is why there is no `.gitkeep` in it.
-/app/.claude/plans/
+# Developer mode's own plan directory, `app/.claude/plans/`, is TRACKED and deliberately not
+# listed here. Developer mode runs in `app/`, Claude Code reads project settings from the
+# session's own directory rather than walking up, and `plansDirectory` must resolve INSIDE that
+# project root -- so `app/.claude/settings.json` points the mode's plans there and nowhere else.
+# A plan in it is a live checklist committed alongside the work it describes, and the last
+# commit of that work `git rm`s it: a plan file in the tree always means unfinished work, and a
+# finished one lives on in history next to its implementation. `.claude/modes/dev.md` has the rule.
 
 # Generated per-machine state (corepack pnpm shims, Eclipse workspace data). Never committed.
 .hangar/

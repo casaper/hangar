@@ -121,8 +121,8 @@ An archive lands beside the live plan, in whatever directory `plansDirectory` re
 project, dated `YYYY-MM-DD_-_<title>.md` so a directory of them reads in order. Nothing in this
 skill collects them afterwards. In this hangar: a clone session's archives are swept into the
 shared `plans/` by `hangar plans collect` at `SessionEnd`, which reads that date prefix as already
-stamped and keeps the name; developer mode's stay in `app/.claude/plans/`, which nothing drains
-and git ignores.
+stamped and keeps the name; developer mode's stay in `app/.claude/plans/`, which git tracks — an
+archive there is unfinished work like any plan, committed with its work and `git rm`'d when done.
 
 ## What this must never touch
 

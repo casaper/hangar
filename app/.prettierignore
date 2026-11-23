@@ -15,8 +15,7 @@ dev/golden/
 # prettier does not format either.
 .husky/
 
-# Developer mode's own plan files. Gitignored at the hangar root (`app/.claude/plans/`), which
-# does not reach prettier -- so every plan a developer-mode session writes turned
-# `pnpm format:check` red, in a directory the developer never edits by hand. Same failure as
-# `.remember/` above, and the same fix.
+# Developer mode's own plan files. Tracked, but written by Claude Code in plan mode and ticked
+# off by the session working through them -- prettier would rewrap a checklist mid-edit, and a
+# plan freshly written in plan mode would turn `pnpm format:check` red before it is committed.
 .claude/plans/
