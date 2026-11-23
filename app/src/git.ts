@@ -269,11 +269,21 @@ export const fetchArgs = (remoteNames: readonly [string, ...string[]]): string[]
 /** The sibling remotes this repo HAS that are missing a `SIBLING_REMOTE_CONFIG` value. */
 export const loudSiblingRemotes = (repo: string, siblingNames: readonly string[]): string[] => {
   const present = remotes(repo);
+  // ONE `git config` for every remote, rather than one per sibling per key: `doctor --all` asked
+  // this of every clone, so a sixteen-clone fleet paid 240 spawns for one row. git prints the
+  // section and the variable name lowercased and the remote's own name as written, and the
+  // last value wins, as `--get` would answer.
+  const config = new Map<string, string>();
+  for (const line of (gitTry(repo, ['config', '--get-regexp', '^remote\\.']) ?? '').split('\n')) {
+    const space = line.indexOf(' ');
+    if (line !== '')
+      config.set(space < 0 ? line : line.slice(0, space), space < 0 ? '' : line.slice(space + 1));
+  }
   return siblingNames.filter(
     (name) =>
       present.has(name) &&
       SIBLING_REMOTE_CONFIG.some(
-        ([key, want]) => gitConfig(repo, `remote.${name}.${key}`) !== want,
+        ([key, want]) => config.get(`remote.${name}.${key.toLowerCase()}`) !== want,
       ),
   );
 };

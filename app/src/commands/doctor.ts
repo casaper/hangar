@@ -250,7 +250,15 @@ const readModeStatusLine = (path: string): string | undefined => {
   }
 };
 
-const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Check[] => {
+/** A clone's remotes, read once per run however many siblings ask about it. */
+type RemotesOf = (path: string) => Map<string, string>;
+
+const checksFor = (
+  hangar: Hangar,
+  clone: Clone,
+  siblings: readonly Clone[],
+  remotesOf: RemotesOf,
+): Check[] => {
   const checks: Check[] = [];
 
   checks.push({
@@ -730,12 +738,14 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
   });
 
   // --- fleet wiring ------------------------------------------------------------------
-  const mine = remotes(clone.path);
+  // Through `remotesOf`: every clone asks the same question of every sibling, so reading each
+  // clone's remotes afresh here was N squared `git remote` spawns for `doctor --all`.
+  const mine = remotesOf(clone.path);
   const missingOut = siblings
     .filter((s) => s.index !== clone.index && !mine.has(s.name))
     .map((s) => s.name);
   const missingIn = siblings
-    .filter((s) => s.index !== clone.index && !remotes(s.path).has(clone.name))
+    .filter((s) => s.index !== clone.index && !remotesOf(s.path).has(clone.name))
     .map((s) => s.name);
   checks.push({
     name: 'sibling remotes',
@@ -2042,9 +2052,18 @@ export const doctor = (hangar: Hangar, ref: string | undefined, opts: DoctorOpti
    */
   const cloneWarnings: DoctorWarning[] = [];
 
+  const remotesRead = new Map<string, Map<string, string>>();
+  const remotesOf: RemotesOf = (path) => {
+    const known = remotesRead.get(path);
+    if (known !== undefined) return known;
+    const read = remotes(path);
+    remotesRead.set(path, read);
+    return read;
+  };
+
   for (const clone of targets) {
     heading(cloneLabel(clone));
-    for (const check of checksFor(hangar, clone, all)) {
+    for (const check of checksFor(hangar, clone, all, remotesOf)) {
       if (check.ok) {
         if (check.unverified === true) note(`${check.name.padEnd(22)} ${check.detail}`);
         else ok(`${check.name.padEnd(22)} ${pc.dim(check.detail)}`);

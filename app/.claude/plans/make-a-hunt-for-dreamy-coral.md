@@ -296,7 +296,7 @@ Commits are `refactor` or `docs`.
 
 These are `perf(<scope>)` commits.
 
-- [ ] doctor's sibling-remote checks run N² git calls (`doctor.ts:733-763`). Read each clone's
+- [x] doctor's sibling-remote checks run N² git calls _(done: `doctor --all` 13.9s → 5.6s)_ (`doctor.ts:733-763`). Read each clone's
   remotes and remote config once.
 - [ ] ps/lsof run per clone (`doctor.ts:1080`, `close.ts:186-197`, `open.ts:474,682`). Call
   `allClaudeSessions()`, `currentSession()` and `invokingTty()` once per run. Also stop
