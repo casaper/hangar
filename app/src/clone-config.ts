@@ -1139,7 +1139,9 @@ export const readEnvLocalPorts = (clone: Clone): Partial<Record<string, number>>
   const found: Record<string, number> = {};
   if (!existsSync(path)) return found;
   for (const line of readFileSync(path, 'utf8').split('\n')) {
-    const match = /^\s*([A-Z_]+)\s*=\s*'?"?(\d+)'?"?\s*$/.exec(line);
+    // The schema's own key shape, digits included: `[A-Z_]+` never matched `E2E_PORT`, so doctor
+    // called a correctly written one missing for ever and `portClaims` never saw it.
+    const match = /^\s*([A-Z][A-Z0-9_]*)\s*=\s*'?"?(\d+)'?"?\s*$/.exec(line);
     if (match?.[1] && match[2]) found[match[1]] = Number.parseInt(match[2], 10);
   }
   return found;

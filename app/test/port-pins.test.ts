@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { envLocalPath, readEnvLocalPorts } from '../src/clone-config.ts';
 import { CliError } from '../src/exec.ts';
 import { cloneAt } from '../src/fleet.ts';
 import { clearPortPin, portPins, setPortPin } from '../src/port-pins.ts';
@@ -73,5 +74,19 @@ test('two hangars in one process do not share pins', () => {
   } finally {
     rmSync(a, { recursive: true, force: true });
     rmSync(b, { recursive: true, force: true });
+  }
+});
+
+test('a port key with a digit in it is read back from the dotenv', () => {
+  // The schema allows `^[A-Z][A-Z0-9_]*$`; the reader once took `[A-Z_]+` only, so doctor called
+  // a correctly written `E2E_PORT` missing for ever and the collision check never saw it.
+  const root = freshRoot();
+  try {
+    const clone = cloneAt(syntheticHangar({ root }), 1);
+    mkdirSync(clone.path, { recursive: true });
+    writeFileSync(envLocalPath(clone), 'E2E_PORT=4311\nS3_PORT=\'4312\'\nAPI_PORT="4313"\n');
+    assert.deepEqual(readEnvLocalPorts(clone), { E2E_PORT: 4311, S3_PORT: 4312, API_PORT: 4313 });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

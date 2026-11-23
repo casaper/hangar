@@ -194,7 +194,7 @@ All of these are `fix(<scope>)` commits.
   `claudeBinary()`. _Done in `runHeadlessClaude`'s default, so every caller is covered._
 - [x] **doctor's `plansDirectory` repair clobbers the settings repair** (`doctor.ts:576`, V).
   Re-read the file inside the repair. _Done via `reconcileHook`._
-- [ ] **Port keys with digits** (`clone-config.ts:1142`, V). Use `[A-Z][A-Z0-9_]*` and test
+- [x] **Port keys with digits** _(done; test in port-pins.test.ts)_ (`clone-config.ts:1142`, V). Use `[A-Z][A-Z0-9_]*` and test
   `E2E_PORT`.
 - [ ] **`clone_00` crashes every command** (`fleet.ts:37`, `palette.ts:453`, R). Skip index 0,
   and have doctor report it.
