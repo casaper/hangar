@@ -777,7 +777,13 @@ const leftovers = (hangar: Hangar, state: TreeAfterSync): string =>
     .filter((part): part is string => part !== undefined)
     .join(', ');
 
-const syncOne = async (hangar: Hangar, clone: Clone, opts: SyncOptions): Promise<boolean> => {
+/**
+ * `true` synced, `false` failed, `'skipped'` declined at the "Sync anyway?" question -- which is
+ * the operator choosing not to, and was tallied as a failure ("sync failed for: X", non-zero).
+ */
+type SyncOutcome = boolean | 'skipped';
+
+const syncOne = async (hangar: Hangar, clone: Clone, opts: SyncOptions): Promise<SyncOutcome> => {
   heading(`Syncing ${cloneLabel(clone)}`);
 
   // Never the session running this command: run from a clone session's own Bash tool, the
@@ -857,7 +863,7 @@ const integrate = async (
   opts: SyncOptions,
   sessions: readonly ClaudeSession[],
   run: Run,
-): Promise<boolean> => {
+): Promise<SyncOutcome> => {
   const target = run.strategy.target;
 
   // 1. pause any live session
@@ -870,7 +876,7 @@ const integrate = async (
       if (run.paused.length !== sessions.length) {
         if (!confirm('Some sessions could not be reached. Sync anyway?')) {
           note('skipped');
-          return false;
+          return 'skipped';
         }
       }
     }
@@ -1052,7 +1058,9 @@ export const sync = async (
       }
     }
     try {
-      if (!(await syncOne(hangar, clone, opts))) failed.push(clone.name);
+      const outcome = await syncOne(hangar, clone, opts);
+      if (outcome === 'skipped') skipped.push(clone.name);
+      else if (!outcome) failed.push(clone.name);
     } catch (error) {
       if (!(error instanceof CliError) || clones.length === 1) throw error;
       fail(`${clone.name}: ${error.message}`);
