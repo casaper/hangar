@@ -199,7 +199,7 @@ All of these are `fix(<scope>)` commits.
 - [x] **`clone_00` crashes every command** (`fleet.ts:37`, `palette.ts:453`, R). Skip index 0,
   and have doctor report it. _Done in `discoverClones`, which also skips a non-canonical
   `clone_001` (a second clone 1). Deferred: a doctor row for skipped directories._
-- [ ] **Bar PR refresh with no `--hangar`** (`tmux-status-sh.ts:424`, V). Add
+- [x] **Bar PR refresh with no `--hangar`** _(done; golden delta as predicted, plus 2 comment lines)_ (`tmux-status-sh.ts:424`, V). Add
   `--hangar <root>`. Expected golden: one line of `clone-tmux-status.sh` per fixture.
 - [ ] **doctor `.env.local` checks only the ports** (`doctor.ts:262-297`, R). Compare the root key
   and `cloneEnv.vars` too.

@@ -219,7 +219,9 @@ pr)
       printf '%s' "$now" >"$lock/at" 2>/dev/null
       # Every descriptor is closed: tmux waits for a job's stdout to reach EOF, so a child
       # holding it open would hang the bar rather than the other way round.
-      ("$HANGAR" pr refresh "$clone" >/dev/null 2>&1; rm -rf "$lock") \
+      # `--hangar`, like every command tmux starts: a status job runs in the CLIENT's
+      # directory, and the CLI otherwise finds its hangar by walking up from there.
+      ("$HANGAR" --hangar "$ROOT" pr refresh "$clone" >/dev/null 2>&1; rm -rf "$lock") \
         </dev/null >/dev/null 2>&1 &
     fi
   fi
