@@ -107,7 +107,11 @@ included, since a session there would not load `app/CLAUDE.md` on its first turn
 **`pwd -P`, never `$PWD`.** `$PWD` is a shell variable and is inherited, so a non-interactive
 shell that never `cd`'d carries whatever its parent had — which made an early version of the shim
 answer for a directory the caller was not standing in. `pwd` asks the OS, and `-P` resolves
-symlinks on both sides so a hangar reached through a link still compares equal.
+symlinks on both sides so a hangar reached through a link still compares equal. **Finding the
+real binary is the one comparison it cannot make that way**, because PATH entries are not
+resolved: the shim skips its own FILE with `-ef`, not its directory as a string, or a symlinked
+or trailing-slash PATH entry for `.local/bin` made it exec itself in a loop
+(`test/claude-shim.test.ts` holds both spellings).
 
 **Three more cases get the bare binary, and each unsets `HANGAR_MODE` on the way:**
 

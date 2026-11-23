@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   realpathSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -134,4 +135,24 @@ test('with no real claude behind it, it says so rather than finding itself', () 
   });
   assert.equal(res.status, 127);
   assert.match(res.stderr, /not found on PATH/);
+});
+
+test('the shim never finds itself, however PATH spells its directory', () => {
+  /*
+   * The skip compared each PATH entry with `pwd -P`'s resolved directory as a STRING, so a
+   * symlinked spelling of the same directory -- or a trailing slash -- was a different string,
+   * `real` became the shim itself, and in a mode directory it re-exec'd itself for ever.
+   */
+  const alias = join(root, 'shim-alias');
+  symlinkSync(shimDir, alias);
+  for (const spelling of [alias, `${shimDir}/`]) {
+    const res = spawnSync(join(shimDir, 'claude'), [], {
+      cwd: join(root, 'app'),
+      env: { PATH: `${spelling}:${fakeDir}:/usr/bin:/bin` },
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    assert.equal(res.status, 0, `PATH ${spelling}: ${res.stderr || String(res.error)}`);
+    assert.match(res.stdout, /^HANGAR_MODE=dev\n/);
+  }
 });

@@ -232,7 +232,8 @@ All of these are `fix(<scope>)` commits.
   - Answer a non-object line or a batch with an error.
   - Make the catch null-safe.
   - Test a `null` line, a batch and a split multi-byte character.
-- [ ] **`claude` shim self-exec loop** (`.local/bin/claude`, R). Resolve PATH entries with
+- [x] **`claude` shim self-exec loop** (`.local/bin/claude`, R). _Done with `-ef` (same file), not
+  `pwd -P` per entry. The new test timed out on the old shim and passes on the new one._ Resolve PATH entries with
   `pwd -P`. Work on a scratch copy and run `test/claude-shim.test.ts` against it before the `mv`.
 - [ ] **`skills sync --adopt` with a subfolder** (`skills.ts:376`, R). Compare recursively and
   guard ENOTDIR.
