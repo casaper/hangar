@@ -114,7 +114,13 @@ export const discoverClones = (hangar: Hangar): Clone[] => {
     } catch {
       continue;
     }
-    indices.push(Number.parseInt(match[1], 10));
+    const index = Number.parseInt(match[1], 10);
+    // Only a directory spelled exactly as `cloneNameFor` would spell it, and never index 0.
+    // `clone_00` has no palette entry (`colourFor` threw inside `makeClone`, so every command
+    // died), and `clone_001` beside `clone_01` parses to the same index -- while `makeClone`
+    // builds the path from the canonical name, so it would have been a second copy of clone 1.
+    if (index < 1 || entry.name !== cloneNameFor(hangar, index)) continue;
+    indices.push(index);
   }
   return indices.sort((a, b) => a - b).map((index) => makeClone(hangar, index));
 };

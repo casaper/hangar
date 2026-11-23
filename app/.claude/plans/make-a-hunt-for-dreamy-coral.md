@@ -196,8 +196,9 @@ All of these are `fix(<scope>)` commits.
   Re-read the file inside the repair. _Done via `reconcileHook`._
 - [x] **Port keys with digits** _(done; test in port-pins.test.ts)_ (`clone-config.ts:1142`, V). Use `[A-Z][A-Z0-9_]*` and test
   `E2E_PORT`.
-- [ ] **`clone_00` crashes every command** (`fleet.ts:37`, `palette.ts:453`, R). Skip index 0,
-  and have doctor report it.
+- [x] **`clone_00` crashes every command** (`fleet.ts:37`, `palette.ts:453`, R). Skip index 0,
+  and have doctor report it. _Done in `discoverClones`, which also skips a non-canonical
+  `clone_001` (a second clone 1). Deferred: a doctor row for skipped directories._
 - [ ] **Bar PR refresh with no `--hangar`** (`tmux-status-sh.ts:424`, V). Add
   `--hangar <root>`. Expected golden: one line of `clone-tmux-status.sh` per fixture.
 - [ ] **doctor `.env.local` checks only the ports** (`doctor.ts:262-297`, R). Compare the root key

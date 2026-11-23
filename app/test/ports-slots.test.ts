@@ -152,3 +152,21 @@ test('add-clone skips an index whose formula ports an existing clone holds', () 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('only a directory spelled as the clone name would be is a clone, and never index 0', () => {
+  // `wt-000` once killed every command (no palette entry for index 0), and `wt-0001` beside
+  // `wt-001` was a second clone 1 whose path pointed at the first one's directory.
+  const root = mkdtempSync(join(tmpdir(), 'hangar-discover-'));
+  try {
+    const h = syntheticHangar({ root });
+    for (const name of ['wt-000', 'wt-001', 'wt-0001', 'wt-002', 'wt-1000']) {
+      mkdirSync(join(root, name));
+    }
+    assert.deepEqual(
+      discoverClones(h).map((c) => c.name),
+      ['wt-001', 'wt-002', 'wt-1000'],
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
