@@ -97,7 +97,10 @@ This plan file is NOT in that commit. **Done in `3ac7841`**; 51 old plans delete
   - Refuse these without `-n`: `hangar dev release`, `cli.ts dev release`, `pnpm release`, and a
     direct `semantic-release`.
   - Update `modes.md`'s guard section and the root CLAUDE.md guard paragraph.
-- [ ] **Commit gate** (`bin/hangar-commit-gate:64-142`, P). Commit `fix(commit-gate): …`.
+- [x] **Commit gate** (`bin/hangar-commit-gate:64-142`, P). Commit `fix(commit-gate): …`.
+  _Done. Quoted spans are blanked before the walk, so `sh -c 'git commit'` stays out of reach,
+  which root-tools.md records. `.hangar` is matched only as the directory itself or a glob of
+  it, not any path under it. `git branch -c` (copy) is allowed, since the lock stays put._
   - Replace the `GIT_COMMIT` regex with the exec guard's token walk. Cover a pipe, `(`,
     `VAR=… git`, `env git`, `/usr/bin/git` and `--git-dir x`.
   - Match `GATE_RELEASE`/`GATE_STATE` on bare tokens, quoted `"release"` included, and on any

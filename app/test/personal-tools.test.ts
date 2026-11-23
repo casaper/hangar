@@ -34,7 +34,9 @@ type Decision = { op: string; why?: string; replaces?: string };
 /** The gate's pure half -- it exports it when required rather than run. */
 const gate = createRequire(import.meta.url)(join(binDir, 'hangar-commit-gate')) as {
   GATE_STATE: RegExp;
+  commits: (command: string) => boolean;
   releasesGate: (command: string) => boolean;
+  renamesBranch: (command: string) => boolean;
   toggleDecision: (facts: {
     branch: string;
     isDefault: boolean;
@@ -121,9 +123,16 @@ test('the gate guards its own release, because a permission rule cannot', () => 
   ]) {
     assert.ok(gate.releasesGate(line), `a release escape is not caught: ${line}`);
   }
+  // Quoting the verb is still the verb.
+  for (const line of ['hangar-commit-gate "release"', "hangar-commit-gate 'unlock'"]) {
+    assert.ok(gate.releasesGate(line), `a quoted release escape is not caught: ${line}`);
+  }
   for (const line of [
     'rm -rf .hangar/commit-gate',
     'echo x > $HOME/h/.hangar/commit-gate/c.json',
+    // The directory that holds it, whole or globbed.
+    'rm -rf ../.hangar',
+    'rm -rf /h/.hangar/*',
   ]) {
     assert.ok(gate.GATE_STATE.test(line), `a state-file escape is not caught: ${line}`);
   }
@@ -136,6 +145,38 @@ test('the gate guards its own release, because a permission rule cannot', () => 
     'hangar status 2',
   ]) {
     assert.ok(!gate.releasesGate(line) && !gate.GATE_STATE.test(line), `wrongly caught: ${line}`);
+  }
+});
+
+test('the gate reads a commit and a branch rename wherever the shell would run one', () => {
+  // Each of these got past the old pattern, which wanted `git` right after a line or `&&`/`;`.
+  for (const line of [
+    'git commit -m x',
+    'true | git commit -m x',
+    '(git commit -m x)',
+    'GIT_EDITOR=true git commit',
+    'env git commit',
+    '/usr/bin/git commit',
+    'git --git-dir .git commit',
+    'git -C /x -c user.name=a commit --amend',
+    'ls && git commit -F /tmp/m',
+  ]) {
+    assert.ok(gate.commits(line), `a commit is not caught: ${line}`);
+  }
+  for (const line of [
+    'echo "then git commit"',
+    'git log --grep commit',
+    'git status',
+    'cat commit.txt',
+    'grep -n "git commit" a.md',
+  ]) {
+    assert.ok(!gate.commits(line), `wrongly read as a commit: ${line}`);
+  }
+  for (const line of ['git branch -m new', 'git branch -M old new', 'git branch --move a b']) {
+    assert.ok(gate.renamesBranch(line), `a rename is not caught: ${line}`);
+  }
+  for (const line of ['git branch', 'git branch --merged', 'git branch -c a b', 'git branch -a']) {
+    assert.ok(!gate.renamesBranch(line), `wrongly read as a rename: ${line}`);
   }
 });
 

@@ -15,9 +15,14 @@ rather than `hangar` subcommands, what each refuses, and how `personal-skills/` 
   repo root. The gate is pre-approved only as `status`; `lock`, `release` and `unlock` prompt,
   because an agent that can release its own gate has no gate. The hook does nothing while the
   gate is neither locked nor armed; under a lock it refuses `release`, `unlock`, `toggle`,
-  `hangar key gate` (which runs `toggle`) and any command naming its own state file, because a
-  permission rule matches only the START of a command string and
-  `hangar-commit-gate status && … release` sails straight past one. `releasesGate` is the one
+  `hangar key gate` (which runs `toggle`), any command naming its own state file or the
+  `.hangar` directory that holds it, and an agent's own `git branch -m`, which would leave the
+  lock on a name nobody commits on -- because a permission rule matches only the START of a
+  command string and `hangar-commit-gate status && … release` sails straight past one. The
+  commit itself is found by a token walk over the line with quoted spans blanked out (`commits`,
+  beside `renamesBranch`), not by a regex anchored at `&&`/`;`: that let `true | git commit`,
+  `(git commit)`, `env git commit`, `/usr/bin/git commit` and `git --git-dir x commit` through.
+  `sh -c 'git commit'` stays out of reach, the price of not blocking a `grep` for one. `releasesGate` is the one
   test for every releasing spelling, and the script exports it with `toggleDecision` when it is
   required rather than run, so `test/personal-tools.test.ts` holds the hook's own patterns rather
   than a copy. `lock` itself is refused only while armed, below.

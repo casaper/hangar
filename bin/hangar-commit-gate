@@ -58,10 +58,61 @@ const { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } = require('
 const { join, basename, dirname } = require('node:path');
 
 /**
- * Anchored at a command boundary and stepping over complete quoted spans, so `echo "then git
- * commit"` is not a commit and `git -C dir commit` is.
+ * Git's global options that take their value as the NEXT token -- the same set
+ * `hangar-exec-guard` steps over, so `git --git-dir .git commit` is read as a commit.
  */
-const GIT_COMMIT = /(?:^|&&|\|\||;|\n)\s*git\s+(?:-C\s+\S+\s+|-c\s+\S+\s+|--\S+\s+)*commit\b/;
+const GIT_VALUE_OPTIONS = new Set([
+  '-C',
+  '-c',
+  '--git-dir',
+  '--work-tree',
+  '--namespace',
+  '--config-env',
+  '--super-prefix',
+  '--exec-path',
+]);
+
+/**
+ * Every git invocation on the line, as `{ verb, args }`. PURE.
+ *
+ * Token-based, as `hangar-exec-guard` is, rather than anchored at a command boundary: a regex
+ * that wanted `git` right after `^`, `&&`, `||`, `;` or a newline let `true | git commit`,
+ * `(git commit)`, `GIT_EDITOR=true git commit`, `env git commit` and `/usr/bin/git commit` through.
+ * Quoted spans are blanked out first, so `echo "then git commit"` and a `grep` for one are not
+ * commits -- which leaves `sh -c 'git commit'` out of reach, a limit of reading a line rather
+ * than running it.
+ */
+const gitInvocations = (command) => {
+  const found = [];
+  const plain = command.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, ' _ ');
+  for (const segment of plain.split(/[;&|()`\n]+/)) {
+    const tokens = segment.split(/\s+/).filter(Boolean);
+    for (let i = 0; i < tokens.length; i += 1) {
+      if (!/(^|\/)git$/.test(tokens[i])) continue;
+      let j = i + 1;
+      while (j < tokens.length && tokens[j].startsWith('-')) {
+        j += GIT_VALUE_OPTIONS.has(tokens[j]) ? 2 : 1;
+      }
+      if (j < tokens.length) found.push({ verb: tokens[j], args: tokens.slice(j + 1) });
+    }
+  }
+  return found;
+};
+
+/** Does the line run `git commit`? */
+const commits = (command) => gitInvocations(command).some((g) => g.verb === 'commit');
+
+/**
+ * Does the line rename a branch? Under a lock that is an escape: the lock names the branch, and
+ * a renamed branch is one the lock no longer applies to. `follow-rename` is how a lock moves with
+ * a real rename, and `hangar pr rebranch` runs it; an agent's own `git branch -m` is refused.
+ */
+const renamesBranch = (command) =>
+  gitInvocations(command).some(
+    (g) =>
+      g.verb === 'branch' &&
+      g.args.some((a) => a === '--move' || /^-[A-Za-z]*[mM][A-Za-z]*$/.test(a)),
+  );
 
 /**
  * Releasing the gate, in any spelling -- and this is a hook rather than a permission rule for the
@@ -77,7 +128,7 @@ const GIT_COMMIT = /(?:^|&&|\|\||;|\n)\s*git\s+(?:-C\s+\S+\s+|-c\s+\S+\s+|--\S+\
  * whole command line is visible. The person at the terminal is unaffected: a PreToolUse hook sees
  * an agent's tool calls and nothing they type themselves.
  */
-const GATE_RELEASE = /hangar-commit-gate\s+(?:--\S+\s+)*(?:release|unlock|toggle)\b/;
+const GATE_RELEASE = /hangar-commit-gate["']?\s+(?:--\S+\s+)*["']?(?:release|unlock|toggle)\b/;
 
 /**
  * `hangar key gate`, which is `C-b C-g` and runs `toggle` -- so it releases a lock exactly as
@@ -94,7 +145,7 @@ const releasesGate = (command) => GATE_RELEASE.test(command) || GATE_KEY.test(co
  * branch names, or `lock` on some other branch, and the ticket's own branch is never locked.
  * Denied only while armed -- under a lock, `arm` already refuses and `lock` re-locks.
  */
-const GATE_REPOINT = /hangar-commit-gate\s+(?:--\S+\s+)*(?:arm|lock)\b/;
+const GATE_REPOINT = /hangar-commit-gate["']?\s+(?:--\S+\s+)*["']?(?:arm|lock)\b/;
 
 /**
  * Deleting or rewriting the lock, which is the same escape one level down.
@@ -102,9 +153,11 @@ const GATE_REPOINT = /hangar-commit-gate\s+(?:--\S+\s+)*(?:arm|lock)\b/;
  * The hook denies `git commit` by reading a file; a command that removes that file turns the gate
  * off just as completely and was, until this, entirely unguarded. Matched by the state
  * directory's name rather than the resolved path, so a relative spelling, a glob or a `$HOME`
- * form is caught too -- nothing an agent has reason to touch mentions it.
+ * form is caught too -- nothing an agent has reason to touch mentions it. The `.hangar` directory
+ * as a whole is matched as well, bare or globbed (`rm -rf ../.hangar`, `.hangar/*`), since
+ * removing it removes the lock with it; a path to anything else under it is left alone.
  */
-const GATE_STATE = /\.hangar\/commit-gate/;
+const GATE_STATE = /\.hangar\/commit-gate|\.hangar(?:\/\*?)?(?=$|[\s'";&|)])/;
 
 /** The hangar root, from this script's own location -- never from $PWD. Same rule as bin/hangar. */
 const hangarRoot = () => dirname(dirname(__filename));
@@ -265,7 +318,8 @@ const escape = (lock) =>
     `**Releasing the commit gate is the user's, and this is blocked.**`,
     '',
     `The gate is ACTIVE on ${describe(lock)}. Releasing it -- with \`release\`, \`unlock\` or`,
-    '`toggle`, or by deleting its state file -- is the one thing you may not do on this branch, because a',
+    '`toggle`, by deleting its state file, or by renaming the branch out from under it -- is the',
+    'one thing you may not do on this branch, because a',
     'gate you can turn off yourself is not a gate.',
     '',
     'If the work is ready, say so and stop. The user runs the release.',
@@ -514,8 +568,8 @@ const hook = () => {
   const command = payload.tool_input?.command ?? '';
   if (payload.tool_name !== 'Bash') return;
 
-  const escaping = releasesGate(command) || GATE_STATE.test(command);
-  if (!escaping && !GIT_COMMIT.test(command)) return;
+  const escaping = releasesGate(command) || GATE_STATE.test(command) || renamesBranch(command);
+  if (!escaping && !commits(command)) return;
 
   process.stdout.write(
     JSON.stringify({
@@ -622,8 +676,10 @@ if (require.main === module) {
     GATE_RELEASE,
     GATE_KEY,
     GATE_STATE,
+    commits,
     followsRename,
     releasesGate,
+    renamesBranch,
     toggleDecision,
   };
 }
