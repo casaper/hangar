@@ -184,8 +184,10 @@ All of these are `fix(<scope>)` commits.
   The help text and command-notes are updated._
 - [x] **The `pr` dry run names the wrong directory** _(done)_ (`pr.ts:759,959`, R). Use
   `join(clone.path,'tmp')`.
-- [ ] **`push` trusts a stale `origin/<branch>`** (`push.ts:60`, R). "couldn't find remote ref"
-  means the branch is not on origin. A network failure refuses.
+- [x] **`push` trusts a stale `origin/<branch>`** (`push.ts:60`, R). "couldn't find remote ref"
+  means the branch is not on origin. A network failure refuses. _Done with `ls-remote
+  --exit-code` (exit 2 means missing, in any locale) rather than matching git's English stderr,
+  then a fetch. No test: the logic is git exit codes, already pinned by the ls-remote probe._
 - [ ] **`pickPullRequest` "most recent"** (`pr-cache.ts:225`, `bitbucket.ts:407`, R). Send
   `sort=-updated_on`.
 - [x] **Headless `claude` by bare name** (`resolve-conflicts.ts:90`, `pr.ts:551`, R). Use

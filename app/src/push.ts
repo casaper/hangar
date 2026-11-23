@@ -1,6 +1,6 @@
 import type { Clone } from './fleet.ts';
 import { CliError } from './exec.ts';
-import { git, gitTry, refExists } from './git.ts';
+import { git, gitTry } from './git.ts';
 
 /**
  * Where a branch stands against origin, and what pushing it would mean.
@@ -52,13 +52,39 @@ export const describePush = (branch: string, state: OriginState): string => {
 };
 
 /**
- * Fetch the branch, then read where it stands. Fetched first, on a dry run too: a stale
+ * Ask origin, fetch the branch, then read where it stands. Fetched first, on a dry run too: a stale
  * remote-tracking ref is exactly the wrong answer here, calling a branch pushed an hour ago
  * unpushed -- or, worse, pushed when its last commits are local. Only `refs/remotes` moves.
  */
 export const originState = (clone: Clone, branch: string): OriginState => {
-  const fetched = git(clone.path, ['fetch', '--quiet', 'origin', branch]);
-  const onOrigin = fetched.ok || refExists(clone.path, `origin/${branch}`);
+  // Origin is ASKED, and its answer is the only one taken. A branch gone from origin (merged with
+  // close-source-branch) leaves a stale `origin/<branch>` behind, which read as "up to date" --
+  // nothing pushed, and `pr create` then opened a pull request from a branch origin no longer
+  // has. `--exit-code` makes "no such branch" exit 2 in any locale; any other failure is origin
+  // not answering, and a push decided on a stale ref is what this function exists to prevent.
+  const asked = git(clone.path, [
+    'ls-remote',
+    '--exit-code',
+    '--heads',
+    'origin',
+    `refs/heads/${branch}`,
+  ]);
+  if (!asked.ok && asked.code !== 2) {
+    throw new CliError(
+      `${clone.name}: could not ask origin about ${branch}`,
+      asked.stderr.trim() || 'git ls-remote failed without saying why.',
+    );
+  }
+  const onOrigin = asked.ok;
+  if (onOrigin) {
+    const fetched = git(clone.path, ['fetch', '--quiet', 'origin', branch]);
+    if (!fetched.ok) {
+      throw new CliError(
+        `${clone.name}: could not fetch ${branch} from origin`,
+        fetched.stderr.trim(),
+      );
+    }
+  }
   const counted = onOrigin
     ? gitTry(clone.path, ['rev-list', '--left-right', '--count', `HEAD...origin/${branch}`])
     : gitTry(clone.path, ['rev-list', '--count', 'HEAD', '--not', '--remotes=origin']);
