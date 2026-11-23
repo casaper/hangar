@@ -114,8 +114,11 @@ This plan file is NOT in that commit. **Done in `3ac7841`**; 51 old plans delete
   - Today `doctor({clone:"--fix"})` runs `doctor --fix`.
   - Refuse a positional that starts with `-`, and emit `--` before the positionals.
   - Test this in `test/mcp-tools.test.ts`.
-- [ ] **tmux footer shell injection** (`src/generate/tmux-conf.ts:360,385`, V). Commit
+- [x] **tmux footer shell injection** (`src/generate/tmux-conf.ts:360,385`, V). Commit
   `fix(terminal): …`.
+  _Done. Probed on 3.8 with an attached client, run under script(1): the bare form INJECTED, and
+  `q:` passed the path through as one inert arg. The golden delta was exactly the 4 predicted
+  lines. The live bar only changes after `hangar colours sync`, which the user runs at the end._
   - Use `#{q:pane_current_path}` and `#{q:@hangar_clone}`, without the double quotes.
   - Probe `q:` inside `#()` on a throwaway `-L` server, with a `mkdir '$(touch pwned)'` pane.
   - Expected golden: only the `pane-border-format` lines of `clone-tmux.conf`, in both fixtures.

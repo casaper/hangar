@@ -357,7 +357,7 @@ export const barOptions = (hangar: Hangar): readonly BarOption[] => {
  * would spawn a fresh shell per column while a pane is being dragged.
  */
 export const paneBorderFormat = (hangar: Hangar, colour?: CloneColour): string => {
-  const job = statusJob(hangar)('footer', '#{pane_current_path}');
+  const job = statusJob(hangar)('footer', 'pane_current_path');
   /*
    * `bold` on the hue version, and it is legibility rather than emphasis: `colour.ink` is pure
    * black on most of the palette, and pure black at normal weight on a saturated hue is thinner
@@ -372,18 +372,23 @@ export const paneBorderFormat = (hangar: Hangar, colour?: CloneColour): string =
 };
 
 /**
- * `#(clone-tmux-status.sh <field> "<clone>" …)`, the one place the job's shape is written.
+ * `#(clone-tmux-status.sh <field> <clone> …)`, the one place the job's shape is written.
  *
- * Double quotes around each expansion, never single: the whole value is single-quoted on the way
- * into the conf, and tmux processes no escapes inside single quotes -- so one `'` in here would
- * end the option's value and leave the rest of the line as garbage tmux does not complain about.
- * Verified expanding inside `#()` either way.
+ * **Every expansion goes through tmux's `q:` modifier, never bare inside quotes.** tmux
+ * substitutes `#{…}` into the job's text BEFORE handing it to `sh -c`, escaping nothing, so a
+ * `"#{pane_current_path}"` in a pane `cd`'d into a directory named `$(…)` ran that command on
+ * every redraw, in every attached client -- measured on 3.8, together with `q:` passing the same
+ * path through as one inert argument. `q:` escapes for sh(1) itself, which is also why there are
+ * no quotes around it: they would be quoting an already-quoted word. And still no single quote
+ * anywhere in here: the whole value is single-quoted on its way into the conf.
+ *
+ * So the rest arguments name FORMAT VARIABLES (`pane_current_path`), not finished `#{…}` text.
  */
 const statusJob =
   (hangar: Hangar) =>
-  (field: string, ...args: readonly string[]): string =>
-    `#(${hangar.paths.tmuxStatusScript} ${field} "#{@hangar_clone}"${args
-      .map((a) => ` "${a}"`)
+  (field: string, ...variables: readonly string[]): string =>
+    `#(${hangar.paths.tmuxStatusScript} ${field} #{q:@hangar_clone}${variables
+      .map((v) => ` #{q:${v}}`)
       .join('')})`;
 
 /**

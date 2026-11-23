@@ -533,7 +533,7 @@ windows after a restart does that for every tab at once. What it builds is the s
 header describes: one bare unnamed window, no roles, and nothing painted. Observed here, six
 sessions deep, with the two clones nobody reopened left holding a single `zsh` window each.
 
-Nothing then says so. The footer job is `#(clone-tmux-status.sh footer "#{@hangar_clone}" …)` and
+Nothing then says so. The footer job is `#(clone-tmux-status.sh footer #{q:@hangar_clone} …)` and
 every failure in that script is a deliberate silent `exit 0`, so an empty tag renders an empty
 footer; `set-titles-string` reads `@hangar_clone_label` and drops the clone out of the window
 title; the click binding and the hangar keys hand `hangar browse`, `hangar edit` and
@@ -1183,11 +1183,18 @@ that works on half the fleet.
 
 ### The clone comes from the session tag, and that is a correctness property
 
-Each field is a `#(…)` job calling `clone-tmux-status.sh <field> "#{@hangar_clone}"`, the tag
+Each field is a `#(…)` job calling `clone-tmux-status.sh <field> #{q:@hangar_clone}`, the tag
 expanded into the command TEXT rather than read from a pane's working directory. `barOptions`'
 header has both reasons; the one that is a bug rather than a preference is that **a tmux job is
 keyed on the EXPANDED command**, so without the clone name in the text every bar in the fleet
 would show whichever clone's job ran first.
+
+**Every expansion in a job goes through `q:`, and that one is security rather than taste.** tmux
+pastes `#{…}` into the text it hands `sh -c` without escaping anything, so the footer's old
+`"#{pane_current_path}"` ran a `$(…)` in a directory's NAME on every redraw, for every client --
+measured on 3.8 with a probe directory, beside `#{q:pane_current_path}` arriving as one inert
+argument. `statusJob` takes format VARIABLE names and writes the `#{q:…}` itself, so a new field
+cannot reintroduce the bare form by accident.
 
 `#{…}` does expand inside `#()`, with either quoting -- but the format value is single-quoted on
 the way into the conf and tmux processes no escapes inside single quotes, so the job uses DOUBLE

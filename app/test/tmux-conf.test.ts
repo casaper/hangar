@@ -154,6 +154,30 @@ test('each hangar writes its own conf, at its own root', () => {
  * as correct on a fresh server and can never be applied to a running one -- exactly as happily
  * as it records the right thing.
  */
+test('every expansion inside a status job is shell-quoted by tmux, never bare', () => {
+  /*
+   * tmux pastes `#{…}` into a `#()` job's text before `sh -c` runs it, escaping nothing: a bare
+   * `"#{pane_current_path}"` ran a `$(…)` in a directory NAME on every redraw. Only `#{q:…}`
+   * reaches the job as one inert word.
+   */
+  const hangar = syntheticHangar();
+  const formats = [
+    ...barOptions(hangar).map((o) => o.value),
+    paneBorderFormat(hangar),
+    paneBorderFormat(hangar, colourFor(PALETTE, 1, PALETTE[0].name)),
+  ];
+  let jobs = 0;
+  for (const format of formats) {
+    for (const [job] of format.matchAll(/#\([^)]*\)/g)) {
+      jobs += 1;
+      for (const [expansion] of job.matchAll(/#\{[^}]*\}/g)) {
+        assert.match(expansion, /^#\{q:/, `a bare expansion in a status job: ${job}`);
+      }
+    }
+  }
+  assert.ok(jobs >= 3, `found only ${String(jobs)} status jobs -- did the shape change?`);
+});
+
 test('every bar option is rendered into the conf, from the one table', () => {
   const hangar = syntheticHangar();
   const { content } = tmuxConfArtifact(hangar);
