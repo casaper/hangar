@@ -30,9 +30,12 @@ dir="$ROOT/$clone"
 [ -d "$dir" ] || exit 0
 
 # `symbolic-ref` and not `branch --show-current`: one ref read rather than a branch walk,
-# and it exits non-zero on a detached HEAD, which is the answer "no branch" anyway. The
-# footer asks git for its own branch, since one `status -b` answers that and three more.
-branch=$(git -C "$dir" symbolic-ref --quiet --short HEAD 2>/dev/null) || branch=""
+# and it exits non-zero on a detached HEAD, which is the answer "no branch" anyway. Not for
+# the footer, which runs most often of all: its one `status -b` names the branch already.
+branch=""
+if [ "$field" != footer ]; then
+  branch=$(git -C "$dir" symbolic-ref --quiet --short HEAD 2>/dev/null) || branch=""
+fi
 
 case "$field" in
 footer)
@@ -79,6 +82,14 @@ footer)
   done <<EOF
 $status
 EOF
+
+  # The branch, off the same `## ` line: empty on a detached HEAD, as `symbolic-ref` would
+  # answer, and the name itself on an unborn branch.
+  case "$head" in
+  'HEAD (no branch)'*) branch="" ;;
+  'No commits yet on '*) branch=${head#'No commits yet on '} ;;
+  *) branch=$head ;;
+  esac
 
   # A branch called `something_behind_x` would otherwise be read as a count. Both counts come
   # from the same line as the branch name, so both are checked rather than trusted.
