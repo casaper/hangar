@@ -1,5 +1,14 @@
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import {
+  chmodSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import type { Hangar } from '../hangar.ts';
 import { tildify } from '../user-paths.ts';
 
@@ -62,7 +71,40 @@ export const applyArtifact = (artifact: Artifact, dryRun: boolean): ArtifactOutc
   if (existing === artifact.content) return 'unchanged';
   if (dryRun) return existing === undefined ? 'would-create' : 'would-change';
   mkdirSync(dirname(artifact.path), { recursive: true });
-  writeFileSync(artifact.path, artifact.content, 'utf8');
-  if (artifact.mode !== undefined) chmodSync(artifact.path, artifact.mode);
+  writeAtomically(artifact.path, artifact.content, artifact.mode);
   return 'written';
+};
+
+/**
+ * Write `content` to `path` so that no reader ever sees half of it.
+ *
+ * tmux runs `clone-tmux-status.sh` every ten seconds for every client and every new shell
+ * sources `clone-terminal.sh`, so an in-place truncate-and-write could be read mid-way, and a
+ * brand-new script was briefly not executable before the `chmod`. The content goes to a temp file
+ * beside the destination, already at its final mode, and is renamed over it -- atomic within one
+ * directory. A destination that is a SYMLINK (a dotfiles repo managing it, say) is resolved first,
+ * so the rename lands on the real file and the link survives; renaming onto the link itself would
+ * have replaced it with a plain file.
+ */
+const writeAtomically = (path: string, content: string, declared: number | undefined): void => {
+  let target = path;
+  let mode = declared;
+  try {
+    target = realpathSync(path);
+    // An in-place write kept the existing file's mode; a fresh temp file would take the umask's
+    // instead, so a file somebody made 0600 would quietly become 0644. Carried over unless the
+    // artifact declares its own.
+    mode ??= statSync(target).mode & 0o7777;
+  } catch {
+    // Not there yet: write it where it was asked for.
+  }
+  const temp = join(dirname(target), `.${basename(target)}.${String(process.pid)}.tmp`);
+  try {
+    writeFileSync(temp, content, { encoding: 'utf8', ...(mode === undefined ? {} : { mode }) });
+    if (mode !== undefined) chmodSync(temp, mode); // `mode` above is masked by the umask.
+    renameSync(temp, target);
+  } catch (error) {
+    rmSync(temp, { force: true });
+    throw error;
+  }
 };

@@ -309,11 +309,16 @@ These are `perf(<scope>)` commits.
 - [x] The bar's footer runs a `symbolic-ref` it never uses _(done as two commits; old and new
   are byte-identical on the live clones and on sample payloads)_ (`tmux-status-sh.ts:239`), and the
   statusline runs one `jq` per field (`statusline-sh.ts`). Write the golden delta first.
-- [ ] `sleepSync` busy-waits; use `Atomics.wait`. `restyle` spawns tmux once per option; chain
+- [x] `sleepSync` busy-waits; use `Atomics.wait`. _The `sleepSync` half is done (25cc6df).
+  `restyle`'s and `reload`'s extra tmux spawns are deferred: they run only on `colours sync`,
+  `open` and `reload`, and chaining them means changing what a live server is sent, for
+  milliseconds._ `restyle` spawns tmux once per option; chain
   the commands with `\;` after a probe. `reload` sources the conf once per clone instead of once.
 - [x] doctor repeats work _(done)_: `defaultBranchFromGit` (lines 1556 and 1570), `isGitRepo` (257) and
   `readSettings` (575).
-- [ ] `tmp merge` runs jdupes twice (`dedupe.ts:61,91`). Measure first. Then make `scrub` filter
+- [x] `tmp merge` runs jdupes twice _(measured; no change. On the live 1.8 GB, 14k-file store,
+  `tmp merge -n --quiet` takes 0.20s, `scrub --recent` 0.20s and a hand-run whole-store
+  `scrub` 0.27s.)_ (`dedupe.ts:61,91`). Measure first. Then make `scrub` filter
   by mtime before it stats or reads anything (`scrub.ts:321,370`).
 
 ### 5. Robustness hardening
@@ -326,7 +331,8 @@ These are `perf(<scope>)` commits.
     `clone-config.ts:196`.
   - Make the split at `doctor.ts:462` quote-aware.
   - Write the golden delta first.
-- [ ] Make generated writes atomic (`generate/index.ts:63`): write a temp file in the same
+- [x] Make generated writes atomic _(done. A symlinked destination is resolved so the link
+  survives, and an existing file keeps its mode unless the artifact declares one. 3 tests.)_ (`generate/index.ts:63`): write a temp file in the same
   directory with its final mode, then `rename` it into place.
 
 ## Verification (every commit)
