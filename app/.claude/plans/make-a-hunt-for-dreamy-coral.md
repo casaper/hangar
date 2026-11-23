@@ -182,7 +182,7 @@ All of these are `fix(<scope>)` commits.
   description, and test `bodyDecision`. _Done in `prUpdate`'s edit, where `titleOnly` keeps the
   description. No test, because the edit is built inline and `bodyDecision` is not on this path.
   The help text and command-notes are updated._
-- [ ] **The `pr` dry run names the wrong directory** (`pr.ts:759,959`, R). Use
+- [x] **The `pr` dry run names the wrong directory** _(done)_ (`pr.ts:759,959`, R). Use
   `join(clone.path,'tmp')`.
 - [ ] **`push` trusts a stale `origin/<branch>`** (`push.ts:60`, R). "couldn't find remote ref"
   means the branch is not on origin. A network failure refuses.

@@ -756,7 +756,7 @@ export const prCreate = async (
 
   if (outcome.kind === 'would-regenerate') {
     note(`${clone.name}: would write a description first, then open a pull request`);
-    note(`  ${describeDescriptionState(outcome.state, tildify(hangar.paths.tmp)).line}`);
+    note(`  ${describeDescriptionState(outcome.state, tildify(join(clone.path, 'tmp'))).line}`);
     if (pushes(origin.plan)) note(`  first: ${describePush(branch, origin)}`);
     note(`  into:  ${destination}`);
     note(`  state: ${draft ? 'draft' : 'ready for review'}`);
@@ -956,7 +956,7 @@ export const prUpdate = async (
     keepTitle && keepBody ? undefined : await resolveBody(hangar, clone, branch, opts);
   if (outcome?.kind === 'would-regenerate') {
     note(`${clone.name}: would write a description first, then rewrite #${String(found.id)}`);
-    note(`  ${describeDescriptionState(outcome.state, tildify(hangar.paths.tmp)).line}`);
+    note(`  ${describeDescriptionState(outcome.state, tildify(join(clone.path, 'tmp'))).line}`);
     note('(dry run — nothing was written and no run was started)');
     return;
   }
