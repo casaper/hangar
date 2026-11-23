@@ -80,7 +80,13 @@ const forgeAsk = (hangar: Hangar, clone: Clone): TargetAsk => {
     },
     onOrigin: (branch) => {
       // Exit 2 is "no such ref"; anything else failing is not an answer.
-      const res = git(clone.path, ['ls-remote', '--exit-code', '--heads', 'origin', branch]);
+      const res = git(clone.path, [
+        'ls-remote',
+        '--exit-code',
+        '--heads',
+        'origin',
+        `refs/heads/${branch}`,
+      ]);
       return Promise.resolve(res.ok ? true : res.code === 2 ? false : 'unknown');
     },
   };

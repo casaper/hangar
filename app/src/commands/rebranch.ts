@@ -106,7 +106,13 @@ export const rebranch = async (
   const prefixes = hangar.config.tracker.keyPrefixes ?? [];
   const problems = rebranchNameProblems(branch, next, trackedKeyIn(prefixes, branch), prefixes);
   if (refExists(repo, `refs/heads/${next}`)) problems.push('a local branch has that name already');
-  const nextRemote = git(repo, ['ls-remote', '--exit-code', '--heads', 'origin', next]);
+  const nextRemote = git(repo, [
+    'ls-remote',
+    '--exit-code',
+    '--heads',
+    'origin',
+    `refs/heads/${next}`,
+  ]);
   if (nextRemote.ok) problems.push('origin has a branch by that name already');
   if (problems.length > 0) {
     throw new CliError(
@@ -115,7 +121,13 @@ export const rebranch = async (
     );
   }
 
-  const remote = git(repo, ['ls-remote', '--exit-code', '--heads', 'origin', branch]);
+  const remote = git(repo, [
+    'ls-remote',
+    '--exit-code',
+    '--heads',
+    'origin',
+    `refs/heads/${branch}`,
+  ]);
   if (!remote.ok && remote.code !== 2) {
     throw new CliError(`could not ask origin whether ${branch} is there`, remote.stderr.trim());
   }

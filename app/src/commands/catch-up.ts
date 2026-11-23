@@ -441,7 +441,13 @@ const start = async (hangar: Hangar, clone: Clone, opts: CatchUpOptions): Promis
   }
 
   // Published? Asked live -- a stale `origin/<branch>` ref answers both ways wrongly.
-  const remote = git(repo, ['ls-remote', '--exit-code', '--heads', 'origin', branch]);
+  const remote = git(repo, [
+    'ls-remote',
+    '--exit-code',
+    '--heads',
+    'origin',
+    `refs/heads/${branch}`,
+  ]);
   if (!remote.ok && remote.code !== 2) {
     throw new CliError(`could not ask origin whether ${branch} is there`, remote.stderr.trim());
   }

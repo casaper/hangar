@@ -161,8 +161,9 @@ All of these are `fix(<scope>)` commits.
   record._
 - [x] **`storeContentFrom` `$` expansion** _(done)_ (`jira-records.ts:415`, P). Use
   `replace(frontmatter, () => kept)` and test `$&`/`$$`. This file is fleet-live.
-- [ ] **`ls-remote` tail match** (`catch-up.ts:444`, `pr-target.ts:83`, R). Use
-  `refs/heads/${branch}`.
+- [x] **`ls-remote` tail match** (`catch-up.ts:444`, `pr-target.ts:83`, R). Use
+  `refs/heads/${branch}`. _Done, `rebranch.ts`'s two calls included. Probed: a bare `fix`
+  matched `feature/fix`, and `refs/heads/fix` matched nothing._
 - [ ] **catch-up `--abort`/`--continue` on the wrong branch** (`catch-up.ts:86,613-629`, R).
   Refuse unless the current branch is `ledger.branch`.
 - [ ] **Stored PR target checked before the fetch** (`sync.ts:181,232`, R). Re-resolve after the
