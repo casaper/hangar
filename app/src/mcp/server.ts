@@ -112,9 +112,13 @@ const runHangar = async (hangar: Hangar, argv: readonly string[]): Promise<Spawn
       detached: true,
     });
     let output = '';
-    const collect = (chunk: Buffer): void => {
-      output += chunk.toString('utf8');
+    const collect = (chunk: string): void => {
+      output += chunk;
     };
+    // Decoded by the STREAM, never per chunk: a multi-byte character split across a 64 KB
+    // boundary became two U+FFFD, and this CLI prints `—`, `→` and `●` on nearly every line.
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
     child.stdout.on('data', collect);
     child.stderr.on('data', collect);
     child.on('error', (error: Error) => {
@@ -255,17 +259,30 @@ export const serveMcp = async (hangar: Hangar, program: CommandUnknownOpts): Pro
   const onLine = (line: string): void => {
     const text = line.trim();
     if (text === '') return;
-    let request: Request;
+    let parsed: unknown;
     try {
-      request = JSON.parse(text) as Request;
+      parsed = JSON.parse(text);
     } catch {
       failRequest(null, -32700, 'parse error');
       return;
     }
+    // Valid JSON that is not a request object -- `null`, a number, a batch array -- is answered
+    // rather than handed on: `handle` read `request.id` off `null` and threw, the catch below read
+    // it AGAIN and threw from inside the rejection handler, and the unhandled rejection ended the
+    // server, taking every hangar tool with it. Batches are not something this server speaks.
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      failRequest(
+        null,
+        -32600,
+        Array.isArray(parsed) ? 'batches are not supported' : 'invalid request',
+      );
+      return;
+    }
+    const request = parsed as Request;
     const task = handle(hangar, program, request)
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
-        if (request.id !== undefined) failRequest(request.id ?? null, -32603, message);
+        if (request.id !== undefined) failRequest(request.id, -32603, message);
       })
       .finally(() => inflight.delete(task));
     inflight.add(task);

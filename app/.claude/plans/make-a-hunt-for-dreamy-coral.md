@@ -225,7 +225,9 @@ All of these are `fix(<scope>)` commits.
   - Drop the `'24'` default.
   - Check that the SessionEnd hook passes `--recent`.
   - Update `command-notes.md`.
-- [ ] **MCP server robustness** (`server.ts:108,250-266`, V).
+- [x] **MCP server robustness** (`server.ts:108,250-266`, V). _Done. Verified by a protocol
+  probe (null, 42 and a batch each get an error, then `tools/list` answers 86) rather than a
+  unit test, since `serveMcp` reads process stdin._
   - Call `setEncoding('utf8')`.
   - Answer a non-object line or a batch with an error.
   - Make the catch null-safe.
