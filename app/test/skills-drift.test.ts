@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import {
   classifyDrift,
   readManifest,
+  sameTree,
   type DriftFacts,
   type SkillEntry,
 } from '../src/commands/skills.ts';
@@ -187,5 +188,29 @@ test('the manifest refuses supersedes without the adoptedFrom branch it is stage
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a skill with a subfolder can be adopted, and any difference anywhere refuses it', () => {
+  // One-level compare `readFileSync`'d `reference/` and threw EISDIR, so such a skill could never
+  // be adopted; a live FILE threw ENOTDIR out of `readdirSync`, uncaught.
+  const dir = mkdtempSync(join(tmpdir(), 'skills-tree-'));
+  try {
+    const tree = (root: string, extra = ''): void => {
+      mkdirSync(join(root, 'reference'), { recursive: true });
+      writeFileSync(join(root, 'SKILL.md'), '# skill\n');
+      writeFileSync(join(root, 'reference', 'a.md'), `a${extra}\n`);
+    };
+    tree(join(dir, 'source'));
+    tree(join(dir, 'live'));
+    assert.equal(sameTree(join(dir, 'source'), join(dir, 'live')), true);
+
+    tree(join(dir, 'edited'), ' -- edited in place');
+    assert.equal(sameTree(join(dir, 'source'), join(dir, 'edited')), false);
+
+    writeFileSync(join(dir, 'a-file'), 'x');
+    assert.equal(sameTree(join(dir, 'source'), join(dir, 'a-file')), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

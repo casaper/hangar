@@ -373,15 +373,36 @@ export const adoptable = (hangar: Hangar, name: string): boolean => {
   const source = sourcePath(hangar, name);
   const live = linkPath(name);
   if (!existsSync(source) || !existsSync(live)) return false;
-  const files = readdirSync(source).sort();
-  if (JSON.stringify(files) !== JSON.stringify(readdirSync(live).sort())) return false;
-  return files.every((file) => {
-    try {
-      return readFileSync(join(source, file)).equals(readFileSync(join(live, file)));
-    } catch {
-      return false;
-    }
-  });
+  return sameTree(source, live);
+};
+
+/**
+ * Two directories with the same entries and the same bytes, ALL THE WAY DOWN. PURE but for reads.
+ *
+ * The first version compared one level and `readFileSync`'d every entry: a skill with a
+ * `reference/` folder threw EISDIR there, read as "differs", and could never be adopted -- and a
+ * live path that was a FILE threw ENOTDIR out of `readdirSync`, uncaught. Any read failure is
+ * "not the same", which is the refusing answer.
+ */
+export const sameTree = (a: string, b: string): boolean => {
+  try {
+    const left = readdirSync(a, { withFileTypes: true }).sort((x, y) =>
+      x.name.localeCompare(y.name),
+    );
+    const right = readdirSync(b, { withFileTypes: true }).sort((x, y) =>
+      x.name.localeCompare(y.name),
+    );
+    if (left.length !== right.length) return false;
+    return left.every((entry, i) => {
+      const other = right[i];
+      if (other?.name !== entry.name || other.isDirectory() !== entry.isDirectory()) return false;
+      const from = join(a, entry.name);
+      const to = join(b, entry.name);
+      return entry.isDirectory() ? sameTree(from, to) : readFileSync(from).equals(readFileSync(to));
+    });
+  } catch {
+    return false;
+  }
 };
 
 export const skillsList = (hangar: Hangar): void => {
