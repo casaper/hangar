@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import pc from 'picocolors';
 
-import { CliError } from '../exec.ts';
+import { CliError, sleepSync } from '../exec.ts';
 import { discoverClones, knownClonesHint, requireClone, type Clone } from '../fleet.ts';
 import type { Hangar } from '../hangar.ts';
 import { roleUrl } from '../ports.ts';
@@ -743,18 +743,6 @@ export const killWarnings = (plan: KillPlan): string[] =>
   );
 
 /**
- * Sleep, synchronously, without a subprocess.
- *
- * Everything in this command is synchronous -- `run` is `spawnSync` and the whole CLI is written
- * that way -- so waiting for a signal to take effect needs a blocking wait rather than a timer
- * whose callback would never run. `Atomics.wait` on a buffer nobody else touches is exactly that
- * and costs no process.
- */
-const waitMs = (ms: number): void => {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-};
-
-/**
  * Signal one process, and say whether it actually went away.
  *
  * Exported because `hangar close` stops a clone's servers before it kills the session, and one
@@ -770,7 +758,7 @@ export const stopServer = (record: ServerRecord, signal: NodeJS.Signals): boolea
   }
   for (let waited = 0; waited < 5000; waited += 100) {
     if (!isAlive(record.pid)) return true;
-    waitMs(100);
+    sleepSync(100);
   }
   return !isAlive(record.pid);
 };

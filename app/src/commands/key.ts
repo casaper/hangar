@@ -16,7 +16,7 @@ import { basename, join, relative } from 'node:path';
 import { openPullRequests, repoRef } from '../bitbucket.ts';
 import { claudeBinary, runHeadlessClaude } from '../claude-headless.ts';
 import { discoverClones, requireClone, type Clone } from '../fleet.ts';
-import { CliError, run } from '../exec.ts';
+import { CliError, run, sleepSync } from '../exec.ts';
 import { pick, pickMany } from '../fuzzy.ts';
 import { changedFiles, currentBranch, fetchArgs, git, remotes } from '../git.ts';
 import type { Hangar } from '../hangar.ts';
@@ -321,7 +321,7 @@ const askIdeSelection = (clone: Clone): IdeSelection | undefined => {
   postIdeMessage(clone, { kind: 'selection', id, at: Date.now() });
   const answer = join(clone.path, 'tmp', IDE_MAILBOX, `answer-${id}.json`);
   for (let waited = 0; waited < 2000; waited += 50) {
-    sleepMs(50);
+    sleepSync(50);
     try {
       const parsed = JSON.parse(readFileSync(answer, 'utf8')) as {
         editor?: unknown;
@@ -776,11 +776,6 @@ const pickableFiles = (dir: string, glob: string): string[] => {
   return listed.ok ? listed.stdout.split('\n').filter((line) => line !== '') : [];
 };
 
-/** A synchronous pause, which Node offers no other way to take. */
-const sleepMs = (ms: number): void => {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-};
-
 /**
  * Stop a server the way a person would: `C-c`, then wait for the shell to come back, then close
  * the window -- so the next press goes through `servers start`, which refuses while the role has
@@ -795,7 +790,7 @@ const stopServer = (
 ): string => {
   server.sendKey(paneId, 'C-c');
   for (let waited = 0; waited < 15_000; waited += 250) {
-    sleepMs(250);
+    sleepSync(250);
     const pane = runnerPanes(server, clone, entry).find((p) => p.paneId === paneId);
     if (pane === undefined) return `${clone.name}: stopped ${entry.name}`;
     if (pane.idle) {
@@ -998,7 +993,7 @@ export const keyPaste = (
     return;
   }
   // A pause first: an Enter that lands while Claude Code is still taking the paste is lost.
-  sleepMs(150);
+  sleepSync(150);
   if (!server.sendKey(pane.id, 'Enter')) {
     throw new CliError(`pasted into ${clone.name}'s Claude Code, but could not press Enter`);
   }

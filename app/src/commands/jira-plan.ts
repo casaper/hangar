@@ -4,7 +4,7 @@ import { basename, join } from 'node:path';
 import { usesBitbucket, type PrState } from '../bitbucket.ts';
 import { transcriptDirsForClone } from '../claude-sessions.ts';
 import { requireDefaultBranch } from '../config/default-branch.ts';
-import { CliError, run } from '../exec.ts';
+import { CliError, run, sleepSync } from '../exec.ts';
 import { discoverClones, type Clone } from '../fleet.ts';
 import {
   currentBranch,
@@ -370,17 +370,13 @@ const withPullRequests = async (
 
 // --- acting -------------------------------------------------------------------------------------
 
-const sleepMs = (ms: number): void => {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-};
-
 /** Wait for every Claude Code process in the clone to exit. False when one is still there. */
 const awaitNoClaude = (clone: Clone, timeoutMs: number): boolean => {
   const until = Date.now() + timeoutMs;
   for (;;) {
     if (claudeSessionsIn(clone.path).length === 0) return true;
     if (Date.now() >= until) return false;
-    sleepMs(200);
+    sleepSync(200);
   }
 };
 

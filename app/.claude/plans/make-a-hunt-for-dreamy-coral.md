@@ -287,8 +287,9 @@ Commits are `refactor` or `docs`.
   - `colours.ts:206`, "doctor only checks it EXISTS";
   - the `clone-colours.sh` header's `set -- $(…)`;
   - `tmux-status-sh.ts:236`.
-- [ ] De-duplicate `tmp.ts`'s `isInside` against `procs.ts`, and `sleepMs` against `waitMs`.
-  _`isInside` is done (see above); `sleepMs` against `waitMs` is still open._
+- [x] De-duplicate `tmp.ts`'s `isInside` against `procs.ts`, and `sleepMs` against `waitMs`.
+  _Done. All five sleeps are now `exec.ts`'s `sleepSync`, and `tmux.ts`'s busy-wait went with
+  them, which is Tier 4's `sleepSync` item._
 - Keep the 176 test-only exports: they are the pure-builder convention, not dead code.
 
 ### 4. Performance

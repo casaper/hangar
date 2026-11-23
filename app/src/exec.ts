@@ -177,3 +177,13 @@ export const onPath = (name: string): boolean => {
   }
   return false;
 };
+
+/**
+ * A synchronous pause that costs no CPU. Node has no `sleep`, and a `setTimeout` would hand
+ * control back to an event loop these callers are not running; `Atomics.wait` on a buffer
+ * nobody else touches blocks the thread for exactly `ms` instead. A `Date.now()` spin loop -- what
+ * `tmux.ts` had -- burned a whole core for the length of every poll.
+ */
+export const sleepSync = (ms: number): void => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+};

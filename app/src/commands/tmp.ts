@@ -33,7 +33,7 @@ import {
   ticketNameOf,
   writeStoreRecord,
 } from '../jira-records.ts';
-import { CliError } from '../exec.ts';
+import { CliError, sleepSync } from '../exec.ts';
 import { discoverClones, type Clone } from '../fleet.ts';
 import { STORE_GIT_FENCE_CONTENT, storeGitFencePath } from '../hangar-files.ts';
 import { isAlive } from '../procs.ts';
@@ -380,10 +380,6 @@ export const tmpMerge = (hangar: Hangar, opts: TmpMergeOptions): void => {
 const LOCK_WAIT_MS = 90_000;
 const LOCK_POLL_MS = 500;
 
-const sleepMs = (ms: number): void => {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-};
-
 /**
  * Run `body` holding the hangar's merge lock -- `tmp-merge-lock.ts` has why two at once break.
  *
@@ -419,7 +415,7 @@ const serialised = (hangar: Hangar, dryRun: boolean, body: () => void): void => 
       note(pc.dim(`waiting for another tmp merge (pid ${attempt.holder || '?'}) to finish`));
       announced = true;
     }
-    sleepMs(LOCK_POLL_MS);
+    sleepSync(LOCK_POLL_MS);
   }
 };
 

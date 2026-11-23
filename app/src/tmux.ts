@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { cloneShortName, paletteOf, type Clone } from './fleet.ts';
-import { run } from './exec.ts';
+import { run, sleepSync } from './exec.ts';
 import type { Hangar } from './hangar.ts';
 import {
   barOptions,
@@ -184,14 +184,6 @@ export const tmuxBinary = (): string => {
   const res = run('sh', ['-c', 'command -v tmux 2>/dev/null']);
   cachedBinary = res.ok && res.stdout.trim() !== '' ? res.stdout.trim() : 'tmux';
   return cachedBinary;
-};
-
-/** A synchronous pause, which Node offers no other way to do. */
-const sleepSync = (ms: number): void => {
-  const until = Date.now() + ms;
-  while (Date.now() < until) {
-    // Intentionally empty: see `awaitClient`.
-  }
 };
 
 /**
@@ -694,8 +686,8 @@ export const tmuxServer = (hangar: Hangar): TmuxServer => {
         const [tty] = res.ok ? lines(res.out) : [];
         if (tty !== undefined) return tty;
         if (Date.now() >= deadline) return undefined;
-        // A busy wait, deliberately: this is a synchronous CLI and 60ms of `spawnSync` latency
-        // per poll is the sleep. Node has no sync sleep that is not worse than this.
+        // A synchronous CLI polling tmux: `sleepSync` blocks without burning the core a
+        // `Date.now()` spin loop did for every one of these 60ms.
         sleepSync(60);
       }
     },
