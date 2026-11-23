@@ -15,7 +15,7 @@ import { basename, dirname, join } from 'node:path';
 import pc from 'picocolors';
 
 import { adoptInto, type AdoptAction } from '../adopt.ts';
-import { excludePath, excludeBlock, missingExcludeLines } from '../clone-config.ts';
+import { excludeAddition, excludePath, missingExcludeLines } from '../clone-config.ts';
 import {
   duplicateSets,
   freshnessOf,
@@ -852,6 +852,6 @@ const excludeCloneLocalMd = (hangar: Hangar, clone: Clone, dryRun: boolean): voi
     note(`.git/info/exclude would gain ${missing.join(', ')}`);
     return;
   }
-  writeFileSync(path, current + excludeBlock(hangar), 'utf8');
+  writeFileSync(path, current + excludeAddition(hangar, current), 'utf8');
   ok(`.git/info/exclude hides ${missing.join(', ')}`);
 };

@@ -11,7 +11,7 @@ import {
   portClaims,
   envrcPrivateContent,
   envrcPrivatePath,
-  excludeBlock,
+  excludeAddition,
   missingExcludeLines,
   excludePath,
   cloneSymlinks,
@@ -204,7 +204,7 @@ export const addClone = (hangar: Hangar, opts: AddCloneOptions): void => {
   writeFile(claudeLocalMdPath(clone), claudeLocalMdContent(clone));
   const exclude = existsSync(excludePath(clone)) ? readFileSync(excludePath(clone), 'utf8') : '';
   if (missingExcludeLines(exclude).length > 0) {
-    writeFile(excludePath(clone), exclude + excludeBlock(hangar));
+    writeFile(excludePath(clone), exclude + excludeAddition(hangar, exclude));
   }
   ok('CLAUDE.local.md + .git/info/exclude (always as a pair)');
 

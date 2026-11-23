@@ -155,6 +155,22 @@ export const missingExcludeLines = (exclude: string): string[] => {
 };
 
 /**
+ * What to APPEND to an existing `.git/info/exclude`: the block's header and only the lines it
+ * lacks, or nothing. Every repair appended the whole `excludeBlock`, which is harmless with one
+ * line and duplicates every line already present the moment there are two. PURE.
+ */
+export const excludeAddition = (hangar: Hangar, exclude: string): string => {
+  const missing = missingExcludeLines(exclude);
+  if (missing.length === 0) return '';
+  return [
+    '',
+    `# Per-clone Claude Code identity (hangar: ${tildify(hangar.root)})`,
+    ...missing,
+    '',
+  ].join('\n');
+};
+
+/**
  * How a session inside a clone asks for a port at run time, as a pasteable command.
  *
  * `repo.portCheckCommand` is the REPO's own resolver and the source of truth: it runs inside the

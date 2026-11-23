@@ -38,7 +38,7 @@ import {
   envrcDotenvLine,
   envrcPrivateContent,
   envrcPrivatePath,
-  excludeBlock,
+  excludeAddition,
   EXCLUDE_LINES,
   fleetBinPathLine,
   excludePath,
@@ -437,7 +437,7 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
       ? `hides ${EXCLUDE_LINES.join(', ')}`
       : `missing ${missingExcludes.join(', ')} — untracked noise that eventually gets committed`,
     repair: () => {
-      writeFile(excludePath(clone), exclude + excludeBlock(hangar));
+      writeFile(excludePath(clone), exclude + excludeAddition(hangar, exclude));
     },
   });
 

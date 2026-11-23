@@ -204,7 +204,7 @@ All of these are `fix(<scope>)` commits.
 - [x] **doctor `.env.local` checks only the ports** _(done: `envLocalExtrasDrift`; the live
   fleet stays green)_ (`doctor.ts:262-297`, R). Compare the root key
   and `cloneEnv.vars` too.
-- [ ] **Exclude repairs append the whole block** (`doctor.ts:432`, `tmp.ts:855`,
+- [x] **Exclude repairs append the whole block** _(done: `excludeAddition`)_ (`doctor.ts:432`, `tmp.ts:855`,
   `add-clone.ts:207`). Append only `missingExcludeLines`.
 - [ ] **Hook writers drop a whole matcher** (`clone-config.ts:796,876`, R). Remove only the
   hangar hook and use the anchored `invokesOurCli`. Test with a foreign hook sharing the matcher.

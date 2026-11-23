@@ -9,6 +9,7 @@ import {
   defaultSettings,
   envLocalContent,
   envrcPrivateContent,
+  excludeAddition,
   excludeBlock,
   hangarRootAllow,
   healthCheckAllows,
@@ -198,6 +199,18 @@ test('the git exclude block hides the identity file', () => {
   // Excluded via `.git/info/exclude` rather than the tracked `.gitignore`, so it never commits
   // and never travels to a sibling.
   assert.match(excludeBlock(hangar()), /^\/CLAUDE\.local\.md$/m);
+});
+
+test('a repair appends only the exclude lines that are missing, and nothing when none are', () => {
+  const block = excludeBlock(hangar());
+  assert.equal(excludeAddition(hangar(), block), '');
+  assert.equal(excludeAddition(hangar(), `# ours\n/CLAUDE.local.md\n`), '');
+  const added = excludeAddition(hangar(), '# a repo of its own\n');
+  assert.match(added, /^\/CLAUDE\.local\.md$/m);
+  // Appended to what it was computed from, every line is present exactly once.
+  const repaired = `# a repo of its own\n${added}`;
+  assert.equal(excludeAddition(hangar(), repaired), '');
+  assert.equal(repaired.split('\n').filter((line) => line === '/CLAUDE.local.md').length, 1);
 });
 
 test('symlinks render {secretsFile} and each carries its why', () => {
