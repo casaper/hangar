@@ -667,6 +667,16 @@ export const catchUp = async (
         'Start one with `hangar catch-up`.',
       );
     }
+    // The ledger names the branch it was written for. Mid-rebase HEAD is detached and the rebase
+    // itself knows its branch; anywhere else, a different branch checked out since means
+    // `--abort` would `reset --hard` THAT branch to the old head and throw its tree away.
+    const here = currentBranch(clone.path);
+    if (inProgressOperation(clone.path) !== 'rebase' && here !== ledger.branch) {
+      throw new CliError(
+        `${clone.name}: the catch-up under way is for ${ledger.branch}, and ${here} is checked out`,
+        `Check out ${ledger.branch} again, then re-run with --${opts.abort === true ? 'abort' : 'continue'}.`,
+      );
+    }
     return opts.abort === true ? abort(hangar, clone, ledger) : proceed(hangar, clone, ledger);
   }
   return start(hangar, clone, opts);
