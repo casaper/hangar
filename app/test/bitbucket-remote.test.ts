@@ -15,6 +15,9 @@ describe('parseRemote', () => {
     'ssh://git@ssh.bitbucket.org/acme/storefront_ui.git',
     'ssh://git@ssh.bitbucket.org:22/acme/storefront_ui',
     'https://bitbucket.org/acme/storefront_ui.git',
+    // Bitbucket's own HTTPS clone URL names the user, and a token may ride along.
+    'https://someone@bitbucket.org/acme/storefront_ui.git',
+    'https://x-token-auth:abc123@bitbucket.org/acme/storefront_ui',
   ]) {
     it(`reads ${url}`, () => {
       assert.deepEqual(parseRemote(url), REF);
@@ -26,6 +29,9 @@ describe('parseRemote', () => {
     'git@ssh.bitbucket.org:storefront_ui.git',
     'ssh://git@xssh.bitbucket.org/acme/storefront_ui.git',
     'git@github.com:acme/storefront_ui.git',
+    // A host that merely has `bitbucket.org` in its PATH is not Bitbucket.
+    'https://evil.example/bitbucket.org/acme/storefront_ui',
+    'https://evil.example/x@bitbucket.org/acme/storefront_ui',
   ]) {
     it(`refuses ${url}`, () => {
       assert.equal(parseRemote(url), undefined);

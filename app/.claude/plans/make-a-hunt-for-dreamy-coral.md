@@ -139,7 +139,7 @@ This plan file is NOT in that commit. **Done in `3ac7841`**; 51 old plans delete
     closed.
   - Make `remove-clone --delete` `confirm()` unless `--yes`.
   - Correct the header.
-- [ ] **`parseRemote` HTTPS** (`src/bitbucket.ts:39`, V). Commit `fix(pr)`.
+- [x] **`parseRemote` HTTPS** (`src/bitbucket.ts:39`, V). Commit `fix(pr)`. _Done._
   - Use `^https:\/\/(?:[^@/]+@)?bitbucket\.org\/`.
   - Test `user@`, a URL carrying a token, and `evil.example/bitbucket.org`.
 

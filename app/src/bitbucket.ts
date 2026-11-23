@@ -28,7 +28,7 @@ export type RepoRef = { readonly workspace: string; readonly repo: string };
 
 /**
  * Takes `git@[ssh.]bitbucket.org:ws/repo[.git]`, `ssh://git@[ssh.]bitbucket.org[:port]/ws/repo`
- * and `https://…bitbucket.org/ws/repo`. Bitbucket serves SSH on both hosts, so a clone on either
+ * and `https://[user@]bitbucket.org/ws/repo`. Bitbucket serves SSH on both hosts, so a clone on either
  * names the same repository; the clone-side agent scripts' parser takes the same SSH forms.
  */
 export const parseRemote = (url: string): RepoRef | undefined => {
@@ -36,7 +36,9 @@ export const parseRemote = (url: string): RepoRef | undefined => {
     /^git@(?:ssh\.)?bitbucket\.org:([^/]+)\/(.+?)(?:\.git)?$/.exec(url) ??
     /^ssh:\/\/git@(?:ssh\.)?bitbucket\.org(?::\d+)?\/([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
   if (ssh?.[1] && ssh[2]) return { workspace: ssh[1], repo: ssh[2] };
-  const https = /^https:\/\/[^@]*bitbucket\.org\/([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
+  // An optional `user@` or `user:token@` -- Bitbucket's own HTTPS clone URL carries the user --
+  // and then the host itself, never a path that merely CONTAINS `bitbucket.org`.
+  const https = /^https:\/\/(?:[^@/]+@)?bitbucket\.org\/([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
   if (https?.[1] && https[2]) return { workspace: https[1], repo: https[2] };
   return undefined;
 };
