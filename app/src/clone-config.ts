@@ -125,14 +125,11 @@ export const cloneSymlinks = (clone: Clone): CloneSymlink[] =>
  * What `.git/info/exclude` has to hide, and why it cannot be the tracked `.gitignore`:
  * `/CLAUDE.local.md` is generated per clone and must never travel to a sibling.
  *
- * `/tmp` used to be here too, for a `tmp` that was a symlink to the fleet's shared directory:
- * the tracked rule is `tmp/` and a trailing slash matches a directory only, so the link showed
- * up as untracked. `tmp/` is a real directory again -- only the cache entries INSIDE it are
- * links -- so the tracked rule covers it and this list is back to one line. An existing clone
- * that still carries the `/tmp` line is fine; it excludes something already ignored.
+ * `tmp/` needs no line here: it is a real directory -- only the cache entries INSIDE it are
+ * links -- so the repo's tracked `tmp/` rule covers it. A clone whose exclude file also carries a
+ * `/tmp` line is fine; it excludes something already ignored.
  */
 export const EXCLUDE_LINES = ['/CLAUDE.local.md'] as const;
-export const EXCLUDE_LINE = EXCLUDE_LINES[0];
 /**
  * A FUNCTION, not a constant, and this is one of the five that had to change when the hangar
  * root stopped being known at import time. It embeds the root in text written into a live

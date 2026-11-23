@@ -186,7 +186,6 @@ export const tmuxBinary = (): string => {
   return cachedBinary;
 };
 
-/** Quote only what needs it, so the common line carries no quotes at all. */
 /** A synchronous pause, which Node offers no other way to do. */
 const sleepSync = (ms: number): void => {
   const until = Date.now() + ms;
@@ -195,7 +194,10 @@ const sleepSync = (ms: number): void => {
   }
 };
 
-/** One word for a POSIX shell: bare when it is safe bare, single-quoted otherwise. */
+/**
+ * One word for a POSIX shell: bare when it is safe bare, single-quoted otherwise. Quote only what
+ * needs it, so the common line carries no quotes at all.
+ */
 export const shellQuote = (value: string): string =>
   /^[A-Za-z0-9_./:=-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`;
 

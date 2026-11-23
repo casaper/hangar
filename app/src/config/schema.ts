@@ -965,7 +965,6 @@ export const hangarConfigSchema = z
 export type HangarConfig = z.infer<typeof hangarConfigSchema>;
 export type PortRole = HangarConfig['ports']['roles'][number];
 export type InstallStep = HangarConfig['repo']['install'][number];
-export type SymlinkSpec = HangarConfig['repo']['symlinks'][number];
 
 /** The argv an install step runs, resolving `manager` to its canonical command. */
 export const installCommandFor = (step: InstallStep): readonly string[] => {

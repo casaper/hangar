@@ -263,26 +263,6 @@ export const deriveDefaults = (hangarRoot: string): DerivedDefaults => {
 };
 
 /**
- * The port roles `setup` suggests, which is now NONE.
- *
- * It used to render the three hardcoded roles of this one repo -- an Angular dev server, a
- * Storybook and a Playwright report -- into every config it wrote, which is why `setup` could
- * not describe a repo that serves anything else. There is nothing left to derive: a role is a
- * decision about the repo (what it runs, on which port, under which env var), and no amount of
- * looking at a checkout answers it.
- *
- * So the template writes an empty `roles: []`, which the schema accepts -- a hangar that manages
- * no ports is legal -- and F7 is where `setup` learns to ASK. Returning an empty list rather
- * than deleting the function keeps that seam in one place.
- */
-export const derivedPortRoles = (): readonly {
-  id: string;
-  envKey: string;
-  base: number;
-  label: string;
-}[] => [];
-
-/**
  * The spacing `setup` suggests between clones.
  *
  * A plain default rather than a reading of anything: 100 leaves room for a role's own port range

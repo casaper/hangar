@@ -276,9 +276,12 @@ Commits are `refactor` or `docs`.
   - `dev.ts:128`
 
   Then add `noUnusedLocals` and `noUnusedParameters` to `tsconfig.json`.
-- [ ] Remove `EXCLUDE_LINE` (`clone-config.ts:135`), `SymlinkSpec` (`schema.ts:968`) and
+- [x] Remove `EXCLUDE_LINE` (`clone-config.ts:135`), `SymlinkSpec` (`schema.ts:968`) and
   `derivedPortRoles` (`config/derive.ts:278`).
-- [ ] Fix stale comments:
+- [x] Fix stale comments. _Done, with two exceptions. The `clone-colours.sh` header is right as
+  it stands, because zsh DOES split `$(…)` and only refuses `$fields` (measured). The
+  `tmux-status-sh.ts:236` comment goes with its perf item. The `sleepSync` comment moved back
+  onto `shellQuote`, where it belongs._
   - the `EXCLUDE_LINES` "`/tmp` used to be here": rewrite it in the present tense;
   - the orphaned comment on `sleepSync` (`tmux.ts:189`);
   - `colours.ts:206`, "doctor only checks it EXISTS";

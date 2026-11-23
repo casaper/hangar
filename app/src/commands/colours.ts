@@ -203,7 +203,8 @@ export const coloursChange = (
     ok(`theme custom:${themeName(updated)} in .claude/settings.local.json`);
   }
 
-  // The identity file names the colour three times, and `doctor` only checks that it EXISTS.
+  // The identity file names the colour three times. `doctor` would catch it stale on its next run,
+  // but `change` is the command that just made it stale, so it rewrites it now.
   writeFileSync(claudeLocalMdPath(updated), claudeLocalMdContent(updated), 'utf8');
   ok(`CLAUDE.local.md now announces ${updated.colour.name}`);
 
