@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -110,9 +118,9 @@ test('what deleting a clone would lose: its real, shareable tmp/ entries and not
 test("the Jira hook's links in a real ticket directory are the store's own, not a stranger's", () => {
   /*
    * A real `tmp/<KEY>/` in a clone holds the hook's RELATIVE links into `jira-tickets/`. Judged
-   * by the ticket's own destination they looked foreign, so every `tmp merge` warned "left alone"
-   * about each one -- and in `--quiet` a single warn prints the whole narration, at every session
-   * end in that clone.
+   * by the ticket's own destination they look foreign, so every `tmp merge` would warn "left
+   * alone" about each one -- and in `--quiet` a single warn prints the whole narration, at every
+   * session end in that clone.
    */
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'adopt-links-')));
   try {
@@ -139,6 +147,9 @@ test("the Jira hook's links in a real ticket directory are the store's own, not 
       kinds.some((k) => /dropped .*ticket\.md: same link/.test(k)),
       kinds.join('; '),
     );
+    // Nothing is left behind in the clone: a directory stripped of its links but left standing
+    // would be "in the way" of pass 2b's link, and the clone would lose its ticket records.
+    assert.equal(existsSync(join(clone, 'ABC-7')), false, 'the emptied ticket directory stayed');
     // The relation link the store lacked moved in, and still resolves to the same record.
     assert.equal(
       realpathSync(join(store, 'ABC-7', 'ticket_relation_ABC-8.md')),
