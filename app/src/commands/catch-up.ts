@@ -277,14 +277,22 @@ const restage = (
     ...stagedBefore,
     ...lines(gitTry(repo, ['diff', '--name-only', `${stashRef}^1`, stashRef])),
   ]);
+  // Two listings for every path at once, where each path used to cost a `diff --quiet` and a
+  // `cat-file -e` of its own -- six hundred spawns for a three-hundred-file stash.
+  // `--no-renames`: with rename detection a moved file is listed under its new name only, and
+  // the old one would read as untouched by the update.
+  const changedByUpdate = new Set(
+    lines(gitTry(repo, ['diff', '--name-only', '--no-renames', oldHead, 'HEAD'])),
+  );
+  const inHead = new Set(lines(gitTry(repo, ['ls-tree', '-r', '--name-only', 'HEAD'])));
   const fromIndex: string[] = [];
   const unstage: string[] = [];
   for (const path of touched) {
     const decision = restageDecision({
       conflicted: conflicted.includes(path),
       stagedBefore: stagedBefore.has(path),
-      unchangedByUpdate: git(repo, ['diff', '--quiet', oldHead, 'HEAD', '--', path]).ok,
-      inHead: git(repo, ['cat-file', '-e', `HEAD:${path}`]).ok,
+      unchangedByUpdate: !changedByUpdate.has(path),
+      inHead: inHead.has(path),
     });
     if (decision === 'from-stash-index') fromIndex.push(path);
     else if (decision === 'unstage') unstage.push(path);

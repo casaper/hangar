@@ -303,7 +303,8 @@ These are `perf(<scope>)` commits.
   they are.)_ (`doctor.ts:1080`, `close.ts:186-197`, `open.ts:474,682`). Call
   `allClaudeSessions()`, `currentSession()` and `invokingTty()` once per run. Also stop
   `procs.ts:186` from running `ps` twice.
-- [ ] catch-up's restage spawns two processes per path (`catch-up.ts:284`). Use one
+- [x] catch-up's restage spawns two processes per path _(done; `--no-renames` keeps a moved
+  file's old name in the set)_ (`catch-up.ts:284`). Use one
   `diff --name-only -z` and one `ls-tree -r -z` instead.
 - [ ] The bar's footer runs a `symbolic-ref` it never uses (`tmux-status-sh.ts:239`), and the
   statusline runs one `jq` per field (`statusline-sh.ts`). Write the golden delta first.
