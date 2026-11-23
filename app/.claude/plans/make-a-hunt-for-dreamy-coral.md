@@ -306,7 +306,8 @@ These are `perf(<scope>)` commits.
 - [x] catch-up's restage spawns two processes per path _(done; `--no-renames` keeps a moved
   file's old name in the set)_ (`catch-up.ts:284`). Use one
   `diff --name-only -z` and one `ls-tree -r -z` instead.
-- [ ] The bar's footer runs a `symbolic-ref` it never uses (`tmux-status-sh.ts:239`), and the
+- [x] The bar's footer runs a `symbolic-ref` it never uses _(done as two commits; old and new
+  are byte-identical on the live clones and on sample payloads)_ (`tmux-status-sh.ts:239`), and the
   statusline runs one `jq` per field (`statusline-sh.ts`). Write the golden delta first.
 - [ ] `sleepSync` busy-waits; use `Atomics.wait`. `restyle` spawns tmux once per option; chain
   the commands with `\;` after a probe. `reload` sources the conf once per clone instead of once.
