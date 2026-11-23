@@ -210,12 +210,19 @@ export const claudeSessionDiagnostic = (): ClaudeSessionDiagnostic => {
 export const claudeSessionsIn = (clonePath: string): ClaudeSession[] =>
   allClaudeSessions().filter((s) => isInside(s.cwd, clonePath));
 
+/**
+ * Whether a process with this pid exists. Signal 0 checks without sending anything.
+ *
+ * EPERM is ALIVE: the process is there, it just belongs to someone else. Reading every failure as
+ * dead had `stopServer` report "stopped" for a process it could not signal, and `servers prune`
+ * delete a live process's pid file. Only ESRCH means there is no such process.
+ */
 export const isAlive = (pid: number): boolean => {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
   }
 };
 

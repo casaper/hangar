@@ -19,7 +19,7 @@ import {
 } from '../src/commands/servers.ts';
 import { cloneAt } from '../src/fleet.ts';
 import { visibleWidth } from '../src/ui.ts';
-import type { Listener, ProcessRow } from '../src/procs.ts';
+import { isAlive, type Listener, type ProcessRow } from '../src/procs.ts';
 
 import { fixtureVscodeConfigText, syntheticHangar } from './fixture.ts';
 
@@ -602,4 +602,13 @@ test('a role declaring no URL gives a record with none', () => {
   });
   assert.equal(record?.role, 'db');
   assert.equal(record.url, undefined, 'asserted on the record, never on how an absent cell paints');
+});
+
+test('a process owned by someone else is alive, not gone', () => {
+  // Signal 0 to another user's process fails with EPERM, and reading that as "dead" had
+  // `servers kill` report a server stopped that it never reached, and `prune` drop its pid file.
+  // pid 1 is always there and never ours unless the suite runs as root -- alive either way.
+  assert.equal(isAlive(1), true);
+  assert.equal(isAlive(process.pid), true);
+  assert.equal(isAlive(2 ** 30), false);
 });

@@ -237,8 +237,10 @@ All of these are `fix(<scope>)` commits.
   `pwd -P`. Work on a scratch copy and run `test/claude-shim.test.ts` against it before the `mv`.
 - [x] **`skills sync --adopt` with a subfolder** _(done: `sameTree`)_ (`skills.ts:376`, R). Compare recursively and
   guard ENOTDIR.
-- [ ] **`setup` hard-codes `.env.shared`** (`setup.ts:621,627`, R). Use `secrets.file`.
-- [ ] **`isAlive` treats EPERM as dead** (`procs.ts:213`, R). EPERM means alive.
+- [x] **`setup` hard-codes `.env.shared`** (`setup.ts:621,627`, R). Use `secrets.file`.
+  _No change needed. The config `setup` generates hard-codes `file: .env.shared` (line 430), so
+  the file it creates and the config always agree, and a `--force` re-run rewrites both._
+- [x] **`isAlive` treats EPERM as dead** _(done; test against pid 1)_ (`procs.ts:213`, R). EPERM means alive.
 - [ ] **Small message bugs** (R). Derive each of these from state:
   - a declined "Sync anyway?" is counted as a failure (`sync.ts:840`);
   - catch-up hard-codes `rebased = true` (`catch-up.ts:579,600`);
