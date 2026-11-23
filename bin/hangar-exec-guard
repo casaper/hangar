@@ -203,19 +203,59 @@ function dryRunAfter(segment, verb, flags = ['-n', '--dry-run']) {
  * its `/dev/tty` question. `hangar dev release`, the `release` script that runs it, and
  * semantic-release itself are each refused unless they are the dry run.
  */
+/** Package-manager options that take the NEXT token as their value. */
+const PM_VALUE_OPTIONS = new Set(['-C', '--dir', '--prefix', '--filter', '-F', '--workspace', '--cwd']);
+
+/**
+ * Where a program name is RUN rather than mentioned: the first word of the segment once `VAR=x`
+ * and `env` are stepped over, or the first non-flag word after a runner (`npx`, `bunx`, `yarn`,
+ * `pnpm exec|dlx`, `npm exec`). `npm view semantic-release time` and a `grep` for it name the
+ * program without running it, and must pass.
+ */
+function commandPositions(tokens) {
+  const at = new Set();
+  let s = 0;
+  while (s < tokens.length && (tokens[s] === 'env' || /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[s]))) {
+    s += 1;
+  }
+  at.add(s);
+  for (let i = 0; i < tokens.length; i += 1) {
+    const runner =
+      /(^|\/)(npx|bunx|yarn)$/.test(tokens[i]) ||
+      (/(^|\/)(pnpm|npm)$/.test(tokens[i]) && /^(exec|dlx)$/.test(tokens[i + 1] ?? ''));
+    if (!runner) continue;
+    let j = /^(exec|dlx)$/.test(tokens[i + 1] ?? '') ? i + 2 : i + 1;
+    while (j < tokens.length && tokens[j].startsWith('-')) j += 1;
+    at.add(j);
+  }
+  return at;
+}
+
 function releases(command) {
   const bare = (t) => t.replace(/^["']|["']$/g, '');
   for (const segment of command.split(/[;&|()`\n]+/)) {
     const tokens = segment.split(/\s+/).filter(Boolean).map(bare);
+    const runs = commandPositions(tokens);
     for (let i = 0; i < tokens.length; i += 1) {
       const t = tokens[i];
       if (/(^|\/)semantic-release$/.test(t)) {
-        if (!dryRunAfter(segment, tokens[i], ['--dry-run', '-d'])) return true;
+        if (runs.has(i) && !dryRunAfter(segment, tokens[i], ['--dry-run', '-d'])) return true;
         continue;
       }
       if (/(^|\/)(pnpm|npm|yarn)$/.test(t)) {
-        const k = tokens[i + 1] === 'run' ? i + 2 : i + 1;
-        if (tokens[k] === 'release' && !dryRunAfter(segment, 'release')) return true;
+        // Step over the manager's own options first: `pnpm -C app release -y` named the script
+        // after a directory, and the release ran while the check looked at `-C`.
+        let k = i + 1;
+        while (k < tokens.length && tokens[k].startsWith('-')) {
+          k += PM_VALUE_OPTIONS.has(tokens[k]) ? 2 : 1;
+        }
+        if (tokens[k] === 'run' || tokens[k] === 'run-script') k += 1;
+        // `-w` takes a value in npm and none in pnpm, so an explicit `run release` anywhere after
+        // the manager counts as well.
+        const named =
+          tokens[k] === 'release' ||
+          tokens.slice(i + 1).some((x, n, rest) => /^run(-script)?$/.test(x) && rest[n + 1] === 'release');
+        if (named && !dryRunAfter(segment, 'release')) return true;
         continue;
       }
       if (!/(^|\/)hangar$/.test(t) && !/(^|\/)cli\.ts$/.test(t)) continue;

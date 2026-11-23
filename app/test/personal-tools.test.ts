@@ -294,7 +294,16 @@ test('publishing is refused in every spelling, and nothing else is', () => {
     'pnpm release -y',
     'pnpm run release',
     'npx semantic-release',
+    'npx --yes semantic-release',
+    'pnpm exec semantic-release',
+    'GITHUB_TOKEN=x app/node_modules/.bin/semantic-release --no-ci',
     'app/node_modules/.bin/semantic-release --no-ci',
+    // The manager's own options before the script name.
+    'pnpm -C app release -y',
+    'pnpm --dir app release',
+    'npm --prefix app run release',
+    'npm -w app run release',
+    'pnpm -w release',
   ]) {
     assert.ok(guardSays(command), `publishing was ALLOWED: ${command}`);
   }
@@ -325,6 +334,11 @@ test('publishing is refused in every spelling, and nothing else is', () => {
     'pnpm run release --dry-run',
     'npx semantic-release --dry-run',
     'git log --grep release',
+    // Naming the program is not running it -- the dependency sweep checks its publish dates.
+    'npm view semantic-release time',
+    'pnpm why semantic-release',
+    'grep -n semantic-release app/package.json',
+    'pnpm -C app release -n',
   ]) {
     assert.ok(!guardSays(command), `ordinary work was denied: ${command}`);
   }

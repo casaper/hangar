@@ -249,6 +249,14 @@ All of these are `fix(<scope>)` commits.
   - catch-up hard-codes `rebased = true` (`catch-up.ts:579,600`);
   - `requireCleanForSwitch` says "default branch" for `open --branch`.
 
+### 2b. Follow-ups found while reviewing Tiers 1 and 2
+
+- [x] The publish guard over-matched `semantic-release` (`npm view semantic-release time` was
+  denied) and under-matched `pnpm -C app release`. Now matched in command position only, and
+  past the package manager's own options.
+- [x] `sort=-updated_on` checked against the live Bitbucket API: `sync 5 -n` and an
+  any-state lookup both answer. No change needed.
+
 ### 3. Dead code and stale text
 
 Commits are `refactor` or `docs`.
