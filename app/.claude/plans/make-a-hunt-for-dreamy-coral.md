@@ -167,8 +167,10 @@ All of these are `fix(<scope>)` commits.
 - [x] **catch-up `--abort`/`--continue` on the wrong branch** (`catch-up.ts:86,613-629`, R).
   Refuse unless the current branch is `ledger.branch`. _Done. The refusal does not apply
   mid-rebase, where HEAD is detached and `rebase --abort` restores the branch itself._
-- [ ] **Stored PR target checked before the fetch** (`sync.ts:181,232`, R). Re-resolve after the
-  fetch.
+- [x] **Stored PR target checked before the fetch** (`sync.ts:181,232`, R). Re-resolve after the
+  fetch. _Done another way: the stored target is checked against origin with an exact
+  `ls-remote`, falling back to the local ref only when origin is unreachable. Re-resolving would
+  have needed the PR lookup moved._
 - [ ] **sync stash handling** (`sync.ts:866-881,947-960`, R).
   - Find the stash by its label.
   - Derive "restored" from git rather than from the flag.

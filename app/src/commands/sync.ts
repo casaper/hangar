@@ -177,9 +177,26 @@ export const resolveTarget = async (
    * and when the branch has no open pull request yet -- a stacked branch is synced onto the
    * branch it stacks on, not onto the default branch. Only when it still names a branch origin
    * has; a target that vanished is no target.
+   *
+   * ORIGIN is asked, not this clone's `origin/<target>`: this runs before the fetch, so a target
+   * a sibling pushed since this clone last fetched has no local ref yet, and checking for one
+   * dropped a perfectly good stacked base for the default branch. The local ref answers only
+   * when origin cannot be reached.
    */
+  const onOrigin = (name: string): boolean => {
+    const res = git(clone.path, [
+      'ls-remote',
+      '--exit-code',
+      '--heads',
+      'origin',
+      `refs/heads/${name}`,
+    ]);
+    if (res.ok) return true;
+    if (res.code === 2) return false;
+    return refExists(clone.path, `origin/${name}`);
+  };
   const storedTarget = (stored: string | undefined, why: string): Target | undefined =>
-    stored !== undefined && stored !== branch && refExists(clone.path, `origin/${stored}`)
+    stored !== undefined && stored !== branch && onOrigin(stored)
       ? { branch: stored, ref: `origin/${stored}`, why, guessed: false, pr: undefined }
       : undefined;
 
