@@ -573,14 +573,15 @@ const checksFor = (hangar: Hangar, clone: Clone, siblings: readonly Clone[]): Ch
         : plans.resolved === undefined
           ? `${plans.value} resolves outside the clone — Claude Code REJECTS that and silently uses ~/.claude/plans instead`
           : `${plans.value}${readSettings(clone)?.plansDirectory === undefined ? ' (from the repo settings)' : ''}`,
+    // Through `reconcileHook`, which reads the file again: the `settings` above was read once
+    // for every check, and writing it back here undid the `settings.local.json` repair that runs
+    // earlier in the same `--fix` -- "repaired", and red again on the next run.
     repair:
       plans.resolved === undefined && settings !== undefined
-        ? () => {
-            writeFile(
-              settingsPath(clone),
-              `${JSON.stringify({ ...settings, plansDirectory: PLANS_DIRECTORY }, null, 2)}\n`,
-            );
-          }
+        ? reconcileHook(hangar, clone, (current) => ({
+            ...current,
+            plansDirectory: PLANS_DIRECTORY,
+          }))
         : undefined,
   });
 
