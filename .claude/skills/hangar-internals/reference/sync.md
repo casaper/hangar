@@ -239,7 +239,10 @@ below follows from that.
 - **`--abort` mid-rebase is `rebase --abort`; after the rebase it is `reset --hard` to the old
   head**, then the stash is re-applied. The stash is checked to exist before anything is
   discarded, and the untracked files a half-done apply restored are removed first, or the re-apply
-  would refuse over them.
+  would refuse over them. **Past the rebase, both `--abort` and `--continue` refuse unless the
+  checked-out branch is the ledger's**: a `reset --hard` to the old head on whatever branch is
+  checked out now would rewrite a branch the catch-up never touched. Mid-rebase HEAD is detached
+  and `rebase --abort` restores the branch itself, so the check does not apply there.
 
 **`sync`'s own stash re-apply settles what its resolver resolved.** A conflicted `stash apply`
 leaves its paths unmerged until something stages them, and the resolver never stages, so
@@ -347,8 +350,11 @@ Every decision below follows from that one asymmetry.
   the argument is required. This is the fleet's own "stay in your own clone" rule reaching the one
   command whose mistake is published -- a pull request opened for the branch next door is on
   somebody's review queue before anybody notices. It is also why there is no `--all`.
-- **Origin is fetched before it is judged, on the dry run too** (`originState` in `push.ts`).
-  The counts read remote-tracking refs, and a stale one gives exactly the wrong answer: a branch
+- **Origin is asked, then fetched, before it is judged, on the dry run too** (`originState` in
+  `push.ts`). `ls-remote --exit-code origin refs/heads/<branch>` answers whether the branch is
+  there at all -- exit 2 is "absent" in any locale, and any other failure refuses rather than
+  falling back to a ref that may be stale. Only then is it fetched for the counts, which read
+  remote-tracking refs, and a stale one gives exactly the wrong answer: a branch
   reported as unpushed that was pushed an hour ago, or -- far worse -- as pushed while the last
   three commits are local, which opens a pull request that reads as complete and is missing the
   work its description describes. Only `refs/remotes` moves, so no local branch and no file in the
