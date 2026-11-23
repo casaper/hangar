@@ -154,8 +154,8 @@ export const missingExcludeLines = (exclude: string): string[] => {
 
 /**
  * What to APPEND to an existing `.git/info/exclude`: the block's header and only the lines it
- * lacks, or nothing. Every repair appended the whole `excludeBlock`, which is harmless with one
- * line and duplicates every line already present the moment there are two. PURE.
+ * lacks, or nothing. Appending the whole `excludeBlock` instead is harmless with one line and
+ * duplicates every line already present the moment there are two. PURE.
  */
 export const excludeAddition = (hangar: Hangar, exclude: string): string => {
   const missing = missingExcludeLines(exclude);
@@ -244,9 +244,9 @@ export const dotenvValues = (text: string): Map<string, string> => {
  * What in a clone's `.env.local` differs from what `envLocalContent` derives, PORTS EXCLUDED --
  * the root-path key and every `repo.cloneEnv.vars` entry. PURE given the file's text.
  *
- * `doctor` compared the ports alone, so a changed `cloneEnv.vars` template or a moved root stayed
- * green although the file's own header sends the reader to `doctor --fix` for drift; and when
- * the row did go red, the repair rewrote those values silently.
+ * Comparing the ports alone would leave a changed `cloneEnv.vars` template or a moved root green,
+ * although the file's own header sends the reader to `doctor --fix` for drift -- and when the row
+ * did go red, its repair would rewrite those values without a word.
  */
 export const envLocalExtrasDrift = (clone: Clone, text: string): string[] => {
   const ports = new Set(clone.ports.map((entry) => entry.role.envKey));
@@ -675,7 +675,7 @@ const MOVED_ROOT_INVOCATION =
 
 /**
  * `<bin/hangar> --hangar <root>`, each half quoted only when its path needs it -- a root with a
- * space broke every hook command. Bare for a root like this hangar's, so the bytes do not move.
+ * space breaks a bare hook command. Bare for a root like this hangar's, so the bytes stay put.
  */
 const ourCli = (hangar: Hangar): string =>
   `${shellQuote(hangar.paths.bin)} --hangar ${shellQuote(hangar.root)}`;
@@ -700,8 +700,8 @@ const withoutOurs = (
 
 /**
  * One of this hangar's own `bin/` scripts, invoked bare -- an absolute path ending in the name,
- * with nothing around it. `endsWith` alone also claimed a developer's own wrapper whose command
- * merely ENDED with the script's name.
+ * with nothing around it. `endsWith` alone would also claim a developer's own wrapper whose
+ * command merely ENDS with the script's name.
  */
 const isOwnScript = (name: string, command: string | undefined): boolean => {
   if (command === undefined) return false;

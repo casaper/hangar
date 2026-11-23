@@ -76,7 +76,7 @@ const GIT_VALUE_OPTIONS = new Set([
  * Every git invocation on the line, as `{ verb, args }`. PURE.
  *
  * Token-based, as `hangar-exec-guard` is, rather than anchored at a command boundary: a regex
- * that wanted `git` right after `^`, `&&`, `||`, `;` or a newline let `true | git commit`,
+ * that wants `git` right after `^`, `&&`, `||`, `;` or a newline lets `true | git commit`,
  * `(git commit)`, `GIT_EDITOR=true git commit`, `env git commit` and `/usr/bin/git commit` through.
  * Quoted spans are blanked out first, so `echo "then git commit"` and a `grep` for one are not
  * commits -- which leaves `sh -c 'git commit'` out of reach, a limit of reading a line rather

@@ -37,9 +37,9 @@ test('a clean tree gives no rows, so the picker falls back to every file', () =>
 
 test('a conflicted non-ASCII path is named as it is, and its markers are found', () => {
   /*
-   * Under git's default `core.quotePath=true`, `diff --name-only` printed `"caf\303\251.ts"`,
-   * quotes included. `readFileSync` on that threw, the throw read as "no markers", and an
-   * integration committed them. Real git in a throwaway repo: the quoting is git's, not ours.
+   * Under git's default `core.quotePath=true`, `diff --name-only` prints `"caf\303\251.ts"`,
+   * quotes included. `readFileSync` on that throws, a throw read as "no markers" would let an
+   * integration commit them. Real git in a throwaway repo: the quoting is git's, not ours.
    */
   const saved = Object.entries(process.env).filter(([key]) => key.startsWith('GIT_'));
   for (const [key] of saved) Reflect.deleteProperty(process.env, key);

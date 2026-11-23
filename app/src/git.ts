@@ -77,8 +77,8 @@ export type GitOptions = {
  * `core.quotePath` defaults to true, under which git prints a non-ASCII path as a C string in
  * double quotes: a conflicted `src/café.ts` comes out of `diff --name-only` as
  * `"src/caf\303\251.ts"`. Every reader here splits that output into paths and hands them back to
- * git or to `readFileSync`, where the quoted form names nothing -- so the conflict-marker check
- * read "no markers" for a file it could not open, and the integration committed them. Turning
+ * git or to `readFileSync`, where the quoted form names nothing -- so a conflict-marker check
+ * would read "no markers" for a file it cannot open, and an integration would commit them. Turning
  * quoting off prints the bytes as they are; only a name with a control character, `"` or `\`
  * stays quoted. In argv rather than the environment, so it cannot clobber a
  * `GIT_CONFIG_COUNT` the operator exported.
@@ -269,10 +269,10 @@ export const fetchArgs = (remoteNames: readonly [string, ...string[]]): string[]
 /** The sibling remotes this repo HAS that are missing a `SIBLING_REMOTE_CONFIG` value. */
 export const loudSiblingRemotes = (repo: string, siblingNames: readonly string[]): string[] => {
   const present = remotes(repo);
-  // ONE `git config` for every remote, rather than one per sibling per key: `doctor --all` asked
-  // this of every clone, so a sixteen-clone fleet paid 240 spawns for one row. git prints the
-  // section and the variable name lowercased and the remote's own name as written, and the
-  // last value wins, as `--get` would answer.
+  // ONE `git config` for every remote, rather than one per sibling per key: `doctor --all` asks
+  // this of every clone, which per sibling per key is 240 spawns for one row on sixteen clones.
+  // git prints the section and the variable name lowercased and the remote's own name as
+  // written, and the last value wins, as `--get` would answer.
   const config = new Map<string, string>();
   for (const line of (gitTry(repo, ['config', '--get-regexp', '^remote\\.']) ?? '').split('\n')) {
     const space = line.indexOf(' ');

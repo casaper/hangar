@@ -154,8 +154,8 @@ test('add-clone skips an index whose formula ports an existing clone holds', () 
 });
 
 test('only a directory spelled as the clone name would be is a clone, and never index 0', () => {
-  // `wt-000` once killed every command (no palette entry for index 0), and `wt-0001` beside
-  // `wt-001` was a second clone 1 whose path pointed at the first one's directory.
+  // `wt-000` would kill every command (no palette entry for index 0), and `wt-0001` beside
+  // `wt-001` would be a second clone 1 whose path points at the first one's directory.
   const root = mkdtempSync(join(tmpdir(), 'hangar-discover-'));
   try {
     const h = syntheticHangar({ root });

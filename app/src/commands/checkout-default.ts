@@ -261,8 +261,8 @@ export const landOnBranch = (
  */
 const requireCleanForSwitch = (clone: Clone, state: SyncState, onto: string): void => {
   if (state.dirty === 0) return;
-  // `onto` is named by the caller: `open --branch <name>` reaches this too, and was told its
-  // work would land "onto the default branch" when it was about to land on <name>.
+  // `onto` is named by the caller: `open --branch <name>` reaches this too, and there the work
+  // lands on <name>, not on the default branch.
   throw new CliError(
     `${clone.name} has ${state.dirty} modified file(s) — switching branches would carry them onto ${onto}`,
     `Commit them, stash them (\`git -C ${clone.path} stash\`), or run \`hangar sync ${clone.index}\`, which stashes and restores around the integration.`,

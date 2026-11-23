@@ -84,8 +84,8 @@ test('two hangars in one process do not share pins', () => {
 });
 
 test('a port key with a digit in it is read back from the dotenv', () => {
-  // The schema allows `^[A-Z][A-Z0-9_]*$`; the reader once took `[A-Z_]+` only, so doctor called
-  // a correctly written `E2E_PORT` missing for ever and the collision check never saw it.
+  // The schema allows `^[A-Z][A-Z0-9_]*$`; a reader taking `[A-Z_]+` only would call a correctly
+  // written `E2E_PORT` missing for ever, and the collision check would never see it.
   const root = freshRoot();
   try {
     const clone = cloneAt(syntheticHangar({ root }), 1);

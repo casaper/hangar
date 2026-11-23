@@ -103,15 +103,16 @@ through the same Bitbucket adapter.
 - **Conflicts are delegated to a headless `claude -p` inside the clone**, then verified
   mechanically (no unmerged paths, no markers -- a file that cannot be READ counts as markers,
   one that is absent does not, and every git call runs with `core.quotePath=false` so a
-  non-ASCII path names a real file; the default quoting once let `café.ts`'s markers through as
-  "unreadable, so clean"). If that fails the whole operation is aborted and
-  the pre-sync state restored — never left half-merged. **One exception, and it is inherent:**
-  putting your stashed work back happens after the integration is already committed, so if that
-  is what fails, the branch has moved and cannot be rolled back. The clone is then left with
-  unmerged paths and the stash intact, and the session is told the integration DID happen —
-  never that it did not. `status` grows two rows for exactly this wreckage — `pending` and
-  `sync stash` — and both appear **only when there is something to say**, so a clone that shows
-  neither is the healthy case and not a missing feature. The stash row earns its place: these
+  non-ASCII path names a real file; under the default quoting `café.ts` comes back as a quoted
+  C string that names no file, and "unreadable, so clean" would commit its markers). If that
+  fails the whole operation is aborted and the pre-sync state restored — never left
+  half-merged. **One exception, and it is inherent:** putting your stashed work back happens
+  after the integration is already committed, so if that is what fails, the branch has moved
+  and cannot be rolled back. The clone is then left with unmerged paths and the stash intact,
+  and the session is told the integration DID happen — never that it did not. `status` grows two
+  rows for exactly this wreckage — `pending` and `sync stash` — and both appear **only when
+  there is something to say**, so a clone that shows neither is the healthy case and not a
+  missing feature. The stash row earns its place: these
   clones carry six hundred stashes each, and a leftover `hangar-sync` one is invisible in
   that pile. **For the same reason every restore finds the run's stash by its timestamped
   label (`stashRefLabelled`), never as `stash@{0}`**, which is whoever pushed last; and a

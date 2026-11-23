@@ -75,8 +75,8 @@ test('the stale clone is still WIRED, which is what keeps doctor from calling it
 
 test('a repair takes out only our hook, never a developer hook that shares its matcher', () => {
   /*
-   * The writers dropped a whole matcher when ANY hook in it was ours, so a command a developer
-   * had added to the same `Bash` matcher object vanished on the next `doctor --fix`.
+   * Dropping a whole matcher when ANY hook in it is ours would take a command a developer added to
+   * the same `Bash` matcher object with it, on the next `doctor --fix`.
    */
   const hangar = syntheticHangar();
   const theirs = { type: 'command' as const, command: '/usr/local/bin/my-audit-hook' };

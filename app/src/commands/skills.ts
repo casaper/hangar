@@ -379,10 +379,10 @@ export const adoptable = (hangar: Hangar, name: string): boolean => {
 /**
  * Two directories with the same entries and the same bytes, ALL THE WAY DOWN. PURE but for reads.
  *
- * The first version compared one level and `readFileSync`'d every entry: a skill with a
- * `reference/` folder threw EISDIR there, read as "differs", and could never be adopted -- and a
- * live path that was a FILE threw ENOTDIR out of `readdirSync`, uncaught. Any read failure is
- * "not the same", which is the refusing answer.
+ * Recursive because a one-level compare that `readFileSync`s every entry throws EISDIR on a
+ * skill's `reference/` folder -- read as "differs", so such a skill is never adoptable -- and
+ * `readdirSync` on a live path that is a FILE throws ENOTDIR. Any read failure is "not the same",
+ * which is the refusing answer.
  */
 export const sameTree = (a: string, b: string): boolean => {
   try {

@@ -192,8 +192,8 @@ test('the manifest refuses supersedes without the adoptedFrom branch it is stage
 });
 
 test('a skill with a subfolder can be adopted, and any difference anywhere refuses it', () => {
-  // One-level compare `readFileSync`'d `reference/` and threw EISDIR, so such a skill could never
-  // be adopted; a live FILE threw ENOTDIR out of `readdirSync`, uncaught.
+  // A one-level compare `readFileSync`s `reference/` and throws EISDIR, so such a skill is never
+  // adoptable; a live FILE throws ENOTDIR out of `readdirSync`.
   const dir = mkdtempSync(join(tmpdir(), 'skills-tree-'));
   try {
     const tree = (root: string, extra = ''): void => {

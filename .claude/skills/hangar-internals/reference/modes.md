@@ -110,7 +110,7 @@ answer for a directory the caller was not standing in. `pwd` asks the OS, and `-
 symlinks on both sides so a hangar reached through a link still compares equal. **Finding the
 real binary is the one comparison it cannot make that way**, because PATH entries are not
 resolved: the shim skips its own FILE with `-ef`, not its directory as a string, or a symlinked
-or trailing-slash PATH entry for `.local/bin` made it exec itself in a loop
+or trailing-slash PATH entry for `.local/bin` would make it exec itself in a loop
 (`test/claude-shim.test.ts` holds both spellings).
 
 **Three more cases get the bare binary, and each unsets `HANGAR_MODE` on the way:**
@@ -360,9 +360,10 @@ is why they refuse while an unexposed command is only a warning.
 
 **The same split would leak through a VALUE, so `argvFor` refuses any value starting with `-`.**
 commander reads a dash-leading word as an option wherever it stands, so `doctor({clone: "--fix"})`
-was `doctor --fix` under `doctor`'s pre-approved rule, `pr_target({clone: "--set=main"})` wrote
-through the report tool, and `"--"` cancelled a preview's fixed `--dry-run`. No clone name, ref or
-title the tools take needs a leading dash, so the refusal costs nothing a caller meant.
+would be `doctor --fix` under `doctor`'s pre-approved rule, `pr_target({clone: "--set=main"})`
+would write through the report tool, and `"--"` would cancel a preview's fixed `--dry-run`.
+No clone name, ref or title the tools take needs a leading dash, so the refusal costs nothing a
+caller meant.
 
 **`colours sync` is the one command with two read-only tools**, and that is not redundancy:
 `--check` is a gate that exits non-zero when an artifact is stale, `-n` is the report that says
@@ -406,9 +407,9 @@ its identity rather than styling, and a model reading a tool result has no use f
 **The child is spawned `detached`, which is what makes "a tool has no terminal" true.** The
 server itself runs under the terminal Claude Code draws in -- `ps` shows each `hangar mcp` on a
 `ttys` -- and a child inherits that as its controlling terminal, so `confirm()`'s
-`exec </dev/tty` succeeded there (measured under `script(1)`: attached `HAS-TTY`, detached
-`NO-TTY`). An acting tool reaching a question would have sat reading the user's keystrokes
-behind a prompt written into a pipe. `detached` is `setsid()`: a new session, no terminal, and
+`exec </dev/tty` succeeds there (measured under `script(1)`: attached `HAS-TTY`, detached
+`NO-TTY`). An acting tool reaching a question would sit reading the user's keystrokes behind a
+prompt written into a pipe. `detached` is `setsid()`: a new session, no terminal, and
 every `confirm()` takes its declining branch as the rest of this file assumes.
 
 ### The enumeration is a test, and the coverage is only a warning

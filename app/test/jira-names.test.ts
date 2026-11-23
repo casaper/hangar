@@ -237,8 +237,8 @@ test('the record store is linked into every clone like any other shared entry', 
 test('a `$` in a record survives the relation strip byte for byte', () => {
   /*
    * `String.replace` with a STRING replacement expands `$&`, `$$`, `` $` `` and `$'`, so a
-   * summary like "costs $$ and $& here" came out with the whole matched frontmatter -- the very
-   * `relation:` line being stripped -- pasted back in.
+   * summary like "costs $$ and $& here" would come out with the whole matched frontmatter -- the
+   * very `relation:` line being stripped -- pasted back in.
    */
   const content = [
     '---',

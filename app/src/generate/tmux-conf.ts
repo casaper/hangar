@@ -377,7 +377,7 @@ export const paneBorderFormat = (hangar: Hangar, colour?: CloneColour): string =
  *
  * **Every expansion goes through tmux's `q:` modifier, never bare inside quotes.** tmux
  * substitutes `#{…}` into the job's text BEFORE handing it to `sh -c`, escaping nothing, so a
- * `"#{pane_current_path}"` in a pane `cd`'d into a directory named `$(…)` ran that command on
+ * `"#{pane_current_path}"` in a pane `cd`'d into a directory named `$(…)` runs that command on
  * every redraw, in every attached client -- measured on 3.8, together with `q:` passing the same
  * path through as one inert argument. `q:` escapes for sh(1) itself, which is also why there are
  * no quotes around it: they would be quoting an already-quoted word. And still no single quote

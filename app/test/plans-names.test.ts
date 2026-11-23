@@ -35,8 +35,8 @@ test('the plans hook writer keeps a plansDirectory doctor wrote', () => {
 });
 
 test('a collected plan never lands on top of one already in the archive', () => {
-  // Twin `SessionEnd` runs pick target names from one stale snapshot; `renameSync` replaced the
-  // first run's plan with the second's, silently.
+  // Twin `SessionEnd` runs pick target names from one stale snapshot, and a rename would replace
+  // the first run's plan with the second's, silently.
   const dir = mkdtempSync(join(tmpdir(), 'plans-move-'));
   try {
     const first = join(dir, 'a.md');

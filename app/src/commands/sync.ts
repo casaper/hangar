@@ -779,7 +779,7 @@ const leftovers = (state: TreeAfterSync): string =>
 
 /**
  * `true` synced, `false` failed, `'skipped'` declined at the "Sync anyway?" question -- which is
- * the operator choosing not to, and was tallied as a failure ("sync failed for: X", non-zero).
+ * the operator choosing not to, not a failure to tally ("sync failed for: X", non-zero).
  */
 type SyncOutcome = boolean | 'skipped';
 
@@ -1006,8 +1006,8 @@ const integrate = async (
     } else if (conflictedFiles(clone.path).length === 0) {
       // git REFUSED the apply -- an untracked file in the stash where the integration now has a
       // tracked one ("already exists, no checkout") -- and conflicted nothing. There is nothing
-      // for a resolver to resolve: handed zero files it answers "resolved", and the agent was
-      // then told its changes ARE back in the tree when none of them were.
+      // for a resolver to resolve: handed zero files it answers "resolved", and the agent would
+      // be told its changes ARE back in the tree when none of them are.
       fail('git refused to re-apply your stashed changes, and nothing is conflicted to resolve');
       warn(`your changes are still in ${stashRef} in ${clone.name} — re-apply them by hand`);
       return false;

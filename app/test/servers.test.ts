@@ -605,7 +605,7 @@ test('a role declaring no URL gives a record with none', () => {
 });
 
 test('a process owned by someone else is alive, not gone', () => {
-  // Signal 0 to another user's process fails with EPERM, and reading that as "dead" had
+  // Signal 0 to another user's process fails with EPERM, and reading that as "dead" would have
   // `servers kill` report a server stopped that it never reached, and `prune` drop its pid file.
   // pid 1 is always there and never ours unless the suite runs as root -- alive either way.
   assert.equal(isAlive(1), true);

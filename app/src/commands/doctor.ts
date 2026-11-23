@@ -590,9 +590,9 @@ const checksFor = (
         : plans.resolved === undefined
           ? `${plans.value} resolves outside the clone — Claude Code REJECTS that and silently uses ~/.claude/plans instead`
           : `${plans.value}${settings?.plansDirectory === undefined ? ' (from the repo settings)' : ''}`,
-    // Through `reconcileHook`, which reads the file again: the `settings` above was read once
-    // for every check, and writing it back here undid the `settings.local.json` repair that runs
-    // earlier in the same `--fix` -- "repaired", and red again on the next run.
+    // Through `reconcileHook`, which reads the file again: the `settings` above is read once
+    // for every check, and writing it back here would undo the `settings.local.json` repair that
+    // runs earlier in the same `--fix` -- "repaired", and red again on the next run.
     repair:
       plans.resolved === undefined && settings !== undefined
         ? reconcileHook(clone, (current) => ({
@@ -741,7 +741,7 @@ const checksFor = (
 
   // --- fleet wiring ------------------------------------------------------------------
   // Through `remotesOf`: every clone asks the same question of every sibling, so reading each
-  // clone's remotes afresh here was N squared `git remote` spawns for `doctor --all`.
+  // clone's remotes afresh here would be N squared `git remote` spawns for `doctor --all`.
   const mine = remotesOf(clone.path);
   const missingOut = siblings
     .filter((s) => s.index !== clone.index && !mine.has(s.name))

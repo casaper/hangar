@@ -1,11 +1,11 @@
 /**
  * Quoting a value into generated shell and tmux text, and reading the first word back out.
  *
- * One module, because there were four approaches across the generators and two copies of the
- * same one: a path with a space broke every hook command and every bar job, a `'` broke the
- * shell assignments, and a reader that split on the first space then named half a path. Every
- * helper here leaves a value that needs nothing EXACTLY as it was, so a hangar whose root has no
- * space or quote in it gets byte-identical artifacts.
+ * One module, so every generator quotes the same way: a path with a space breaks a bare hook
+ * command, bar job or key binding, a `'` breaks a `NAME='...'` assignment, and a reader that
+ * splits on the first space names half a path. Every helper here leaves a value that needs
+ * nothing EXACTLY as it is, so a hangar whose root has no space or quote in it gets byte-identical
+ * artifacts.
  */
 
 const SAFE_BARE = /^[A-Za-z0-9_./:=-]+$/;

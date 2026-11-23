@@ -151,8 +151,8 @@ export const runCaptured = async (
  * Walks PATH in-process rather than spawning `command -v`: `setup` and every `doctor` render a
  * report that would otherwise spend most of its runtime on ten spawns. It also keeps a program
  * name out of a shell string entirely, which matters because some names come from config -- an
- * editor launcher override is pasted by whoever writes `hangar.config.yaml`, and the
- * `sh -c 'command -v <name>'` probes it replaced ran whatever that value spelled.
+ * editor launcher override is pasted by whoever writes `hangar.config.yaml`, and a
+ * `sh -c 'command -v <name>'` probe runs whatever that value spells.
  */
 export const onPath = (name: string): boolean => {
   if (name === '') return false;

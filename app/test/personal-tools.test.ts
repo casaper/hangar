@@ -149,7 +149,7 @@ test('the gate guards its own release, because a permission rule cannot', () => 
 });
 
 test('the gate reads a commit and a branch rename wherever the shell would run one', () => {
-  // Each of these got past the old pattern, which wanted `git` right after a line or `&&`/`;`.
+  // Each of these passes a pattern that wants `git` right after a line start or `&&`/`;`.
   for (const line of [
     'git commit -m x',
     'true | git commit -m x',

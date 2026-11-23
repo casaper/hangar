@@ -1190,8 +1190,8 @@ keyed on the EXPANDED command**, so without the clone name in the text every bar
 would show whichever clone's job ran first.
 
 **Every expansion in a job goes through `q:`, and that one is security rather than taste.** tmux
-pastes `#{…}` into the text it hands `sh -c` without escaping anything, so the footer's old
-`"#{pane_current_path}"` ran a `$(…)` in a directory's NAME on every redraw, for every client --
+pastes `#{…}` into the text it hands `sh -c` without escaping anything, so a bare
+`"#{pane_current_path}"` runs a `$(…)` in a directory's NAME on every redraw, for every client --
 measured on 3.8 with a probe directory, beside `#{q:pane_current_path}` arriving as one inert
 argument. `statusJob` takes format VARIABLE names and writes the `#{q:…}` itself, so a new field
 cannot reintroduce the bare form by accident.

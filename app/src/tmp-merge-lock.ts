@@ -72,11 +72,11 @@ export type LockAttempt =
 /**
  * Remove the stale lock that was JUDGED, and only that one.
  *
- * Compare-then-remove was two steps, and two waiters could both judge one dead lock stale: A
- * removed it and took its own, then B -- its comparison already passed -- removed A's live lock
- * and took the lock too, so two merges ran at once, which is the damage this file exists to
- * prevent. A rename is atomic, so exactly one waiter moves the file aside; and if what it moved
- * is not the file it judged, it was a FRESH lock, which is linked straight back.
+ * Compare-then-remove is two steps, and two waiters can both judge one dead lock stale: A removes
+ * it and takes its own, then B -- its comparison already passed -- removes A's live lock and takes
+ * the lock too, so two merges run at once, which is the damage this file exists to prevent. A
+ * rename is atomic, so exactly one waiter moves the file aside; and if what it moved is not the
+ * file it judged, that is a FRESH lock, which is linked straight back.
  */
 export const clearStale = (path: string, judged: string | undefined, pid: number): void => {
   const grave = `${path}.stale-${String(pid)}`;

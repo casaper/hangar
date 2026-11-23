@@ -132,7 +132,7 @@ const PUSH_VERBS = /^(push|send-pack|http-push)$/;
 /**
  * Git's global options that take their value as the NEXT token. Each one has to be stepped over
  * as a pair, or its value is read as the subcommand and the scan stops before the `push` that
- * follows: `git --namespace x push` was let through that way.
+ * follows: `git --namespace x push` would pass that way.
  */
 const GIT_VALUE_OPTIONS = new Set([
   '-C',
@@ -243,8 +243,8 @@ function releases(command) {
         continue;
       }
       if (/(^|\/)(pnpm|npm|yarn)$/.test(t)) {
-        // Step over the manager's own options first: `pnpm -C app release -y` named the script
-        // after a directory, and the release ran while the check looked at `-C`.
+        // Step over the manager's own options first, or `pnpm -C app release -y` would be judged
+        // by its `-C` while the release runs.
         let k = i + 1;
         while (k < tokens.length && tokens[k].startsWith('-')) {
           k += PM_VALUE_OPTIONS.has(tokens[k]) ? 2 : 1;

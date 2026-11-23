@@ -54,8 +54,8 @@ here="$(pwd -P)"
 
 # The real binary, with THIS file skipped so it can never resolve to itself. `-ef` (same file)
 # rather than comparing the directory as a string: PATH may spell this directory through a
-# symlink or with a trailing slash, and a string mismatch made `real` the shim itself, which in
-# a mode directory re-exec'd itself for ever.
+# symlink or with a trailing slash, and a string mismatch would make `real` the shim itself,
+# which in a mode directory re-execs itself for ever.
 real=''
 IFS=:
 for dir in $PATH; do

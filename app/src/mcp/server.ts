@@ -115,8 +115,9 @@ const runHangar = async (hangar: Hangar, argv: readonly string[]): Promise<Spawn
     const collect = (chunk: string): void => {
       output += chunk;
     };
-    // Decoded by the STREAM, never per chunk: a multi-byte character split across a 64 KB
-    // boundary became two U+FFFD, and this CLI prints `—`, `→` and `●` on nearly every line.
+    // Decoded by the STREAM, never per chunk: per-chunk decoding turns a multi-byte character split
+    // across a 64 KB boundary into two U+FFFD, and this CLI prints `—`, `→` and `●` on nearly
+    // every line.
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', collect);
@@ -267,9 +268,9 @@ export const serveMcp = async (hangar: Hangar, program: CommandUnknownOpts): Pro
       return;
     }
     // Valid JSON that is not a request object -- `null`, a number, a batch array -- is answered
-    // rather than handed on: `handle` read `request.id` off `null` and threw, the catch below read
-    // it AGAIN and threw from inside the rejection handler, and the unhandled rejection ended the
-    // server, taking every hangar tool with it. Batches are not something this server speaks.
+    // rather than handed on: `handle` would read `request.id` off `null` and throw, a catch reading
+    // it AGAIN would throw from inside the rejection handler, and the unhandled rejection would end
+    // the server, taking every hangar tool with it. Batches are not something this server speaks.
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       failRequest(
         null,

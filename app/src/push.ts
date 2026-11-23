@@ -58,9 +58,9 @@ export const describePush = (branch: string, state: OriginState): string => {
  */
 export const originState = (clone: Clone, branch: string): OriginState => {
   // Origin is ASKED, and its answer is the only one taken. A branch gone from origin (merged with
-  // close-source-branch) leaves a stale `origin/<branch>` behind, which read as "up to date" --
-  // nothing pushed, and `pr create` then opened a pull request from a branch origin no longer
-  // has. `--exit-code` makes "no such branch" exit 2 in any locale; any other failure is origin
+  // close-source-branch) leaves a stale `origin/<branch>` behind, which would read as "up to
+  // date" -- nothing pushed, and `pr create` opening a pull request from a branch origin does not
+  // have. `--exit-code` makes "no such branch" exit 2 in any locale; any other failure is origin
   // not answering, and a push decided on a stale ref is what this function exists to prevent.
   const asked = git(clone.path, [
     'ls-remote',

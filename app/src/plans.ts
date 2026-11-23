@@ -219,8 +219,8 @@ export const setMtimeToDay = (path: string, day: string): void => {
  *
  * Every clone's `SessionEnd` hook runs `plans collect`, and `reload`/`down` end them all at once.
  * Each run decides its target names from a snapshot of the archive taken before any of them
- * moved anything, so two can pick the same free name -- and `renameSync` replaces silently, so
- * the second plan erased the first. A hard link fails with EEXIST instead, and only once it holds
+ * moved anything, so two can pick the same free name -- and a rename replaces silently, so the
+ * second plan would erase the first. A hard link fails with EEXIST instead, and only once it holds
  * is the source unlinked. The caller treats the throw as "leave it for the next run". Across
  * filesystems, where a link cannot be made, an exclusive copy keeps the same guarantee.
  */

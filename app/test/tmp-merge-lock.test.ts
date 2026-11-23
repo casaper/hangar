@@ -70,8 +70,8 @@ test('the lock lives under the hangar root, beside its other state', () => {
 test('a waiter clearing a stale lock never removes a fresh one taken meanwhile', () => {
   /*
    * Two waiters judge one dead lock stale. The first clears it and takes a fresh one; the second
-   * then arrives at the compare-and-remove with the OLD content in hand. Compare-then-rm removed
-   * the fresh lock and two merges ran; the rename-aside puts it straight back.
+   * then arrives at the compare-and-remove with the OLD content in hand. Compare-then-rm would
+   * remove the fresh lock and two merges would run; the rename-aside puts it straight back.
    */
   const path = join(dir, 'race.lock');
   writeFileSync(path, '999\n');

@@ -99,7 +99,7 @@ export const statuslineArtifact = (hangar: Hangar, clones: readonly Clone[]): Ar
     '',
     'input="$(cat)"',
     '',
-    '# ONE jq for every field, where there was a pipeline per field -- six on every render. The',
+    '# ONE jq for every field, not a pipeline per field, which would be six on every render. The',
     '# fields are joined with the unit separator, never a tab: tab is IFS whitespace, so two in a',
     '# row would collapse and a missing field would shift every one after it.',
     "IFS=$'\\037' read -r dir model session used window pct < <(",

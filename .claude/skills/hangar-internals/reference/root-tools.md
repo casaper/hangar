@@ -20,7 +20,7 @@ rather than `hangar` subcommands, what each refuses, and how `personal-skills/` 
   lock on a name nobody commits on -- because a permission rule matches only the START of a
   command string and `hangar-commit-gate status && … release` sails straight past one. The
   commit itself is found by a token walk over the line with quoted spans blanked out (`commits`,
-  beside `renamesBranch`), not by a regex anchored at `&&`/`;`: that let `true | git commit`,
+  beside `renamesBranch`), not by a regex anchored at `&&`/`;`, which lets `true | git commit`,
   `(git commit)`, `env git commit`, `/usr/bin/git commit` and `git --git-dir x commit` through.
   `sh -c 'git commit'` stays out of reach, the price of not blocking a `grep` for one. `releasesGate` is the one
   test for every releasing spelling, and the script exports it with `toggleDecision` when it is

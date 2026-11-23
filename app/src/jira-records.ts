@@ -413,7 +413,7 @@ export const storeContentFrom = (content: string): { content: string; stripped: 
     .join('\n');
   if (stripped.length === 0) return { content, stripped };
   // A function, never the string: a string replacement still expands `$&`, `$$`, `$`` and `$'`,
-  // so a summary with a `$` in it pasted the whole block -- `relation:` line included -- back in.
+  // so a summary with a `$` in it would paste the whole block -- `relation:` line included -- back.
   return { content: content.replace(frontmatter, () => kept), stripped };
 };
 

@@ -221,8 +221,8 @@ export const claudeSessionsIn = (
  * Whether a process with this pid exists. Signal 0 checks without sending anything.
  *
  * EPERM is ALIVE: the process is there, it just belongs to someone else. Reading every failure as
- * dead had `stopServer` report "stopped" for a process it could not signal, and `servers prune`
- * delete a live process's pid file. Only ESRCH means there is no such process.
+ * dead would have `stopServer` report "stopped" for a process it cannot signal, and `servers
+ * prune` delete a live process's pid file. Only ESRCH means there is no such process.
  */
 export const isAlive = (pid: number): boolean => {
   try {

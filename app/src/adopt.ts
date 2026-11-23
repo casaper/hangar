@@ -41,7 +41,7 @@ export type AdoptOptions = {
    * The store's ROOT, carried down unchanged while `destDir` descends. A link anywhere in it is
    * the store's own -- the Jira hook links a real ticket directory's records into
    * `jira-tickets/`, which is not under that ticket's `destDir` -- and judging by `destDir`
-   * alone warned "left alone" about every one of them, which in `--quiet` mode is a warn that
+   * alone would warn "left alone" about every one of them, which in `--quiet` mode is a warn that
    * prints the whole narration at the end of every session in that clone.
    */
   readonly storeRoot: string;

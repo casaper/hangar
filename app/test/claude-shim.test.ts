@@ -139,9 +139,9 @@ test('with no real claude behind it, it says so rather than finding itself', () 
 
 test('the shim never finds itself, however PATH spells its directory', () => {
   /*
-   * The skip compared each PATH entry with `pwd -P`'s resolved directory as a STRING, so a
-   * symlinked spelling of the same directory -- or a trailing slash -- was a different string,
-   * `real` became the shim itself, and in a mode directory it re-exec'd itself for ever.
+   * Skipping a PATH entry by comparing it with `pwd -P`'s resolved directory as a STRING misses a
+   * symlinked spelling of the same directory, or a trailing slash: `real` would be the shim itself,
+   * and in a mode directory it would re-exec itself for ever.
    */
   const alias = join(root, 'shim-alias');
   symlinkSync(shimDir, alias);

@@ -346,8 +346,8 @@ clone 2 still holds under the old one. So `unpin` refuses to release a clone ont
 claims and names the sibling, `doctor` reports any port two existing clones claim as a hangar
 problem, and the `.env.local ports` repair is withheld for a clone in such a collision — the net
 for a pin file edited by hand. Despite its name the row compares everything the file is generated
-from, the root-path key and every `repo.cloneEnv.vars` value too (`envLocalExtrasDrift`): it
-compared the ports alone, so a changed template stayed green while the repair, when it ran,
+from, the root-path key and every `repo.cloneEnv.vars` value too (`envLocalExtrasDrift`):
+comparing the ports alone would leave a changed template green while the repair, when it ran,
 rewrote those values without a word. A pin for an index with no clone is reported the way an orphaned
 colour assignment is, and `add-clone` and `remove-clone` both drop one, because `nextFreeIndex`
 reuses gaps.

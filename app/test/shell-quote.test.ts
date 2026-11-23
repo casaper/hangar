@@ -18,7 +18,7 @@ import { syntheticHangar } from './fixture.ts';
  * A hangar root with a space or a quote in it, written into generated text and read back.
  *
  * The golden fixtures cannot show this: their roots need no quoting, which is exactly why every
- * helper leaves such a value untouched -- and why a root that DOES need it broke every hook
+ * helper leaves such a value untouched -- and why a root that DOES need it can break every hook
  * command, bar job and key binding without a capture moving.
  */
 
