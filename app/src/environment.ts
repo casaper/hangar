@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
-import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
-import { delimiter, join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
+import { onPath } from './exec.ts';
 import { platform } from './platform/index.ts';
 import { home } from './user-paths.ts';
 
@@ -57,28 +58,6 @@ export type Tool = {
 const nvmPresent = (): boolean => {
   const dir = process.env['NVM_DIR'] ?? join(home, '.nvm');
   return existsSync(join(dir, 'nvm.sh'));
-};
-
-/**
- * Is this program executable on PATH?
- *
- * Walks PATH in-process rather than spawning `command -v` ten times: the whole report is
- * rendered on `setup` and on every `doctor`, and ten spawns is most of that runtime. It also
- * keeps a tool name out of a shell string entirely.
- */
-const onPath = (name: string): boolean => {
-  const path = process.env['PATH'];
-  if (path === undefined || path === '') return false;
-  for (const dir of path.split(delimiter)) {
-    if (dir === '') continue;
-    try {
-      accessSync(join(dir, name), constants.X_OK);
-      return true;
-    } catch {
-      // Not here, or not executable -- keep looking.
-    }
-  }
-  return false;
 };
 
 /**

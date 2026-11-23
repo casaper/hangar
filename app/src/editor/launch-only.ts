@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { run } from '../exec.ts';
+import { onPath, run } from '../exec.ts';
 import type { Clone } from '../fleet.ts';
 import type { EditorDriver, LaunchResult } from './types.ts';
 
@@ -82,8 +82,7 @@ export const eclipseDriver = (launcherOverride?: string): EditorDriver => {
   const binary =
     launcherOverride !== undefined && launcherOverride !== '' ? launcherOverride : 'eclipse';
   const present = (): boolean =>
-    run('sh', ['-c', `command -v ${binary} >/dev/null 2>&1`]).ok ||
-    (process.platform === 'darwin' && existsSync('/Applications/Eclipse.app'));
+    onPath(binary) || (process.platform === 'darwin' && existsSync('/Applications/Eclipse.app'));
 
   return {
     kind: 'eclipse',

@@ -1,4 +1,4 @@
-import { run } from '../exec.ts';
+import { onPath, run } from '../exec.ts';
 import type { Clone } from '../fleet.ts';
 import { VIM_GUI_BINARIES, VIM_TERMINAL_BINARIES } from './kinds.ts';
 import type { EditorDriver, LaunchResult } from './types.ts';
@@ -28,8 +28,7 @@ import type { EditorDriver, LaunchResult } from './types.ts';
  * keep everything in `~/.vimrc`. Declaring a list would mean copying files between clones that
  * the developer never asked to share, and a wrong guess here writes into a clone root.
  */
-const firstOnPath = (candidates: readonly string[]): string | undefined =>
-  candidates.find((bin) => run('sh', ['-c', `command -v ${bin} >/dev/null 2>&1`]).ok);
+const firstOnPath = (candidates: readonly string[]): string | undefined => candidates.find(onPath);
 
 const guiVim = (override: string | undefined): string | undefined =>
   override !== undefined && override !== ''

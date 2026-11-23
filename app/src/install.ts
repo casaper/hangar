@@ -242,9 +242,14 @@ const nodeBinDirFor = (version: string): string | undefined => {
     if (fnmNode.ok && fnmNode.stdout.trim() !== '') return dirname(fnmNode.stdout.trim());
   }
   const nvmDir = process.env['NVM_DIR'] ?? join(home, '.nvm');
+  // `$1` and `$2`, never interpolated: the version is the raw content of a TRACKED `.nvmrc`, so
+  // a branch that spells `$(…)` in it would otherwise run that here.
   const nvmNode = run('sh', [
     '-c',
-    `. "${nvmDir}/nvm.sh" >/dev/null 2>&1 && nvm which "${version}" 2>/dev/null`,
+    '. "$1/nvm.sh" >/dev/null 2>&1 && nvm which "$2" 2>/dev/null',
+    'sh',
+    nvmDir,
+    version,
   ]);
   const path = nvmNode.stdout.trim();
   return nvmNode.ok && path !== '' ? dirname(path) : undefined;

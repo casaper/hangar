@@ -1,4 +1,6 @@
 import { spawn, spawnSync, type SpawnSyncOptions } from 'node:child_process';
+import { accessSync, constants } from 'node:fs';
+import { delimiter, join } from 'node:path';
 
 /**
  * A failure the user should read as a message, not a stack trace. `cli.ts` catches these,
@@ -142,3 +144,36 @@ export const runCaptured = async (
       resolve({ ok: code === 0, code: code ?? -1, stdout, stderr });
     });
   });
+
+/**
+ * Is this program executable on PATH -- or, given a path, at that path?
+ *
+ * Walks PATH in-process rather than spawning `command -v`: `setup` and every `doctor` render a
+ * report that would otherwise spend most of its runtime on ten spawns. It also keeps a program
+ * name out of a shell string entirely, which matters because some names come from config -- an
+ * editor launcher override is pasted by whoever writes `hangar.config.yaml`, and the
+ * `sh -c 'command -v <name>'` probes it replaced ran whatever that value spelled.
+ */
+export const onPath = (name: string): boolean => {
+  if (name === '') return false;
+  if (name.includes('/')) {
+    try {
+      accessSync(name, constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  const path = process.env['PATH'];
+  if (path === undefined || path === '') return false;
+  for (const dir of path.split(delimiter)) {
+    if (dir === '') continue;
+    try {
+      accessSync(join(dir, name), constants.X_OK);
+      return true;
+    } catch {
+      // Not here, or not executable -- keep looking.
+    }
+  }
+  return false;
+};

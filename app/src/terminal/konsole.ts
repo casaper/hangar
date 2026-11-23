@@ -1,4 +1,4 @@
-import { run } from '../exec.ts';
+import { onPath, run } from '../exec.ts';
 import { devPath, type EmulatorDriver, type WindowSpec } from './types.ts';
 
 /**
@@ -21,8 +21,7 @@ import { devPath, type EmulatorDriver, type WindowSpec } from './types.ts';
 
 const QDBUS_CANDIDATES = ['qdbus6', 'qdbus-qt6', 'qdbus', 'qdbus-qt5'] as const;
 
-const findQdbus = (): string | undefined =>
-  QDBUS_CANDIDATES.find((bin) => run('sh', ['-c', `command -v ${bin} >/dev/null 2>&1`]).ok);
+const findQdbus = (): string | undefined => QDBUS_CANDIDATES.find(onPath);
 
 export const konsoleDriver = (): EmulatorDriver => {
   const qdbus = findQdbus();

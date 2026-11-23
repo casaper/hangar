@@ -8,7 +8,7 @@ import {
   workspacePath,
   workspacePaths,
 } from '../clone-config.ts';
-import { CliError, run } from '../exec.ts';
+import { CliError, onPath, run } from '../exec.ts';
 import { cloneDirPattern, type Clone } from '../fleet.ts';
 import { git } from '../git.ts';
 import { render as renderTemplate } from '../template.ts';
@@ -478,7 +478,7 @@ export const vscodeDriver = (
       rewritesRootPaths: true,
       closeWindow: platform().capabilities.controlAppWindows,
     },
-    isAvailable: () => run('sh', ['-c', `command -v ${binary} >/dev/null 2>&1`]).ok,
+    isAvailable: () => onPath(binary),
     unavailableHint: () =>
       `the \`${binary}\` command is not on PATH — in ${label}, run “Shell Command: Install '${binary}' command in PATH”.`,
     launch: (clone) => launchVscode(binary, label, stateDir, clone),

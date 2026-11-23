@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { run } from '../exec.ts';
+import { onPath, run } from '../exec.ts';
 import type { Clone } from '../fleet.ts';
 import { platform } from '../platform/index.ts';
 import { JETBRAINS_PRODUCTS, type JetbrainsProduct } from './kinds.ts';
@@ -85,8 +85,6 @@ const resolveLauncher = (
   const { launcher } = JETBRAINS_PRODUCTS[product];
   return onPath(launcher) ? launcher : undefined;
 };
-
-const onPath = (bin: string): boolean => run('sh', ['-c', `command -v ${bin} >/dev/null 2>&1`]).ok;
 
 /**
  * Open the clone directory.

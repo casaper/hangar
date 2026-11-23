@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 import {
@@ -8,6 +11,7 @@ import {
   workspacePaths,
 } from '../src/clone-config.ts';
 import { render, templatize, vscodeArtifacts } from '../src/editor/vscode.ts';
+import { onPath } from '../src/exec.ts';
 import { cloneAt } from '../src/fleet.ts';
 import { first, fixtureConfigText, fixtureVscodeConfigText, syntheticHangar } from './fixture.ts';
 
@@ -165,4 +169,27 @@ test('a PADDED folder label keeps its padding through a sync', () => {
   );
   const arrived = render(templatize(artifact, workspaceContent(clone), clone).template, clone);
   assert.match(arrived, /"name": "vsfix clone 0003"/);
+});
+
+test('an editor launcher name is looked up, never run through a shell', () => {
+  /*
+   * A launcher override comes from `hangar.config.yaml`, and the `sh -c 'command -v <name>'`
+   * probes `onPath` replaced ran whatever that value spelled. Looked up in-process instead, a
+   * name with a shell metacharacter is just a file that does not exist.
+   */
+  const dir = mkdtempSync(join(tmpdir(), 'onpath-'));
+  const marker = join(dir, 'ran');
+  assert.equal(onPath(`x; touch ${marker}`), false);
+  assert.equal(onPath(`$(touch ${marker})`), false);
+  assert.equal(existsSync(marker), false, 'a launcher name was executed');
+
+  // A path is checked where it points; a bare name is found on PATH.
+  const tool = join(dir, 'my tool');
+  writeFileSync(tool, '#!/bin/sh\n');
+  chmodSync(tool, 0o755);
+  assert.equal(onPath(tool), true);
+  assert.equal(onPath(join(dir, 'absent')), false);
+  assert.equal(onPath('sh'), true);
+  assert.equal(onPath(''), false);
+  rmSync(dir, { recursive: true, force: true });
 });

@@ -122,7 +122,10 @@ This plan file is NOT in that commit. **Done in `3ac7841`**; 51 old plans delete
   - Use `#{q:pane_current_path}` and `#{q:@hangar_clone}`, without the double quotes.
   - Probe `q:` inside `#()` on a throwaway `-L` server, with a `mkdir '$(touch pwned)'` pane.
   - Expected golden: only the `pane-border-format` lines of `clone-tmux.conf`, in both fixtures.
-- [ ] **`sh -c` with config values** (R). Commit `fix(editor)` and `fix(install)`.
+- [x] **`sh -c` with config values** (R). Commit `fix(editor)` and `fix(install)`.
+  _Done as one `fix(editor)` commit. `environment.ts`'s in-process `onPath` moved to `exec.ts`,
+  learned how to check a path, and replaced all five interpolating probes, `konsole.ts`'s qdbus
+  included. nvm takes `$1`/`$2`, and a probe showed a `$(…)` version arriving as literal text._
   - Pass `bin` as `$1` in the `command -v` probes in `editor/jetbrains.ts:89`,
     `launch-only.ts:85`, `vscode.ts:481` and `vim.ts:32`.
   - Do the same for the nvm `version` in `install.ts:245`.
