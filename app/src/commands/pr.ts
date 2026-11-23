@@ -961,10 +961,17 @@ export const prUpdate = async (
     return;
   }
   const text = outcome?.text;
+  /*
+   * `--title` alone renames the pull request and nothing else. On `pr create` it means "no
+   * description", because there is none yet; here there is one, somebody's, and the empty body
+   * `resolveBody` hands back would have replaced it -- reported only as "--title, with no
+   * description (empty)", and `-y` skips even that.
+   */
+  const titleOnly = opts.title !== undefined && opts.file === undefined;
 
   const edit: PullRequestEdit = {
     title: keepTitle || text === undefined ? current.pr.title : text.title,
-    description: keepBody || text === undefined ? current.description : text.body,
+    description: keepBody || titleOnly || text === undefined ? current.description : text.body,
     // Carried, never chosen: this is a read-modify-write, and a `PUT` that omitted these would
     // clear them -- reviewers most of all.
     destination: current.pr.destination,

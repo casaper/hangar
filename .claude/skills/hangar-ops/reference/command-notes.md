@@ -46,7 +46,8 @@ tool is the separate `<thing>_preview`.
   Code session in the clone, one to three minutes with progress streaming. **Through the tool it is
   not**: `pr_create` and `pr_update` fix `--no-describe`, so they refuse and name the command to
   type. That is deliberate — a tool call cannot show a stream and would die at its own timeout
-  mid-run. `--file <path>` and `--title <text>` bypass the search entirely.
+  mid-run. `--file <path>` and `--title <text>` bypass the search entirely. On `pr update`,
+  `--title` WITHOUT `--file` renames the pull request and leaves its description as it is.
 - **Both commands ASK before they act, on the terminal, and there is no terminal behind a tool.**
   So a tool call needs `yes: true` or it reports that nothing was created and exits 0 — which is
   why the preview matters here more than anywhere else: it is where the title is printed, and

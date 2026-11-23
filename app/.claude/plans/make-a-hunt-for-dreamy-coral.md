@@ -178,8 +178,10 @@ All of these are `fix(<scope>)` commits.
   - Derive "restored" from git rather than from the flag.
   - Treat a failed apply with no conflicts as a failure.
   - Stage with `-u`, not `-A` (lines 689 and 911).
-- [ ] **`pr update --title` wipes the description** (`pr.ts:606,967`, V). Keep the current
-  description, and test `bodyDecision`.
+- [x] **`pr update --title` wipes the description** (`pr.ts:606,967`, V). Keep the current
+  description, and test `bodyDecision`. _Done in `prUpdate`'s edit, where `titleOnly` keeps the
+  description. No test, because the edit is built inline and `bodyDecision` is not on this path.
+  The help text and command-notes are updated._
 - [ ] **The `pr` dry run names the wrong directory** (`pr.ts:759,959`, R). Use
   `join(clone.path,'tmp')`.
 - [ ] **`push` trusts a stale `origin/<branch>`** (`push.ts:60`, R). "couldn't find remote ref"

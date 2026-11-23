@@ -1012,7 +1012,7 @@ pr.command('update')
     "Replaces the title and description of the pull request open for this clone's branch, from the same description file `pr create` uses.\n\nONLY ON PULL REQUESTS YOU OPENED. Bitbucket lets anyone with write access rewrite anyone's; this refuses unless the token owner is the author, and refuses too when it cannot tell whose it is.\n\nThe draft state is left exactly as it is unless --draft or --ready says otherwise. --keep-title and --keep-body each hold one half back.\n\nUnpushed commits on the branch are pushed first, as `hangar push` would -- after the confirmation, never forced; a branch behind or diverged from origin is said and left alone.",
   )
   .argument('[clone]', 'clone name or index — defaults to the clone you are in')
-  .option('--title <text>', "use this title instead of the description file's heading")
+  .option('--title <text>', 'use this title; without --file the description is left as it is')
   .option('--file <path>', 'take the title and body from this file instead')
   .option('--keep-title', 'leave the title as it is')
   .option('--keep-body', 'leave the description as it is')
