@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 
-import { lockVerdict, tryTakeLock } from '../src/tmp-merge-lock.ts';
+import { clearStale, lockVerdict, tryTakeLock } from '../src/tmp-merge-lock.ts';
 import { syntheticHangar } from './fixture.ts';
 
 /**
@@ -65,4 +65,24 @@ test("release leaves a lock that is no longer this run's alone", () => {
 test('the lock lives under the hangar root, beside its other state', () => {
   const hangar = syntheticHangar();
   assert.ok(hangar.paths.tmpMergeLock.startsWith(join(hangar.root, '.hangar') + '/'));
+});
+
+test('a waiter clearing a stale lock never removes a fresh one taken meanwhile', () => {
+  /*
+   * Two waiters judge one dead lock stale. The first clears it and takes a fresh one; the second
+   * then arrives at the compare-and-remove with the OLD content in hand. Compare-then-rm removed
+   * the fresh lock and two merges ran; the rename-aside puts it straight back.
+   */
+  const path = join(dir, 'race.lock');
+  writeFileSync(path, '999\n');
+  clearStale(path, '111\n', 222);
+  assert.equal(readFileSync(path, 'utf8'), '999\n');
+  assert.equal(existsSync(`${path}.stale-222`), false, 'the set-aside copy is left behind');
+
+  // The judged lock itself is cleared.
+  writeFileSync(path, '111\n');
+  clearStale(path, '111\n', 222);
+  assert.equal(existsSync(path), false);
+  // And nothing at all is fine.
+  clearStale(path, '111\n', 222);
 });

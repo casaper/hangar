@@ -217,7 +217,8 @@ All of these are `fix(<scope>)` commits.
 - [x] **`tmp merge` replaces a foreign symlink** _(done; the live `-n` run is clean. No unit
   test, because `linkStoreEntries` is not pure.)_ (`tmp.ts:278,332-339`, R). Pass 2b skips any
   link that 2a classed as foreign. Fleet-live.
-- [ ] **Stale-lock takeover race** (`tmp-merge-lock.ts:94`, R). Take the lock over with an atomic
+- [x] **Stale-lock takeover race** _(done: `clearStale` renames the lock aside, and links a
+  fresh lock back if that is what it moved)_ (`tmp-merge-lock.ts:94`, R). Take the lock over with an atomic
   `rename`. Fleet-live.
 - [ ] **`scrub --recent` is always set** (`cli.ts:322`, V).
   - Drop the `'24'` default.

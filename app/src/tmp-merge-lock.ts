@@ -1,4 +1,14 @@
-import { closeSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeSync } from 'node:fs';
+import {
+  closeSync,
+  linkSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeSync,
+} from 'node:fs';
 import { dirname } from 'node:path';
 
 /**
@@ -60,6 +70,32 @@ export type LockAttempt =
   | { readonly taken: false; readonly holder: string };
 
 /**
+ * Remove the stale lock that was JUDGED, and only that one.
+ *
+ * Compare-then-remove was two steps, and two waiters could both judge one dead lock stale: A
+ * removed it and took its own, then B -- its comparison already passed -- removed A's live lock
+ * and took the lock too, so two merges ran at once, which is the damage this file exists to
+ * prevent. A rename is atomic, so exactly one waiter moves the file aside; and if what it moved
+ * is not the file it judged, it was a FRESH lock, which is linked straight back.
+ */
+export const clearStale = (path: string, judged: string | undefined, pid: number): void => {
+  const grave = `${path}.stale-${String(pid)}`;
+  try {
+    renameSync(path, grave);
+  } catch {
+    return; // Somebody else moved it first; the next attempt reads what is there now.
+  }
+  if (readLock(grave) !== judged) {
+    try {
+      linkSync(grave, path);
+    } catch {
+      // A third run took the name meanwhile. Nothing better to do than leave theirs.
+    }
+  }
+  rmSync(grave, { force: true });
+};
+
+/**
  * One attempt to take the lock: created exclusively, so two runs cannot both win, and a stale one
  * is removed and retried once. `release` removes the file only while it still names `pid`.
  */
@@ -90,8 +126,7 @@ export const tryTakeLock = (
     // `take` here means it went between the failed open and this read: the holder just finished.
     const verdict = lockVerdict(content, ageOf(path), alive);
     if (verdict === 'wait') return { taken: false, holder: content?.trim() ?? '' };
-    // Only the lock that was judged: another waiter may have cleared it and taken a fresh one.
-    if (verdict === 'stale' && readLock(path) === content) rmSync(path, { force: true });
+    if (verdict === 'stale') clearStale(path, content, pid);
   }
   return { taken: false, holder: readLock(path)?.trim() ?? '' };
 };
