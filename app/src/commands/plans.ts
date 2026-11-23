@@ -159,7 +159,9 @@ export const plansCollect = (hangar: Hangar, opts: CollectOptions): void => {
         say(() => {
           note(pc.dim(`${relabel(file)} — identical to ${basename(survivor.path)}, dropping`));
         });
-        if (!dryRun) rmSync(file.path);
+        // `force`, and never fatal: a twin run may have collected this very file already, and a
+        // throw here would end the hook with a stack trace over a plan that is safe.
+        if (!dryRun) rmSync(file.path, { force: true });
         continue;
       }
       const name =

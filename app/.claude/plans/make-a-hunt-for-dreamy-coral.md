@@ -209,7 +209,9 @@ All of these are `fix(<scope>)` commits.
 - [x] **Hook writers drop a whole matcher** _(done: `withoutOurs` in all 6 writers, plus
   `isOwnScript`, an anchored match, for the guard and the gate)_ (`clone-config.ts:796,876`, R). Remove only the
   hangar hook and use the anchored `invokesOurCli`. Test with a foreign hook sharing the matcher.
-- [ ] **`plans collect` races** (`plans.ts:162,209`, V at :162). Fleet-live.
+- [x] **`plans collect` races** (`plans.ts:162,209`, V at :162). Fleet-live. _Done. On EEXIST
+  the plan is left for the next run, via the existing conflict path, rather than retried under
+  a new name. The live `-n` run still works._
   - Make the `rmSync` `force` and wrap it in a try.
   - Move without overwriting: `link` + `unlink`, taking the next free name on EEXIST.
 - [ ] **`tmp merge` replaces a foreign symlink** (`tmp.ts:278,332-339`, R). Pass 2b skips any

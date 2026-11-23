@@ -1,5 +1,15 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, renameSync, statSync, utimesSync } from 'node:fs';
+import {
+  constants,
+  copyFileSync,
+  existsSync,
+  linkSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+  utimesSync,
+} from 'node:fs';
 import { basename, join } from 'node:path';
 
 import { run } from './exec.ts';
@@ -204,9 +214,24 @@ export const setMtimeToDay = (path: string, day: string): void => {
   }
 };
 
-/** Move within the archive (or into it), never across a filesystem in practice. */
+/**
+ * Move within the archive (or into it), and NEVER over a file already there.
+ *
+ * Every clone's `SessionEnd` hook runs `plans collect`, and `reload`/`down` end them all at once.
+ * Each run decides its target names from a snapshot of the archive taken before any of them
+ * moved anything, so two can pick the same free name -- and `renameSync` replaces silently, so
+ * the second plan erased the first. A hard link fails with EEXIST instead, and only once it holds
+ * is the source unlinked. The caller treats the throw as "leave it for the next run". Across
+ * filesystems, where a link cannot be made, an exclusive copy keeps the same guarantee.
+ */
 export const moveInto = (from: string, to: string): void => {
-  renameSync(from, to);
+  try {
+    linkSync(from, to);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
+    copyFileSync(from, to, constants.COPYFILE_EXCL);
+  }
+  unlinkSync(from);
 };
 
 export const archiveNames = (hangar: Hangar): Set<string> => {
