@@ -197,7 +197,7 @@ test('an open pull request wins over a closed one on the same branch', () => {
   const open = { ...base, id: 2, state: 'open' as const, draft: false };
   assert.equal(pickPullRequest([merged, open])?.id, 2);
   assert.equal(pickPullRequest([open, merged])?.id, 2);
-  // With none open, the most recent -- Bitbucket returns them oldest first for this query.
-  assert.equal(pickPullRequest([merged, { ...merged, id: 3 }])?.id, 3);
+  // With none open, the most recent -- the first, because the lookup asks for `-updated_on`.
+  assert.equal(pickPullRequest([{ ...merged, id: 3 }, merged])?.id, 3);
   assert.equal(pickPullRequest([]), undefined);
 });

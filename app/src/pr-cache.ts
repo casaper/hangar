@@ -216,13 +216,14 @@ export const prCacheIsStale = (
 ): boolean => cached === undefined || now - cached.fetchedAt >= ttlSeconds;
 
 /**
- * OPEN wins, then whichever was touched last.
+ * OPEN wins, then whichever was touched last -- the FIRST, because `openPullRequests` asks for
+ * `sort=-updated_on`.
  *
  * A branch reused after its first PR merged has two, and the open one is the one being worked on.
  * Falling back to recency rather than to id keeps a reopened PR ahead of a newer declined one.
  */
 export const pickPullRequest = (prs: readonly PullRequest[]): PullRequest | undefined =>
-  prs.find((pr) => pr.state === 'open') ?? prs[prs.length - 1];
+  prs.find((pr) => pr.state === 'open') ?? prs[0];
 
 /**
  * What a refresh found: the record it wrote, the pull request behind it, or why neither.

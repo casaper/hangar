@@ -407,6 +407,9 @@ export const openPullRequests = async (
   );
   const source = `source.branch.name=${quoted(branch)}`;
   url.searchParams.set('q', opts.anyState === true ? source : `${source} AND state="OPEN"`);
+  // Newest first, asked for rather than assumed: with no `sort` the order is the API's own, and
+  // the default page of ten can cut a reused branch's latest pull request off the end of it.
+  url.searchParams.set('sort', '-updated_on');
   url.searchParams.set(
     'fields',
     'values.id,values.title,values.destination.branch.name,values.links.html.href,' +

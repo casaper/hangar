@@ -188,7 +188,7 @@ All of these are `fix(<scope>)` commits.
   means the branch is not on origin. A network failure refuses. _Done with `ls-remote
   --exit-code` (exit 2 means missing, in any locale) rather than matching git's English stderr,
   then a fetch. No test: the logic is git exit codes, already pinned by the ls-remote probe._
-- [ ] **`pickPullRequest` "most recent"** (`pr-cache.ts:225`, `bitbucket.ts:407`, R). Send
+- [x] **`pickPullRequest` "most recent"** _(done; the pick now takes the first entry)_ (`pr-cache.ts:225`, `bitbucket.ts:407`, R). Send
   `sort=-updated_on`.
 - [x] **Headless `claude` by bare name** (`resolve-conflicts.ts:90`, `pr.ts:551`, R). Use
   `claudeBinary()`. _Done in `runHeadlessClaude`'s default, so every caller is covered._
