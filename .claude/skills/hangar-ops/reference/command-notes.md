@@ -478,3 +478,27 @@ would be noise; you get one dim line saying it was skipped.
 Drift is never fatal and never blocks anything. What it costs is recoverability: a stale example
 is a config nobody can rebuild. If you see it, the fix is a hand edit to the example — nothing
 generates it.
+
+## `ci` reads CI, and only reads it
+
+`hangar ci status | log | tests | jobs` is what a clone's agent runs when the user asks why a
+pipeline failed, and each clone's `CLAUDE.local.md` says so — but only in a hangar with a `ci`
+block; without one every subcommand refuses and names the key. Every request is a GET, so a clone
+session runs it without a prompt (its generated settings allow `Bash(hangar ci:*)`), and the four
+MCP tools are reports.
+
+- **The builds come from the forge, not from a guessed job path.** `status` asks for the build
+  statuses on the branch's open pull request, or on the commit origin has for it when there is
+  none — the exact builds of the commit under review. A branch with no pushed commit and no pull
+  request has nothing to report.
+- **`log` and `tests` read one build.** With no `--job`, that is the one failed build; several
+  failed is a list and **exit 2**, never a pick. `--job` matches a job's name, key or path, as a
+  substring and in any state, so a passing build can be read too.
+- **`log` narrows to the failed step.** By default it prints the last 200 lines of the step that
+  failed in each failed stage, through Jenkins' Stage View API. A build without that API, or with
+  no stage marked failed, falls back to the whole console's tail. `--full` asks for the console,
+  `--grep` keeps matching lines with three of context, and `--tail 0` keeps everything.
+- **"Unreachable" means the VPN, usually.** The server answering only on a VPN gives a connect
+  error or timeout when it is off. Say so; retrying does not help.
+- **A build URL under any other host is refused before a request is built**, so the CI
+  credentials are never sent off `ci.baseUrl` — not even when a forge status links elsewhere.

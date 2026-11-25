@@ -42,6 +42,7 @@ take the one that matches what you are touching:
 | changing `doctor`, `add-clone`, `install`, `scrub`, `ports pin`/`unpin`/`take`, any generated per-clone artifact, or the plan archive | `reference/doctor.md` |
 | changing `hangar up` or `hangar down`, the `claude` mode shim, the two hangar-root modes, their permission rules, `hangar mcp` and its tool table, `allow`, `skills sync`, `exec` and its guard, or what a hangar-root session is told it is | `reference/modes.md` |
 | changing `bin/hangar-waypoint`, `hangar-commit-gate`, `hangar-rewrite` or `hangar-exec-guard`, or `personal-skills/` | `reference/root-tools.md` |
+| changing `hangar ci`, `jenkins.ts`, the forge's build-status reader, or the identity file's CI section | `reference/ci.md` |
 | probing git, Claude Code permissions, a command's file I/O, a generated script or a VS Code extension without touching the live fleet | `reference/probing.md` |
 | cutting a release, changing what a commit type is worth, the CHANGELOG's sections, the commitlint rules or the husky hooks; rewriting this repo's history | `reference/release.md` |
 | changing `hangar dev golden` or what it captures | `app/dev/golden/README.md` |

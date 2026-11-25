@@ -43,6 +43,7 @@ For every request, in this order:
 | "open a PR" | `pr_create_preview`, read the title back, then `pr_create` (draft) |
 | "doctor says files are not what the builder renders" (after a hangar update) | `colours_sync_preview`, then `colours_sync` for the hangar-root shell/tmux files (applied to the running tmux server, no restart); then `doctor_fix` for each clone's per-clone files |
 | "open clone N's ticket / PR / ticket folder" | `browse` with `ticket`, `pr` or `tmp` (Finder on `tmp/<KEY>`); a refusal (no key, folder not fetched yet) exits 1 and is the answer, not a retry |
+| "why is CI red on N?" | `ci_status` with that clone, then `ci_log` / `ci_tests` (read only; `job` when several failed). "Unreachable" means the VPN is off — say so, do not retry |
 | "what is ⊠gate / ⊡gate on the footer?" | the commit gate: `⊠` blocks commits on that branch, `⊡ KEY` is armed for a ticket; `hangar-commit-gate status` inside that clone is the long form, and releasing it is the user's alone |
 | "make clone N <colour>" / "which colours are free?" | `colours_list` (this hangar's palette, who holds what), then `colours_change`; a hue for the whole hangar is `palette.hues` / `palette.rotate` in the config, which is a config edit for the user, then `colours_sync` |
 

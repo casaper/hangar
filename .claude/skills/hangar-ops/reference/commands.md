@@ -58,6 +58,7 @@ another name.
 | `pr rebranch` | `pr_rebranch_preview` | `pr_rebranch` |
 | `push` | `push_preview` | `push` |
 | `pr target` | `pr_target` | `pr_target_set` (`set` or `clear`) |
+| `ci status` · `ci log` · `ci tests` · `ci jobs` | `ci_status` · `ci_log` · `ci_tests` · `ci_jobs` | — (CI is read only) |
 | `resume` | `resume_list` | — |
 | `teach-rg` | `teach_rg_preview` | `teach_rg` |
 | `setup` | `setup_preview` | `setup` |
@@ -185,6 +186,10 @@ stderr as having no tool at all, is the developer tab's to fix, not yours.
 
 | Command | Args | Options | |
 | --- | --- | --- | --- |
+| `ci status` | `[target]` (clone, or a Jenkins build URL; defaults to the clone you are in — any clone may be named) | `-b, --branch <branch>` · `--json` | report — the branch's builds, from the forge's build statuses on its open pull request (else on the commit origin has); failures first with their failed stage. Needs the `ci` config block |
+| `ci log` | `[target]` (same) | `-b, --branch` · `-j, --job <name>` · `--full` · `-t, --tail <lines>` (default 200, `0` = all) · `-g, --grep <regex>` | report — the failed stage's step log, or the whole console with `--full`. Several failed builds and no `--job`: lists them, **exits 2** |
+| `ci tests` | `[target]` (same) | `-b, --branch` · `-j, --job <name>` · `-l, --limit <count>` (default 30) · `--stack <lines>` (default 8) | report — failed cases from the build's test report; exits 2 like `ci log` |
+| `ci jobs` | `[filter]` | — | report — every Jenkins job and its multibranch branches |
 | `config show` | — | — | report |
 | `config validate` | — | — | report (also compares `hangar.config.example.yaml` with the live file when both declare the same `id`) |
 | `config schema` | — | `--check` · `--out <path>` | act (writes `hangar.schema.json`; `--check` is the read-only form) |
