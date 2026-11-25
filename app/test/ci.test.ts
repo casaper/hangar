@@ -7,6 +7,7 @@ import {
   ciBuilds,
   ciStatusRows,
   failedTestLines,
+  jenkinsStateAsForge,
   jobLines,
   selectBuild,
 } from '../src/commands/ci.ts';
@@ -210,12 +211,14 @@ test('log and tests read one failed build, and ask rather than pick among severa
   const lint = status({ name: 'lint' });
   const builds = ciBuilds([lint, unit, e2e], BASE);
 
-  assert.equal(selectBuild(builds, undefined).kind, 'many');
-  const one = selectBuild(builds, 'E2E');
+  assert.equal(selectBuild(builds, undefined, false).kind, 'many');
+  const one = selectBuild(builds, 'E2E', false);
   assert.equal(one.kind === 'one' ? one.build.status.name : '', 'e2e');
   // --job reaches a passing build too.
-  assert.equal(selectBuild(builds, 'lint').kind, 'one');
-  assert.equal(selectBuild(ciBuilds([lint], BASE), undefined).kind, 'none');
+  assert.equal(selectBuild(builds, 'lint', false).kind, 'one');
+  assert.equal(selectBuild(ciBuilds([lint], BASE), undefined, false).kind, 'none');
+  // A build named by URL is read whatever its state: the user pointed at it.
+  assert.equal(selectBuild(ciBuilds([lint], BASE), undefined, true).kind, 'one');
   // Failures sort first in the status table.
   assert.deepEqual(
     ciStatusRows(builds, new Map()).map((r) => r[1]),
@@ -247,4 +250,13 @@ test('the identity file has a CI section iff the hangar has a ci block, built fr
   assert.deepEqual(ciSection(without), []);
   assert.doesNotMatch(claudeLocalMdContent(cloneAt(without, 1)), /hangar ci/);
   assert.deepEqual(hangarReportAllows(without), []);
+});
+
+test('a build named by URL takes the forge vocabulary from its own result', () => {
+  assert.equal(jenkinsStateAsForge({ result: 'FAILURE', building: false }), 'FAILED');
+  assert.equal(jenkinsStateAsForge({ result: 'UNSTABLE' }), 'FAILED');
+  assert.equal(jenkinsStateAsForge({ result: 'ABORTED' }), 'STOPPED');
+  assert.equal(jenkinsStateAsForge({ result: 'SUCCESS' }), 'SUCCESSFUL');
+  assert.equal(jenkinsStateAsForge({ result: null, building: true }), 'INPROGRESS');
+  assert.equal(jenkinsStateAsForge(undefined), '');
 });

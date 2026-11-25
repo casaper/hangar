@@ -91,7 +91,8 @@ pipeline failed, read it yourself — every subcommand is read-only and needs no
 - `hangar ci tests` — the failed test cases with their errors and stack heads.
 - `hangar ci jobs [filter]` — the jobs and their branches, to find a build by hand.
 
-Each takes a build URL instead of the clone, and `--branch <name>` for another branch.
+`status`, `log` and `tests` each take a build URL instead of the clone, and `--branch <name>`
+for another branch.
 
 The credentials are `FIXTURE_CI_USER` and `FIXTURE_CI_TOKEN`, already in this shell's
 environment through direnv, from the shared secrets file it loads — the same file

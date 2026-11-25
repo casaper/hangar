@@ -404,7 +404,8 @@ export const ciSection = (hangar: Hangar): string[] => {
     ...bullet('`hangar ci jobs [filter]` — the jobs and their branches, to find a build by hand.'),
     '',
     ...para(
-      'Each takes a build URL instead of the clone, and `--branch <name>` for another branch.',
+      '`status`, `log` and `tests` each take a build URL instead of the clone, and ' +
+        '`--branch <name>` for another branch.',
     ),
     ...para(
       `The credentials are \`${ci.userEnvKey}\` and \`${ci.tokenEnvKey}\`, already in this ` +

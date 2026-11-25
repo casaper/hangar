@@ -58,6 +58,26 @@ export const ciBuilds = (statuses: readonly BuildStatus[], baseUrl: string): CiB
     return { status, root: root !== undefined && isUnderBase(root, baseUrl) ? root : undefined };
   });
 
+/**
+ * A Jenkins build's `result` and `building`, in the forge's status vocabulary, so a build named by
+ * URL renders and is picked exactly as one found through a status. PURE.
+ */
+export const jenkinsStateAsForge = (body: unknown): string => {
+  const run = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
+  if (run['building'] === true) return 'INPROGRESS';
+  switch (run['result']) {
+    case 'SUCCESS':
+      return 'SUCCESSFUL';
+    case 'FAILURE':
+    case 'UNSTABLE':
+      return 'FAILED';
+    case 'ABORTED':
+      return 'STOPPED';
+    default:
+      return '';
+  }
+};
+
 const isFailed = (state: string): boolean => state === 'FAILED' || state === 'STOPPED';
 
 /**
@@ -71,10 +91,13 @@ const isFailed = (state: string): boolean => state === 'FAILED' || state === 'ST
 export const selectBuild = (
   builds: readonly CiBuild[],
   job: string | undefined,
+  named: boolean,
 ):
   | { readonly kind: 'one'; readonly build: CiBuild }
   | { readonly kind: 'none'; readonly why: string }
   | { readonly kind: 'many'; readonly builds: readonly CiBuild[] } => {
+  const only = builds[0];
+  if (named && builds.length === 1 && only !== undefined) return { kind: 'one', build: only };
   const needle = job?.toLowerCase();
   const candidates =
     needle === undefined
@@ -171,7 +194,12 @@ export type CiTargetOptions = {
   branch?: string | undefined;
 };
 
-type Subject = { readonly what: string; readonly builds: readonly CiBuild[] };
+type Subject = {
+  readonly what: string;
+  readonly builds: readonly CiBuild[];
+  /** The build was NAMED, by URL: `log` and `tests` read it whatever its state. */
+  readonly named: boolean;
+};
 
 /** The clone named, or the one the command runs in. Read only, so any clone may be named. */
 const targetClone = (hangar: Hangar, ref: string | undefined): Clone => {
@@ -202,9 +230,12 @@ const subjectOf = async (
     if (!isUnderBase(root, ci.baseUrl)) {
       throw new CliError(`${target} is not under ci.baseUrl (${ci.baseUrl}) — not fetched`);
     }
+    const run = await jenkinsGet(hangar, ci, `${root}api/json?tree=result,building`, 'json');
+    const state = run.ok ? jenkinsStateAsForge(run.value) : '';
     return {
       what: buildLabel(root),
-      builds: [{ status: { key: '', name: buildLabel(root), state: '', url: root }, root }],
+      builds: [{ status: { key: '', name: buildLabel(root), state, url: root }, root }],
+      named: true,
     };
   }
   const clone = targetClone(hangar, target);
@@ -219,6 +250,7 @@ const subjectOf = async (
       return {
         what: `${clone.name}: ${branch}, pull request #${String(pr.id)}`,
         builds: ciBuilds(statuses, ci.baseUrl),
+        named: false,
       };
     }
   }
@@ -234,6 +266,7 @@ const subjectOf = async (
   return {
     what: `${clone.name}: ${branch ?? 'detached HEAD'} at ${commit.slice(0, 10)} (no open pull request)`,
     builds: ciBuilds(statuses, ci.baseUrl),
+    named: false,
   };
 };
 
@@ -307,7 +340,7 @@ const pickBuild = async (
   opts: CiReadOptions,
 ): Promise<{ build: CiBuild; root: string } | { exitCode: number }> => {
   const subject = await subjectOf(hangar, ci, target, opts);
-  const pick = selectBuild(subject.builds, opts.job);
+  const pick = selectBuild(subject.builds, opts.job, subject.named);
   if (pick.kind === 'none') {
     note(`${subject.what}: ${pick.why}`);
     return { exitCode: 0 };
