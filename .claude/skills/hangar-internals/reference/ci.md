@@ -79,13 +79,22 @@ config and any `repo.symlinks[]` entry that points at `{secretsFile}`, because t
 a person would tell the agent the credentials are. The repo's path is never written into the
 builder. `generic-text.test.ts` renders the section against a foreign config to hold that.
 
-## Not verified here
+## Measured against a real server
 
-The suite has no Jenkins, and none of the Jenkins JSON parsers' inputs were recorded from a real
-server. They follow the documented shapes of:
-- Stage View's `wfapi`;
-- `testReport/api/json`;
-- `api/json?tree=jobs[…]`.
+The suite has no Jenkins, so the parsers were written against the documented shapes and then run
+once against this fleet's server. All of these behaved as written:
 
-The first real run against a server is the user's smoke test. When one of them comes back in a
-different shape, record what was measured here.
+- **`ci jobs`.** Multibranch children came back as `bugfix%2F…`, decoded once for display, with
+  `%252F` in their URLs.
+- **`ci status` on a pull request.** The Bitbucket status linked
+  `<base>/job/<job>/job/PR-<id>/<n>/`, so multibranch here builds pull requests as `PR-<id>`
+  jobs, not as branch jobs. That is one more reason a branch-name path would miss them.
+- **`ci status` on a branch with no pull request.** The commit statuses on `origin/<branch>`
+  answered.
+- **`ci log` on a failed build.** Stage View named `Declarative: Checkout SCM` as the `FAILED`
+  stage. Its failed step's `wfapi/log` came back as console HTML that `consoleHtmlToText` reduced
+  to the exception text, with the cause in the tail.
+- **`ci tests` on an `UNSTABLE` build.** It read `testReport` with 129 `FAILED`/`REGRESSION`
+  cases. Their `errorDetails` is often one long line, which is printed as it is.
+
+When a shape is found to differ, record what was measured here.
