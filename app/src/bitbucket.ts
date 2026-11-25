@@ -222,7 +222,7 @@ export type PullRequestLookup =
  * `hangar` is just as often run from the fleet root, whose `.envrc` only does `PATH_add`.
  * Commented-out lines cannot match: they start with `#`.
  */
-const sharedEnvValue = (hangar: Hangar, key: string): string | undefined => {
+export const sharedEnvValue = (hangar: Hangar, key: string): string | undefined => {
   let text: string;
   try {
     text = readFileSync(hangar.paths.envShared, 'utf8');
@@ -435,18 +435,92 @@ export const openPullRequests = async (
   }
 };
 
+/** One build status as the forge reports it: one per CI job, per commit. */
+export type BuildStatus = {
+  /** The CI's own stable key for the job. */
+  readonly key: string;
+  readonly name: string;
+  /** `SUCCESSFUL`, `FAILED`, `INPROGRESS` or `STOPPED`. */
+  readonly state: string;
+  /** Where the CI says the build is -- for Jenkins, the build's own page. */
+  readonly url: string;
+};
+
+/** The statuses out of a `/statuses` page. PURE. Rows without a state are dropped. */
+export const parseBuildStatuses = (body: unknown): BuildStatus[] => {
+  const values = asRecord(body)?.['values'];
+  if (!Array.isArray(values)) return [];
+  return values.flatMap((value: unknown) => {
+    const v = asRecord(value);
+    const state = v?.['state'];
+    if (typeof state !== 'string') return [];
+    const str = (field: string): string => {
+      const raw = v?.[field];
+      return typeof raw === 'string' ? raw : '';
+    };
+    return [{ key: str('key'), name: str('name'), state, url: str('url') }];
+  });
+};
+
+/** Whose statuses to ask for: a pull request's (its head commit's), or one commit's. */
+export type StatusSubject = { readonly prId: number } | { readonly commit: string };
+
 /**
- * What CI says about a pull request's head commit.
+ * Every build status on a pull request's head commit, or on one commit.
  *
- * `/pullrequests/{id}/statuses` rather than `/commit/{sha}/statuses`: both answer, and the first
- * needs no commit hash, so a PR whose `source.commit.hash` the list call omitted is still
- * covered. This is the generic build-status API every CI integration writes into -- this fleet's
- * is Jenkins, and nothing here is specific to it.
+ * `/pullrequests/{id}/statuses` rather than `/commit/{sha}/statuses` when there is a pull
+ * request: both answer, and the first needs no commit hash, so a PR whose `source.commit.hash`
+ * the list call omitted is still covered. This is the generic build-status API every CI
+ * integration writes into -- this fleet's is Jenkins, and nothing here is specific to it.
  *
- * Soft-failing like everything else in this module, and `none` is the answer for a real failure
- * as well as for a commit with no builds. That collapse is deliberate: the bar has one character
- * to say this in, and "CI is quiet" and "we could not ask" render the same either way. The
- * commands that can afford a sentence report the reason instead.
+ * A soft failure like every read in this module: the reason is a sentence for a command that can
+ * afford one, and the bar's `pullRequestCiState` collapses it to `none`.
+ */
+export const buildStatuses = async (
+  hangar: Hangar,
+  ref: RepoRef | undefined,
+  subject: StatusSubject,
+  signal?: AbortSignal,
+): Promise<ForgeResult<BuildStatus[]>> => {
+  if (ref === undefined) {
+    return { ok: false, reason: 'forge.originUrl is not a Bitbucket repository' };
+  }
+  const token = bitbucketToken(hangar);
+  if (token === undefined) {
+    return {
+      ok: false,
+      reason: `no ${hangar.config.forge.tokenEnvKey ?? DEFAULT_BITBUCKET_TOKEN_ENV_KEY} in the environment or ${tildify(hangar.paths.envShared)}`,
+    };
+  }
+  const url = apiUrl(
+    ref,
+    'prId' in subject
+      ? `/pullrequests/${String(subject.prId)}/statuses`
+      : `/commit/${encodeURIComponent(subject.commit)}/statuses`,
+  );
+  url.searchParams.set('fields', 'values.key,values.name,values.state,values.url');
+  url.searchParams.set('pagelen', '50');
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      signal: withTimeout(signal),
+    });
+    if (!res.ok) return { ok: false, reason: `Bitbucket answered HTTP ${String(res.status)}` };
+    return { ok: true, value: parseBuildStatuses(await res.json()) };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `Bitbucket could not be asked: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+};
+
+/**
+ * What CI says about a pull request's head commit, for the bar.
+ *
+ * `none` is the answer for a real failure as well as for a commit with no builds. That collapse
+ * is deliberate: the bar has one character to say this in, and "CI is quiet" and "we could not
+ * ask" render the same either way. `hangar ci status` reports the reason instead.
  */
 export const pullRequestCiState = async (
   hangar: Hangar,
@@ -454,30 +528,8 @@ export const pullRequestCiState = async (
   id: number,
   signal?: AbortSignal,
 ): Promise<CiState> => {
-  const token = bitbucketToken(hangar);
-  if (ref === undefined || token === undefined) return 'none';
-  const url = new URL(
-    `https://api.bitbucket.org/2.0/repositories/${ref.workspace}/${ref.repo}/pullrequests/${String(id)}/statuses`,
-  );
-  url.searchParams.set('fields', 'values.state');
-  url.searchParams.set('pagelen', '50');
-  try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-      signal: withTimeout(signal),
-    });
-    if (!res.ok) return 'none';
-    const values = asRecord(await res.json())?.['values'];
-    if (!Array.isArray(values)) return 'none';
-    return ciStateOf(
-      values.flatMap((value: unknown) => {
-        const state = asRecord(value)?.['state'];
-        return typeof state === 'string' ? [state] : [];
-      }),
-    );
-  } catch {
-    return 'none';
-  }
+  const statuses = await buildStatuses(hangar, ref, { prId: id }, signal);
+  return statuses.ok ? ciStateOf(statuses.value.map((s) => s.state)) : 'none';
 };
 
 /**

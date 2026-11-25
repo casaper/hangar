@@ -68,6 +68,7 @@ import { catchUp } from './commands/catch-up.ts';
 import { rebranch } from './commands/rebranch.ts';
 import { tmpMerge } from './commands/tmp.ts';
 import { syncEditor } from './commands/vscode.ts';
+import { ciJobs, ciLog, ciStatus, ciTests } from './commands/ci.ts';
 import type { EditorKind } from './editor/index.ts';
 import {
   CONFIG_FILENAME,
@@ -950,6 +951,59 @@ bookmarks
   )
   .action(async (options) => {
     await bookmarksSync(requireHangar(), options);
+  });
+
+const ci = program
+  .command('ci')
+  .description(
+    "What CI says about a clone's branch, read from Jenkins: which builds failed, the failed stage's log, and the failed tests. Read only -- every request is a GET, and nothing here rebuilds, replays or aborts.\n\nThe builds are found through the forge's build statuses on the branch's open pull request (or, with none, on the commit origin has for it), so they are the builds of the commit under review rather than whatever ran last. Needs the `ci` config block; the credentials come from its two env keys, in the environment or the shared secrets file. A server behind a VPN answers 'unreachable' while the VPN is off.",
+  );
+
+const CI_TARGET = 'clone name or index, or a Jenkins build URL — defaults to the clone you are in';
+
+ci.command('status')
+  .summary("Every CI build of a clone's branch, failures and their failed stage first")
+  .argument('[target]', CI_TARGET)
+  .option('-b, --branch <branch>', "another branch of that clone's repo instead of its current one")
+  .option('--json', 'print the builds as JSON')
+  .action(async (target: string | undefined, options) => {
+    await ciStatus(requireHangar(), target, options);
+  });
+
+ci.command('log')
+  .summary("The failed stage's log of a clone's failed build")
+  .description(
+    'Prints the log of the failed step(s) of the failed stage(s), the last 200 lines of each; --full prints the whole console log instead. With several failed builds and no --job it lists them and exits 2.',
+  )
+  .argument('[target]', CI_TARGET)
+  .option('-b, --branch <branch>', "another branch of that clone's repo instead of its current one")
+  .option('-j, --job <name>', 'the build whose job name, key or path contains this (any state)')
+  .option('--full', 'the whole console log, not just the failed stage')
+  .option('-t, --tail <lines>', 'keep the last N lines (default 200; 0 keeps all)')
+  .option('-g, --grep <regex>', 'keep matching lines, with 3 lines of context (case-insensitive)')
+  .action(async (target: string | undefined, options) => {
+    process.exitCode = await ciLog(requireHangar(), target, options);
+  });
+
+ci.command('tests')
+  .summary("The failed tests of a clone's failed build, from its Jenkins test report")
+  .description(
+    'Prints each failed case with its error and the head of its stack trace. With several failed builds and no --job it lists them and exits 2.',
+  )
+  .argument('[target]', CI_TARGET)
+  .option('-b, --branch <branch>', "another branch of that clone's repo instead of its current one")
+  .option('-j, --job <name>', 'the build whose job name, key or path contains this (any state)')
+  .option('-l, --limit <count>', 'print at most this many failed cases (default 30)')
+  .option('--stack <lines>', 'stack-trace lines per case (default 8)')
+  .action(async (target: string | undefined, options) => {
+    process.exitCode = await ciTests(requireHangar(), target, options);
+  });
+
+ci.command('jobs')
+  .summary('The Jenkins jobs, and their multibranch branches')
+  .argument('[filter]', 'show only jobs or branches whose name contains this')
+  .action(async (filter: string | undefined) => {
+    await ciJobs(requireHangar(), filter);
   });
 
 const pr = program

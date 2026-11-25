@@ -75,9 +75,16 @@ const foreign = ({ repo = '', top = '' }: { repo?: string; top?: string } = {}):
 > => syntheticHangar({ configText: foreignConfig(repo, top) });
 
 const JIRA = 'tracker:\n  kind: jira\n  baseUrl: https://j.invalid\n';
+/** A CI block, so the identity file's CI section is rendered and held to the same rule. */
+const CI =
+  'ci:\n  kind: jenkins\n  baseUrl: https://ci.invalid\n  userEnvKey: FOREIGN_CI_USER\n  tokenEnvKey: FOREIGN_CI_TOKEN\n';
 
 test('no per-clone artifact names the repo this CLI was built in', () => {
-  for (const hangar of [foreign(), foreign({ top: `${JIRA}  keyPrefixes: [ZZ]\n` })]) {
+  for (const hangar of [
+    foreign(),
+    foreign({ top: `${JIRA}  keyPrefixes: [ZZ]\n` }),
+    foreign({ top: CI }),
+  ]) {
     const clone = cloneAt(hangar, 2);
     const texts = [
       envLocalContent(clone),

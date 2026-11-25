@@ -270,10 +270,10 @@ The rule, and the two halves it splits into:
 
 Four consequences worth knowing before editing the files they touch:
 
-- **`hangar.config.example.yaml` is a superset of the live config EXCEPT for five keys.**
-  `displayName`, `profile`, `forge.originUrl`, `forge.webBaseUrl` and `tracker.baseUrl` are
-  placeholders, and `configDrift` in `config/drift.ts` excludes exactly those from the
-  example-vs-live comparison. Everything else is still held equal — `forge.defaultBranch`
+- **`hangar.config.example.yaml` is a superset of the live config EXCEPT for six keys.**
+  `displayName`, `profile`, `forge.originUrl`, `forge.webBaseUrl`, `tracker.baseUrl` and
+  `ci.baseUrl` are placeholders, and `configDrift` in `config/drift.ts` excludes exactly those
+  from the example-vs-live comparison. Everything else is still held equal — `forge.defaultBranch`
   included, which is the line that comparison was written for after the pair silently drifted.
 - **The live config's `keyPrefixes` value never appears as a literal in the tree.** The guards
   that forbid it import `THIS_REPOS_TICKET_PREFIX` from `test/fixture.ts`, which builds it by

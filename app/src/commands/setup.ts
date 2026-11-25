@@ -699,6 +699,8 @@ export const setup = async (root: string, opts: SetupOptions): Promise<void> => 
           forgeKind: usesBitbucket({ originUrl: answers.originUrl }) ? 'bitbucketCloud' : 'none',
           forgeTokenEnvKey: undefined,
           trackerKind: answers.trackerBaseUrl === '' ? 'none' : 'jira',
+          // `setup` never asks about CI: a `ci` block is added by hand, so nothing to scaffold.
+          ci: undefined,
         }),
       ),
       { mode: 0o600, flag: 'wx' },

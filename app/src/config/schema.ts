@@ -120,6 +120,33 @@ const forgeSchema = z.strictObject({
   prDescriptionPrompt: z.string().min(1).optional(),
 });
 
+const envKey = z
+  .string()
+  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'must be a legal environment variable name');
+
+/**
+ * The CI server `hangar ci` reads build logs from. Optional with NO default, on the
+ * `prDescriptionPrompt` precedent: where a repo's CI runs is a property of that repo, and a
+ * default would put one organisation's build server into every hangar. Absent means `hangar ci`
+ * refuses and names this key, and no clone's identity file mentions CI at all.
+ *
+ * The credentials are NAMED here, never held: both are read from the environment and then from
+ * the shared secrets file, exactly as `forge.tokenEnvKey` is.
+ */
+const ciSchema = z.strictObject({
+  /** The one kind there is. An enum so a second CI system is a new kind, not a rename. */
+  kind: z.enum(['jenkins']),
+  /**
+   * The server's root, e.g. `https://ci.example.com`. Credentials are only ever sent to a URL
+   * under it, so a build status linking anywhere else is shown and never fetched.
+   */
+  baseUrl: z.url(),
+  /** The variable holding the CI user name. */
+  userEnvKey: envKey,
+  /** The variable holding that user's API token. */
+  tokenEnvKey: envKey,
+});
+
 const trackerSchema = z.strictObject({
   kind: z.enum(['jira', 'none']).default('none'),
   baseUrl: z.url().optional(),
@@ -786,6 +813,7 @@ export const hangarConfigSchema = z
     clones: clonesSchema.prefault({}),
     forge: forgeSchema,
     tracker: trackerSchema.prefault({}),
+    ci: ciSchema.optional(),
     repo: repoSchema.prefault({}),
     ports: portsSchema,
     terminal: terminalSchema.prefault({}),
@@ -975,3 +1003,4 @@ export const installCommandFor = (step: InstallStep): readonly string[] => {
   return canonical;
 };
 export type SecretVariable = HangarConfig['secrets']['variables'][number];
+export type CiConfig = NonNullable<HangarConfig['ci']>;

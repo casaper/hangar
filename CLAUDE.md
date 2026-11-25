@@ -97,7 +97,7 @@ deliberately elsewhere, and none of it reaches a clone session:
 All three are at the hangar root, so a clone session has none of them and should not go looking:
 skills load only as far as the repository root, and each clone is its own repo.
 
-**Read freely; do not integrate.** `list`, `ports`, `status`, `servers list`, `colours list`,
+**Read freely; do not integrate.** `list`, `ports`, `status`, `ci`, `servers list`, `colours list`,
 `skills list`, `scrub`, `config show`, `config validate`, `config schema --check`,
 `colours sync --check`, a bare `pr target` and a bare `doctor` only report, and every `-n` is a dry run — except
 `hangar resume`'s, which is `--limit`, the one place in this CLI where `-n` does not mean "change

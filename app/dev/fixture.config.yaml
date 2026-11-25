@@ -28,6 +28,14 @@ forge:
   defaultBranch: trunk
   tokenEnvKey: FIXTURE_FORGE_TOKEN
 
+# Carried here and not by fixture-vscode, so the golden net renders both the identity file's CI
+# section and its absence. Env keys unlike the example's, so a default leaking in shows.
+ci:
+  kind: jenkins
+  baseUrl: https://ci.example.invalid/jenkins
+  userEnvKey: FIXTURE_CI_USER
+  tokenEnvKey: FIXTURE_CI_TOKEN
+
 tracker:
   kind: jira
   baseUrl: https://example.invalid

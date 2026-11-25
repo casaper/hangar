@@ -186,6 +186,9 @@ test('defaultSettings denies the secrets file and allows only its own clone', ()
     // READ -- `lock`/`release`/`unlock` have no entry, so releasing a gate asks a human.
     'Bash(hangar-waypoint:*)',
     'Bash(hangar-commit-gate status:*)',
+    // Only because the fixture has a `ci` block, and safe as a prefix: every `hangar ci`
+    // subcommand is a GET. `ci.test.ts` asserts a hangar without one gets no such entry.
+    'Bash(hangar ci:*)',
     'Bash(curl -s -o /dev/null -w "%{http_code}" --max-time 7 http://localhost:3037/ready)',
   ]);
 

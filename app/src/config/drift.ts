@@ -29,15 +29,15 @@ const NOTE_KEY = '_';
  * The keys a PUBLISHED example structurally cannot carry, so they are compared by nobody.
  *
  * Two kinds, and neither changes behaviour: `displayName` and `profile` are free-text labels no
- * code reads, and the other three are addresses. All five name one organisation's repository and
- * issue tracker. The example is committed and
+ * code reads, and the other four are addresses. All six name one organisation's repository, issue
+ * tracker or build server. The example is committed and
  * public; the live file's values belong to whoever runs the hangar. Holding them equal would mean
  * either publishing a real origin and a real Jira host, or a check that is red in every hangar
  * including the one it was written in -- and `hangar-internals` names that failure three times
  * over: a check that is red in normal operation is a check nobody reads.
  *
  * So the invariant is restated rather than dropped: **`hangar config show` on each must differ
- * only in the free-text note and in these four site-identity keys.** Everything else is still
+ * only in the free-text note and in these site-identity keys.** Everything else is still
  * held equal, `forge.defaultBranch` included -- which is the line the check was written for, after
  * the pair had drifted `main` in the example against `master` live and sent a colleague adopting
  * this fleet at a branch the repo does not have.
@@ -51,6 +51,7 @@ const SITE_LOCAL_PATHS: readonly string[] = [
   'forge.originUrl',
   'forge.webBaseUrl',
   'tracker.baseUrl',
+  'ci.baseUrl',
 ];
 
 export type ConfigDrift = {

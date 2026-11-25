@@ -1403,6 +1403,7 @@ const reportSecretVariables = (hangar: Hangar, fix: boolean): readonly string[] 
       forgeKind: usesBitbucket(hangar.config.forge) ? 'bitbucketCloud' : 'none',
       forgeTokenEnvKey: hangar.config.forge.tokenEnvKey,
       trackerKind: hangar.config.tracker.kind,
+      ci: hangar.config.ci,
     }),
     hangar.config.secrets.variables,
   );

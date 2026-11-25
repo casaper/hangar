@@ -348,6 +348,83 @@ const paddedTable = (rows: readonly (readonly [string, string])[]): string[] => 
  * text that arrives in this session unbidden, a shared directory inside this checkout, and the
  * commands that would sync the very tree the reader is editing.
  */
+/**
+ * What the identity file says about CI: that `hangar ci` reads it, and how to use it without
+ * spending a credential or the fleet's shared `tmp/`. Nothing at all without a `ci` block.
+ *
+ * The credentials are named because an agent that has not been told they exist goes looking
+ * for them -- and the file they live in is denied to it. Naming them, and saying the command
+ * already has them, ends that search before it starts.
+ */
+/** Greedy word wrap at `width`, continuation lines prefixed with `indent`. PURE. */
+const wrapProse = (text: string, width: number, indent = ''): string[] => {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    const next = line === '' ? word : `${line} ${word}`;
+    if (next.length > width && line !== '') {
+      lines.push(line);
+      line = `${indent}${word}`;
+    } else {
+      line = next;
+    }
+  }
+  if (line !== '') lines.push(line);
+  return lines;
+};
+
+export const ciSection = (hangar: Hangar): string[] => {
+  const ci = hangar.config.ci;
+  if (ci === undefined) return [];
+  // The links a repo keeps to the secrets file are where a person would point an agent at the
+  // credentials, so they are named as the same file rather than left to look like another source.
+  const links = hangar.config.repo.symlinks
+    .filter((link) => link.target === '{secretsFile}')
+    .map((link) => `\`${link.path}\``);
+  const width = 96;
+  const para = (text: string): string[] => [...wrapProse(text, width), ''];
+  const bullet = (text: string): string[] => wrapProse(`- ${text}`, width, '  ');
+  return [
+    '## CI: read build failures with `hangar ci`',
+    '',
+    ...para(
+      `The project's CI is Jenkins at ${ci.baseUrl}. When the user asks why a pipeline failed, ` +
+        'read it yourself — every subcommand is read-only and needs no permission:',
+    ),
+    ...bullet(
+      "`hangar ci status` — every build of this clone's branch (its open pull request, else the " +
+        'commit origin has), failures first, each with its failed stage and build URL.',
+    ),
+    ...bullet(
+      "`hangar ci log` — the failed stage's step log, the last 200 lines. `--grep <regex>` and " +
+        '`--tail <n>` narrow it, `--full` reads the whole console, and `--job <name>` picks one ' +
+        'build when several failed (otherwise it lists them and exits 2).',
+    ),
+    ...bullet('`hangar ci tests` — the failed test cases with their errors and stack heads.'),
+    ...bullet('`hangar ci jobs [filter]` — the jobs and their branches, to find a build by hand.'),
+    '',
+    ...para(
+      'Each takes a build URL instead of the clone, and `--branch <name>` for another branch.',
+    ),
+    ...para(
+      `The credentials are \`${ci.userEnvKey}\` and \`${ci.tokenEnvKey}\`, already in this ` +
+        "shell's environment through direnv, from the shared secrets file it loads" +
+        (links.length === 0
+          ? '. '
+          : ` — the same file ${links.join(', ')} ${links.length === 1 ? 'links' : 'link'} to. `) +
+        '`hangar ci` reads them itself: never pass, print or echo them, and do not read that ' +
+        'file — it is denied to you. If `hangar ci` says one is missing, tell the user.',
+    ),
+    ...para(
+      'An "unreachable" error means this machine cannot reach the server — usually a VPN that ' +
+        'is off: ask the user to connect it rather than retrying. Keep any log you save in your ' +
+        'session scratchpad, never under `tmp/`, which the whole fleet reads. `hangar ci` never ' +
+        'rebuilds, replays or aborts anything; when a build needs re-running, say so and let the ' +
+        'user do it.',
+    ),
+  ];
+};
+
 export const claudeLocalMdContent = (clone: Clone): string => {
   return [
     `# This clone: ${clone.name} (${clone.colour.name})`,
@@ -440,6 +517,7 @@ export const claudeLocalMdContent = (clone: Clone): string => {
     '`.git/info/exclude` — it never commits and never travels to a sibling. Do not hand-edit it:',
     '`hangar doctor --fix` rewrites it whenever it differs from what the generator produces.',
     '',
+    ...ciSection(clone.hangar),
     '## Nothing about the fleet goes into anything you write',
     '',
     'Not into what you commit — messages, code comments, documentation, identifiers, business',
@@ -1096,11 +1174,29 @@ export const personalToolAllows = (): string[] => [
   'Bash(hangar-commit-gate status:*)',
 ];
 
+/**
+ * The `hangar` reports a clone session may run without a prompt, beyond what the user's own
+ * settings already allow.
+ *
+ * Only `hangar ci`, and only in a hangar with a `ci` block. Every one of its subcommands is a GET
+ * against the forge or the CI server, so the prefix rule cannot reach a write; and it is the
+ * command the identity file tells the clone's agent to run, so a prompt on each call would be
+ * the identity file arguing with the settings beside it. Left in place if `ci` is removed later:
+ * the command then refuses, and an allow only ever permits.
+ */
+export const hangarReportAllows = (hangar: Hangar): string[] =>
+  hangar.config.ci === undefined ? [] : ['Bash(hangar ci:*)'];
+
 export const defaultSettings = (clone: Clone): SettingsJson => {
   const hangar = clone.hangar;
   const base: SettingsJson = {
     permissions: {
-      allow: [hangarRootAllow(hangar), ...personalToolAllows(), ...healthCheckAllows(clone)],
+      allow: [
+        hangarRootAllow(hangar),
+        ...personalToolAllows(),
+        ...hangarReportAllows(hangar),
+        ...healthCheckAllows(clone),
+      ],
       deny: [secretsDeny(hangar)],
       additionalDirectories: [sharedTmpDirectory(hangar)],
     },
@@ -1166,6 +1262,7 @@ export const settingsContentFor = (clone: Clone, template: SettingsJson): string
     ...kept,
     ...(kept.includes(rootAllow) ? [] : [rootAllow]),
     ...personalToolAllows().filter((entry) => !kept.includes(entry)),
+    ...hangarReportAllows(hangar).filter((entry) => !kept.includes(entry)),
     ...healthCheckAllows(clone),
   ];
   const deny = permissions.deny ?? [];

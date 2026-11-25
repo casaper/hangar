@@ -110,6 +110,7 @@ test('a bitbucket + jira hangar expects three credentials it never had to declar
     forgeKind: 'bitbucketCloud',
     forgeTokenEnvKey: undefined,
     trackerKind: 'jira',
+    ci: undefined,
   });
   assert.deepEqual(
     derived.map((v) => v.name),
@@ -127,6 +128,7 @@ test('forge.tokenEnvKey renames the derived row, so the scaffold and the reader 
     forgeKind: 'bitbucketCloud',
     forgeTokenEnvKey: 'ACME_BITBUCKET_PAT',
     trackerKind: 'none',
+    ci: undefined,
   });
   assert.equal(token?.name, 'ACME_BITBUCKET_PAT');
 });
@@ -137,9 +139,29 @@ test('a hangar on no forge and no tracker expects nothing, so it gets no row', (
       forgeKind: 'none',
       forgeTokenEnvKey: undefined,
       trackerKind: 'none',
+      ci: undefined,
     }),
     [],
   );
+});
+
+test('a ci block derives its two credentials under the names it gives them', () => {
+  const derived = hangarOwnSecretVariables({
+    forgeKind: 'none',
+    forgeTokenEnvKey: undefined,
+    trackerKind: 'none',
+    ci: {
+      kind: 'jenkins',
+      baseUrl: 'https://ci.example.com',
+      userEnvKey: 'ACME_CI_USER',
+      tokenEnvKey: 'ACME_CI_TOKEN',
+    },
+  });
+  assert.deepEqual(
+    derived.map((v) => v.name),
+    ['ACME_CI_USER', 'ACME_CI_TOKEN'],
+  );
+  assert.ok(derived.every((v) => v.optional && v.why.length > 0));
 });
 
 /**
@@ -155,6 +177,7 @@ test('a declared variable replaces the derived one of the same name, never dupli
     forgeKind: 'bitbucketCloud',
     forgeTokenEnvKey: undefined,
     trackerKind: 'none',
+    ci: undefined,
   });
   const declared: SecretVariable[] = [
     { name: 'BITBUCKET_TOKEN', why: 'this fleet cannot sync without it', optional: false },

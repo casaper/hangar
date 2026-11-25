@@ -6,6 +6,7 @@
       "Read(%HANGAR%/**)",
       "Bash(hangar-waypoint:*)",
       "Bash(hangar-commit-gate status:*)",
+      "Bash(hangar ci:*)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" --max-time 7 http://localhost:3137/ready)"
     ],
     "deny": [

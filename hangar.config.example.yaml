@@ -200,6 +200,22 @@ forge:
   prDescriptionPrompt: /pr-description
 
 # --------------------------------------------------------------------------------------------
+# The CI server -- what `hangar ci` reads build logs from. Optional, with no default.
+# --------------------------------------------------------------------------------------------
+# Absent means `hangar ci` refuses and names this key, and no clone's CLAUDE.local.md mentions
+# CI. `hangar ci` finds a branch's builds through the forge's build statuses, so it needs
+# `forge.kind: bitbucketCloud` too.
+ci:
+  # `jenkins` is the only kind.
+  kind: jenkins
+  # The server's root. Credentials are sent only to URLs under it.
+  baseUrl: https://ci.example.com
+  # The variables holding the CI user and its API token -- named, never held. Read from the
+  # environment, then from the shared secrets file, like `forge.tokenEnvKey`.
+  userEnvKey: JENKINS_USER
+  tokenEnvKey: JENKINS_API_TOKEN
+
+# --------------------------------------------------------------------------------------------
 # The issue tracker -- ticket links, and the shared ticket cache
 # --------------------------------------------------------------------------------------------
 tracker:

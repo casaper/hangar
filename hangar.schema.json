@@ -151,6 +151,36 @@
       },
       "additionalProperties": false
     },
+    "ci": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "jenkins"
+          ]
+        },
+        "baseUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "userEnvKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "tokenEnvKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        }
+      },
+      "required": [
+        "kind",
+        "baseUrl",
+        "userEnvKey",
+        "tokenEnvKey"
+      ],
+      "additionalProperties": false
+    },
     "repo": {
       "default": {},
       "type": "object",

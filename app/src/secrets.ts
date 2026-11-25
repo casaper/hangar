@@ -1,5 +1,5 @@
 import { DEFAULT_BITBUCKET_TOKEN_ENV_KEY } from './bitbucket.ts';
-import type { SecretVariable } from './config/schema.ts';
+import type { CiConfig, SecretVariable } from './config/schema.ts';
 
 /**
  * What the shared secrets file is missing, as a PURE function of the declaration and the text.
@@ -123,6 +123,8 @@ export const hangarOwnSecretVariables = (facts: {
   /** `forge.tokenEnvKey`. Optional in the schema, so the adapter's own default stands in. */
   readonly forgeTokenEnvKey: string | undefined;
   readonly trackerKind: 'jira' | 'none';
+  /** `ci`, whose two env keys name the credentials `hangar ci` reads. */
+  readonly ci: CiConfig | undefined;
 }): readonly SecretVariable[] => [
   ...(facts.forgeKind === 'bitbucketCloud'
     ? [
@@ -147,6 +149,20 @@ export const hangarOwnSecretVariables = (facts: {
         },
       ]
     : []),
+  ...(facts.ci === undefined
+    ? []
+    : [
+        {
+          name: facts.ci.userEnvKey,
+          why: 'the CI user `hangar ci` reads build statuses and logs as',
+          optional: true,
+        },
+        {
+          name: facts.ci.tokenEnvKey,
+          why: "that CI user's API token; without it `hangar ci` cannot read a build log",
+          optional: true,
+        },
+      ]),
 ];
 
 /**

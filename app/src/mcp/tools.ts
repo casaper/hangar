@@ -201,6 +201,14 @@ export const EXPOSURES: readonly Exposure[] = [
     acts: false,
     lede: "Reports the PR target stored for the clone's branch. Setting one is `pr_target_set`.",
   },
+  /*
+   * `hangar ci` sends the operator's CI credentials, but only as GETs to `ci.baseUrl`: it reads
+   * what a browser tab on the build would show, and nothing it can be told to do writes.
+   */
+  { name: 'ci_status', path: ['ci', 'status'], acts: false },
+  { name: 'ci_log', path: ['ci', 'log'], acts: false },
+  { name: 'ci_tests', path: ['ci', 'tests'], acts: false },
+  { name: 'ci_jobs', path: ['ci', 'jobs'], acts: false },
   {
     name: 'pr_refresh_preview',
     path: ['pr', 'refresh'],
