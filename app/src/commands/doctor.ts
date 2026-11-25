@@ -51,6 +51,7 @@ import {
   settingsContentFor,
   settingsPath,
   healthCheckAllows,
+  hangarReportAllows,
   hangarRootAllow,
   secretsDeny,
   sharedTmpDirectory,
@@ -528,6 +529,10 @@ const checksFor = (
   const memoryOk = haveMemory === wantMemory;
   const wantRootAllow = hangarRootAllow(clone.hangar);
   const rootAllowOk = allow.includes(wantRootAllow);
+  // Without this check an allow added after a clone was made never reaches it: the row is green,
+  // so `--fix` never rewrites the file, and the identity file tells the agent to run a command
+  // its settings then prompt for.
+  const missingReportAllows = hangarReportAllows(clone.hangar).filter((a) => !allow.includes(a));
   const wantDeny = secretsDeny(clone.hangar);
   const denyOk = (settings?.permissions?.deny ?? []).includes(wantDeny);
   const wantTmpDir = sharedTmpDirectory(clone.hangar);
@@ -541,6 +546,7 @@ const checksFor = (
       statusOk &&
       memoryOk &&
       rootAllowOk &&
+      missingReportAllows.length === 0 &&
       denyOk &&
       tmpDirOk,
     detail:
@@ -558,6 +564,9 @@ const checksFor = (
               ? undefined
               : `autoMemoryDirectory is ${haveMemory === undefined ? 'unset' : tildify(haveMemory)}, expected ${tildify(wantMemory)} — this clone's memory is not the fleet's`,
             rootAllowOk ? undefined : `no read allow for the hangar root (${wantRootAllow})`,
+            missingReportAllows.length === 0
+              ? undefined
+              : `no allow for ${missingReportAllows.join(', ')} — the identity file tells the agent to run it`,
             denyOk
               ? undefined
               : `the shared secrets are not denied (${wantDeny}) — and ${wantRootAllow} would reach them`,

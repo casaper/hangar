@@ -49,6 +49,10 @@ one property carries three exposures:
 - the MCP tools are reports;
 - the identity file can say "read it yourself" without a permission prompt arguing with it.
 
+`doctor`'s `settings.local.json` row checks that allow (`hangarReportAllows`), because without
+the check a clone made before the `ci` block was added stays green. Then `--fix` never writes the
+allow, and the identity file tells the agent to run a command its settings prompt for.
+
 A `ci rebuild` would have to be a separate, user-only command with its own `ask` rule and a guard
 entry, and must never be a flag here.
 
