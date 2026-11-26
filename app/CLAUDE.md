@@ -240,6 +240,7 @@ The two nets:
   `makeClone` reads `.hangar/colour-assignments.json` under the hangar root and caches it per
   root, so a test aimed at this hangar would read one developer's own `colours change` history.
   `namesNoMachinePath` in `test/fixture.ts` is the standing guard.
+  A test that needs a `Clone` takes `cloneAt(syntheticHangar(), n)` (`src/fleet.ts`).
 
   **Some `builders.test.ts` assertions match across the builder's hard wraps**
   (`/personal\ntool\./`): re-wrapping identity-file prose without changing a word fails them.
@@ -468,6 +469,9 @@ tmux session**. The emulator only opens a window and raises one; everything insi
   server-wide, and never written onto somebody else's server. A bare `tmux ls` does not see it.
 - **Identity is the session NAME**, so "is this clone open" is `has-session` — the check that
   keeps a clone from getting two Claude Code sessions, this fleet's worst failure.
+  For the whole fleet it is ONE `tmuxServer(hangar).sessions()`, matched on
+  `row.clone === clone.name || row.name === tmuxSessionName(clone)` as `doctor` and `list` do;
+  no tmux or no server answers `[]`.
 - **Nothing is ever typed at a raw tty**; tmux is the only portable mechanism.
 
 `hangar-internals/reference/terminal-and-sessions.md` has the rest: the emulator table, the tmux
