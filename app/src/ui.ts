@@ -111,6 +111,16 @@ const ELLIPSIS = '…';
  */
 export const cloneLabel = (clone: Clone): string => paint(clone.colour, `${BULLET} ${clone.index}`);
 
+const HOLLOW_BULLET = '○';
+
+/**
+ * `cloneLabel` that also says whether the clone is open: `●` when it has a session on the
+ * hangar's tmux server, `○` when it has none. A glyph rather than a colour, so `NO_COLOR` and the
+ * MCP tool's stripped output still tell the two apart. PURE.
+ */
+export const cloneMark = (clone: Clone, open: boolean): string =>
+  paint(clone.colour, `${open ? BULLET : HOLLOW_BULLET} ${clone.index}`);
+
 const ESC = String.fromCharCode(27);
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m|${ESC}\\]8;[^${ESC}\\x07]*(?:${ESC}\\\\|\\x07)`, 'g');
 

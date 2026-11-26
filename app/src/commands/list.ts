@@ -13,7 +13,8 @@ import {
   type CachedPullRequest,
 } from '../pr-cache.ts';
 import { issueUrl, ticketBinding } from '../jira.ts';
-import { cloneLabel, link, note, table, truncate } from '../ui.ts';
+import { cloneMark, link, note, table, truncate } from '../ui.ts';
+import { tmuxServer, tmuxSessionName } from '../tmux.ts';
 import { prPlan } from './pr.ts';
 import type { Hangar } from '../hangar.ts';
 import { readPrTarget } from '../pr-target.ts';
@@ -189,6 +190,12 @@ export const list = async (
     clearTimeout(timer);
   }
 
+  // One `list-sessions` for the fleet; no tmux or no server answers `[]`, so every clone is closed.
+  // Matched on both keys `doctor` uses: the `@hangar_clone` tag and the session name.
+  const sessions = tmuxServer(hangar).sessions();
+  const isOpen = (clone: (typeof clones)[number]): boolean =>
+    sessions.some((row) => row.clone === clone.name || row.name === tmuxSessionName(clone));
+
   const rows: string[][] = [LIST_HEADER.map((h) => pc.dim(h))];
   for (const { clone, branch, cached, plan } of facts) {
     const commit = lastCommit(clone.path);
@@ -207,7 +214,7 @@ export const list = async (
     // id 0 is the negative record, and its url is a search rather than a pull request.
     const prUrl = pr.kind === 'known' && pr.record.id !== 0 ? pr.record.url : undefined;
     rows.push([
-      cloneLabel(clone),
+      cloneMark(clone, isOpen(clone)),
       key === '' ? dash : link(key, issueUrl(hangar, key)),
       link(prCell, prUrl),
       branchCell(branch, readPrTarget(clone.path, branch), tryDefaultBranch(hangar)),

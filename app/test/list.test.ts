@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { commitDay, initials, LIST_HEADER, listPrCells } from '../src/commands/list.ts';
-import { hyperlink, visibleWidth } from '../src/ui.ts';
+import { cloneMark, hyperlink, visibleWidth } from '../src/ui.ts';
+import { cloneAt } from '../src/fleet.ts';
+import { syntheticHangar } from './fixture.ts';
 import type { CachedPullRequest } from '../src/pr-cache.ts';
 
 /**
@@ -85,4 +87,12 @@ test('a hyperlink carries its url and takes only its text in width', () => {
   assert.ok(cell.includes('https://example.invalid/browse/ABC-1323'));
   assert.equal(visibleWidth(cell), 'ABC-1323'.length);
   assert.equal(visibleWidth(hyperlink('\x1b[2m#852\x1b[22m', 'https://example.invalid/pr/852')), 4);
+});
+
+test('the CLONE cell is a filled dot for an open clone and a hollow one for a closed clone', () => {
+  const clone = cloneAt(syntheticHangar(), 3);
+  const [open, closed] = plain([cloneMark(clone, true), cloneMark(clone, false)]);
+  assert.equal(open, '● 3');
+  assert.equal(closed, '○ 3');
+  assert.equal(visibleWidth(cloneMark(clone, true)), visibleWidth(cloneMark(clone, false)));
 });
