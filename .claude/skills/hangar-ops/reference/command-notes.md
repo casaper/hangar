@@ -419,7 +419,8 @@ tool is the separate `<thing>_preview`.
   (reviewers assigned, nobody has decided), `approved a/n` or `changes a/n`, with `changes`
   winning over any approval; a merged, declined or superseded pull request shows no build or review.
   The CLONE cell is `● <n>` when the clone has a session on the hangar's tmux server and
-  `○ <n>` when it has none, so an open clone shows without `hangar open`.
+  `○ <n>` when it has none, so an open clone shows without `hangar open`; a legend line under
+  the table says so.
   The columns run CLONE, ISSUE, PR, BRANCH, BUILD, REVIEW, LAST COMMIT, the last as
   `sha MM-DD initials subject`. On a terminal the issue key and the pull request number are OSC 8
   links to the ticket and the pull request (Cmd-click in iTerm2); piped, and through the MCP tool,

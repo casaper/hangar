@@ -116,6 +116,9 @@ export const initials = (name: string): string => {
   return letters === '' ? '?' : letters;
 };
 
+/** What the CLONE cell's two dots mean, printed under the table. */
+export const LIST_LEGEND = '● tmux session open   ○ no tmux session';
+
 export const LIST_HEADER = ['CLONE', 'ISSUE', 'PR', 'BRANCH', 'BUILD', 'REVIEW', 'LAST COMMIT'];
 
 /**
@@ -224,5 +227,6 @@ export const list = async (
     ]);
   }
   table(rows);
+  note(LIST_LEGEND);
   for (const problem of problems) note(pc.dim(`could not ask Bitbucket about ${problem}`));
 };

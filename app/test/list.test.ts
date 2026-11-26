@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { commitDay, initials, LIST_HEADER, listPrCells } from '../src/commands/list.ts';
+import {
+  commitDay,
+  initials,
+  LIST_HEADER,
+  LIST_LEGEND,
+  listPrCells,
+} from '../src/commands/list.ts';
 import { cloneMark, hyperlink, visibleWidth } from '../src/ui.ts';
 import { cloneAt } from '../src/fleet.ts';
 import { syntheticHangar } from './fixture.ts';
@@ -95,4 +101,5 @@ test('the CLONE cell is a filled dot for an open clone and a hollow one for a cl
   assert.equal(open, '● 3');
   assert.equal(closed, '○ 3');
   assert.equal(visibleWidth(cloneMark(clone, true)), visibleWidth(cloneMark(clone, false)));
+  assert.ok(LIST_LEGEND.includes('●') && LIST_LEGEND.includes('○'));
 });
