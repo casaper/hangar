@@ -39,7 +39,7 @@ hangar root for the reason below.
 > **`dev/scrub-check.sh` enforces that shape, because the obvious guard does not work.** A
 > `preinstall` script exiting 1 is measured not to work: **pnpm 10 did not run it** — not
 > even with a dependency present to install (probed both ways; `pnpm run preinstall` fires,
-> `pnpm install` does not), and npm skipped it too. That probe predates the 12.20.0 pin and has
+> `pnpm install` does not), and npm skipped it too. That probe predates the pnpm 12 pin and has
 > not been repeated on it; the gate holds either way. So a stray `pnpm install` here still leaves an
 > empty `node_modules`, which resolves nothing and harms nothing. What must never happen is this
 > file growing something to put in it, and that is the line the gate holds.
